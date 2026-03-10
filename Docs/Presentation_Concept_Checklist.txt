@@ -1,0 +1,50 @@
+CONCEPT CHECKLIST
+DCIT60 – METHODS OF RESEARCH
+
+Title:
+LimenServe: A Web-Based Management Information System with Automated Cost Estimation and Quotation for Services and Orders of Limen Auto Parts Center
+
+Researcher/s:
+Dela Cruz, Jay Iverson A.
+Suacillo, Alden M.
+Ulanday, Don Rich M.
+Vargas, Christian Dave D.
+Villafuerte, Estefhano C.
+
+OBJECTIVES
+- To design and develop LimenServe, a web-based MIS that optimizes Limen Auto Parts Center's operations.
+- To implement Automated Cost Estimation and Quotation to provide instant, accurate pricing for services and orders.
+- To empower customers with a public web portal for real-time stock checks and self-service cost estimation.
+- To streamline Service Order Management and POS transactions for improved workflow efficiency.
+- To fully digitize all sales records and paper-based transactions into a centralized database.
+- To provide a practical, desirable solution with 3D spatial visualization for rapid stock retrieval.
+- To ensure project achievability through a reliable, Offline-First architecture.
+
+SCOPE
+- User Management: Comprehensive role-based access for Administrators, Stock Clerks, and Cashiers.
+- Public Customer Portal: Allows external users to browse inventory and generate cost estimates online (Quotation Only).
+- Inventory Module: Real-time tracking of stock levels with low-stock alerts and barcode integration.
+- Sales & Payment: Integrated POS system for upfront physical store payments; records all sales to database.
+- Automated Cost Estimation & Quotation: Instant calculation and generation of professional quotes for services and parts.
+- Service Management: Digital tracking of service orders from intake to completion.
+- 3D Spatial Visualization: Digital representation of the stockroom.
+- Automated Reporting: Generates sales and inventory reports for business analysis.
+- Offline-First Architecture: Ensures reliability during internet outages.
+
+LIMITATIONS
+- Cloud Sync Dependency: Remote dashboard requires active internet connectivity.
+- Hardware & Platform: PWA optimized for desktop/tablet Chrome browsers; not a native mobile app.
+- Scope of Automation: Manual physical placement of items is still required to match 3D coordinates.
+- Estimation Accuracy: Estimates are based on standard rates and may differ from final repair needs.
+- Transaction Processing: Strict upfront in-store payment policy; no online payment processing.
+- Logistics: Supports Metro Manila delivery coordination, but excludes real-time GPS rider/package tracking.
+- System Boundary: Single-branch operation; Public Portal is for viewing and quoting only.
++ 
++ TECH STACK & LANGUAGES
++ - Frontend: JavaScript (React), HTML5, CSS3, Tailwind CSS, Framer Motion, Zustand
++ - Backend: Node.js (Express), Axios (API)
++ - Database: SQL (Supabase/PostgreSQL)
++ - 3D Module: JavaScript (Three.js/React Three Fiber)
++ - Testing: JavaScript (Jest, Supertest, Cypress)
++ - Deployment: Vercel (Frontend), Render (Backend), Supabase (Database)
++ - Design: Figma

@@ -1,0 +1,320 @@
+LIMENSERVE PROJECT DEVELOPMENT TIMELINE (GANTT CHART)
+======================================================
+
+Title: LimenServe: A Web-Based Management Information System with Automated Cost 
+Estimation and Quotation for Services and Orders of Limen Auto Parts Center
+
+Academic Year: 2025-2026
+Project Start: October 2025
+Target Completion: July 2026
+
+================================================================================
+                              PROJECT GANTT CHART
+================================================================================
+
+PROJECT ACTIVITIES           | OCT | NOV | DEC | JAN | FEB | MAR | APR | MAY | JUN | JUL
+                             | 25  | 25  | 25  | 26  | 26  | 26  | 26  | 26  | 26  | 26
+=============================================================================================
+
+PHASE 1: PROPOSAL DRAFTING
+---------------------------------------------------------------------------------------------
+1.1 Proposal Drafting        | ### | ### | ### |     |     |     |     |     |     |
+
+PHASE 2: PLANNING & REQUIREMENTS ANALYSIS
+---------------------------------------------------------------------------------------------
+2.1 Project Proposal &       |     |     |     | ### |     |     |     |     |     |
+    Title Defense            |     |     |     |     |     |     |     |     |     |
+2.2 On-site Interview &      |     |     |     | ### |     |     |     |     |     |
+    Data Gathering           |     |     |     |     |     |     |     |     |     |
+2.3 Requirements             |     |     |     | ### |     |     |     |     |     |
+    Documentation            |     |     |     |     |     |     |     |     |     |
+
+PHASE 3: SYSTEM DESIGN
+---------------------------------------------------------------------------------------------
+3.1 UI/UX Prototyping &      |     |     |     |     | ### |     |     |     |     |
+    Wireframes               |     |     |     |     |     |     |     |     |     |
+3.2 Database Schema &        |     |     |     |     | ### |     |     |     |     |
+    Architecture             |     |     |     |     |     |     |     |     |     |20
+3.3 3D Stockroom Layout      |     |     |     |     | ### |     |     |     |     |
+    Mapping                  |     |     |     |     |     |     |     |     |     |
+
+PHASE 4: DEVELOPMENT
+---------------------------------------------------------------------------------------------
+4.1 User Management Module   |     |     |     |     | ### | ### |     |     |     |
+4.2 Inventory Module &       |     |     |     |     | ### | ### |     |     |     |
+    Barcode                  |     |     |     |     |     |     |     |     |     |
+4.3 POS & Receipt Printing   |     |     |     |     |     | ### | ### |     |     |
+4.4 Cost Estimation &        |     |     |     |     |     | ### | ### |     |     |
+    Quotation                |     |     |     |     |     |     |     |     |     |
+4.5 Service Order Management |     |     |     |     |     | ### | ### |     |     |
+4.6 3D Spatial Visualization |     |     |     |     |     |     | ### |     |     |
+4.7 Public Customer Portal   |     |     |     |     |     |     | ### |     |     |
+4.8 Reporting Dashboard      |     |     |     |     |     |     | ### |     |     |
+
+PHASE 5: TESTING
+---------------------------------------------------------------------------------------------
+5.1 Unit & Integration       |     |     |     |     |     |     | ### | ### |     |
+    Testing                  |     |     |     |     |     |     |     |     |     |
+5.2 User Acceptance Testing  |     |     |     |     |     |     | ### | ### |     |
+    (UAT)                    |     |     |     |     |     |     |     |     |     |
+
+PHASE 6: EVALUATION
+---------------------------------------------------------------------------------------------
+6.1 ISO 25010 Quality        |     |     |     |     |     |     |     | ### | ### |
+    Assessment               |     |     |     |     |     |     |     |     |     |
+6.2 Survey & Data Analysis   |     |     |     |     |     |     |     | ### | ### |
+
+PHASE 7: MANUSCRIPT PREPARATION (Ongoing)
+---------------------------------------------------------------------------------------------
+7.1 Manuscript Writing       | ### | ### | ### | ### | ### | ### | ### | ### | ### |
+
+PHASE 8: DEPLOYMENT & DOCUMENTATION
+---------------------------------------------------------------------------------------------
+8.1 Final Deployment to      |     |     |     |     |     |     |     |     | ### | ###
+    Cloud                    |     |     |     |     |     |     |     |     |     |
+8.2 Final Oral Defense       |     |     |     |     |     |     |     |     | ### | ###
+8.3 Manuscript Review        |     |     |     |     |     |     |     |     | ### | ###
+8.4 User Training & Handover |     |     |     |     |     |     |     |     |     | ###
+
+=============================================================================================
+LEGEND: ### = Activity Duration
+        25 = Year 2025, 26 = Year 2026
+=============================================================================================
+
+
+================================================================================
+                     PROJECT TIMELINE DESCRIPTION
+================================================================================
+
+The development of LimenServe follows a comprehensive ten-month timeline spanning 
+from October 2025 to July 2026, covering the complete academic year.
+
+OCTOBER - DECEMBER 2025 (First Semester) is dedicated to Proposal Drafting. The 
+team researches existing literature, drafts the initial project proposal, defines 
+project scope, and prepares documentation for the title defense.
+
+JANUARY 2026 marks the start of the Second Semester with Planning and Requirements 
+Analysis. The team conducts the Project Proposal and Title Defense, performs on-site 
+interviews and data gathering at Limen Auto Parts Center, and completes the 
+Requirements Documentation including the Software Requirements Specification (SRS).
+
+FEBRUARY 2026 focuses on System Design. Activities include UI/UX prototyping and 
+wireframe creation in Figma, database schema and architecture planning using 
+PostgreSQL, and 3D stockroom layout mapping for the spatial visualization module.
+
+FEBRUARY - APRIL 2026 encompasses the Development phase. Starting in February, the 
+team develops the User Management Module and Inventory Module with barcode integration. 
+March continues with the POS system, Automated Cost Estimation and Quotation, and 
+Service Order Management. April completes development with 3D Spatial Visualization, 
+Public Customer Portal, and Reporting Dashboard.
+
+APRIL - MAY 2026 is devoted to Testing. Unit and integration testing using Jest and 
+Supertest ensure code quality. User Acceptance Testing (UAT) is conducted with Limen 
+Auto Parts Center staff to validate real-world usability.
+
+MAY - JUNE 2026 covers the Evaluation phase. ISO 25010 quality assessment is conducted, 
+evaluation surveys are distributed and analyzed, and findings are documented.
+
+SEPTEMBER 2025 - JUNE 2026 represents ongoing Manuscript Preparation that runs parallel 
+to all other activities throughout the academic year.
+
+JUNE - JULY 2026 concludes the project with Deployment and Final Defense. The system 
+is deployed to Vercel, Render, and Supabase. The Final Oral Defense is conducted, 
+manuscript review is completed, and user training sessions are held for handover.
+
+
+================================================================================
+                         DETAILED ACTIVITY BREAKDOWN
+================================================================================
+
+OCTOBER - DECEMBER 2025: PROPOSAL DRAFTING
+------------------------------------------
+  - Research related literature and existing systems
+  - Draft initial project proposal
+  - Define project scope and objectives
+  - Prepare preliminary documentation
+  - Review and refine proposal with advisers
+
+
+JANUARY 2026: PLANNING & REQUIREMENTS ANALYSIS
+----------------------------------------------
+Week 1-2: Project Proposal & Title Defense
+  - Finalize project proposal document
+  - Prepare and conduct title defense presentation
+  - Incorporate panel feedback
+
+Week 2-3: On-site Interview & Data Gathering
+  - Conduct interviews with shop owners (Mr. & Mrs. Limen)
+  - Observe current workflow and pain points
+  - Document physical stockroom layout (2 floors)
+  - Gather sample paper records for digitization reference
+
+Week 3-4: Requirements Documentation
+  - Create Software Requirements Specification (SRS)
+  - Define functional and non-functional requirements
+  - Validate requirements with stakeholders
+
+
+FEBRUARY 2026: SYSTEM DESIGN & INITIAL DEVELOPMENT
+---------------------------------------------------
+Week 1-2: UI/UX Prototyping & Wireframes
+  - Create initial wireframes in Figma
+  - Design user interface mockups
+  - Plan navigation and user flows
+  - Finalize all screen designs
+  - Get stakeholder approval on design
+
+Week 1-2: Database Schema & Architecture
+  - Design PostgreSQL database schema
+  - Define table relationships (inventory, sales, users, services)
+  - Plan API endpoints structure
+
+Week 2-3: 3D Stockroom Layout Mapping
+  - Measure physical stockroom dimensions
+  - Create 3D model coordinates
+  - Plan shelf and item placement system
+
+Week 3-4: User Management Module
+  - Implement role-based access control (Admin, Cashier, Stock Clerk)
+  - Set up Supabase authentication
+  - Create user CRUD operations
+
+Week 3-4: Inventory Module Development Begins
+  - Build inventory listing and search
+  - Implement barcode scanning integration
+
+
+MARCH 2026: CORE DEVELOPMENT
+----------------------------
+Week 1-2: Complete Inventory Module
+  - Create low-stock alert system
+  - Develop batch entry functionality
+
+Week 1-3: POS & Receipt Printing
+  - Set up transaction processing logic
+  - Design checkout interface
+  - Integrate thermal receipt printer
+  - Test payment recording
+
+Week 2-3: Cost Estimation & Quotation Module
+  - Build quote calculation engine
+  - Create printable quotation templates
+  - Implement save/retrieve quotations
+
+Week 3-4: Service Order Management
+  - Develop service order tracking
+  - Create status workflow (pending → in-progress → complete)
+  - Build service history records
+
+
+APRIL 2026: FEATURE COMPLETION & TESTING BEGINS
+-----------------------------------------------
+Week 1-2: 3D Spatial Visualization
+  - Implement Three.js 3D viewer
+  - Create interactive stockroom navigation
+  - Link inventory items to 3D positions
+
+Week 2-3: Public Customer Portal
+  - Build public inventory browsing
+  - Create self-service quotation tool
+  - Ensure read-only access restrictions
+
+Week 2-3: Reporting Dashboard
+  - Develop sales reports (daily/weekly/monthly)
+  - Create inventory movement charts
+  - Build service revenue tracking
+
+Week 3-4: Testing Phase Begins
+  - Execute unit tests with Jest
+  - Run API tests with Supertest
+  - Begin User Acceptance Testing with staff
+
+
+MAY 2026: TESTING & EVALUATION BEGINS
+-------------------------------------
+Week 1-2: Complete Testing
+  - Finalize User Acceptance Testing (UAT)
+  - Perform end-to-end tests with Cypress
+  - Document and fix identified issues
+
+Week 2-4: Evaluation Begins
+  - Begin ISO 25010 quality assessment
+  - Prepare evaluation surveys
+  - Start collecting user feedback
+
+
+JUNE 2026: EVALUATION & DEPLOYMENT
+----------------------------------
+Week 1-2: Complete Evaluation
+  - Finalize ISO 25010 quality assessment
+  - Distribute and analyze evaluation surveys
+  - Compile evaluation results
+
+Week 2-3: Deployment
+  - Deploy frontend to Vercel
+  - Deploy backend API to Render
+  - Deploy database to Supabase
+
+Week 3-4: Final Oral Defense & Manuscript Review
+  - Conduct final oral defense presentation
+  - Submit manuscript for review
+  - Incorporate reviewer feedback
+
+
+JULY 2026: HANDOVER & COMPLETION
+--------------------------------
+Week 1-2: Manuscript Finalization
+  - Complete manuscript revisions
+  - Submit final documentation
+
+Week 2-3: User Training & Handover
+  - Conduct training sessions with staff
+  - Prepare user manuals and guides
+  - Complete system handover to client
+
+Week 4: Project Closure
+  - Final documentation submission
+  - Project completion sign-off
+
+
+================================================================================
+                           MILESTONE SUMMARY
+================================================================================
+
++---------------------+------------------------+--------------------------------+
+| Milestone           | Target Date            | Deliverables                   |
++---------------------+------------------------+--------------------------------+
+| Proposal Complete   | December 2025          | Draft proposal document        |
+| Title Defense       | January 2026           | Approved project proposal      |
+| Requirements Done   | January 2026           | SRS document, validated        |
+|                     |                        | requirements                   |
+| Design Complete     | February 2026          | UI/UX designs, DB schema,      |
+|                     |                        | 3D layout plan                 |
+| Core Modules Done   | March 2026             | User mgmt, Inventory, POS,     |
+|                     |                        | Quotation, Service Orders      |
+| All Features Done   | April 2026             | All 8 modules complete         |
+| Testing Complete    | May 2026               | Test reports, UAT sign-off     |
+| Evaluation Done     | June 2026              | ISO 25010 assessment, surveys  |
+| Final Deployment    | June 2026              | Live system on cloud           |
+| Final Oral Defense  | June - July 2026       | Defense presentation passed    |
+| Manuscript Complete | July 2026              | Final documentation submitted  |
+| Project Handover    | July 2026              | System handed over to client   |
++---------------------+------------------------+--------------------------------+
+
+
+================================================================================
+                              TEAM ALLOCATION
+================================================================================
+
+Team Member               | Primary Responsibilities
+--------------------------|--------------------------------------------------
+Dela Cruz, Jay Iverson A. | Lead Developer, 3D Visualization, System Design
+Suacillo, Alden M.        | Backend Development, Database, API Design
+Ulanday, Don Rich M.      | Frontend Development, POS Module
+Vargas, Christian Dave D. | Inventory Module, Barcode Integration
+Villafuerte, Estefhano C. | Testing, Documentation, Service Management
+
+================================================================================
+Document Version: 1.2
+Last Updated: January 28, 2026
+================================================================================

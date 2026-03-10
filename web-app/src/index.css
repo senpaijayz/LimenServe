@@ -1,0 +1,355 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@media print {
+  @page {
+    margin: 1cm;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* ========================================
+   LIMEN MODERN AUTOMOTIVE UI
+   Clean, Futuristic, Dynamic Shield Inspired
+======================================== */
+
+:root {
+  /* Primary Scale - Sleek Grayscale */
+  --primary-950: #0a0a0c;
+  --primary-900: #111216;
+  --primary-800: #1c1d22;
+  --primary-700: #2d2f36;
+  --primary-600: #42454d;
+  --primary-500: #686b74;
+  --primary-400: #93969e;
+  --primary-300: #bfc1c7;
+  --primary-200: #e5e6e9;
+  --primary-100: #f4f5f6;
+
+  /* Mitsubishi Accent Red */
+  --accent-primary: #E60012;
+  --accent-secondary: #B3000E;
+
+  /* Structural */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+}
+
+@layer base {
+  body {
+    @apply bg-primary-100 text-primary-900 antialiased font-sans selection:bg-accent-blue selection:text-white;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-display tracking-tight text-primary-950;
+  }
+}
+
+/* ========================================
+   UTILITY COMPONENTS
+======================================== */
+
+@layer components {
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full font-sans font-medium text-sm transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent-blue text-white hover:bg-accent-blueDark hover:shadow-[0_0_20px_#2563eb66];
+  }
+
+  .btn-secondary {
+    @apply btn border border-primary-300 bg-white text-primary-800 hover:bg-primary-50;
+  }
+
+  .btn-outline {
+    @apply btn border border-primary-300 bg-transparent text-primary-600 hover:bg-primary-50;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-primary-500 hover:text-primary-900 hover:bg-primary-100;
+  }
+
+  /* Inputs */
+  .input {
+    @apply w-full px-4 py-3 bg-white border border-primary-300 rounded-lg text-primary-900 placeholder-primary-400 transition-colors focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue font-sans shadow-sm;
+  }
+
+  /* Surface Cards */
+  .surface {
+    @apply bg-white border border-primary-200 rounded-2xl overflow-hidden shadow-sm transition-all duration-500 hover:border-primary-300 hover:shadow-md;
+  }
+
+  /* Dynamic Shield Aesthetic (Angled Elements) */
+  .dynamic-shield {
+    clip-path: polygon(15% 0, 100% 0, 100% 100%, 0 100%, 0 15%);
+  }
+
+  /* Modals */
+  .modal-overlay {
+    @apply fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm overflow-y-auto;
+  }
+
+  .modal {
+    @apply relative w-full bg-white border border-primary-200 rounded-xl shadow-2xl overflow-hidden my-auto;
+  }
+
+  .modal-header {
+    @apply flex items-center justify-between p-4 border-b border-primary-200;
+  }
+
+  .modal-title {
+    @apply text-xl font-display font-bold text-primary-950;
+  }
+
+  .modal-body {
+    @apply p-4;
+  }
+
+  .modal-footer {
+    @apply flex items-center justify-end gap-3 p-4 border-t border-primary-200 bg-primary-50;
+  }
+}
+
+/* ========================================
+   DASHBOARD LAYOUT STRUCTURE
+======================================== */
+
+@layer components {
+
+  /* Layout Shell */
+  .sidebar {
+    @apply fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-primary-200 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 lg:fixed lg:flex-shrink-0 flex flex-col;
+  }
+
+  .sidebar-collapsed {
+    @apply lg:w-20;
+  }
+
+  .sidebar-open {
+    @apply translate-x-0;
+  }
+
+  .sidebar-logo {
+    @apply flex items-center h-16 px-4 gap-3 bg-white border-b border-primary-200;
+  }
+
+  .sidebar-nav {
+    @apply flex-1 px-3 py-4 overflow-y-auto bg-white;
+  }
+
+  .sidebar-section-title {
+    @apply px-3 mb-2 text-[11px] font-bold text-primary-400 uppercase tracking-widest;
+  }
+
+  .sidebar-nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg text-primary-600 hover:text-primary-950 hover:bg-primary-50 transition-all duration-200;
+  }
+
+  .sidebar-nav-item-active {
+    @apply bg-red-50 text-accent-danger font-semibold shadow-[inset_3px_0_0_0_#E60012];
+  }
+
+  .main-content {
+    @apply flex-1 flex flex-col min-w-0 min-h-screen pt-16 lg:pl-64 transition-all duration-300;
+  }
+
+  .main-content-collapsed {
+    @apply lg:pl-20;
+  }
+
+  .header {
+    @apply fixed top-0 right-0 z-30 flex h-16 w-full items-center justify-between px-4 lg:px-8 bg-white/80 backdrop-blur-md border-b border-primary-200 transition-all duration-300 lg:w-[calc(100%-16rem)];
+  }
+
+  .header-collapsed {
+    @apply lg:w-[calc(100%-5rem)];
+  }
+}
+
+/* ========================================
+   ANIMATIONS & SCROLLBAR
+======================================== */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--primary-100);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--primary-300);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-400);
+}
+
+/* Decorative grid pattern for modern feel */
+.bg-grid-pattern {
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* Print Overrides — Full-page Automotive Receipt Format */
+@media print {
+  @page {
+    size: auto;
+    margin: 12mm 15mm;
+  }
+
+  /* Reset body */
+  body {
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    width: 100% !important;
+    font-size: 12px !important;
+  }
+
+  /* Hide the React app root — the receipt modal is portaled outside #root */
+  #root {
+    display: none !important;
+  }
+
+  /* But allow the portal container (modal) to display */
+  .modal-overlay {
+    display: flex !important;
+    position: static !important;
+    background: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    z-index: auto !important;
+  }
+
+  .modal-overlay .modal {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+
+  /* Hide modal header, footer, and buttons during print */
+  .modal-header,
+  .modal-footer,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .modal-body {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Full-page receipt preview */
+  .receipt-preview {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    background: white !important;
+    color: black !important;
+    font-size: 12px !important;
+    line-height: 1.5 !important;
+    page-break-inside: avoid !important;
+  }
+
+  .receipt-preview * {
+    visibility: visible !important;
+    color: black !important;
+  }
+
+  /* Hide success animation and non-receipt modal content */
+  .modal-body>div:not(:has(.receipt-preview)):not(.receipt-preview) {
+    display: none !important;
+  }
+
+  /* Keep flex layouts working */
+  .receipt-preview .flex {
+    display: flex !important;
+  }
+
+  .receipt-preview .justify-between {
+    justify-content: space-between !important;
+  }
+
+  .receipt-preview img {
+    max-height: 50px !important;
+    filter: grayscale(1) contrast(1.5) !important;
+  }
+
+  /* Automotive receipt table styles */
+  .receipt-preview table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .receipt-preview table th {
+    background: black !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    padding: 6px 10px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    text-align: left !important;
+    text-transform: uppercase !important;
+  }
+
+  .receipt-preview table td {
+    padding: 6px 10px !important;
+    border-bottom: 1px solid #e0e0e0 !important;
+    font-size: 12px !important;
+    vertical-align: top !important;
+  }
+
+  .receipt-preview table th:last-child,
+  .receipt-preview table td:last-child {
+    text-align: right !important;
+  }
+
+  .receipt-preview table th:nth-child(3),
+  .receipt-preview table td:nth-child(3) {
+    text-align: right !important;
+  }
+}

@@ -1,0 +1,129 @@
+LIMENSERVE: METHODOLOGY
+=======================
+
+Title: LimenServe: A Web-Based Management Information System with Automated Cost 
+Estimation and Quotation for Services and Orders of Limen Auto Parts Center
+
+================================================================================
+3.1 DESIGN OF SOFTWARE SYSTEM PRODUCTS AND/OR PROCESSES
+================================================================================
+
+The design phase defines the system's user interface, database structure, and 
+overall architecture. UI/UX wireframes and interactive prototypes are created 
+using Figma to validate user flows for different roles (Admin, Cashier, Stock 
+Clerk). The database schema is designed to manage users, inventory, sales, 
+services, and quotations. The system follows a three-tier architecture with 
+separate presentation, application, and data layers. Additionally, the 3D 
+stockroom visualization is planned with accurate measurements of the physical 
+2-floor stockroom for item location mapping.
+
+
+================================================================================
+3.2 SYSTEM DEVELOPMENT
+================================================================================
+
+The development phase implements the system using Agile-Scrum methodology with 
+iterative 2-week sprints. The following modules are developed:
+
+1. User Management Module - Role-based access control and authentication
+2. Inventory Module - Real-time stock tracking with barcode integration
+3. POS and Receipt Printing Module - Transaction processing and receipts
+4. Cost Estimation and Quotation Module - Quote generation and printing
+5. Service Order Management Module - Service tracking and status workflow
+6. 3D Spatial Visualization Module - Interactive stockroom navigation
+7. Public Customer Portal - Customer browsing and self-service quotes
+8. Reporting Dashboard - Sales and inventory reports
+
+
+================================================================================
+3.3 SYSTEM TESTING
+================================================================================
+
+The testing phase ensures system functionality and quality through:
+
+- Unit Testing: Verify individual components using Jest
+- Integration Testing: Validate API endpoints using Supertest
+- End-to-End Testing: Test complete user workflows using Cypress
+- User Acceptance Testing (UAT): Hands-on testing with Limen Auto Parts 
+  Center staff to validate real-world usability
+
+
+================================================================================
+3.4 SYSTEM EVALUATION
+================================================================================
+
+The evaluation phase assesses system quality using the ISO 25010 Software 
+Quality Model, focusing on:
+
+- Functional Suitability
+- Performance Efficiency
+- Usability
+- Reliability
+- Security
+- Maintainability
+
+Data is collected through survey questionnaires and analyzed statistically.
+
+
+================================================================================
+3.5 IMPLEMENTATION PLAN (INFRASTRUCTURE/DEPLOYMENT)
+================================================================================
+
+The system is deployed to cloud platforms:
+- Frontend: Vercel
+- Backend: Render
+- Database: Supabase
+
+Hardware requirements for Limen Auto Parts Center:
+- Desktop/Tablet with Chrome browser
+- Barcode scanner (USB/Bluetooth)
+- Thermal receipt printer
+- Internet connection
+
+User training sessions are conducted for administrators, cashiers, and stock 
+personnel before system handover.
+
+
+================================================================================
+3.6 PROJECT TECH STACK AND LANGUAGES
+================================================================================
+
+LimenServe is developed using a modern web-based architecture. The following 
+languages and technologies are used to ensure system reliability and performance:
+
+Core Programming Languages:
+- JavaScript (ES6+): Used for all application logic in both Frontend and Backend.
+- HTML5: Used for the semantic structure of the web interface.
+- CSS3: Used for custom styling and visual presentation.
+- SQL: Used for database queries and data management within Supabase.
+
+Frontend Frameworks & Libraries:
+- React.js (v19): Core library for building the interactive user interface.
+- Vite: Next-generation build tool for fast development and optimized production.
+- Tailwind CSS: Utility-first CSS framework for responsive and modern styling.
+- Framer Motion: Used for smooth transitions and interactive micro-animations.
+- Zustand: Light-weight state management for maintaining application data.
+- React Hook Form & Zod: For robust form handling and data validation.
+- Recharts: Used for generating sales and inventory analytical charts.
+
+3.D Spatial Visualization:
+- Three.js: JavaScript 3D library for rendering the digital twin stockroom.
+- React Three Fiber: React renderer for Three.js.
+- React Three Drei: Helper library for complex 3D components.
+
+Backend & Database:
+- Node.js & Express.js: Server-side environment and API framework.
+- Supabase (PostgreSQL): Cloud-based relational database for persistent storage.
+- Axios: HTTP client for secure communication between frontend and backend.
+
+Testing & Quality Assurance:
+- Jest: Framework for unit testing individual code modules.
+- Supertest: Used for validating backend API endpoints.
+- Cypress: Tool for end-to-end testing of critical user workflows.
+
+DevOps & Tools:
+- Git/GitHub: Version control and collaborative development.
+- Figma: Professional design tool for UI/UX prototyping.
+- Vercel & Render: High-availability cloud hosting platforms.
+
+================================================================================

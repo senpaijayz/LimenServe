@@ -1,0 +1,7 @@
+LIST OF PROGRAMMING LANGUAGES
+============================
+
+1. JavaScript (ES6+) - Used for Frontend, Backend, and 3D Logic
+2. SQL - Used for Database Management (PostgreSQL)
+3. HTML5 - Used for Semantic Web Structure
+4. CSS3 - Used for Application Styling
