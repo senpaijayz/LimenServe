@@ -1,5 +1,10 @@
 .agent/
+.agents/
 .cursor/
+3D/
+Docs/
+LimenLogo/
+Pricelist/
 node_modules/
 dist/
 dist-ssr/
