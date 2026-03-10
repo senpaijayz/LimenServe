@@ -127,7 +127,7 @@ const SearchBar = ({ onPartSelect, disabled = false }) => {
                 {query && (
                     <button
                         onClick={clearSearch}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded hover:bg-primary-700 text-primary-500 hover:text-primary-300 transition-colors"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-primary-500 transition-colors hover:bg-primary-100 hover:text-primary-700"
                     >
                         <X className="w-4 h-4" />
                     </button>
@@ -152,7 +152,7 @@ const SearchBar = ({ onPartSelect, disabled = false }) => {
                                 key={part.id}
                                 onClick={() => handleSelectPart(part)}
                                 onMouseEnter={() => setSelectedIndex(index)}
-                                className={`p-3 cursor-pointer border-b border-primary-700/50 last:border-b-0 transition-colors ${selectedIndex === index ? 'bg-primary-700' : 'hover:bg-primary-800'
+                                className={`cursor-pointer border-b border-primary-200 p-3 transition-colors last:border-b-0 ${selectedIndex === index ? 'bg-red-50' : 'hover:bg-primary-50'
                                     }`}
                             >
                                 <div className="flex items-start gap-3">
@@ -190,5 +190,6 @@ const SearchBar = ({ onPartSelect, disabled = false }) => {
 };
 
 export default SearchBar;
+
 
 
