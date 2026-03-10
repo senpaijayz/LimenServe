@@ -517,15 +517,15 @@ const SceneCameraController = ({ viewMode, controlsRef, focusPoint }) => {
     useEffect(() => {
         const target = focusPoint || [0, 0, 0];
         const nextPosition = viewMode === '2d'
-            ? [target[0], 34, target[2] + 0.1]
-            : [target[0] + 16, 18, target[2] + 20];
+            ? [target[0], 26, target[2] + 0.1]
+            : [target[0] + 10, 11, target[2] + 13];
 
         camera.position.set(...nextPosition);
-        camera.lookAt(target[0], 0, target[2]);
+        camera.lookAt(target[0], 1.2, target[2]);
         camera.updateProjectionMatrix();
 
         if (controlsRef.current) {
-            controlsRef.current.target.set(target[0], 0.5, target[2]);
+            controlsRef.current.target.set(target[0], 1.2, target[2]);
             controlsRef.current.update();
         }
     }, [camera, controlsRef, focusPoint, viewMode]);
@@ -535,13 +535,13 @@ const SceneCameraController = ({ viewMode, controlsRef, focusPoint }) => {
 
 const WarehouseBackdrop = () => (
     <group>
-        <mesh position={[0, 6, 0]}>
-            <boxGeometry args={[42, 12, 42]} />
-            <meshStandardMaterial color="#091019" side={THREE.BackSide} roughness={0.95} metalness={0.05} />
-        </mesh>
         <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[15.5, 16.1, 48]} />
-            <meshBasicMaterial color={COLORS.glow} transparent opacity={0.12} side={THREE.DoubleSide} />
+            <ringGeometry args={[11.5, 12.2, 48]} />
+            <meshBasicMaterial color={COLORS.glow} transparent opacity={0.08} side={THREE.DoubleSide} />
+        </mesh>
+        <mesh position={[0, -0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[17, 48]} />
+            <meshBasicMaterial color="#0b1220" transparent opacity={0.18} side={THREE.DoubleSide} />
         </mesh>
     </group>
 );
@@ -805,7 +805,7 @@ const StockroomViewer = () => {
             </AnimatePresence>
 
             {/* 3D Canvas Container */}
-            <div className="relative rounded-[28px] overflow-hidden border border-primary-200 shadow-2xl bg-[#050505]" style={{ height: '68vh', minHeight: 640 }}>
+            <div className="relative h-[54vh] min-h-[360px] overflow-hidden rounded-[28px] border border-primary-200 bg-[#050505] shadow-2xl sm:h-[60vh] sm:min-h-[460px] lg:h-[68vh] lg:min-h-[640px]">
 
                 {/* Transition Overlay */}
                 <AnimatePresence>
@@ -835,7 +835,7 @@ const StockroomViewer = () => {
                                 <ErrorBoundary>
                     <Canvas
                         gl={{ antialias: true, powerPreference: "high-performance", alpha: false }}
-                        camera={{ position: [0, 20, 25], fov: 50 }}
+                        camera={{ position: [10, 11, 13], fov: 50 }}
                         style={{ background: COLORS.bg }}
                         onCreated={({ gl }) => {
                             gl.setClearColor(new THREE.Color(COLORS.bg));
@@ -855,13 +855,13 @@ const StockroomViewer = () => {
                         <OrbitControls
                             ref={controlsRef}
                             enabled={isOrbitEnabled}
-                            enableRotate={viewMode === '3d'}
-                            enablePan
+                            enableRotate={!editMode && viewMode === '3d'}
+                            enablePan={!editMode}
                             enableZoom
-                            minDistance={2}
+                            minDistance={4}
                             maxDistance={80}
                             maxPolarAngle={viewMode === '2d' ? 0.01 : Math.PI / 2.1}
-                            dampingFactor={0.05}
+                            dampingFactor={0.08}
                         />
                         <PathRenderer points={pathPoints} />
                         <HighlightMarker highlightedPart={highlightedPart} />
@@ -869,8 +869,8 @@ const StockroomViewer = () => {
                 </ErrorBoundary>
 
                 {/* Corner Data Readouts */}
-                <div className="absolute bottom-6 left-6 z-10 pointer-events-none">
-                    <div className="backdrop-blur-md bg-white/80 border border-primary-200 rounded-xl p-4 min-w-[160px] shadow-sm">
+                <div className="absolute bottom-3 left-3 z-10 pointer-events-none sm:bottom-6 sm:left-6">
+                    <div className="min-w-[132px] rounded-xl border border-primary-200 bg-white/80 p-3 shadow-sm backdrop-blur-md sm:min-w-[160px] sm:p-4">
                         <div className="text-[10px] text-primary-500 font-bold font-mono tracking-widest uppercase mb-3 border-b border-primary-200 pb-2">
                             Floor {currentFloor}
                         </div>
@@ -887,7 +887,7 @@ const StockroomViewer = () => {
                     </div>
                 </div>
 
-                <div className="absolute bottom-6 right-6 z-10 pointer-events-none text-right"><div className="font-mono text-xs font-bold text-primary-500 bg-white/50 px-2 py-0.5 rounded backdrop-blur-sm">
+                <div className="absolute bottom-3 right-3 z-10 pointer-events-none text-right sm:bottom-6 sm:right-6"><div className="font-mono text-xs font-bold text-primary-500 bg-white/50 px-2 py-0.5 rounded backdrop-blur-sm">
                         {editMode ? 'CLICK / DRAG TO MODIFY' : viewMode === '2d' ? 'DRAG TO PAN / SCROLL TO ZOOM' : 'DRAG TO ROTATE OR PAN / SCROLL TO ZOOM'}
                     </div>
                 </div>
@@ -899,7 +899,7 @@ const StockroomViewer = () => {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.5 }}
-                    className="flex justify-center"
+                    className="flex justify-center px-3"
                 >
                     <div className="bg-white border border-primary-200 rounded-full px-6 py-2 flex items-center gap-3 text-sm text-primary-600 font-bold shadow-sm">
                         <Search className="w-4 h-4 text-primary-400" />
@@ -912,6 +912,13 @@ const StockroomViewer = () => {
 };
 
 export default StockroomViewer;
+
+
+
+
+
+
+
 
 
 
