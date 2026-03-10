@@ -421,7 +421,7 @@ const POSTerminal = () => {
                         </div>
 
                         {/* Title */}
-                        <h3 style={{ textAlign: 'center', fontSize: '20px', fontWeight: '800', margin: '12px 0 14px', letterSpacing: '2px' }}>AUTOMOTIVE</h3>
+                        <h3 style={{ textAlign: 'center', fontSize: '20px', fontWeight: '800', margin: '12px 0 14px', letterSpacing: '2px' }}>SALES INVOICE</h3>
 
                         {/* Items Table */}
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>

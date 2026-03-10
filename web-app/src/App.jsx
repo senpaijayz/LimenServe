@@ -26,6 +26,7 @@ const PublicHome = lazy(() => import('./modules/public/pages/PublicHome'));
 const PublicCatalog = lazy(() => import('./modules/public/pages/PublicCatalog'));
 const PublicEstimate = lazy(() => import('./modules/public/pages/PublicEstimate'));
 const PublicAbout = lazy(() => import('./modules/public/pages/PublicAbout'));
+const PublicServiceOrders = lazy(() => import('./modules/public/pages/PublicServiceOrders'));
 
 /**
  * App Component
@@ -51,6 +52,7 @@ function App() {
                     <Route path="/" element={<PublicHome />} />
                     <Route path="/catalog" element={<PublicCatalog />} />
                     <Route path="/estimate" element={<PublicEstimate />} />
+                    <Route path="/service-orders" element={<PublicServiceOrders />} />
                     <Route path="/about" element={<PublicAbout />} />
                   </Route>
 

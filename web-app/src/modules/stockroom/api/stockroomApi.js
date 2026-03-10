@@ -108,19 +108,31 @@ export const searchParts = async (query) => {
     const q = query.toLowerCase();
 
     return storeProducts
-        .filter(p =>
-            p.sku.toLowerCase().includes(q) ||
-            p.name.toLowerCase().includes(q) ||
-            p.category.toLowerCase().includes(q)
-        )
-        .map(p => ({
-            id: p.id,
-            material: p.sku,
-            description: p.name,
-            location_code: `F${p.location.floor}-${p.location.section}-${p.location.shelf}`,
-            stock: p.quantity,
-            location: { aisle: p.location.section, shelf: parseInt(p.location.shelf), bin: 1 }
-        }));
+        .filter((product) => {
+            const sku = String(product.sku || '').toLowerCase();
+            const name = String(product.name || '').toLowerCase();
+            const category = String(product.category || '').toLowerCase();
+            return sku.includes(q) || name.includes(q) || category.includes(q);
+        })
+        .map((product) => {
+            const floor = Number(product.location?.floor || 1);
+            const section = String(product.location?.section || 'A').toUpperCase();
+            const shelf = String(product.location?.shelf || '1');
+
+            return {
+                id: product.id,
+                material: product.sku,
+                description: product.name,
+                location_code: `F${floor}-${section}-${shelf}`,
+                stock: product.quantity,
+                location: {
+                    floor,
+                    aisle: section,
+                    shelf: Number.parseInt(shelf, 10) || 1,
+                    bin: 1,
+                },
+            };
+        });
 };
 
 // Export all as default object for compatibility
@@ -133,3 +145,5 @@ export default {
     setDefaultLayout,
     searchParts,
 };
+
+

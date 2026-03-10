@@ -6,8 +6,8 @@ import { Search, ChevronRight, Calculator, Shield, Cpu, ArrowRight } from 'lucid
 const PublicHome = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const { scrollYProgress } = useScroll();
-    const yHero = useTransform(scrollYProgress, [0, 1], ['0%', '30%']);
-    const opacityHero = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
+    const yHero = useTransform(scrollYProgress, [0, 1], ['0%', '-12%']);
+    const opacityHero = useTransform(scrollYProgress, [0, 0.45], [1, 0.35]);
 
     return (
         <div className="bg-primary-50 min-h-screen font-sans text-primary-900 selection:bg-accent-blue selection:text-white pb-20 overflow-hidden relative">
@@ -19,7 +19,7 @@ const PublicHome = () => {
             </div>
 
             {/* --- HERO SECTION --- */}
-            <section className="relative min-h-[90vh] flex flex-col justify-center pt-24 pb-16 px-4 md:px-8 xl:px-12 z-10 layout-container">
+            <section className="relative min-h-[90vh] flex flex-col justify-center pt-24 pb-24 md:pb-32 px-4 md:px-8 xl:px-12 z-10 layout-container">
                 <div className="absolute inset-0 bg-grid-pattern opacity-30 pointer-events-none" />
 
                 <motion.div
@@ -44,9 +44,9 @@ const PublicHome = () => {
                         transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
                         className="text-5xl md:text-7xl lg:text-8xl font-display text-primary-950 tracking-tight leading-[0.95]"
                     >
-                        <span className="font-light text-primary-600">Drive with</span><br />
-                        <span className="font-extrabold uppercase bg-clip-text text-transparent bg-gradient-to-r from-accent-blue via-accent-blueDark to-accent-danger">Uncompromising</span>
-                        <br />Confidence
+                        <span className="font-light text-primary-600">Your trusted source for</span><br />
+                        <span className="font-extrabold uppercase bg-clip-text text-transparent bg-gradient-to-r from-accent-blue via-accent-blueDark to-accent-danger">Genuine Mitsubishi</span>
+                        <br />Parts
                     </motion.h1>
 
                     {/* Subheadline */}
@@ -56,7 +56,7 @@ const PublicHome = () => {
                         transition={{ duration: 0.8, delay: 0.3 }}
                         className="text-lg md:text-xl text-primary-600 max-w-2xl mt-8 leading-relaxed font-light"
                     >
-                        The apex of automotive performance and reliability. Source, estimate, and secure authentic Mitsubishi components directly from Metro Manila's premier depot.
+                        Limen Auto Parts Center provides authentic Mitsubishi parts, updated pricing, and fast estimates for drivers, repair shops, and fleet customers across Metro Manila.
                     </motion.p>
 
                     {/* Search / Action */}
@@ -88,7 +88,7 @@ const PublicHome = () => {
             </section>
 
             {/* --- FEATURE CARDS --- */}
-            <section className="px-4 md:px-8 xl:px-12 relative z-20 mt-[-5vh]">
+            <section className="px-4 md:px-8 xl:px-12 relative z-20 -mt-6 md:-mt-10">
                 <div className="max-w-[1600px] mx-auto">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
@@ -108,14 +108,14 @@ const PublicHome = () => {
                             </div>
 
                             <h3 className="text-2xl font-display font-semibold text-primary-950 mb-3 tracking-tight">
-                                Digital Inventory
+                                Parts Pricelist
                             </h3>
                             <p className="text-primary-600 leading-relaxed mb-8 relative z-10">
-                                Browse our comprehensive catalog of verified equipment. Real-time stock levels, pricing, and exact fitment data.
+                                Check available Mitsubishi parts, current pricing, and fitment details to find the right item for your vehicle with confidence.
                             </p>
 
                             <Link to="/catalog" className="inline-flex items-center text-sm font-semibold text-accent-primary tracking-wide group/link relative z-10">
-                                Explore Parts
+                                View Pricelist
                                 <ArrowRight className="w-4 h-4 ml-2 group-hover/link:translate-x-2 transition-transform duration-300 text-accent-danger" />
                             </Link>
                         </motion.div>
@@ -137,14 +137,14 @@ const PublicHome = () => {
                             </div>
 
                             <h3 className="text-2xl font-display font-semibold text-primary-950 mb-3 tracking-tight relative z-10">
-                                Intelligence Estimator
+                                Cost Estimator
                             </h3>
                             <p className="text-primary-600 leading-relaxed mb-8 relative z-10">
-                                Compile your required components and service parameters for an instant, definitive cost projection structure.
+                                Build a quick parts and service estimate based on your requirements before requesting a final quotation from our team.
                             </p>
 
                             <Link to="/estimate" className="inline-flex items-center text-sm font-semibold text-accent-blue hover:text-accent-blueDark transition-colors tracking-wide group/link relative z-10">
-                                Calculate Now
+                                Get Estimate
                                 <ArrowRight className="w-4 h-4 ml-2 group-hover/link:translate-x-2 transition-transform duration-300" />
                             </Link>
                         </motion.div>
@@ -155,22 +155,26 @@ const PublicHome = () => {
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true, margin: "-100px" }}
                             transition={{ duration: 0.6, delay: 0.2 }}
-                            className="surface p-8 group relative opacity-75 grayscale hover:grayscale-0 transition-all duration-700"
+                            className="surface p-8 group relative"
                         >
-                            <div className="w-14 h-14 bg-primary-50 rounded-2xl flex items-center justify-center mb-8 border border-primary-200">
-                                <Shield className="w-7 h-7 text-primary-500" />
+                            <div className="absolute inset-0 bg-gradient-to-br from-accent-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-accent-primary/10 rounded-full blur-3xl group-hover:bg-accent-primary/20 transition-colors pointer-events-none" />
+
+                            <div className="w-14 h-14 bg-primary-50 rounded-2xl flex items-center justify-center mb-8 border border-primary-200 group-hover:border-accent-primary/30 transition-colors">
+                                <Shield className="w-7 h-7 text-accent-primary" />
                             </div>
 
-                            <h3 className="text-2xl font-display font-semibold text-primary-950 mb-3 tracking-tight">
-                                Elite Workmanship
+                            <h3 className="text-2xl font-display font-semibold text-primary-950 mb-3 tracking-tight relative z-10">
+                                Service Orders
                             </h3>
-                            <p className="text-primary-600 leading-relaxed mb-8">
-                                Deploy our certified technical operatives for precision installation. Scheduling interface undergoing refinement.
+                            <p className="text-primary-600 leading-relaxed mb-8 relative z-10">
+                                Learn how repair and installation requests are received, estimated, and tracked by our team from intake to completion.
                             </p>
 
-                            <span className="inline-flex items-center text-sm font-medium tracking-widest text-primary-500 bg-primary-100 px-3 py-1 rounded-full border border-primary-200 uppercase">
-                                Offline
-                            </span>
+                            <Link to="/service-orders" className="inline-flex items-center text-sm font-semibold text-accent-primary tracking-wide group/link relative z-10">
+                                View Service Orders
+                                <ArrowRight className="w-4 h-4 ml-2 group-hover/link:translate-x-2 transition-transform duration-300" />
+                            </Link>
                         </motion.div>
 
                     </div>

@@ -22,9 +22,10 @@ const PublicLayout = () => {
 
     const navLinks = [
         { path: '/', label: 'Home' },
-        { path: '/about', label: 'Our Enterprise' },
+        { path: '/about', label: 'About' },
         { path: '/catalog', label: 'Genuine Parts' },
-        { path: '/estimate', label: 'Get Estimate' }
+        { path: '/estimate', label: 'Get Estimate' },
+        { path: '/service-orders', label: 'Service Orders' }
     ];
 
     return (

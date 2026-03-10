@@ -24,14 +24,14 @@ const PublicAbout = () => {
                 >
                     <div className="flex items-center justify-center gap-2 mb-6">
                         <span className="w-8 h-1 bg-accent-primary rounded-full" />
-                        <span className="text-sm font-semibold tracking-widest text-primary-500 uppercase">Enterprise Overview</span>
+                        <span className="text-sm font-semibold tracking-widest text-primary-500 uppercase">About</span>
                         <span className="w-8 h-1 bg-accent-primary rounded-full" />
                     </div>
                     <h1 className="text-5xl md:text-7xl font-display font-bold text-primary-950 tracking-tight leading-tight mb-6">
                         Limen Auto Parts <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent-primary to-accent-danger">Center</span>
                     </h1>
                     <p className="text-lg text-primary-700 leading-relaxed font-light">
-                        The premier destination for authentic Mitsubishi replacement parts and high-end automotive solutions serving Metro Manila and beyond.
+                        A family-owned auto parts business in Pasay City that has been serving customers for 13 years with genuine Mitsubishi parts, dependable service, and a more modern way to manage inventory and quotations through LimenServe.
                     </p>
                 </motion.div>
             </section>
@@ -48,17 +48,17 @@ const PublicAbout = () => {
                         transition={{ duration: 0.6 }}
                         className="space-y-6"
                     >
-                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">Our Legacy & Operations</h2>
+                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">Our Story & Operations</h2>
                         <div className="w-16 h-1 bg-accent-primary rounded-full mb-8" />
 
                         <p className="text-primary-700 leading-relaxed">
-                            Limen Auto Parts Center is a distinguished supplier in the automotive retail and repair service industry. We cater to a diverse clientele with rigorous automotive demands, specializing in the precise orchestration of thousands of unique individual components and complex mechanical service requests.
+                            Limen Auto Parts Center is an established family-owned auto parts retail shop located along EDSA in Pasay City, Metro Manila. For 13 years, the business has focused on providing genuine Mitsubishi car parts that are widely used and trusted by customers in the Philippines.
                         </p>
                         <p className="text-primary-700 leading-relaxed">
-                            Located strategically along EDSA in Pasay City, our expansive two-floor commercial facility houses a comprehensive array of premium replacement parts, spanning thousands of distinct Stock Keeping Units (SKUs).
+                            The shop operates in a two-floor commercial space, with the first floor serving as the main sales area and the second floor serving as the stockroom. Daily operations involve sales, customer service, stock management, and quotation preparation for both parts and service-related requests.
                         </p>
                         <p className="text-primary-700 leading-relaxed">
-                            We are committed to modernizing the retail workflow. Through our proprietary **LimenServe** digital infrastructure, we guarantee perfect stock accuracy, rapid turnaround times, and highly structured, automated quotation generation for all service and parts inquiries.
+                            Through **LimenServe**, the business is transitioning from manual, paper-based processes to a more organized digital workflow that supports stock visibility, faster transaction handling, structured quotations, and improved customer service.
                         </p>
                     </motion.div>
 
@@ -72,23 +72,23 @@ const PublicAbout = () => {
                     >
                         <div className="surface p-6 flex flex-col items-center justify-center text-center bg-white border-primary-200 shadow-sm">
                             <Package className="w-10 h-10 text-accent-primary mb-4" />
-                            <span className="text-3xl font-display font-bold text-primary-950">28,000+</span>
-                            <span className="text-xs font-semibold text-primary-500 uppercase tracking-widest mt-1">Verified SKUs</span>
+                            <span className="text-3xl font-display font-bold text-primary-950">13 Years</span>
+                            <span className="text-xs font-semibold text-primary-500 uppercase tracking-widest mt-1">In Service</span>
                         </div>
                         <div className="surface p-6 flex flex-col items-center justify-center text-center bg-white border-primary-200 shadow-sm translate-y-8">
                             <MapPin className="w-10 h-10 text-accent-primary mb-4" />
                             <span className="text-3xl font-display font-bold text-primary-950">Pasay City</span>
-                            <span className="text-xs font-semibold text-primary-500 uppercase tracking-widest mt-1">Prime Location</span>
+                            <span className="text-xs font-semibold text-primary-500 uppercase tracking-widest mt-1">Metro Manila</span>
                         </div>
                         <div className="surface p-6 flex flex-col items-center justify-center text-center bg-white border-primary-200 shadow-sm -translate-y-8">
                             <Building className="w-10 h-10 text-accent-primary mb-4" />
                             <span className="text-3xl font-display font-bold text-primary-950">2 Floors</span>
-                            <span className="text-xs font-semibold text-primary-500 uppercase tracking-widest mt-1">Storage Facility</span>
+                            <span className="text-xs font-semibold text-primary-500 uppercase tracking-widest mt-1">Sales and Stockroom</span>
                         </div>
                         <div className="surface p-6 flex flex-col items-center justify-center text-center bg-white border-primary-200 shadow-sm">
                             <Wrench className="w-10 h-10 text-accent-primary mb-4" />
-                            <span className="text-3xl font-display font-bold text-primary-950">100%</span>
-                            <span className="text-xs font-semibold text-primary-500 uppercase tracking-widest mt-1">Precision Fit</span>
+                            <span className="text-3xl font-display font-bold text-primary-950">Family-Owned</span>
+                            <span className="text-xs font-semibold text-primary-500 uppercase tracking-widest mt-1">Local Business</span>
                         </div>
                     </motion.div>
                 </div>
@@ -96,8 +96,8 @@ const PublicAbout = () => {
                 {/* Core Pillars */}
                 <div className="mb-16">
                     <div className="text-center mb-12">
-                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">Core Operational Pillars</h2>
-                        <p className="text-primary-600 max-w-2xl mx-auto">The foundational principles that drive our uncompromising automotive excellence.</p>
+                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">What We Stand For</h2>
+                        <p className="text-primary-600 max-w-2xl mx-auto">The values that shape how Limen Auto Parts Center serves customers and manages daily operations.</p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -111,9 +111,9 @@ const PublicAbout = () => {
                             <div className="w-12 h-12 bg-primary-50 border border-primary-100 rounded-xl flex items-center justify-center mb-6 text-accent-primary group-hover:bg-accent-primary group-hover:text-white group-hover:scale-110 transition-all duration-300">
                                 <Shield className="w-6 h-6" />
                             </div>
-                            <h3 className="text-xl font-display font-semibold text-primary-950 mb-3">Uncompromising Quality</h3>
+                            <h3 className="text-xl font-display font-semibold text-primary-950 mb-3">Genuine Mitsubishi Parts</h3>
                             <p className="text-sm text-primary-600 leading-relaxed">
-                                We source and supply only genuine, enterprise-grade replacement parts, ensuring that every component meets rigorous manufacturer specifications.
+                                The business focuses on supplying genuine Mitsubishi parts so customers can rely on accurate fitment, dependable quality, and trusted replacement components.
                             </p>
                         </motion.div>
 
@@ -127,9 +127,9 @@ const PublicAbout = () => {
                             <div className="w-12 h-12 bg-primary-50 border border-primary-100 rounded-xl flex items-center justify-center mb-6 text-accent-primary group-hover:bg-accent-primary group-hover:text-white group-hover:scale-110 transition-all duration-300">
                                 <Zap className="w-6 h-6" />
                             </div>
-                            <h3 className="text-xl font-display font-semibold text-primary-950 mb-3">Rapid Fulfillment</h3>
+                            <h3 className="text-xl font-display font-semibold text-primary-950 mb-3">Faster and More Organized Service</h3>
                             <p className="text-sm text-primary-600 leading-relaxed">
-                                Powered by our digital point-of-sale and 3D geometric inventory mapping, we drastically reduce retrieval times to get you back on the road faster.
+                                LimenServe is designed to reduce delays in stock checking, quotation preparation, and transaction handling by giving staff a more structured digital workflow.
                             </p>
                         </motion.div>
 
@@ -143,9 +143,9 @@ const PublicAbout = () => {
                             <div className="w-12 h-12 bg-primary-50 border border-primary-100 rounded-xl flex items-center justify-center mb-6 text-accent-primary group-hover:bg-accent-primary group-hover:text-white group-hover:scale-110 transition-all duration-300">
                                 <Settings className="w-6 h-6" />
                             </div>
-                            <h3 className="text-xl font-display font-semibold text-primary-950 mb-3">Precision Services</h3>
+                            <h3 className="text-xl font-display font-semibold text-primary-950 mb-3">Digital Modernization</h3>
                             <p className="text-sm text-primary-600 leading-relaxed">
-                                Beyond parts provision, our integrated cost estimator mathematically models complex mechanical repair scenarios for absolute pricing transparency.
+                                The system supports a shift from paper-based records to digital inventory, quotation, service-order, and stockroom management for more accurate business operations.
                             </p>
                         </motion.div>
                     </div>

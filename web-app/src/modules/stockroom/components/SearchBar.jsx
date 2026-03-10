@@ -31,6 +31,7 @@ const SearchBar = ({ onPartSelect, disabled = false }) => {
         if (query.trim().length < 2) {
             setResults([]);
             setIsOpen(false);
+            setIsLoading(false);
             return;
         }
 
@@ -81,9 +82,7 @@ const SearchBar = ({ onPartSelect, disabled = false }) => {
                 break;
             case 'Enter':
                 e.preventDefault();
-                if (selectedIndex >= 0) {
-                    handleSelectPart(results[selectedIndex]);
-                }
+                handleSelectPart(results[selectedIndex >= 0 ? selectedIndex : 0]);
                 break;
             case 'Escape':
                 setQuery('');
@@ -107,18 +106,19 @@ const SearchBar = ({ onPartSelect, disabled = false }) => {
         setResults([]);
         setIsOpen(false);
         setSelectedIndex(-1);
+        onPartSelect(null);
     };
 
     return (
-        <div ref={searchRef} className="relative w-full max-w-lg">
+        <div ref={searchRef} className="relative w-full max-w-xl">
             <div className="relative">
                 <Search
                     className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-primary-500 pointer-events-none"
                 />
                 <input
                     type="text"
-                    className="input pl-10 pr-10"
-                    placeholder="Search by Part Number or scan barcode..."
+                    className="input pl-10 pr-10 rounded-2xl border-primary-200 bg-white shadow-sm"
+                    placeholder="Search part number, description, or barcode..."
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
@@ -136,7 +136,7 @@ const SearchBar = ({ onPartSelect, disabled = false }) => {
 
             {/* Results Dropdown */}
             {isOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 glass rounded-lg shadow-xl max-h-[400px] overflow-y-auto z-50">
+                <div className="absolute top-full left-0 right-0 mt-2 rounded-2xl border border-primary-200 bg-white shadow-2xl max-h-[400px] overflow-y-auto z-50">
                     {isLoading ? (
                         <div className="p-4 text-center text-primary-500">
                             <div className="spinner mx-auto mb-2" />
@@ -161,11 +161,11 @@ const SearchBar = ({ onPartSelect, disabled = false }) => {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         {/* Material Code */}
-                                        <div className="text-accent-warning font-bold font-mono text-base">
+                                        <div className="text-red-600 font-bold font-mono text-base">
                                             {part.material}
                                         </div>
                                         {/* Description */}
-                                        <div className="text-primary-200 text-sm truncate">
+                                        <div className="text-primary-700 text-sm truncate">
                                             {part.description}
                                         </div>
                                         {/* Location & Stock */}
@@ -190,3 +190,5 @@ const SearchBar = ({ onPartSelect, disabled = false }) => {
 };
 
 export default SearchBar;
+
+

@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Plus, Minus, Trash2, Calculator, Printer, User, Phone, Car, Wrench, X, Check, ChevronRight, Package, ArrowLeft } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
 import useDataStore from '../../../store/useDataStore';
+import Button from '../../../components/ui/Button';
+import Modal from '../../../components/ui/Modal';
 
 // Services (modern naming)
 const availableServices = [
@@ -15,6 +17,11 @@ const availableServices = [
     { id: 's7', name: 'Battery Replacement & Testing', price: 300 },
     { id: 's8', name: 'Cooling System Flush', price: 600 },
 ];
+
+const createQuoteMeta = () => ({
+    issuedAt: new Date(),
+    reference: `QT-${Date.now().toString().slice(-6)}`,
+});
 
 /**
  * Public Estimate Page - Modern Automotive Aesthetic
@@ -29,6 +36,8 @@ const PublicEstimate = () => {
     const [selectedParts, setSelectedParts] = useState([]);
     const [selectedServices, setSelectedServices] = useState([]);
     const [partSearch, setPartSearch] = useState('');
+    const [showPrintPreview, setShowPrintPreview] = useState(false);
+    const [quoteMeta, setQuoteMeta] = useState(() => createQuoteMeta());
 
     // Operations
     const addPart = (product) => {
@@ -77,6 +86,11 @@ const PublicEstimate = () => {
 
     const hasItems = selectedParts.length > 0 || selectedServices.length > 0;
 
+    const handleViewOfficialQuote = () => {
+        setQuoteMeta(createQuoteMeta());
+        setStep(3);
+    };
+
     const resetForm = () => {
         setStep(1);
         setCustomerName('');
@@ -84,6 +98,8 @@ const PublicEstimate = () => {
         setVehicleInfo('');
         setSelectedParts([]);
         setSelectedServices([]);
+        setShowPrintPreview(false);
+        setQuoteMeta(createQuoteMeta());
     };
 
     return (
@@ -387,7 +403,7 @@ const PublicEstimate = () => {
                                             <ArrowLeft className="w-4 h-4" /> Back to Selection
                                         </button>
                                         <button
-                                            onClick={() => setStep(3)}
+                                            onClick={handleViewOfficialQuote}
                                             className="btn btn-primary flex-1"
                                         >
                                             View Official Quote <ChevronRight className="w-4 h-4" />
@@ -422,7 +438,7 @@ const PublicEstimate = () => {
                                             </div>
                                         </div>
                                         <div className="flex gap-3">
-                                            <button onClick={() => window.print()} className="btn btn-primary px-4 py-2 text-sm shadow-none">
+                                            <button onClick={() => setShowPrintPreview(true)} className="btn btn-primary px-4 py-2 text-sm shadow-none">
                                                 <Printer className="w-4 h-4" /> Print
                                             </button>
                                             <button onClick={resetForm} className="btn bg-primary-100 text-primary-700 hover:bg-primary-200 px-4 py-2 text-sm">
@@ -446,8 +462,8 @@ const PublicEstimate = () => {
                                             </div>
                                             <div className="text-right text-sm text-primary-600">
                                                 <p className="font-semibold text-primary-950">OFFICIAL QUOTATION</p>
-                                                <p>Date: {new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: '2-digit' })}</p>
-                                                <p className="font-mono text-xs mt-1">REF: QT-{Date.now().toString().slice(-6)}</p>
+                                                <p>Date: {quoteMeta.issuedAt.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: '2-digit' })}</p>
+                                                <p className="font-mono text-xs mt-1">REF: {quoteMeta.reference}</p>
                                             </div>
                                         </div>
 
@@ -539,106 +555,121 @@ const PublicEstimate = () => {
                 </AnimatePresence>
             </section>
 
-            {/* --- LIGHT MODE PRINT RECEIPT (PRINT ONLY) --- */}
-            {step === 3 && (
-                <div className="hidden print:!block !bg-white !text-black p-0 sm:p-8 font-sans w-full max-w-4xl mx-auto">
-                    {/* Company Header */}
-                    <div className="flex justify-between items-start border-b-2 border-black pb-6 mb-6">
-                        <div>
-                            <h2 className="text-3xl font-display font-black tracking-tight text-black mb-1">LIMEN</h2>
-                            <p className="text-sm text-gray-700 font-semibold">Genuine Auto Parts Center</p>
-                            <p className="text-xs text-gray-500 mt-1">1308, 264 EDSA Ave, Pasay City</p>
-                        </div>
-                        <div className="text-right text-sm text-black">
-                            <h3 className="text-lg font-bold uppercase tracking-wider mb-1">Official Quotation</h3>
-                            <p>Date: {new Date().toLocaleDateString('en-PH')}</p>
-                            <p className="font-mono text-xs mt-1">REF: QT-{Date.now().toString().slice(-6)}</p>
-                        </div>
+            <Modal
+                isOpen={showPrintPreview}
+                onClose={() => setShowPrintPreview(false)}
+                title="Print Preview"
+                size="lg"
+            >
+                <div className="receipt-preview" style={{ fontFamily: 'Inter, Arial, sans-serif' }}>
+                    <div style={{ textAlign: 'center', borderBottom: '2px solid black', paddingBottom: '12px', marginBottom: '12px' }}>
+                        <img src="/LogoLimen.jpg" alt="Limen Logo" style={{ height: '48px', margin: '0 auto 6px', display: 'block', filter: 'grayscale(1) contrast(1.3)' }} />
+                        <h2 style={{ fontSize: '16px', fontWeight: '800', margin: 0, letterSpacing: '-0.5px' }}>LIMEN AUTO PARTS CENTER</h2>
+                        <p style={{ fontSize: '11px', margin: '2px 0 0', color: '#555' }}>1308, 264 Epifanio de los Santos Ave, Pasay City, 1308 Metro Manila</p>
+                        <p style={{ fontSize: '11px', margin: '1px 0 0', color: '#555' }}>Tel: +63 917 123 4567 | TIN: 000-123-456-000</p>
                     </div>
 
-                    {/* Customer Info Box */}
-                    <div className="border border-gray-300 rounded p-4 mb-6 text-sm grid grid-cols-2 gap-4">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
                         <div>
-                            <p className="text-gray-500 font-semibold text-xs uppercase mb-1">Prepared For:</p>
-                            <p className="font-bold text-base">{customerName || 'Walk-in Customer'}</p>
-                            {customerPhone && <p className="text-gray-700">{customerPhone}</p>}
-                        </div>
-                        <div>
-                            <p className="text-gray-500 font-semibold text-xs uppercase mb-1">Vehicle Data:</p>
-                            <p className="font-bold text-base">{vehicleInfo || 'N/A'}</p>
-                        </div>
-                    </div>
-
-                    {/* Table Headers */}
-                    <div className="grid grid-cols-12 gap-4 border-b-2 border-black pb-2 mb-4 text-xs font-bold text-gray-700 uppercase tracking-wider">
-                        <div className="col-span-6">Description</div>
-                        <div className="col-span-2 text-center">Qty</div>
-                        <div className="col-span-2 text-right">Unit Price</div>
-                        <div className="col-span-2 text-right">Amount</div>
-                    </div>
-
-                    <div className="space-y-4 min-h-[300px]">
-                        {/* Hardware */}
-                        {selectedParts.length > 0 && (
                             <div>
-                                <p className="font-bold text-sm text-black border-b border-gray-200 pb-1 mb-2">Genuine Components</p>
-                                <div className="space-y-1">
-                                    {selectedParts.map(p => (
-                                        <div key={p.id} className="grid grid-cols-12 gap-4 text-sm items-center py-1">
-                                            <div className="col-span-6 font-medium text-black">
-                                                {p.name} <span className="text-xs text-gray-500 ml-2">({p.sku})</span>
-                                            </div>
-                                            <div className="col-span-2 text-center text-gray-700">{p.quantity}</div>
-                                            <div className="col-span-2 text-right text-gray-700">{formatCurrency(p.price)}</div>
-                                            <div className="col-span-2 text-right font-bold text-black">{formatCurrency(p.price * p.quantity)}</div>
-                                        </div>
-                                    ))}
-                                </div>
+                                <span style={{ fontWeight: '600' }}>Prepared for: </span>
+                                <span style={{ borderBottom: '1px solid #aaa', display: 'inline-block', minWidth: '180px', paddingBottom: '1px' }}>
+                                    {customerName || 'Walk-in Customer'}
+                                </span>
                             </div>
-                        )}
-
-                        {/* Services */}
-                        {selectedServices.length > 0 && (
-                            <div className="mt-4">
-                                <p className="font-bold text-sm text-black border-b border-gray-200 pb-1 mb-2">Labor & Services</p>
-                                <div className="space-y-1">
-                                    {selectedServices.map(s => (
-                                        <div key={s.id} className="grid grid-cols-12 gap-4 text-sm items-center py-1">
-                                            <div className="col-span-6 font-medium text-black">{s.name}</div>
-                                            <div className="col-span-2 text-center text-gray-700">1</div>
-                                            <div className="col-span-2 text-right text-gray-700">{formatCurrency(s.price)}</div>
-                                            <div className="col-span-2 text-right font-bold text-black">{formatCurrency(s.price)}</div>
-                                        </div>
-                                    ))}
+                            {customerPhone && (
+                                <div style={{ marginTop: '2px' }}>
+                                    <span style={{ fontWeight: '600' }}>Phone: </span>
+                                    <span>{customerPhone}</span>
                                 </div>
+                            )}
+                            <div style={{ marginTop: '2px' }}>
+                                <span style={{ fontWeight: '600' }}>Vehicle: </span>
+                                <span>{vehicleInfo || 'N/A'}</span>
                             </div>
-                        )}
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                            <div><span style={{ fontWeight: '600' }}>Date: </span><span>{quoteMeta.issuedAt.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: '2-digit' })}</span></div>
+                            <div><span style={{ fontWeight: '600' }}>Ref No: </span><span style={{ fontFamily: 'monospace', fontSize: '11px' }}>{quoteMeta.reference}</span></div>
+                        </div>
                     </div>
 
-                    {/* Totals Section */}
-                    <div className="border-t-2 border-black mt-6 pt-4 flex justify-end">
-                        <div className="w-1/2 space-y-2 font-sans">
-                            <div className="flex justify-between text-sm text-gray-700">
-                                <span>Subtotal</span><span>{formatCurrency(subtotal)}</span>
+                    <h3 style={{ textAlign: 'center', fontSize: '20px', fontWeight: '800', margin: '12px 0 14px', letterSpacing: '2px' }}>QUOTATION</h3>
+
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr>
+                                <th style={{ background: '#111', color: 'white', padding: '7px 10px', fontSize: '11px', fontWeight: '700', textAlign: 'left', textTransform: 'uppercase' }}>Qty</th>
+                                <th style={{ background: '#111', color: 'white', padding: '7px 10px', fontSize: '11px', fontWeight: '700', textAlign: 'left', textTransform: 'uppercase' }}>Item</th>
+                                <th style={{ background: '#111', color: 'white', padding: '7px 10px', fontSize: '11px', fontWeight: '700', textAlign: 'right', textTransform: 'uppercase' }}>Price/Unit</th>
+                                <th style={{ background: '#111', color: 'white', padding: '7px 10px', fontSize: '11px', fontWeight: '700', textAlign: 'right', textTransform: 'uppercase' }}>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {selectedParts.map((part) => (
+                                <tr key={part.id}>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>{part.quantity}</td>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>
+                                        {part.name}
+                                        <span style={{ display: 'block', fontSize: '10px', color: '#888', fontFamily: 'monospace' }}>{part.sku}</span>
+                                    </td>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right' }}>{formatCurrency(part.price)}</td>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(part.price * part.quantity)}</td>
+                                </tr>
+                            ))}
+                            {selectedServices.map((service) => (
+                                <tr key={service.id}>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>1</td>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>
+                                        {service.name}
+                                        <span style={{ display: 'block', fontSize: '10px', color: '#888' }}>Service / Labor</span>
+                                    </td>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right' }}>{formatCurrency(service.price)}</td>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(service.price)}</td>
+                                </tr>
+                            ))}
+                            {(selectedParts.length + selectedServices.length) < 8 && Array.from({ length: 8 - selectedParts.length - selectedServices.length }).map((_, index) => (
+                                <tr key={`empty-${index}`}>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>&nbsp;</td>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}></td>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}></td>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                        <div style={{ width: '220px', fontSize: '12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #ddd' }}>
+                                <span style={{ fontWeight: '600' }}>Subtotal</span>
+                                <span>{formatCurrency(subtotal)}</span>
                             </div>
-                            <div className="flex justify-between text-sm text-gray-700">
-                                <span>VAT (12%)</span><span>{formatCurrency(vat)}</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #ddd' }}>
+                                <span style={{ fontWeight: '600' }}>VAT (12%)</span>
+                                <span>{formatCurrency(vat)}</span>
                             </div>
-                            <div className="flex justify-between text-lg font-black text-black pt-2 border-t border-gray-300">
-                                <span>Total Due</span><span>{formatCurrency(total)}</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderTop: '2px solid black', marginTop: '4px', fontWeight: '800', fontSize: '14px' }}>
+                                <span>Total</span>
+                                <span>{formatCurrency(total)}</span>
                             </div>
                         </div>
                     </div>
 
-                    {/* Footer Note */}
-                    <div className="mt-12 pt-4 border-t border-gray-300 text-xs text-center text-gray-500">
-                        <p className="font-bold text-black mb-1">Thank you for choosing Limen Auto Parts Center.</p>
-                        <p>This quotation is an estimate and prices may vary depending on actual physical inspection.</p>
-                        <p>1308, 264 Epifanio de los Santos Ave, Pasay City, 1308 Metro Manila | +63 917 123 4567</p>
+                    <div style={{ textAlign: 'center', marginTop: '28px', paddingTop: '12px', borderTop: '1px solid #ccc' }}>
+                        <p style={{ fontSize: '10px', color: '#666', fontWeight: '500' }}>This is a quotation only. Actual costs may vary upon service.</p>
+                        <p style={{ fontSize: '9px', color: '#888', marginTop: '2px' }}>Validity: 7 Days from issue date</p>
                     </div>
                 </div>
-            )
-            }
+                <div className="mt-4 flex gap-3 print:hidden">
+                    <Button variant="secondary" fullWidth onClick={() => setShowPrintPreview(false)}>
+                        Close
+                    </Button>
+                    <Button variant="primary" fullWidth leftIcon={<Printer className="w-4 h-4" />} onClick={() => window.print()}>
+                        Print
+                    </Button>
+                </div>
+            </Modal>
         </div >
     );
 };

@@ -1,16 +1,14 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Text, Line, Html, Grid, Environment, ContactShadows, Float, useCursor } from '@react-three/drei';
 import * as THREE from 'three';
 import useStockroomStore from '../store/useStockroomStore';
-import api from '../api/stockroomApi';
 import SearchBar from '../components/SearchBar';
 import { useToast } from '../../../components/ui/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    RotateCcw, RotateCw, Plus, Eye, Grid3X3, Type, Trash2,
-    ChevronUp, ChevronDown, Target, X, Save, Home, FolderOpen,
-    Database, Check, Edit2, Star, Lock, Unlock, Move, Search, Box,
+    RotateCcw, RotateCw, Plus, Eye, Grid3X3, Trash2,
+    Save, Check, Edit2, Lock, Unlock, Move, Search, Box,
     Layers, Crosshair
 } from 'lucide-react';
 import ErrorBoundary from '../../../components/ui/ErrorBoundary';
@@ -40,17 +38,17 @@ const getDefaultLayout = () => ({
 
 // ==================== OBJECT TYPES ====================
 const OBJECT_TYPES = {
-    shelf: { label: '4-Layer Shelf', icon: '📦' },
-    shelf2: { label: '2-Layer Shelf', icon: '📦' },
-    counter: { label: 'Counter', icon: '💳' },
-    stairs: { label: 'Stairs', icon: '🪜' },
-    room: { label: 'Room', icon: '🚪' },
-    entrance: { label: 'Entrance', icon: '🚶' },
-    wall: { label: 'Wall', icon: '🧱' },
-    floor: { label: 'Floor', icon: '⬜' },
-    table: { label: 'Display Table', icon: '🪑' },
-    signage: { label: 'Signage', icon: '🪧' },
-    label: { label: 'Label', icon: '🏷️' },
+    shelf: { label: '4-Layer Shelf', icon: 'SH4' },
+    shelf2: { label: '2-Layer Shelf', icon: 'SH2' },
+    counter: { label: 'Counter', icon: 'CTR' },
+    stairs: { label: 'Stairs', icon: 'STR' },
+    room: { label: 'Room', icon: 'ROM' },
+    entrance: { label: 'Entrance', icon: 'ENT' },
+    wall: { label: 'Wall', icon: 'WAL' },
+    floor: { label: 'Floor Plate', icon: 'FLR' },
+    table: { label: 'Display Table', icon: 'TBL' },
+    signage: { label: 'Signage', icon: 'SIG' },
+    label: { label: 'Label Marker', icon: 'LBL' },
 };
 
 // ==================== DESIGN TOKENS ====================
@@ -64,6 +62,14 @@ const COLORS = {
     accent: '#fbbf24',   // Amber 400
     glow: '#ef4444',     // Red 500
     gold: '#fbbf24'
+};
+
+const buildRoutePoints = (start, end) => {
+    if (Math.abs(start.x - end.x) < 0.15 || Math.abs(start.z - end.z) < 0.15) {
+        return [start, end];
+    }
+
+    return [start, new THREE.Vector3(start.x, start.y, end.z), end];
 };
 
 // ==================== DRAGGABLE WRAPPER ====================
@@ -368,6 +374,66 @@ const Floor = ({ position = [0, -0.01, 0], rotation = 0, size = [10, 0.2, 10], f
     ) : <group position={position} rotation={[0, rotation, 0]}>{content}</group>;
 };
 
+const DisplayTable = ({ position, rotation = 0, label, editMode, onPositionChange, selected, onSelect, locked }) => {
+    const content = (
+        <group>
+            <mesh position={[0, 0.7, 0]} castShadow>
+                <boxGeometry args={[2.2, 0.12, 1.2]} />
+                <meshPhysicalMaterial color="#dbe4ee" metalness={0.25} roughness={0.35} />
+            </mesh>
+            {[-0.85, 0.85].map((x) => (
+                <mesh key={`leg-front-${x}`} position={[x, 0.34, 0.4]} castShadow>
+                    <boxGeometry args={[0.08, 0.68, 0.08]} />
+                    <meshPhysicalMaterial color={COLORS.shelfFrame} metalness={0.7} roughness={0.28} />
+                </mesh>
+            ))}
+            {[-0.85, 0.85].map((x) => (
+                <mesh key={`leg-back-${x}`} position={[x, 0.34, -0.4]} castShadow>
+                    <boxGeometry args={[0.08, 0.68, 0.08]} />
+                    <meshPhysicalMaterial color={COLORS.shelfFrame} metalness={0.7} roughness={0.28} />
+                </mesh>
+            ))}
+            <Text position={[0, 1.15, 0]} fontSize={0.18} color={COLORS.gold} anchorX="center">{label}</Text>
+        </group>
+    );
+    return editMode ? (
+        <DraggableObject position={position} rotation={rotation} onPositionChange={onPositionChange} editMode={editMode} name={label} selected={selected} onSelect={onSelect} locked={locked}>{content}</DraggableObject>
+    ) : <group position={position} rotation={[0, rotation, 0]}>{content}</group>;
+};
+
+const Signage = ({ position, rotation = 0, label, editMode, onPositionChange, selected, onSelect, locked }) => {
+    const content = (
+        <group>
+            <mesh position={[0, 1.2, 0]} castShadow>
+                <boxGeometry args={[1.5, 0.65, 0.08]} />
+                <meshPhysicalMaterial color={COLORS.glow} metalness={0.35} roughness={0.4} />
+            </mesh>
+            <mesh position={[0, 0.55, 0]} castShadow>
+                <cylinderGeometry args={[0.06, 0.06, 1.1, 16]} />
+                <meshPhysicalMaterial color={COLORS.shelfFrame} metalness={0.7} roughness={0.28} />
+            </mesh>
+            <Text position={[0, 1.2, 0.06]} fontSize={0.12} color="#ffffff" anchorX="center">{label}</Text>
+        </group>
+    );
+    return editMode ? (
+        <DraggableObject position={position} rotation={rotation} onPositionChange={onPositionChange} editMode={editMode} name={label} selected={selected} onSelect={onSelect} locked={locked}>{content}</DraggableObject>
+    ) : <group position={position} rotation={[0, rotation, 0]}>{content}</group>;
+};
+
+const LabelMarker = ({ position, rotation = 0, label, editMode, onPositionChange, selected, onSelect, locked }) => {
+    const content = (
+        <group>
+            <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[2.1, 0.8]} />
+                <meshBasicMaterial color="#ffffff" transparent opacity={0.95} />
+            </mesh>
+            <Text position={[0, 0.07, 0]} fontSize={0.14} color="#111111" anchorX="center" rotation={[-Math.PI / 2, 0, 0]}>{label}</Text>
+        </group>
+    );
+    return editMode ? (
+        <DraggableObject position={position} rotation={rotation} onPositionChange={onPositionChange} editMode={editMode} name={label} selected={selected} onSelect={onSelect} locked={locked}>{content}</DraggableObject>
+    ) : <group position={position} rotation={[0, rotation, 0]}>{content}</group>;
+};
 const HighlightMarker = ({ highlightedPart }) => {
     const meshRef = useRef();
     const beamRef = useRef();
@@ -445,12 +511,48 @@ const PathRenderer = ({ points }) => {
     );
 };
 
+const SceneCameraController = ({ viewMode, controlsRef, focusPoint }) => {
+    const { camera } = useThree();
+
+    useEffect(() => {
+        const target = focusPoint || [0, 0, 0];
+        const nextPosition = viewMode === '2d'
+            ? [target[0], 34, target[2] + 0.1]
+            : [target[0] + 16, 18, target[2] + 20];
+
+        camera.position.set(...nextPosition);
+        camera.lookAt(target[0], 0, target[2]);
+        camera.updateProjectionMatrix();
+
+        if (controlsRef.current) {
+            controlsRef.current.target.set(target[0], 0.5, target[2]);
+            controlsRef.current.update();
+        }
+    }, [camera, controlsRef, focusPoint, viewMode]);
+
+    return null;
+};
+
+const WarehouseBackdrop = () => (
+    <group>
+        <mesh position={[0, 6, 0]}>
+            <boxGeometry args={[42, 12, 42]} />
+            <meshStandardMaterial color="#091019" side={THREE.BackSide} roughness={0.95} metalness={0.05} />
+        </mesh>
+        <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[15.5, 16.1, 48]} />
+            <meshBasicMaterial color={COLORS.glow} transparent opacity={0.12} side={THREE.DoubleSide} />
+        </mesh>
+    </group>
+);
+
 // ==================== COMPONENT MAP ====================
-const COMPONENTS = { shelf: Shelf4Layer, shelf2: Shelf4Layer, counter: Counter, stairs: Stairs, room: Room, entrance: Entrance, wall: Wall, floor: Floor };
+const COMPONENTS = { shelf: Shelf4Layer, shelf2: Shelf4Layer, counter: Counter, stairs: Stairs, room: Room, entrance: Entrance, wall: Wall, floor: Floor, table: DisplayTable, signage: Signage, label: LabelMarker };
 
 // ==================== SCENE ====================
-const StockroomScene = ({ objects, currentFloor, editMode, selectedId, onSelect, onPositionChange, onStairClick }) => (
+const StockroomScene = ({ objects, currentFloor, editMode, selectedId, highlightedId, onSelect, onPositionChange, onStairClick }) => (
     <>
+        <WarehouseBackdrop />
         <Environment preset="city" />
         <ambientLight intensity={0.4} />
         <directionalLight position={[15, 30, 15]} intensity={1.5} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
@@ -469,6 +571,7 @@ const StockroomScene = ({ objects, currentFloor, editMode, selectedId, onSelect,
                     size={obj.size}
                     floor={obj.floor}
                     editMode={editMode}
+                    isHighlighted={highlightedId === obj.id}
                     selected={selectedId === obj.id}
                     onSelect={() => onSelect(obj.id)}
                     onPositionChange={(pos) => onPositionChange(obj.id, pos)}
@@ -479,11 +582,10 @@ const StockroomScene = ({ objects, currentFloor, editMode, selectedId, onSelect,
         })}
     </>
 );
-
 // ==================== MAIN COMPONENT ====================
 const StockroomViewer = () => {
-    const { selectedItem, clearSelection } = useStockroomStore();
-    const { success } = useToast();
+    const { selectedItem } = useStockroomStore();
+    const { success, warning } = useToast();
     const controlsRef = useRef();
 
     const [layout, setLayout] = useState(() => { const saved = localStorage.getItem('stockroomLayoutV2'); if (saved) try { return JSON.parse(saved); } catch { } return getDefaultLayout(); });
@@ -493,9 +595,11 @@ const StockroomViewer = () => {
     const [selectedId, setSelectedId] = useState(null);
     const [isTransitioning, setIsTransitioning] = useState(false);
     const [highlightedPart, setHighlightedPart] = useState(null);
+    const [highlightedId, setHighlightedId] = useState(null);
     const [pathPoints, setPathPoints] = useState([]);
     const [addMenuOpen, setAddMenuOpen] = useState(false);
     const [labelInput, setLabelInput] = useState('');
+    const [transitionTargetFloor, setTransitionTargetFloor] = useState(1);
     const [isOrbitEnabled, setIsOrbitEnabled] = useState(true);
 
     useEffect(() => {
@@ -506,10 +610,11 @@ const StockroomViewer = () => {
 
 
     const selectedObj = layout.objects.find(o => o.id === selectedId);
+    const focusPoint = highlightedPart?.position ? [highlightedPart.position.x, 0, highlightedPart.position.z] : [0, 0, 0];
     useEffect(() => { if (selectedObj) setLabelInput(selectedObj.label || ''); }, [selectedObj]);
 
-    const handleFloorChange = (floor) => { if (floor === currentFloor || isTransitioning) return; setIsTransitioning(true); setTimeout(() => { setCurrentFloor(floor); setTimeout(() => setIsTransitioning(false), 400); }, 200); };
-    const handleStairClick = () => { if (editMode) return; setIsTransitioning(true); setTimeout(() => { setCurrentFloor(prev => prev === 1 ? 2 : 1); setIsTransitioning(false); }, 400); };
+    const handleFloorChange = (floor) => { if (floor === currentFloor || isTransitioning) return; setTransitionTargetFloor(floor); setIsTransitioning(true); setTimeout(() => { setCurrentFloor(floor); setTimeout(() => { setIsTransitioning(false); setTransitionTargetFloor(floor); }, 400); }, 200); };
+    const handleStairClick = () => { if (editMode) return; const nextFloor = currentFloor === 1 ? 2 : 1; setTransitionTargetFloor(nextFloor); setIsTransitioning(true); setTimeout(() => { setCurrentFloor(nextFloor); setIsTransitioning(false); }, 400); };
 
     const handlePositionChange = useCallback((id, pos) => { setLayout(prev => ({ ...prev, objects: prev.objects.map(obj => obj.id === id ? { ...obj, x: pos[0], z: pos[2] } : obj) })); }, []);
     const rotateSelected = (delta) => { if (!selectedId) return; setLayout(prev => ({ ...prev, objects: prev.objects.map(obj => obj.id === selectedId ? { ...obj, rotation: (obj.rotation || 0) + delta } : obj) })); };
@@ -524,25 +629,56 @@ const StockroomViewer = () => {
         setAddMenuOpen(false);
     };
     const saveLayout = () => { localStorage.setItem('stockroomLayoutV2', JSON.stringify(layout)); success('Schematic Architecture Saved!'); };
-    const resetLayout = () => { setLayout(getDefaultLayout()); localStorage.setItem('stockroomLayoutV2', JSON.stringify(getDefaultLayout())); setSelectedId(null); success('Schematic Architecture Reset'); };
+    const resetLayout = () => { setLayout(getDefaultLayout()); localStorage.setItem('stockroomLayoutV2', JSON.stringify(getDefaultLayout())); setSelectedId(null); setHighlightedId(null); success('Schematic Architecture Reset'); };
 
     const handlePartSearch = (part) => {
-        if (!part || !layout?.objects) return;
-        const { aisle, shelf } = part.location || {};
-        if (!aisle || !shelf) return;
-        const targetShelf = layout.objects.find(obj => obj.type === 'shelf' && obj.aisle === aisle && obj.shelfNum === shelf);
-        const x = targetShelf?.x || (-5 + ['A', 'B', 'C'].indexOf(aisle) * 4);
-        const z = targetShelf?.z || (-4 + (shelf - 1) * 3);
-        setHighlightedPart({ ...part, position: { x, y: 1.5, z }, floor: targetShelf?.floor || 1 });
-        if (targetShelf?.floor && targetShelf.floor !== currentFloor) setCurrentFloor(targetShelf.floor);
-        const counterObj = layout.objects.find(o => o.type === 'counter' && o.floor === currentFloor);
+        if (!layout?.objects) return;
+        if (!part) {
+            setHighlightedPart(null);
+            setHighlightedId(null);
+            setPathPoints([]);
+            return;
+        }
+
+        const fallbackMatch = typeof part.location_code === 'string'
+            ? part.location_code.match(/F(\d+)-([A-Z]+)-?(\d+)/i)
+            : null;
+        const aisle = (part.location?.aisle || part.location?.section || fallbackMatch?.[2] || '').toUpperCase();
+        const shelf = Number(part.location?.shelf || fallbackMatch?.[3] || 0);
+        const targetShelf = layout.objects.find(obj => (obj.type === 'shelf' || obj.type === 'shelf2') && obj.aisle === aisle && obj.shelfNum === shelf);
+
+        if (!aisle || !shelf || !targetShelf) {
+            setHighlightedPart(null);
+            setHighlightedId(null);
+            setPathPoints([]);
+            warning('This item does not have a mapped stockroom shelf yet.');
+            return;
+        }
+
+        const targetFloor = targetShelf.floor || Number(part.location?.floor || fallbackMatch?.[1] || currentFloor || 1);
+        const x = targetShelf.x;
+        const z = targetShelf.z;
+
+        setHighlightedId(targetShelf.id);
+        setHighlightedPart({ ...part, position: { x, y: 1.5, z }, floor: targetFloor });
+
+        if (targetFloor !== currentFloor) {
+            handleFloorChange(targetFloor);
+        }
+
+        const counterObj = layout.objects.find(o => o.type === 'counter' && o.floor === targetFloor);
         const start = counterObj ? new THREE.Vector3(counterObj.x, 0.2, counterObj.z) : new THREE.Vector3(0, 0.2, 0);
-        setPathPoints([start, new THREE.Vector3(x, 0.2, z)]);
+        const end = new THREE.Vector3(x, 0.2, z);
+        setPathPoints(buildRoutePoints(start, end));
     };
 
     useEffect(() => {
         if (selectedItem) handlePartSearch(selectedItem);
-        else { setHighlightedPart(null); setPathPoints([]); }
+        else {
+            setHighlightedPart(null);
+            setHighlightedId(null);
+            setPathPoints([]);
+        }
     }, [selectedItem, layout]);
 
     return (
@@ -551,21 +687,21 @@ const StockroomViewer = () => {
             <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between mb-4"
+                className="relative overflow-hidden rounded-3xl border border-primary-200 bg-white p-6 shadow-sm flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between mb-4"
             >
                 <div>
                     <h1 className="text-3xl font-display font-bold text-primary-950 tracking-widest uppercase flex items-center gap-3">
                         <span className="w-8 h-8 rounded bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center shadow-sm">
                             <Box className="w-4 h-4 text-white" />
                         </span>
-                        <span>{currentFloor === 1 ? 'Ground System' : 'Upper Deck'}</span>
-                        <span className="text-red-600 font-light">&mdash; Spatial Mapping</span>
+                        <span>3D Stockroom</span>
+                        <span className="text-red-600 font-light">Floor {currentFloor}</span>
                         {editMode && <span className="text-amber-500 ml-2 animate-pulse text-sm flex items-center gap-1 border border-amber-500/30 px-2 py-1 rounded bg-amber-500/10"><Edit2 className="w-3 h-3" /> SCHEMA OVERRIDE</span>}
                     </h1>
                     <p className="text-primary-500 mt-2 font-mono text-sm max-w-2xl leading-relaxed">
                         {editMode
-                            ? '>> SYSTEM IN DESIGN MODE. MANIPULATE GEOMETRY AND ARCHITECTURE. <<'
-                            : '>> LIVE DIGITAL TWIN ACTIVE. SEARCH AND LOCATE INVENTORY SPATIALLY. <<'}
+                            ? 'Edit mode is active. Move, relabel, and organize stockroom objects.'
+                            : 'Search inventory and locate mapped parts in the stockroom scene.'}
                     </p>
 
                     {!editMode && (
@@ -587,7 +723,7 @@ const StockroomViewer = () => {
 
                     <button className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all border ${viewMode === '2d' ? 'bg-primary-100 border-primary-200 text-primary-950' : 'bg-transparent border-transparent text-primary-600 hover:bg-primary-50 hover:text-primary-950'}`} onClick={() => setViewMode(v => v === '3d' ? '2d' : '3d')}>
                         {viewMode === '2d' ? <Eye className="w-4 h-4" /> : <Grid3X3 className="w-4 h-4" />}
-                        {viewMode === '2d' ? 'PERSPECTIVE' : 'ORTHOGRAPHIC'}
+                        {viewMode === '2d' ? 'PLAN VIEW' : '3D VIEW'}
                     </button>
 
                     <button className={`px-5 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${editMode ? 'bg-amber-500 text-white shadow-md' : 'bg-white border border-primary-200 text-primary-700 hover:bg-primary-50'}`} onClick={() => setEditMode(!editMode)}>
@@ -615,7 +751,7 @@ const StockroomViewer = () => {
                                     <div className="absolute top-full left-0 mt-2 bg-white border border-primary-200 rounded-xl p-2 min-w-[200px] max-h-[300px] overflow-y-auto z-50 shadow-xl">
                                         {Object.entries(OBJECT_TYPES).map(([key, val]) => (
                                             <button key={key} onClick={() => addObject(key)} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-primary-50 text-primary-950 text-sm font-bold transition-colors">
-                                                <span className="text-lg">{val.icon}</span>{val.label}
+                                                <span className="text-[10px] font-mono font-bold tracking-[0.18em] rounded-full bg-primary-100 text-primary-600 px-2 py-1">{val.icon}</span>{val.label}
                                             </button>
                                         ))}
                                     </div>
@@ -669,15 +805,7 @@ const StockroomViewer = () => {
             </AnimatePresence>
 
             {/* 3D Canvas Container */}
-            <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-[#050505]" style={{ height: '65vh', minHeight: 600 }}>
-                {/* HUD Elements */}
-                <div className="absolute top-6 left-6 z-10 pointer-events-none">
-                    <div className="text-red-500/50 font-mono text-xs tracking-widest uppercase mb-1">System Status</div>
-                    <div className="flex items-center gap-2 text-white/90 font-display text-lg tracking-wider">
-                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                        <span>LIVE / SECURE</span>
-                    </div>
-                </div>
+            <div className="relative rounded-[28px] overflow-hidden border border-primary-200 shadow-2xl bg-[#050505]" style={{ height: '68vh', minHeight: 640 }}>
 
                 {/* Transition Overlay */}
                 <AnimatePresence>
@@ -690,7 +818,7 @@ const StockroomViewer = () => {
                         >
                             <Box className="w-16 h-16 mb-6 animate-pulse" />
                             <div className="text-2xl font-display uppercase tracking-[0.2em] font-light text-primary-950">
-                                Re-routing to <strong className="font-bold text-primary-950">{currentFloor === 1 ? 'Ground System' : 'Upper Deck'}</strong>
+                                Switching to <strong className="font-bold text-primary-950">Floor {transitionTargetFloor}</strong>
                             </div>
                             <div className="mt-4 w-48 h-1 bg-primary-200 rounded-full overflow-hidden">
                                 <motion.div
@@ -704,20 +832,22 @@ const StockroomViewer = () => {
                     )}
                 </AnimatePresence>
 
-                <ErrorBoundary>
+                                <ErrorBoundary>
                     <Canvas
                         gl={{ antialias: true, powerPreference: "high-performance", alpha: false }}
-                        camera={{ position: viewMode === '2d' ? [0, 40, 0.1] : [0, 20, 25], fov: 50 }}
+                        camera={{ position: [0, 20, 25], fov: 50 }}
                         style={{ background: COLORS.bg }}
                         onCreated={({ gl }) => {
                             gl.setClearColor(new THREE.Color(COLORS.bg));
                         }}
                     >
+                        <SceneCameraController viewMode={viewMode} controlsRef={controlsRef} focusPoint={focusPoint} />
                         <StockroomScene
                             objects={layout.objects}
                             currentFloor={currentFloor}
                             editMode={editMode}
                             selectedId={selectedId}
+                            highlightedId={highlightedId}
                             onSelect={setSelectedId}
                             onPositionChange={handlePositionChange}
                             onStairClick={handleStairClick}
@@ -742,7 +872,7 @@ const StockroomViewer = () => {
                 <div className="absolute bottom-6 left-6 z-10 pointer-events-none">
                     <div className="backdrop-blur-md bg-white/80 border border-primary-200 rounded-xl p-4 min-w-[160px] shadow-sm">
                         <div className="text-[10px] text-primary-500 font-bold font-mono tracking-widest uppercase mb-3 border-b border-primary-200 pb-2">
-                            {currentFloor === 1 ? 'LEVEL_01_DATA' : 'LEVEL_02_DATA'}
+                            Floor {currentFloor}
                         </div>
                         <div className="space-y-3 font-mono text-sm">
                             <div className="flex justify-between items-center text-primary-700">
@@ -757,12 +887,8 @@ const StockroomViewer = () => {
                     </div>
                 </div>
 
-                <div className="absolute bottom-6 right-6 z-10 pointer-events-none text-right">
-                    <div className="font-mono text-xs font-bold text-amber-600 tracking-widest mb-1 border-b border-amber-200 pb-1">
-                        CONTROLS_ACTIVE
-                    </div>
-                    <div className="font-mono text-xs font-bold text-primary-500 bg-white/50 px-2 py-0.5 rounded backdrop-blur-sm">
-                        {editMode ? 'CLICK/DRAG TO MODIFY' : viewMode === '2d' ? 'DRAG TO PAN • SCROLL TO ZOOM' : 'DRAG TO ROTATE/PAN • SCROLL TO ZOOM'}
+                <div className="absolute bottom-6 right-6 z-10 pointer-events-none text-right"><div className="font-mono text-xs font-bold text-primary-500 bg-white/50 px-2 py-0.5 rounded backdrop-blur-sm">
+                        {editMode ? 'CLICK / DRAG TO MODIFY' : viewMode === '2d' ? 'DRAG TO PAN / SCROLL TO ZOOM' : 'DRAG TO ROTATE OR PAN / SCROLL TO ZOOM'}
                     </div>
                 </div>
             </div>
@@ -777,7 +903,7 @@ const StockroomViewer = () => {
                 >
                     <div className="bg-white border border-primary-200 rounded-full px-6 py-2 flex items-center gap-3 text-sm text-primary-600 font-bold shadow-sm">
                         <Search className="w-4 h-4 text-primary-400" />
-                        Use the search bar above to locate a specific part in the 3D space.
+                        Search to highlight a mapped shelf location.
                     </div>
                 </motion.div>
             )}
@@ -786,3 +912,19 @@ const StockroomViewer = () => {
 };
 
 export default StockroomViewer;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
