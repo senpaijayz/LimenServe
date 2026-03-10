@@ -36,7 +36,7 @@ import {
     STOCKROOM_LAYOUT_STORAGE_KEY,
 } from '../config/stockroomLayout';
 
-const SCENE_BG = '#080b12';
+const SCENE_BG = '#eef3f8';
 
 const buildRoutePoints = (start, end) => {
     const startPoint = new THREE.Vector3(start.x, start.y, start.z);
@@ -307,13 +307,7 @@ const StockroomViewer = () => {
     }, [currentFloor, editMode, switchFloor]);
 
     const toggleEditMode = useCallback(() => {
-        setEditMode((previous) => {
-            const next = !previous;
-            if (next) {
-                setViewMode('2d');
-            }
-            return next;
-        });
+        setEditMode((previous) => !previous);
     }, []);
 
     const clearCanvasSelection = useCallback(() => {
@@ -556,7 +550,7 @@ const StockroomViewer = () => {
                 )}
             </AnimatePresence>
 
-            <section className="relative overflow-hidden rounded-[30px] border border-primary-200 bg-[#05070b] shadow-2xl">
+            <section className="relative overflow-hidden rounded-[30px] border border-primary-200 bg-[#eef3f8] shadow-2xl">
                 <AnimatePresence>
                     {isTransitioning && (
                         <motion.div
@@ -573,7 +567,7 @@ const StockroomViewer = () => {
                     )}
                 </AnimatePresence>
 
-                <div className="relative h-[52vh] min-h-[360px] sm:h-[60vh] sm:min-h-[460px] lg:h-[72vh] lg:min-h-[680px]">
+                <div className="relative h-[46vh] min-h-[320px] sm:h-[56vh] sm:min-h-[420px] lg:h-[72vh] lg:min-h-[680px]">
                     <ErrorBoundary>
                         <Canvas
                             shadows
@@ -605,47 +599,47 @@ const StockroomViewer = () => {
                             />
                             <OrbitControls
                                 ref={controlsRef}
-                                enabled={!isDraggingObject}
-                                enableRotate={!editMode && viewMode === '3d'}
-                                enablePan={!editMode}
+                                enabled={!isTransitioning && !isDraggingObject}
+                                enableRotate={viewMode === '3d'}
+                                enablePan
                                 enableZoom
                                 screenSpacePanning
-                                minDistance={8}
+                                minDistance={6}
                                 maxDistance={72}
-                                minPolarAngle={viewMode === '2d' ? 0.001 : 0.45}
+                                minPolarAngle={viewMode === '2d' ? 0.001 : 0.38}
                                 maxPolarAngle={viewMode === '2d' ? 0.001 : Math.PI / 2.08}
                                 dampingFactor={0.08}
                             />
                         </Canvas>
                     </ErrorBoundary>
 
-                    <div className="pointer-events-none absolute left-3 top-3 z-10 sm:left-5 sm:top-5">
-                        <div className="rounded-2xl border border-white/10 bg-slate-950/75 px-4 py-3 text-white shadow-xl backdrop-blur-md">
-                            <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-slate-400">Scene State</div>
-                            <div className="mt-2 text-sm font-semibold text-slate-100">
+                    <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[220px] sm:left-5 sm:top-5 sm:max-w-none">
+                        <div className="rounded-2xl border border-primary-200/80 bg-white/88 px-3 py-2.5 text-primary-950 shadow-lg backdrop-blur-md sm:px-4 sm:py-3">
+                            <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-primary-400">Scene State</div>
+                            <div className="mt-2 text-sm font-semibold text-primary-900">
                                 {editMode ? 'Layout editing enabled' : selectedItem ? 'Search route active' : 'Interactive warehouse view'}
                             </div>
                         </div>
                     </div>
 
                     <div className="pointer-events-none absolute bottom-3 left-3 z-10 sm:bottom-5 sm:left-5">
-                        <div className="rounded-2xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-xl backdrop-blur-md">
-                            <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-slate-400">Floor {currentFloor}</div>
+                        <div className="rounded-2xl border border-primary-200/80 bg-white/88 p-3 text-primary-950 shadow-lg backdrop-blur-md sm:p-4">
+                            <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-primary-400">Floor {currentFloor}</div>
                             <div className="mt-3 space-y-2 text-sm">
                                 <div className="flex items-center justify-between gap-8">
-                                    <span className="text-slate-300">Shelves</span>
+                                    <span className="text-primary-500">Shelves</span>
                                     <span className="font-bold">{floorStats.shelves}</span>
                                 </div>
                                 <div className="flex items-center justify-between gap-8">
-                                    <span className="text-slate-300">Fixtures</span>
+                                    <span className="text-primary-500">Fixtures</span>
                                     <span className="font-bold">{floorStats.fixtures}</span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="pointer-events-none absolute bottom-3 right-3 z-10 max-w-[250px] sm:bottom-5 sm:right-5">
-                        <div className="rounded-2xl border border-white/10 bg-slate-950/75 px-4 py-3 text-right text-xs font-bold uppercase tracking-[0.24em] text-slate-300 shadow-xl backdrop-blur-md">
+                    <div className="pointer-events-none absolute bottom-3 right-3 z-10 max-w-[220px] sm:bottom-5 sm:right-5 sm:max-w-[250px]">
+                        <div className="rounded-2xl border border-primary-200/80 bg-white/88 px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-[0.22em] text-primary-600 shadow-lg backdrop-blur-md sm:px-4 sm:py-3">
                             {editMode ? 'Drag shelves directly in the scene' : viewMode === '2d' ? 'Pan and zoom the plan view' : 'Rotate, pan, and zoom the stockroom'}
                         </div>
                     </div>
@@ -669,3 +663,4 @@ const StockroomViewer = () => {
 };
 
 export default StockroomViewer;
+
