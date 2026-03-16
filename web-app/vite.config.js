@@ -7,6 +7,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // Prevent stale cached builds from trapping users on old deployments.
+      // This keeps the manifest but removes the service worker and its caches on visit.
+      selfDestroying: true,
       registerType: 'autoUpdate',
       injectRegister: 'auto',
       manifest: {
