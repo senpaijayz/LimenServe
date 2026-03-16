@@ -170,6 +170,43 @@ router.get('/products/all', async (_req, res, next) => {
   }
 });
 
+router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, next) => {
+  try {
+    const [
+      { count: pricelistRows, error: pricelistError },
+      { count: uniqueProducts, error: productsError },
+      { count: currentPriceRows, error: pricesError },
+    ] = await Promise.all([
+      supabaseAdmin.from('pricelist').select('sku', { count: 'exact', head: true }),
+      supabaseAdmin.schema('app').from('products').select('id', { count: 'exact', head: true }).eq('is_active', true),
+      supabaseAdmin.schema('app').from('product_prices').select('product_id', { count: 'exact', head: true }).eq('price_type', 'retail').eq('is_current', true),
+    ]);
+
+    if (pricelistError) {
+      throw pricelistError;
+    }
+
+    if (productsError) {
+      throw productsError;
+    }
+
+    if (pricesError) {
+      throw pricesError;
+    }
+
+    res.json({
+      summary: {
+        totalProducts: Number(pricelistRows ?? 0),
+        pricelistRows: Number(pricelistRows ?? 0),
+        uniqueProducts: Number(uniqueProducts ?? 0),
+        currentPrices: Number(currentPriceRows ?? 0),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/services', async (_req, res, next) => {
   try {
     const { data: services, error } = await supabaseAdmin

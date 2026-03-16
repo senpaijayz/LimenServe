@@ -22,6 +22,20 @@ export async function getFullProductCatalog() {
   }
 }
 
+export async function getCatalogSummary() {
+  try {
+    const { data } = await apiClient.get('/catalog/summary');
+    return data.summary ?? {
+      totalProducts: 0,
+      pricelistRows: 0,
+      uniqueProducts: 0,
+      currentPrices: 0,
+    };
+  } catch (error) {
+    extractApiError(error, 'Failed to load catalog summary.');
+  }
+}
+
 export async function getServiceCatalog() {
   try {
     const { data } = await apiClient.get('/catalog/services');
@@ -63,4 +77,3 @@ export async function getAnalyticsRefreshRuns(limitCount = 10) {
     extractApiError(error, 'Failed to load analytics refresh runs.');
   }
 }
-
