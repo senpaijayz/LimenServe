@@ -6,6 +6,7 @@ import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
+import ProductPackageSuggestions from '../components/ProductPackageSuggestions';
 
 const createQuoteMeta = () => ({
     issuedAt: new Date(),
@@ -19,6 +20,7 @@ const PublicEstimate = () => {
     const [selectedParts, setSelectedParts] = useState([]);
     const [selectedServices, setSelectedServices] = useState([]);
     const [partSearch, setPartSearch] = useState('');
+    const [focusedProduct, setFocusedProduct] = useState(null);
     const [showPrintPreview, setShowPrintPreview] = useState(false);
     const [quoteMeta, setQuoteMeta] = useState(() => createQuoteMeta());
 
@@ -44,16 +46,22 @@ const PublicEstimate = () => {
     }));
 
     const addPart = (product) => {
-        const existing = selectedParts.find((part) => part.id === product.id);
-        if (existing) {
-            setSelectedParts((parts) => parts.map((part) => (part.id === product.id ? { ...part, quantity: part.quantity + 1 } : part)));
-        } else {
-            setSelectedParts([...selectedParts, { ...product, quantity: 1 }]);
-        }
+        setFocusedProduct(product);
+        setSelectedParts((parts) => {
+            const existing = parts.find((part) => part.id === product.id);
+            if (existing) {
+                return parts.map((part) => (part.id === product.id ? { ...part, quantity: part.quantity + 1 } : part));
+            }
+
+            return [...parts, { ...product, quantity: 1 }];
+        });
     };
 
     const removePart = (id) => {
         setSelectedParts((parts) => parts.filter((part) => part.id !== id));
+        if (focusedProduct?.id === id) {
+            setFocusedProduct(null);
+        }
     };
 
     const updateQty = (id, qty) => {
@@ -72,6 +80,22 @@ const PublicEstimate = () => {
         } else {
             setSelectedServices([...selectedServices, service]);
         }
+    };
+
+    const addSuggestedService = (recommendation) => {
+        const service = {
+            id: recommendation.recommendedServiceId,
+            name: recommendation.recommendedServiceName,
+            price: Number(recommendation.recommendedPrice ?? 0),
+        };
+
+        setSelectedServices((services) => {
+            if (services.some((selected) => selected.id === service.id)) {
+                return services;
+            }
+
+            return [...services, service];
+        });
     };
 
     const partsTotal = selectedParts.reduce((sum, part) => sum + (part.price * part.quantity), 0);
@@ -158,6 +182,7 @@ const PublicEstimate = () => {
                                     <div>
                                         <h3 className="text-xl font-display font-semibold text-primary-950">Genuine Parts Price List</h3>
                                         <p className="text-sm text-primary-500">Top 12 matches from the imported Supabase retail price list.</p>
+                                        <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary-400">Click a part to add it and reveal its matched package.</p>
                                     </div>
                                 </div>
 
@@ -206,6 +231,34 @@ const PublicEstimate = () => {
                                 })}
                             </div>
                         </div>
+
+                        {focusedProduct && (
+                            <ProductPackageSuggestions
+                                product={focusedProduct}
+                                vehicleModelId={focusedProduct.model || vehicleInfo}
+                                onAddProduct={(recommendation) => {
+                                    const matchedProduct = recommendation.recommendedProduct;
+
+                                    if (!matchedProduct?.id) {
+                                        return;
+                                    }
+
+                                    addPart({
+                                        id: matchedProduct.id,
+                                        name: matchedProduct.name,
+                                        sku: matchedProduct.sku,
+                                        price: Number(matchedProduct.price ?? recommendation.recommendedPrice ?? 0),
+                                        category: matchedProduct.category,
+                                        model: matchedProduct.model,
+                                    });
+                                }}
+                                onAddService={addSuggestedService}
+                                selectedProductIds={selectedParts.map((part) => part.id)}
+                                selectedServiceIds={selectedServices.map((service) => service.id)}
+                                title="Matched Package Suggestions"
+                                subtitle="Suggested add-on parts and labor for the currently selected part."
+                            />
+                        )}
 
                         <div className="surface p-6">
                             <div className="flex items-start gap-3 mb-6">
@@ -434,4 +487,7 @@ const PublicEstimate = () => {
 };
 
 export default PublicEstimate;
+
+
+
 

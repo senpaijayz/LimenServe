@@ -16,6 +16,7 @@ import { Link } from 'react-router-dom';
 import Barcode from 'react-barcode';
 import { formatCurrency } from '../../../utils/formatters';
 import useProductCatalog from '../../../hooks/useProductCatalog';
+import ProductPackageSuggestions from './ProductPackageSuggestions';
 
 const PAGE_SIZE = 12;
 
@@ -418,6 +419,15 @@ const PublicCatalogView = () => {
                                         </div>
                                     </div>
 
+                                    <div className="mb-8">
+                                        <ProductPackageSuggestions
+                                            product={selectedProduct}
+                                            vehicleModelId={selectedProduct.model}
+                                            title="Package Suggestions"
+                                            subtitle="Matched parts and service labor that usually go together with this component."
+                                        />
+                                    </div>
+
                                     <div className="mt-auto pt-8 border-t border-primary-200 flex flex-col sm:flex-row items-center justify-between gap-6">
                                         <div>
                                             <p className="text-xs font-medium text-primary-500 uppercase tracking-widest mb-1">Unit Valuation (VAT Inc.)</p>
@@ -443,4 +453,5 @@ const PublicCatalogView = () => {
 };
 
 export default PublicCatalogView;
+
 
