@@ -6,7 +6,8 @@ async function fetchProfile(userId) {
   });
 
   if (error) {
-    throw error;
+    console.warn('Failed to load user profile via RPC:', error.message);
+    return null;
   }
 
   return Array.isArray(data) ? (data[0] ?? null) : data;
@@ -31,12 +32,14 @@ export async function attachUser(req, _res, next) {
     }
 
     const profile = await fetchProfile(data.user.id);
+    const fallbackFullName = data.user.user_metadata?.full_name || '';
+    const fallbackRole = data.user.app_metadata?.role || 'customer';
 
     req.user = {
       id: data.user.id,
       email: data.user.email,
-      fullName: profile?.full_name || data.user.user_metadata?.full_name || '',
-      role: profile?.role || data.user.app_metadata?.role || 'customer',
+      fullName: profile?.full_name || fallbackFullName,
+      role: profile?.role || fallbackRole,
       profile,
     };
 
