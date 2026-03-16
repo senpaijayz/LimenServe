@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Search,
@@ -15,7 +15,7 @@ import {
 import { Link } from 'react-router-dom';
 import Barcode from 'react-barcode';
 import { formatCurrency } from '../../../utils/formatters';
-import useDataStore from '../../../store/useDataStore';
+import useProductCatalog from '../../../hooks/useProductCatalog';
 
 const PAGE_SIZE = 10;
 
@@ -89,81 +89,48 @@ const PublicCatalogView = () => {
     const [sortBy, setSortBy] = useState('name-asc');
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedProduct, setSelectedProduct] = useState(null);
-    const { products: storeProducts, loading } = useDataStore();
 
-    const catalogProducts = useMemo(() => storeProducts.map((product) => ({
-        id: product.id,
-        name: product.name,
-        sku: product.sku,
-        category: product.category,
-        price: Number(product.price ?? 0),
-        inStock: Number(product.quantity ?? product.stock ?? 0) > 0,
-        model: product.model || 'Universal',
-        compatibility: [product.model || 'Universal'],
-        description: `Genuine Mitsubishi ${product.name} for ${product.model || 'Universal'}. Engineered for exact fitment.`,
-    })), [storeProducts]);
-
-    const categories = useMemo(() => [
-        { value: 'all', label: 'All Categories', count: catalogProducts.length },
-        ...Array.from(new Set(catalogProducts.map((product) => product.category)))
-            .sort((a, b) => a.localeCompare(b))
-            .map((category) => ({
-                value: category,
-                label: category,
-                count: catalogProducts.filter((product) => product.category === category).length,
-            })),
-    ], [catalogProducts]);
-
-    const filteredProducts = useMemo(() => catalogProducts.filter((product) => {
-        const query = searchQuery.trim().toLowerCase();
-        const matchesSearch = query === ''
-            || product.name.toLowerCase().includes(query)
-            || product.sku.toLowerCase().includes(query)
-            || product.model.toLowerCase().includes(query);
-        const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
-
-        return matchesSearch && matchesCategory;
-    }), [catalogProducts, searchQuery, selectedCategory]);
-
-    const sortedProducts = useMemo(() => {
-        const products = [...filteredProducts];
-
-        switch (sortBy) {
-            case 'name-desc':
-                return products.sort((a, b) => b.name.localeCompare(a.name));
-            case 'price-asc':
-                return products.sort((a, b) => a.price - b.price);
-            case 'price-desc':
-                return products.sort((a, b) => b.price - a.price);
-            case 'name-asc':
-            default:
-                return products.sort((a, b) => a.name.localeCompare(b.name));
-        }
-    }, [filteredProducts, sortBy]);
+    const {
+        products,
+        categories,
+        pagination,
+        loading,
+        error,
+    } = useProductCatalog({
+        page: currentPage,
+        pageSize: PAGE_SIZE,
+        searchQuery,
+        selectedCategory,
+        sortBy,
+    });
 
     useEffect(() => {
         setCurrentPage(1);
     }, [searchQuery, selectedCategory, sortBy]);
 
-    const totalPages = Math.max(1, Math.ceil(sortedProducts.length / PAGE_SIZE));
-    const visibleProducts = sortedProducts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-    const rangeStart = sortedProducts.length === 0 ? 0 : ((currentPage - 1) * PAGE_SIZE) + 1;
-    const rangeEnd = sortedProducts.length === 0 ? 0 : Math.min(currentPage * PAGE_SIZE, sortedProducts.length);
-    const canGoPrev = currentPage > 1;
-    const canGoNext = currentPage < totalPages;
+    const visibleProducts = products.map((product) => ({
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        category: product.category,
+        price: Number(product.price ?? 0),
+        inStock: Number(product.stock ?? 0) > 0,
+        model: product.model || 'Universal',
+        compatibility: [product.model || 'Universal'],
+        description: `Genuine Mitsubishi ${product.name} for ${product.model || 'Universal'}. Engineered for exact fitment.`,
+    }));
+
+    const totalCount = pagination.totalCount || 0;
+    const totalPages = pagination.totalPages || 1;
+    const rangeStart = totalCount === 0 ? 0 : ((pagination.page - 1) * pagination.pageSize) + 1;
+    const rangeEnd = totalCount === 0 ? 0 : Math.min(pagination.page * pagination.pageSize, totalCount);
+    const canGoPrev = pagination.page > 1;
+    const canGoNext = pagination.page < totalPages;
 
     const resetFilters = () => {
         setSearchQuery('');
         setSelectedCategory('all');
         setSortBy('name-asc');
-    };
-
-    const goToPreviousPage = () => {
-        setCurrentPage((page) => Math.max(1, page - 1));
-    };
-
-    const goToNextPage = () => {
-        setCurrentPage((page) => Math.min(totalPages, page + 1));
     };
 
     return (
@@ -238,10 +205,10 @@ const PublicCatalogView = () => {
                         <div className="text-sm text-primary-600">
                             <span>
                                 Showing <strong className="text-primary-950">{rangeStart}-{rangeEnd}</strong> of{' '}
-                                <strong className="text-primary-950">{sortedProducts.length}</strong> components
+                                <strong className="text-primary-950">{totalCount}</strong> components
                             </span>
                             <p className="mt-1 text-xs uppercase tracking-[0.22em] text-primary-400">
-                                Page {currentPage} of {totalPages}
+                                Page {pagination.page} of {totalPages}
                             </p>
                         </div>
 
@@ -272,7 +239,16 @@ const PublicCatalogView = () => {
                             <div className="spinner mx-auto mb-4" />
                             <h3 className="text-xl font-display font-medium text-primary-950">Loading Catalog Data...</h3>
                         </div>
-                    ) : sortedProducts.length === 0 ? (
+                    ) : error ? (
+                        <div className="w-full bg-white border border-accent-danger/20 p-24 text-center flex flex-col items-center justify-center rounded-2xl shadow-sm">
+                            <LayoutGrid className="w-20 h-20 text-accent-danger/40 mb-8" />
+                            <h3 className="text-3xl font-display font-bold text-primary-950 mb-3">Catalog unavailable</h3>
+                            <p className="text-primary-600 mb-8 max-w-md font-sans text-lg">{error}</p>
+                            <button onClick={resetFilters} className="btn btn-outline text-accent-primary hover:bg-accent-primary/5 hover:border-accent-primary">
+                                Reset Filters
+                            </button>
+                        </div>
+                    ) : totalCount === 0 ? (
                         <div className="w-full bg-white border border-primary-200 p-24 text-center flex flex-col items-center justify-center rounded-2xl shadow-sm">
                             <LayoutGrid className="w-20 h-20 text-primary-300 mb-8" />
                             <h3 className="text-3xl font-display font-bold text-primary-950 mb-3">No components matched</h3>
@@ -335,13 +311,13 @@ const PublicCatalogView = () => {
 
                             <div className="mt-10 flex flex-col gap-4 rounded-2xl border border-primary-200 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                                 <div className="text-sm text-primary-600">
-                                    <span className="font-semibold text-primary-950">{sortedProducts.length}</span> total genuine parts available
+                                    <span className="font-semibold text-primary-950">{totalCount}</span> total genuine parts available
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-3">
                                     <button
                                         type="button"
-                                        onClick={goToPreviousPage}
+                                        onClick={canGoPrev ? () => setCurrentPage((page) => Math.max(1, page - 1)) : undefined}
                                         disabled={!canGoPrev}
                                         className="inline-flex items-center gap-2 rounded-xl border border-primary-200 px-4 py-2 text-sm font-semibold text-primary-700 transition disabled:cursor-not-allowed disabled:opacity-40 hover:border-primary-300 hover:bg-primary-50"
                                     >
@@ -351,7 +327,7 @@ const PublicCatalogView = () => {
                                     {canGoNext && (
                                         <button
                                             type="button"
-                                            onClick={goToNextPage}
+                                            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                                             className="inline-flex items-center gap-2 rounded-xl bg-primary-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-800"
                                         >
                                             See More
@@ -361,7 +337,7 @@ const PublicCatalogView = () => {
 
                                     <button
                                         type="button"
-                                        onClick={goToNextPage}
+                                        onClick={canGoNext ? () => setCurrentPage((page) => Math.min(totalPages, page + 1)) : undefined}
                                         disabled={!canGoNext}
                                         className="inline-flex items-center gap-2 rounded-xl border border-primary-200 px-4 py-2 text-sm font-semibold text-primary-700 transition disabled:cursor-not-allowed disabled:opacity-40 hover:border-primary-300 hover:bg-primary-50"
                                     >

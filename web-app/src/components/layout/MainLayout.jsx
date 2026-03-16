@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
 import { useTheme } from '../../context/ThemeContext';
+import useDataStore from '../../store/useDataStore';
 import Sidebar from './Sidebar';
 import Header from './Header';
 
@@ -11,8 +13,16 @@ import Header from './Header';
 const MainLayout = () => {
     const { isAuthenticated, isLoading } = useAuth();
     const { sidebarCollapsed } = useTheme();
+    const fetchProducts = useDataStore((state) => state.fetchProducts);
 
-    // Show loading state
+    useEffect(() => {
+        if (!isAuthenticated) {
+            return;
+        }
+
+        fetchProducts();
+    }, [isAuthenticated, fetchProducts]);
+
     if (isLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center">
@@ -24,20 +34,15 @@ const MainLayout = () => {
         );
     }
 
-    // Redirect to login if not authenticated
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;
     }
 
     return (
         <div className="min-h-screen overflow-x-hidden">
-            {/* Sidebar */}
             <Sidebar />
-
-            {/* Header */}
             <Header />
 
-            {/* Main Content */}
             <main className={`main-content ${sidebarCollapsed ? 'main-content-collapsed' : ''} bg-primary-50`}>
                 <div className="w-full max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-10 transition-all duration-300">
                     <Outlet />

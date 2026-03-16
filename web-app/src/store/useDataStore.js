@@ -1,9 +1,9 @@
 import { create } from 'zustand';
-import { getProductCatalog } from '../services/catalogApi';
+import { getFullProductCatalog } from '../services/catalogApi';
 
 /**
  * Global Data Store that bridges frontend to Supabase.
- * The genuine parts catalog should come from the database only.
+ * Internal screens can still preload the full catalog when needed.
  */
 const useDataStore = create((set) => ({
     products: [],
@@ -15,7 +15,7 @@ const useDataStore = create((set) => ({
         set({ loading: true, error: null });
 
         try {
-            const catalog = await getProductCatalog();
+            const catalog = await getFullProductCatalog();
             const formatted = catalog.map((product) => ({
                 id: product.id,
                 sku: product.sku,

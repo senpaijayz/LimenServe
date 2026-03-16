@@ -1,17 +1,14 @@
-import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './components/ui/Toast';
-import useDataStore from './store/useDataStore';
 import PageLoader from './components/ui/PageLoader';
+import { Suspense, lazy } from 'react';
 
-// Layouts (keep layout synchronous for fast shell rendering)
 import MainLayout from './components/layout/MainLayout';
 import PublicLayout from './components/layout/PublicLayout';
 
-// Lazily Loaded Pages
 const LoginPage = lazy(() => import('./modules/auth/pages/LoginPage'));
 const AdminDashboard = lazy(() => import('./modules/dashboard/pages/AdminDashboard'));
 const InventoryList = lazy(() => import('./modules/inventory/pages/InventoryList'));
@@ -28,17 +25,7 @@ const PublicEstimate = lazy(() => import('./modules/public/pages/PublicEstimate'
 const PublicAbout = lazy(() => import('./modules/public/pages/PublicAbout'));
 const PublicServiceOrders = lazy(() => import('./modules/public/pages/PublicServiceOrders'));
 
-/**
- * App Component
- * Main application with routing, providers, and code splitting
- */
 function App() {
-  const fetchProducts = useDataStore(state => state.fetchProducts);
-
-  useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
-
   return (
     <BrowserRouter>
       <AuthProvider>
@@ -47,7 +34,6 @@ function App() {
             <ToastProvider>
               <Suspense fallback={<PageLoader />}>
                 <Routes>
-                  {/* Public Routes */}
                   <Route element={<PublicLayout />}>
                     <Route path="/" element={<PublicHome />} />
                     <Route path="/catalog" element={<PublicCatalog />} />
@@ -56,10 +42,8 @@ function App() {
                     <Route path="/about" element={<PublicAbout />} />
                   </Route>
 
-                  {/* Auth Routes */}
                   <Route path="/login" element={<LoginPage />} />
 
-                  {/* Protected Routes */}
                   <Route element={<MainLayout />}>
                     <Route path="/dashboard" element={<AdminDashboard />} />
                     <Route path="/inventory" element={<InventoryList />} />
@@ -72,7 +56,6 @@ function App() {
                     <Route path="/users" element={<UserManagement />} />
                   </Route>
 
-                  {/* Fallback */}
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </Suspense>

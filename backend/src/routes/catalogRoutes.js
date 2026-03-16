@@ -4,6 +4,12 @@ import { requireRole } from '../middleware/auth.js';
 import { callRpc } from '../services/supabaseRpc.js';
 
 const router = Router();
+const PRODUCT_CATALOG_CACHE_TTL_MS = 60 * 1000;
+
+let productCatalogCache = {
+  data: null,
+  fetchedAt: 0,
+};
 
 function parsePrice(value) {
   const numeric = Number(value);
@@ -25,9 +31,120 @@ function getPreviousDate(isoDate) {
   return date.toISOString().slice(0, 10);
 }
 
-router.get('/products', async (_req, res, next) => {
+function parsePositiveInteger(value, fallback, max = Number.MAX_SAFE_INTEGER) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return fallback;
+  }
+
+  return Math.min(parsed, max);
+}
+
+function invalidateProductCatalogCache() {
+  productCatalogCache = {
+    data: null,
+    fetchedAt: 0,
+  };
+}
+
+async function getCachedProductCatalog() {
+  const now = Date.now();
+  if (productCatalogCache.data && (now - productCatalogCache.fetchedAt) < PRODUCT_CATALOG_CACHE_TTL_MS) {
+    return productCatalogCache.data;
+  }
+
+  const products = await callRpc('get_product_catalog');
+  productCatalogCache = {
+    data: products ?? [],
+    fetchedAt: now,
+  };
+
+  return productCatalogCache.data;
+}
+
+function filterBySearch(products, query) {
+  const trimmedQuery = String(query || '').trim().toLowerCase();
+  if (!trimmedQuery) {
+    return products;
+  }
+
+  return products.filter((product) => (
+    String(product.name || '').toLowerCase().includes(trimmedQuery)
+    || String(product.sku || '').toLowerCase().includes(trimmedQuery)
+    || String(product.model || '').toLowerCase().includes(trimmedQuery)
+  ));
+}
+
+function sortProducts(products, sortBy) {
+  const items = [...products];
+
+  switch (sortBy) {
+    case 'name-desc':
+      return items.sort((a, b) => String(b.name || '').localeCompare(String(a.name || '')));
+    case 'price-asc':
+      return items.sort((a, b) => Number(a.price ?? 0) - Number(b.price ?? 0) || String(a.name || '').localeCompare(String(b.name || '')));
+    case 'price-desc':
+      return items.sort((a, b) => Number(b.price ?? 0) - Number(a.price ?? 0) || String(a.name || '').localeCompare(String(b.name || '')));
+    case 'name-asc':
+    default:
+      return items.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  }
+}
+
+function buildCategorySummary(products, totalCount) {
+  const counts = new Map();
+
+  products.forEach((product) => {
+    const category = String(product.category || 'Uncategorized');
+    counts.set(category, (counts.get(category) || 0) + 1);
+  });
+
+  return [
+    { value: 'all', label: 'All Categories', count: totalCount },
+    ...Array.from(counts.entries())
+      .sort(([categoryA], [categoryB]) => categoryA.localeCompare(categoryB))
+      .map(([category, count]) => ({ value: category, label: category, count })),
+  ];
+}
+
+router.get('/products', async (req, res, next) => {
   try {
-    const products = await callRpc('get_product_catalog');
+    const page = parsePositiveInteger(req.query.page, 1, 10000);
+    const pageSize = parsePositiveInteger(req.query.pageSize, 10, 100);
+    const sortBy = String(req.query.sortBy || 'name-asc');
+    const selectedCategory = String(req.query.category || 'all');
+    const catalog = await getCachedProductCatalog();
+
+    const searchFiltered = filterBySearch(catalog, req.query.q);
+    const categories = buildCategorySummary(searchFiltered, searchFiltered.length);
+    const categoryFiltered = selectedCategory === 'all'
+      ? searchFiltered
+      : searchFiltered.filter((product) => String(product.category || '') === selectedCategory);
+    const sortedProducts = sortProducts(categoryFiltered, sortBy);
+    const totalCount = sortedProducts.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    const currentPage = Math.min(page, totalPages);
+    const startIndex = (currentPage - 1) * pageSize;
+    const products = sortedProducts.slice(startIndex, startIndex + pageSize);
+
+    res.json({
+      products,
+      categories,
+      pagination: {
+        page: currentPage,
+        pageSize,
+        totalCount,
+        totalPages,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/products/all', async (_req, res, next) => {
+  try {
+    const products = await getCachedProductCatalog();
     res.json({ products: products ?? [] });
   } catch (error) {
     next(error);
@@ -64,7 +181,7 @@ router.get('/services', async (_req, res, next) => {
 
 router.get('/prices/current', requireRole('admin'), async (_req, res, next) => {
   try {
-    const products = await callRpc('get_product_catalog');
+    const products = await getCachedProductCatalog();
     const priceList = (products ?? []).map((product) => ({
       id: product.id,
       sku: product.sku,
@@ -150,6 +267,8 @@ router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next)
     if (insertError) {
       throw insertError;
     }
+
+    invalidateProductCatalogCache();
 
     res.json({
       updatedCount: matchedItems.length,

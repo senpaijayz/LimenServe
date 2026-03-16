@@ -1,11 +1,24 @@
 import apiClient, { extractApiError } from './apiClient';
 
-export async function getProductCatalog() {
+export async function getProductCatalog(params = {}) {
   try {
-    const { data } = await apiClient.get('/catalog/products');
-    return data.products ?? [];
+    const { data } = await apiClient.get('/catalog/products', { params });
+    return {
+      products: data.products ?? [],
+      pagination: data.pagination ?? { page: 1, pageSize: 10, totalCount: 0, totalPages: 1 },
+      categories: data.categories ?? [],
+    };
   } catch (error) {
     extractApiError(error, 'Failed to load product catalog.');
+  }
+}
+
+export async function getFullProductCatalog() {
+  try {
+    const { data } = await apiClient.get('/catalog/products/all');
+    return data.products ?? [];
+  } catch (error) {
+    extractApiError(error, 'Failed to load full product catalog.');
   }
 }
 
