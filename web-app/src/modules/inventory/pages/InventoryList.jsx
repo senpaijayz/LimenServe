@@ -27,6 +27,7 @@ const InventoryList = () => {
     } = useDataStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
+    const [selectedStockFilter, setSelectedStockFilter] = useState('all');
     const [viewMode, setViewMode] = useState('grid');
     const [showAddModal, setShowAddModal] = useState(false);
     const [showCameraScanner, setShowCameraScanner] = useState(false);
@@ -38,19 +39,48 @@ const InventoryList = () => {
     }, [fetchProducts, hasLoadedProducts, loading]);
 
     const categories = useMemo(() => ([
-        { value: 'all', label: 'All Categories' },
-        ...Array.from(new Set(storeProducts.map((product) => product.category)))
-            .filter(Boolean)
-            .sort((a, b) => a.localeCompare(b))
-            .map((category) => ({ value: category.toLowerCase(), label: category })),
+        { value: 'all', label: `All Categories (${storeProducts.length})` },
+        ...Array.from(new Map(
+            storeProducts
+                .filter((product) => product.category)
+                .sort((a, b) => a.category.localeCompare(b.category))
+                .map((product) => [
+                    product.category.toLowerCase(),
+                    {
+                        value: product.category.toLowerCase(),
+                        label: `${product.category} (${storeProducts.filter((item) => item.category?.toLowerCase() === product.category.toLowerCase()).length})`,
+                    },
+                ])
+        ).values()),
     ]), [storeProducts]);
+
+    const stockFilters = useMemo(() => {
+        const allCount = storeProducts.length;
+        const outOfStockCount = storeProducts.filter((product) => product.quantity <= 0).length;
+        const lowStockOnlyCount = storeProducts.filter((product) => product.quantity > 0 && product.quantity <= 5).length;
+        const mediumStockCount = storeProducts.filter((product) => product.quantity >= 6 && product.quantity <= 20).length;
+        const highStockCount = storeProducts.filter((product) => product.quantity > 20).length;
+
+        return [
+            { value: 'all', label: `All Stock Levels (${allCount})` },
+            { value: 'out', label: `Out of Stock (0 qty) (${outOfStockCount})` },
+            { value: 'low', label: `Low Stock (1-5 qty) (${lowStockOnlyCount})` },
+            { value: 'medium', label: `Medium Stock (6-20 qty) (${mediumStockCount})` },
+            { value: 'high', label: `High Stock (21+ qty) (${highStockCount})` },
+        ];
+    }, [storeProducts]);
 
     const filteredProducts = storeProducts.filter((product) => {
         const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase())
             || product.sku.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesCategory = selectedCategory === 'all'
             || product.category.toLowerCase() === selectedCategory.toLowerCase();
-        return matchesSearch && matchesCategory;
+        const matchesStock = selectedStockFilter === 'all'
+            || (selectedStockFilter === 'out' && product.quantity <= 0)
+            || (selectedStockFilter === 'low' && product.quantity > 0 && product.quantity <= 5)
+            || (selectedStockFilter === 'medium' && product.quantity >= 6 && product.quantity <= 20)
+            || (selectedStockFilter === 'high' && product.quantity > 20);
+        return matchesSearch && matchesCategory && matchesStock;
     });
 
     const totalProducts = storeProducts.length;
@@ -92,7 +122,7 @@ const InventoryList = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <div className="flex flex-col sm:flex-row gap-3 flex-1 w-full sm:w-auto">
+                <div className="flex flex-col lg:flex-row gap-3 flex-1 w-full sm:w-auto">
                     <div className="relative flex-1 max-w-md flex gap-2">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
@@ -118,13 +148,20 @@ const InventoryList = () => {
                         options={categories}
                         value={selectedCategory}
                         onChange={setSelectedCategory}
-                        className="w-full sm:w-48"
+                        className="w-full sm:w-56"
+                    />
+
+                    <Dropdown
+                        options={stockFilters}
+                        value={selectedStockFilter}
+                        onChange={setSelectedStockFilter}
+                        className="w-full sm:w-64"
                     />
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
                     {isAdmin && (
-                        <PriceListManager onUpdated={fetchProducts} />
+                        <PriceListManager onUpdated={() => fetchProducts({ force: true })} />
                     )}
 
                     <div className="flex items-center glass rounded-lg p-1">
@@ -240,4 +277,3 @@ const InventoryList = () => {
 };
 
 export default InventoryList;
-

@@ -5,6 +5,7 @@ import { callRpc } from '../services/supabaseRpc.js';
 
 const router = Router();
 const PRODUCT_CATALOG_CACHE_TTL_MS = 60 * 1000;
+const FULL_CATALOG_PAGE_SIZE = 1000;
 
 let productCatalogCache = {
   data: null,
@@ -47,15 +48,63 @@ function invalidateProductCatalogCache() {
   };
 }
 
+function mapCatalogRow(row) {
+  return {
+    id: row.id,
+    sku: row.sku,
+    name: row.name,
+    model: row.model,
+    category: row.category,
+    price: Number(row.price ?? 0),
+    stock: Number(row.stock ?? 0),
+    status: row.status,
+    uom: row.uom,
+    brand: row.brand,
+    location: row.location ?? {},
+  };
+}
+
+async function fetchProductCatalogPage({ page, pageSize, searchQuery = null, selectedCategory = 'all', sortBy = 'name-asc' }) {
+  return callRpc('get_product_catalog_page', {
+    p_page: page,
+    p_page_size: pageSize,
+    p_search: searchQuery || null,
+    p_category: selectedCategory,
+    p_sort_by: sortBy,
+  });
+}
+
 async function getCachedProductCatalog() {
   const now = Date.now();
   if (productCatalogCache.data && (now - productCatalogCache.fetchedAt) < PRODUCT_CATALOG_CACHE_TTL_MS) {
     return productCatalogCache.data;
   }
 
-  const products = await callRpc('get_product_catalog');
+  const firstPageRows = await fetchProductCatalogPage({
+    page: 1,
+    pageSize: FULL_CATALOG_PAGE_SIZE,
+  });
+
+  const totalCount = Number(firstPageRows?.[0]?.total_count ?? 0);
+  const totalPages = Math.max(1, Math.ceil(totalCount / FULL_CATALOG_PAGE_SIZE));
+
+  let allRows = firstPageRows ?? [];
+
+  if (totalPages > 1) {
+    const remainingPageRequests = Array.from({ length: totalPages - 1 }, (_, index) => (
+      fetchProductCatalogPage({
+        page: index + 2,
+        pageSize: FULL_CATALOG_PAGE_SIZE,
+      })
+    ));
+
+    const remainingPages = await Promise.all(remainingPageRequests);
+    allRows = allRows.concat(remainingPages.flat());
+  }
+
+  const products = allRows.map(mapCatalogRow);
   productCatalogCache = {
-    data: products ?? [],
+    data: products,
     fetchedAt: now,
   };
 
@@ -71,31 +120,19 @@ router.get('/products', async (req, res, next) => {
     const sortBy = String(req.query.sortBy || 'name-asc');
 
     const [pageRows, categoryRows] = await Promise.all([
-      callRpc('get_product_catalog_page', {
-        p_page: page,
-        p_page_size: pageSize,
-        p_search: searchQuery || null,
-        p_category: selectedCategory,
-        p_sort_by: sortBy,
+      fetchProductCatalogPage({
+        page,
+        pageSize,
+        searchQuery,
+        selectedCategory,
+        sortBy,
       }),
       callRpc('get_product_catalog_categories', {
         p_search: searchQuery || null,
       }),
     ]);
 
-    const products = (pageRows ?? []).map((row) => ({
-      id: row.id,
-      sku: row.sku,
-      name: row.name,
-      model: row.model,
-      category: row.category,
-      price: Number(row.price ?? 0),
-      stock: Number(row.stock ?? 0),
-      status: row.status,
-      uom: row.uom,
-      brand: row.brand,
-      location: row.location ?? {},
-    }));
+    const products = (pageRows ?? []).map(mapCatalogRow);
 
     const totalCount = Number(pageRows?.[0]?.total_count ?? 0);
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
