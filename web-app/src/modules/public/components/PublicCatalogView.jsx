@@ -423,8 +423,8 @@ const PublicCatalogView = () => {
                                         <ProductPackageSuggestions
                                             product={selectedProduct}
                                             vehicleModelId={selectedProduct.model}
-                                            title="Package Suggestions"
-                                            subtitle="Matched parts and service labor that usually go together with this component."
+                                            title="Compatible Mitsubishi Packages"
+                                            subtitle="Same-vehicle Mitsubishi parts and service matches for this exact component."
                                         />
                                     </div>
 
@@ -453,5 +453,6 @@ const PublicCatalogView = () => {
 };
 
 export default PublicCatalogView;
+
 
 

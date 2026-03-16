@@ -3,7 +3,7 @@ import { Loader2, PackagePlus, Sparkles, Wrench } from 'lucide-react';
 import { getProductUpsellRecommendations } from '../../../services/analyticsApi';
 import { formatCurrency } from '../../../utils/formatters';
 
-const defaultPackageDescription = 'Matched parts and labor that usually go together with this selection.';
+const defaultPackageDescription = 'Matched parts and labor that fit this Mitsubishi vehicle.';
 
 function groupRecommendations(recommendations = []) {
   const groupedPackages = new Map();
@@ -28,6 +28,19 @@ function groupRecommendations(recommendations = []) {
   return Array.from(groupedPackages.values());
 }
 
+function getMatchBadge(matchLevel) {
+  switch (matchLevel) {
+    case 'exact_model':
+      return { label: 'Exact Vehicle Match', className: 'bg-accent-success/10 text-accent-success' };
+    case 'family_match':
+      return { label: 'Same Mitsubishi Family', className: 'bg-accent-blue/10 text-accent-blue' };
+    case 'curated_override':
+      return { label: 'Curated Rule', className: 'bg-accent-warning/10 text-accent-warning' };
+    default:
+      return { label: 'Compatible Match', className: 'bg-primary-100 text-primary-600' };
+  }
+}
+
 const ProductPackageSuggestions = ({
   product,
   vehicleModelId = null,
@@ -35,8 +48,8 @@ const ProductPackageSuggestions = ({
   onAddService = null,
   selectedProductIds = [],
   selectedServiceIds = [],
-  title = 'Suggested Package',
-  subtitle = 'Related parts and labor recommendations based on the selected item.',
+  title = 'Compatible Mitsubishi Package',
+  subtitle = 'Vehicle-matched parts and services based on the selected Mitsubishi part.',
 }) => {
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -88,6 +101,7 @@ const ProductPackageSuggestions = ({
   }, [product?.id, vehicleModelId]);
 
   const groupedPackages = useMemo(() => groupRecommendations(recommendations), [recommendations]);
+  const activeVehicleLabel = vehicleModelId || product?.model || product?.vehicleModelName || 'this Mitsubishi vehicle';
 
   if (!product) {
     return null;
@@ -103,7 +117,7 @@ const ProductPackageSuggestions = ({
           <h4 className="text-lg font-display font-semibold text-primary-950">{title}</h4>
           <p className="mt-1 text-sm text-primary-500">{subtitle}</p>
           <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-primary-400">
-            Based on: {product.name}
+            Based on: {product.name} {activeVehicleLabel ? `• ${activeVehicleLabel}` : ''}
           </p>
         </div>
       </div>
@@ -111,7 +125,7 @@ const ProductPackageSuggestions = ({
       {loading ? (
         <div className="flex items-center gap-3 rounded-xl border border-primary-200 bg-white p-4 text-sm text-primary-500 shadow-sm">
           <Loader2 className="h-4 w-4 animate-spin text-accent-primary" />
-          Loading package suggestions...
+          Loading compatible Mitsubishi package suggestions...
         </div>
       ) : error ? (
         <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/5 p-4 text-sm text-accent-danger">
@@ -119,7 +133,7 @@ const ProductPackageSuggestions = ({
         </div>
       ) : groupedPackages.length === 0 ? (
         <div className="rounded-xl border border-primary-200 bg-white p-4 text-sm text-primary-500 shadow-sm">
-          No package suggestions were found for this part yet.
+          No same-vehicle package has been learned for {activeVehicleLabel} yet.
         </div>
       ) : (
         <div className="space-y-4">
@@ -145,6 +159,7 @@ const ProductPackageSuggestions = ({
                   const itemName = isProduct ? item.recommendedProductName : item.recommendedServiceName;
                   const actionHandler = isProduct ? onAddProduct : onAddService;
                   const canAdd = typeof actionHandler === 'function' && id;
+                  const matchBadge = getMatchBadge(item.matchLevel);
 
                   return (
                     <div key={`${item.consequentKind}-${id || itemName}`} className="flex flex-col gap-3 rounded-xl border border-primary-200 bg-primary-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -154,14 +169,23 @@ const ProductPackageSuggestions = ({
                             {isProduct ? <PackagePlus className="h-3.5 w-3.5" /> : <Wrench className="h-3.5 w-3.5" />}
                             {isProduct ? 'Part' : 'Service'}
                           </span>
-                          {item.reasonLabel && (
-                            <span className="text-xs font-medium text-primary-500">{item.reasonLabel}</span>
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${matchBadge.className}`}>
+                            {matchBadge.label}
+                          </span>
+                          {item.serviceGroup && (
+                            <span className="text-xs font-medium text-primary-500 uppercase tracking-[0.16em]">
+                              {item.serviceGroup.replace(/_/g, ' ')}
+                            </span>
                           )}
                         </div>
 
                         <div className="mt-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-primary-950">{itemName}</p>
+                            <p className="mt-1 text-xs text-primary-500">
+                              {item.reasonLabel || 'Compatible Mitsubishi recommendation'}
+                              {item.vehicleModelName ? ` • ${item.vehicleModelName}` : ''}
+                            </p>
                           </div>
                           <p className="text-sm font-bold text-accent-blue">{formatCurrency(Number(item.recommendedPrice ?? 0))}</p>
                         </div>
@@ -190,4 +214,3 @@ const ProductPackageSuggestions = ({
 };
 
 export default ProductPackageSuggestions;
-

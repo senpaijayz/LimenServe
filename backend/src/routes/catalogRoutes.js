@@ -8,90 +8,104 @@ const PRODUCT_CATALOG_CACHE_TTL_MS = 60 * 1000;
 const FULL_CATALOG_PAGE_SIZE = 1000;
 const SERVICE_CATALOG_CACHE_TTL_MS = 60 * 1000;
 
-const PACKAGE_RULES = [
-  {
-    id: 'oil-change',
-    name: 'Oil Change Package',
-    description: 'Common consumables and labor for routine oil service.',
-    anchorKeywords: ['engine oil', 'oil filter', 'drain plug washer'],
-    productGroups: [
-      { keywords: ['engine oil'], reasonLabel: 'Engine oil bundle match' },
-      { keywords: ['oil filter'], reasonLabel: 'Oil filter bundle match' },
-      { keywords: ['drain plug washer'], reasonLabel: 'Drain washer bundle match' },
-    ],
-    serviceGroups: [
-      { keywords: ['oil change', 'preventive maintenance'], reasonLabel: 'Recommended oil service labor' },
-    ],
+const SERVICE_GROUP_CONFIG = {
+  oil_change: {
+    packageKey: 'oil-change-package',
+    packageName: 'Compatible Oil Change Package',
+    packageDescription: 'Compatible oil service parts and labor for this Mitsubishi model.',
+    serviceKeywords: ['oil change', 'change oil', 'preventive maintenance'],
   },
-  {
-    id: 'brake-refresh',
-    name: 'Brake Refresh Package',
-    description: 'Brake parts often sold together with cleaning fluid and installation work.',
-    anchorKeywords: ['brake pad', 'brake shoe', 'brake cleaner', 'brake fluid', 'disc rotor'],
-    productGroups: [
-      { keywords: ['brake pad', 'brake shoe'], reasonLabel: 'Brake friction set pairing' },
-      { keywords: ['brake cleaner'], reasonLabel: 'Brake cleaning add-on' },
-      { keywords: ['brake fluid'], reasonLabel: 'Brake fluid add-on' },
-    ],
-    serviceGroups: [
-      { keywords: ['brake', 'installation'], reasonLabel: 'Recommended brake installation labor' },
-    ],
+  brake_service: {
+    packageKey: 'brake-service-package',
+    packageName: 'Compatible Brake Service Package',
+    packageDescription: 'Compatible brake parts and labor for this Mitsubishi model.',
+    serviceKeywords: ['brake', 'installation', 'overhaul'],
   },
-  {
-    id: 'filter-maintenance',
-    name: 'Filter Maintenance Package',
-    description: 'Air and cabin filters matched with preventive maintenance work.',
-    anchorKeywords: ['air filter', 'cabin filter', 'fuel filter'],
-    productGroups: [
-      { keywords: ['air filter'], reasonLabel: 'Air filter bundle match' },
-      { keywords: ['cabin filter'], reasonLabel: 'Cabin filter bundle match' },
-      { keywords: ['fuel filter'], reasonLabel: 'Fuel filter bundle match' },
-    ],
-    serviceGroups: [
-      { keywords: ['filter', 'preventive maintenance', 'inspection'], reasonLabel: 'Recommended filter installation labor' },
-    ],
+  cooling_service: {
+    packageKey: 'cooling-service-package',
+    packageName: 'Compatible Cooling System Package',
+    packageDescription: 'Compatible cooling-system parts and labor for this Mitsubishi model.',
+    serviceKeywords: ['cooling', 'radiator', 'coolant'],
   },
-  {
-    id: 'ignition-tune-up',
-    name: 'Ignition Tune-Up Package',
-    description: 'Ignition parts paired with tune-up labor.',
-    anchorKeywords: ['spark plug', 'ignition coil'],
-    productGroups: [
-      { keywords: ['spark plug'], reasonLabel: 'Spark plug bundle match' },
-      { keywords: ['ignition coil'], reasonLabel: 'Ignition coil add-on' },
-    ],
-    serviceGroups: [
-      { keywords: ['tune', 'spark plug', 'ignition'], reasonLabel: 'Recommended tune-up labor' },
-    ],
+  battery_service: {
+    packageKey: 'battery-service-package',
+    packageName: 'Compatible Battery Service Package',
+    packageDescription: 'Compatible battery and electrical service recommendations for this Mitsubishi model.',
+    serviceKeywords: ['battery', 'terminal', 'electrical'],
   },
-  {
-    id: 'battery-care',
-    name: 'Battery Care Package',
-    description: 'Battery products paired with electrical installation and cleanup.',
-    anchorKeywords: ['battery', 'terminal'],
-    productGroups: [
-      { keywords: ['battery'], reasonLabel: 'Battery package match' },
-      { keywords: ['terminal cleaner', 'battery terminal'], reasonLabel: 'Terminal maintenance add-on' },
-    ],
-    serviceGroups: [
-      { keywords: ['battery', 'electrical', 'installation'], reasonLabel: 'Recommended battery installation labor' },
-    ],
+  tune_up: {
+    packageKey: 'tune-up-package',
+    packageName: 'Compatible Tune-Up Package',
+    packageDescription: 'Compatible ignition and tune-up parts and labor for this Mitsubishi model.',
+    serviceKeywords: ['tune', 'diagnostic', 'inspection'],
   },
-  {
-    id: 'cooling-system',
-    name: 'Cooling System Package',
-    description: 'Cooling system parts bundled with coolant and installation service.',
-    anchorKeywords: ['radiator', 'coolant', 'thermostat', 'water pump'],
-    productGroups: [
-      { keywords: ['coolant'], reasonLabel: 'Coolant refill add-on' },
-      { keywords: ['thermostat'], reasonLabel: 'Thermostat package match' },
-      { keywords: ['radiator cap', 'water pump', 'hose'], reasonLabel: 'Cooling system add-on' },
-    ],
-    serviceGroups: [
-      { keywords: ['cooling', 'radiator', 'installation'], reasonLabel: 'Recommended cooling-system labor' },
-    ],
+  filter_service: {
+    packageKey: 'filter-service-package',
+    packageName: 'Compatible Filter Service Package',
+    packageDescription: 'Compatible filter replacement parts and labor for this Mitsubishi model.',
+    serviceKeywords: ['filter', 'maintenance', 'inspection'],
   },
+  tire_service: {
+    packageKey: 'tire-service-package',
+    packageName: 'Compatible Tire Service Package',
+    packageDescription: 'Compatible tire parts and labor for this Mitsubishi model.',
+    serviceKeywords: ['tire', 'wheel alignment', 'wheel balancing', 'installation', 'alignment', 'balancing'],
+  },
+};
+
+const PART_FUNCTION_RULES = [
+  { partFunction: 'oil_filter', serviceGroup: 'oil_change', keywords: ['oil filter'] },
+  { partFunction: 'engine_oil', serviceGroup: 'oil_change', keywords: ['engine oil', 'synthetic oil', 'motor oil'] },
+  { partFunction: 'drain_washer', serviceGroup: 'oil_change', keywords: ['drain washer', 'drain plug washer'] },
+  { partFunction: 'brake_pad', serviceGroup: 'brake_service', keywords: ['brake pad'] },
+  { partFunction: 'brake_shoe', serviceGroup: 'brake_service', keywords: ['brake shoe'] },
+  { partFunction: 'brake_fluid', serviceGroup: 'brake_service', keywords: ['brake fluid'] },
+  { partFunction: 'brake_cleaner', serviceGroup: 'brake_service', keywords: ['brake cleaner'] },
+  { partFunction: 'disc_rotor', serviceGroup: 'brake_service', keywords: ['disc rotor', 'rotor'] },
+  { partFunction: 'spark_plug', serviceGroup: 'tune_up', keywords: ['spark plug', 'glow plug'] },
+  { partFunction: 'ignition_coil', serviceGroup: 'tune_up', keywords: ['ignition coil'] },
+  { partFunction: 'air_filter', serviceGroup: 'filter_service', keywords: ['air filter'] },
+  { partFunction: 'cabin_filter', serviceGroup: 'filter_service', keywords: ['cabin air filter', 'cabin filter'] },
+  { partFunction: 'fuel_filter', serviceGroup: 'filter_service', keywords: ['fuel filter'] },
+  { partFunction: 'battery', serviceGroup: 'battery_service', keywords: ['battery assy', 'battery'] },
+  { partFunction: 'battery_terminal', serviceGroup: 'battery_service', keywords: ['battery terminal', 'terminal cleaner', 'terminal'] },
+  { partFunction: 'radiator', serviceGroup: 'cooling_service', keywords: ['radiator assy', 'radiator'] },
+  { partFunction: 'coolant', serviceGroup: 'cooling_service', keywords: ['coolant'] },
+  { partFunction: 'thermostat', serviceGroup: 'cooling_service', keywords: ['thermostat'] },
+  { partFunction: 'water_pump', serviceGroup: 'cooling_service', keywords: ['water pump'] },
+  { partFunction: 'radiator_hose', serviceGroup: 'cooling_service', keywords: ['radiator hose', 'hose'] },
+  { partFunction: 'tire', serviceGroup: 'tire_service', keywords: ['tire', 'tyre'] },
+  { partFunction: 'wheel', serviceGroup: 'tire_service', keywords: ['wheel'] },
+  { partFunction: 'wheel_valve', serviceGroup: 'tire_service', keywords: ['valve'] },
+  { partFunction: 'lug_nut', serviceGroup: 'tire_service', keywords: ['lug nut', 'wheel nut', 'lug bolt'] },
 ];
+
+const COMPANION_FUNCTIONS = {
+  oil_filter: ['engine_oil', 'drain_washer'],
+  engine_oil: ['oil_filter', 'drain_washer'],
+  drain_washer: ['engine_oil', 'oil_filter'],
+  brake_pad: ['disc_rotor', 'brake_cleaner', 'brake_fluid', 'brake_shoe'],
+  brake_shoe: ['brake_cleaner', 'brake_fluid', 'brake_pad'],
+  brake_fluid: ['brake_pad', 'brake_shoe', 'brake_cleaner'],
+  brake_cleaner: ['brake_pad', 'brake_shoe', 'brake_fluid'],
+  disc_rotor: ['brake_pad', 'brake_cleaner', 'brake_fluid'],
+  spark_plug: ['air_filter', 'cabin_filter', 'fuel_filter', 'ignition_coil'],
+  ignition_coil: ['spark_plug', 'air_filter'],
+  air_filter: ['cabin_filter', 'fuel_filter', 'spark_plug'],
+  cabin_filter: ['air_filter', 'fuel_filter'],
+  fuel_filter: ['air_filter', 'cabin_filter', 'spark_plug'],
+  battery: ['battery_terminal'],
+  battery_terminal: ['battery'],
+  radiator: ['coolant', 'thermostat', 'water_pump', 'radiator_hose'],
+  coolant: ['radiator', 'thermostat', 'radiator_hose'],
+  thermostat: ['coolant', 'radiator', 'water_pump'],
+  water_pump: ['coolant', 'thermostat', 'radiator_hose'],
+  radiator_hose: ['coolant', 'radiator', 'thermostat'],
+  tire: ['wheel', 'wheel_valve', 'lug_nut'],
+  wheel: ['tire', 'wheel_valve', 'lug_nut'],
+  wheel_valve: ['tire', 'wheel'],
+  lug_nut: ['tire', 'wheel'],
+};
 
 let productCatalogCache = {
   data: null,
@@ -182,38 +196,44 @@ function buildServiceSearchText(service) {
   return normalizeText([service.name, service.description, service.code].filter(Boolean).join(' '));
 }
 
-function findBestMatchingProduct({ clickedProduct, catalog, usedProductIds, keywords }) {
-  const preferredModel = normalizeText(clickedProduct.model);
-  const rankedMatches = catalog
-    .filter((candidate) => !usedProductIds.has(candidate.id))
-    .map((candidate) => ({
-      candidate,
-      text: buildProductSearchText(candidate),
-      sameModel: preferredModel && normalizeText(candidate.model) === preferredModel,
-    }))
-    .filter(({ text }) => matchesAnyKeyword(text, keywords))
-    .sort((left, right) => {
-      if (left.sameModel !== right.sameModel) {
-        return left.sameModel ? -1 : 1;
-      }
-
-      if ((right.candidate.stock ?? 0) !== (left.candidate.stock ?? 0)) {
-        return (right.candidate.stock ?? 0) - (left.candidate.stock ?? 0);
-      }
-
-      return left.candidate.name.localeCompare(right.candidate.name);
-    });
-
-  return rankedMatches[0]?.candidate ?? null;
+function extractVehicleFamily(modelName) {
+  const base = String(modelName || '').split('(')[0].trim();
+  return base || null;
 }
 
-function findBestMatchingService({ serviceCatalog, keywords }) {
+function inferProductProfile(product) {
+  const text = buildProductSearchText(product);
+  const matchingRule = PART_FUNCTION_RULES.find((rule) => matchesAnyKeyword(text, rule.keywords));
+  const normalizedModel = normalizeText(product.model);
+  const vehicleFamily = extractVehicleFamily(product.model);
+
+  return {
+    productId: product.id,
+    sku: product.sku,
+    modelName: product.model || null,
+    normalizedModel,
+    vehicleFamily,
+    normalizedVehicleFamily: normalizeText(vehicleFamily),
+    partFunction: matchingRule?.partFunction || null,
+    serviceGroup: matchingRule?.serviceGroup || null,
+    isVehicleSpecific: Boolean(product.model && !normalizeText(product.model).includes('various') && !normalizeText(product.model).includes('universal')),
+  };
+}
+
+function findBestMatchingService({ serviceCatalog, serviceGroup }) {
+  const groupConfig = SERVICE_GROUP_CONFIG[serviceGroup];
+
+  if (!groupConfig) {
+    return null;
+  }
+
   const rankedMatches = serviceCatalog
     .map((service) => ({
       service,
       text: buildServiceSearchText(service),
     }))
-    .filter(({ text }) => matchesAnyKeyword(text, keywords));
+    .filter(({ text }) => matchesAnyKeyword(text, groupConfig.serviceKeywords))
+    .sort((left, right) => left.service.name.localeCompare(right.service.name));
 
   return rankedMatches[0]?.service ?? null;
 }
@@ -235,6 +255,169 @@ function dedupeRecommendations(recommendations = []) {
   });
 }
 
+function scoreCandidate(candidate, desiredFunction, matchLevel) {
+  const stockScore = Number(candidate.product.stock ?? 0);
+  const exactFunctionBonus = candidate.profile.partFunction === desiredFunction ? 1000 : 0;
+  const matchBonus = matchLevel === 'exact_model' ? 500 : 250;
+  return exactFunctionBonus + matchBonus + stockScore;
+}
+
+function pickCompanionProducts({ clickedProduct, catalog, clickedProfile, limitCount }) {
+  const companionFunctions = COMPANION_FUNCTIONS[clickedProfile.partFunction] || [];
+
+  if (!clickedProfile.modelName || companionFunctions.length === 0) {
+    return [];
+  }
+
+  const catalogProfiles = catalog.map((product) => ({ product, profile: inferProductProfile(product) }));
+  const exactModelMatches = [];
+  const familyMatches = [];
+  const usedProductIds = new Set([clickedProduct.id]);
+
+  for (const desiredFunction of companionFunctions) {
+    const exactCandidate = catalogProfiles
+      .filter(({ product, profile }) => !usedProductIds.has(product.id))
+      .filter(({ profile }) => profile.partFunction === desiredFunction)
+      .filter(({ profile }) => profile.normalizedModel && profile.normalizedModel === clickedProfile.normalizedModel)
+      .sort((left, right) => scoreCandidate(right, desiredFunction, 'exact_model') - scoreCandidate(left, desiredFunction, 'exact_model'))[0];
+
+    if (exactCandidate) {
+      usedProductIds.add(exactCandidate.product.id);
+      exactModelMatches.push(exactCandidate);
+      continue;
+    }
+
+    const familyCandidate = catalogProfiles
+      .filter(({ product, profile }) => !usedProductIds.has(product.id))
+      .filter(({ profile }) => profile.partFunction === desiredFunction)
+      .filter(({ profile }) => profile.normalizedVehicleFamily && profile.normalizedVehicleFamily === clickedProfile.normalizedVehicleFamily)
+      .sort((left, right) => scoreCandidate(right, desiredFunction, 'family_match') - scoreCandidate(left, desiredFunction, 'family_match'))[0];
+
+    if (familyCandidate) {
+      usedProductIds.add(familyCandidate.product.id);
+      familyMatches.push(familyCandidate);
+    }
+  }
+
+  const exactRecommendations = exactModelMatches.map(({ product, profile }) => ({
+    ruleId: null,
+    consequentKind: 'product',
+    recommendedProductId: product.id,
+    recommendedProductName: product.name,
+    recommendedServiceId: null,
+    recommendedServiceName: null,
+    recommendedPrice: Number(product.price ?? 0),
+    support: null,
+    confidence: null,
+    lift: null,
+    sampleCount: null,
+    reasonLabel: `Compatible ${profile.partFunction?.replace(/_/g, ' ') || 'part'} for the same vehicle`,
+    packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || `${clickedProfile.serviceGroup || 'vehicle'}-package`,
+    packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Compatible Mitsubishi Package',
+    packageDescription: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageDescription || 'Compatible Mitsubishi parts and services for this vehicle.',
+    matchLevel: 'exact_model',
+    vehicleModelName: clickedProfile.modelName,
+    vehicleFamily: clickedProfile.vehicleFamily,
+    serviceGroup: clickedProfile.serviceGroup,
+  }));
+
+  if (exactRecommendations.length > 0) {
+    return exactRecommendations.slice(0, limitCount);
+  }
+
+  return familyMatches.map(({ product }) => ({
+    ruleId: null,
+    consequentKind: 'product',
+    recommendedProductId: product.id,
+    recommendedProductName: product.name,
+    recommendedServiceId: null,
+    recommendedServiceName: null,
+    recommendedPrice: Number(product.price ?? 0),
+    support: null,
+    confidence: null,
+    lift: null,
+    sampleCount: null,
+    reasonLabel: `Compatible Mitsubishi family match for ${clickedProfile.vehicleFamily}`,
+    packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || `${clickedProfile.serviceGroup || 'vehicle'}-package`,
+    packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Compatible Mitsubishi Package',
+    packageDescription: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageDescription || 'Compatible Mitsubishi parts and services for this vehicle family.',
+    matchLevel: 'family_match',
+    vehicleModelName: clickedProfile.modelName,
+    vehicleFamily: clickedProfile.vehicleFamily,
+    serviceGroup: clickedProfile.serviceGroup,
+  })).slice(0, limitCount);
+}
+
+function buildVehicleMatchedRecommendations({ clickedProduct, catalog, serviceCatalog, limitCount }) {
+  const clickedProfile = inferProductProfile(clickedProduct);
+
+  if (!clickedProfile.partFunction || !clickedProfile.serviceGroup || !clickedProfile.modelName) {
+    return [];
+  }
+
+  const partRecommendations = pickCompanionProducts({
+    clickedProduct,
+    catalog,
+    clickedProfile,
+    limitCount,
+  });
+
+  const service = findBestMatchingService({
+    serviceCatalog,
+    serviceGroup: clickedProfile.serviceGroup,
+  });
+
+  const serviceRecommendation = service
+    ? [{
+        ruleId: null,
+        consequentKind: 'service',
+        recommendedProductId: null,
+        recommendedProductName: null,
+        recommendedServiceId: service.id,
+        recommendedServiceName: service.name,
+        recommendedPrice: Number(service.price ?? 0),
+        support: null,
+        confidence: null,
+        lift: null,
+        sampleCount: null,
+        reasonLabel: `Suggested service for ${clickedProfile.partFunction.replace(/_/g, ' ')}`,
+        packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || `${clickedProfile.serviceGroup}-package`,
+        packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Compatible Mitsubishi Service Package',
+        packageDescription: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageDescription || 'Compatible Mitsubishi parts and services for this vehicle.',
+        matchLevel: partRecommendations[0]?.matchLevel || 'exact_model',
+        vehicleModelName: clickedProfile.modelName,
+        vehicleFamily: clickedProfile.vehicleFamily,
+        serviceGroup: clickedProfile.serviceGroup,
+      }]
+    : [];
+
+  return [...partRecommendations, ...serviceRecommendation].slice(0, limitCount);
+}
+
+function normalizeMatchMetadata(recommendation, clickedProduct, recommendedProduct) {
+  const clickedProfile = inferProductProfile(clickedProduct);
+  const recommendedProfile = recommendedProduct ? inferProductProfile(recommendedProduct) : null;
+  const isExactModel = Boolean(
+    recommendedProfile?.normalizedModel &&
+    clickedProfile.normalizedModel &&
+    recommendedProfile.normalizedModel === clickedProfile.normalizedModel
+  );
+  const isFamilyMatch = Boolean(
+    !isExactModel &&
+    recommendedProfile?.normalizedVehicleFamily &&
+    clickedProfile.normalizedVehicleFamily &&
+    recommendedProfile.normalizedVehicleFamily === clickedProfile.normalizedVehicleFamily
+  );
+
+  return {
+    ...recommendation,
+    matchLevel: recommendation.matchLevel || (isExactModel ? 'exact_model' : isFamilyMatch ? 'family_match' : 'curated_override'),
+    vehicleModelName: recommendation.vehicleModelName || clickedProduct.model || null,
+    vehicleFamily: recommendation.vehicleFamily || clickedProfile.vehicleFamily || null,
+    serviceGroup: recommendation.serviceGroup || clickedProfile.serviceGroup || null,
+  };
+}
+
 async function getOptionalCuratedRecommendations(productId, vehicleModelId, limitCount) {
   try {
     const rows = await callRpc('get_curated_quote_recommendations', {
@@ -253,81 +436,6 @@ async function getOptionalCuratedRecommendations(productId, vehicleModelId, limi
 
     throw error;
   }
-}
-
-function buildRuleBasedPackageRecommendations({ clickedProduct, catalog, serviceCatalog, limitCount }) {
-  const productText = buildProductSearchText(clickedProduct);
-  const matchingRule = PACKAGE_RULES.find((rule) => matchesAnyKeyword(productText, rule.anchorKeywords));
-
-  if (!matchingRule) {
-    return [];
-  }
-
-  const usedProductIds = new Set([clickedProduct.id]);
-  const recommendations = [];
-
-  for (const group of matchingRule.productGroups) {
-    const matchedProduct = findBestMatchingProduct({
-      clickedProduct,
-      catalog,
-      usedProductIds,
-      keywords: group.keywords,
-    });
-
-    if (!matchedProduct) {
-      continue;
-    }
-
-    usedProductIds.add(matchedProduct.id);
-    recommendations.push({
-      ruleId: null,
-      consequentKind: 'product',
-      recommendedProductId: matchedProduct.id,
-      recommendedProductName: matchedProduct.name,
-      recommendedServiceId: null,
-      recommendedServiceName: null,
-      recommendedPrice: Number(matchedProduct.price ?? 0),
-      support: null,
-      confidence: null,
-      lift: null,
-      sampleCount: null,
-      reasonLabel: group.reasonLabel,
-      packageKey: matchingRule.id,
-      packageName: matchingRule.name,
-      packageDescription: matchingRule.description,
-    });
-  }
-
-  for (const group of matchingRule.serviceGroups) {
-    const matchedService = findBestMatchingService({
-      serviceCatalog,
-      keywords: group.keywords,
-    });
-
-    if (!matchedService) {
-      continue;
-    }
-
-    recommendations.push({
-      ruleId: null,
-      consequentKind: 'service',
-      recommendedProductId: null,
-      recommendedProductName: null,
-      recommendedServiceId: matchedService.id,
-      recommendedServiceName: matchedService.name,
-      recommendedPrice: Number(matchedService.price ?? 0),
-      support: null,
-      confidence: null,
-      lift: null,
-      sampleCount: null,
-      reasonLabel: group.reasonLabel,
-      packageKey: matchingRule.id,
-      packageName: matchingRule.name,
-      packageDescription: matchingRule.description,
-    });
-  }
-
-  return dedupeRecommendations(recommendations).slice(0, limitCount);
 }
 
 async function fetchProductCatalogPage({ page, pageSize, searchQuery = null, selectedCategory = 'all', sortBy = 'name-asc' }) {
@@ -587,59 +695,75 @@ router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next)
 
 router.get('/products/:productId/recommendations', async (req, res, next) => {
   try {
-    const limitCount = Number(req.query.limit || 5);
+    const limitCount = Number(req.query.limit || 6);
     const vehicleModelId = req.query.vehicleModelId || null;
     const [directRecommendations, curatedRecommendations, catalog, serviceCatalog] = await Promise.all([
       callRpc('get_product_upsell_recommendations', {
         product_id: req.params.productId,
         vehicle_model_id: vehicleModelId,
         limit_count: limitCount,
-      }),
+      }).catch(() => []),
       getOptionalCuratedRecommendations(req.params.productId, vehicleModelId, limitCount),
       getCachedProductCatalog(),
       getCachedServiceCatalog(),
     ]);
 
     const clickedProduct = catalog.find((product) => product.id === req.params.productId);
-    const fallbackRecommendations = clickedProduct
-      ? buildRuleBasedPackageRecommendations({
-          clickedProduct,
-          catalog,
-          serviceCatalog,
-          limitCount,
-        })
-      : [];
 
-    const mergedRecommendations = dedupeRecommendations([
-      ...(curatedRecommendations ?? []),
-      ...(directRecommendations ?? []),
-      ...fallbackRecommendations,
-    ]).slice(0, limitCount);
+    if (!clickedProduct) {
+      return res.json({ recommendations: [] });
+    }
+
+    const fallbackRecommendations = buildVehicleMatchedRecommendations({
+      clickedProduct,
+      catalog,
+      serviceCatalog,
+      limitCount,
+    });
 
     const productMap = new Map(catalog.map((product) => [product.id, product]));
     const serviceMap = new Map(serviceCatalog.map((service) => [service.id, service]));
-    const enrichedRecommendations = mergedRecommendations.map((recommendation) => {
-      const matchedProduct = recommendation.recommendedProductId
-        ? productMap.get(recommendation.recommendedProductId)
-        : null;
-      const matchedService = recommendation.recommendedServiceId
-        ? serviceMap.get(recommendation.recommendedServiceId)
-        : null;
+    const normalizeExternalRecommendations = (recommendations = []) => recommendations
+      .map((recommendation) => {
+        const matchedProduct = recommendation.recommendedProductId
+          ? productMap.get(recommendation.recommendedProductId)
+          : null;
+        const matchedService = recommendation.recommendedServiceId
+          ? serviceMap.get(recommendation.recommendedServiceId)
+          : null;
 
-      return {
-        ...recommendation,
-        recommendedProduct: matchedProduct ?? null,
-        recommendedService: matchedService ?? null,
-      };
-    });
+        const normalized = normalizeMatchMetadata(recommendation, clickedProduct, matchedProduct);
 
-    res.json({ recommendations: enrichedRecommendations ?? [] });
+        return {
+          ...normalized,
+          recommendedProduct: matchedProduct ?? null,
+          recommendedService: matchedService ?? null,
+        };
+      })
+      .filter((recommendation) => {
+        if (!recommendation.recommendedProduct) {
+          return true;
+        }
+
+        return recommendation.matchLevel === 'exact_model' || recommendation.matchLevel === 'family_match' || recommendation.matchLevel === 'curated_override';
+      });
+
+    const fallbackEnriched = fallbackRecommendations.map((recommendation) => ({
+      ...recommendation,
+      recommendedProduct: recommendation.recommendedProductId ? productMap.get(recommendation.recommendedProductId) ?? null : null,
+      recommendedService: recommendation.recommendedServiceId ? serviceMap.get(recommendation.recommendedServiceId) ?? null : null,
+    }));
+
+    const mergedRecommendations = dedupeRecommendations([
+      ...normalizeExternalRecommendations(curatedRecommendations ?? []),
+      ...fallbackEnriched,
+      ...normalizeExternalRecommendations(directRecommendations ?? []),
+    ]).slice(0, limitCount);
+
+    res.json({ recommendations: mergedRecommendations ?? [] });
   } catch (error) {
     next(error);
   }
 });
 
 export default router;
-
-
-

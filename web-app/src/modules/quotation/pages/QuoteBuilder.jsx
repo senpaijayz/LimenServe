@@ -468,8 +468,8 @@ const QuoteBuilder = () => {
                             }}
                             selectedProductIds={selectedParts.map((part) => part.id)}
                             selectedServiceIds={selectedServices.map((service) => service.id)}
-                            title="Recommendation Packages"
-                            subtitle="Related parts and labor suggested from curated rules and mined quote patterns."
+                            title="Compatible Mitsubishi Packages"
+                            subtitle="Same-vehicle Mitsubishi parts and service matches based on exact model first, then family fallback."
                         />
                     )}
 
@@ -673,3 +673,4 @@ const QuoteBuilder = () => {
 };
 
 export default QuoteBuilder;
+

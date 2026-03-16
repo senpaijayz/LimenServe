@@ -169,7 +169,7 @@ const PublicEstimate = () => {
                             Get Estimate
                         </h1>
                         <p className="mt-4 text-lg text-primary-600 max-w-2xl">
-                            Pick genuine parts from the live pricelist, then add optional services before printing the quotation.
+                            Pick genuine Mitsubishi parts from the live pricelist, then add compatible services before printing the quotation.
                         </p>
                     </div>
                 </div>
@@ -347,7 +347,7 @@ const PublicEstimate = () => {
                                 selectedProductIds={selectedParts.map((part) => part.id)}
                                 selectedServiceIds={selectedServices.map((service) => service.id)}
                                 title="Matched Package Suggestions"
-                                subtitle="Suggested add-on parts and labor for the currently selected part."
+                                subtitle="Same-vehicle Mitsubishi parts and service matches for the currently selected part."
                             />
                         )}
 
@@ -578,6 +578,7 @@ const PublicEstimate = () => {
 };
 
 export default PublicEstimate;
+
 
 
 
