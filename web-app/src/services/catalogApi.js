@@ -9,6 +9,15 @@ export async function getProductCatalog() {
   }
 }
 
+export async function getServiceCatalog() {
+  try {
+    const { data } = await apiClient.get('/catalog/services');
+    return data.services ?? [];
+  } catch (error) {
+    extractApiError(error, 'Failed to load service catalog.');
+  }
+}
+
 export async function getCurrentRetailPriceList() {
   try {
     const { data } = await apiClient.get('/catalog/prices/current');

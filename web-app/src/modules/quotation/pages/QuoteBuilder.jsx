@@ -8,18 +8,7 @@ import Modal from '../../../components/ui/Modal';
 import { formatCurrency } from '../../../utils/formatters';
 import { useToast } from '../../../components/ui/Toast';
 import useDataStore from '../../../store/useDataStore';
-
-// Services (labor charges)
-const availableServices = [
-    { id: 's1', name: 'Oil Change Service', price: 500 },
-    { id: 's2', name: 'Brake Pad Replacement (Labor)', price: 800 },
-    { id: 's3', name: 'Engine Tune-up', price: 1500 },
-    { id: 's4', name: 'Filter Replacement (Labor)', price: 200 },
-    { id: 's5', name: 'Wheel Alignment', price: 1000 },
-    { id: 's6', name: 'Tire Rotation & Balancing', price: 600 },
-    { id: 's7', name: 'Battery Replacement (Labor)', price: 300 },
-    { id: 's8', name: 'Suspension Inspection', price: 700 },
-];
+import useServiceCatalog from '../../../hooks/useServiceCatalog';
 
 /**
  * Quote Builder Page
@@ -28,6 +17,7 @@ const availableServices = [
 const QuoteBuilder = () => {
     const { success } = useToast();
     const { products: storeProducts, loading } = useDataStore();
+    const { services: availableServices, loading: servicesLoading, error: servicesError } = useServiceCatalog();
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
     const [selectedParts, setSelectedParts] = useState([]);
@@ -36,81 +26,71 @@ const QuoteBuilder = () => {
     const [showPreview, setShowPreview] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Add part to quote
     const addPart = (product) => {
-        const existing = selectedParts.find(p => p.id === product.id);
+        const existing = selectedParts.find((part) => part.id === product.id);
         if (existing) {
-            setSelectedParts(parts =>
-                parts.map(p => p.id === product.id ? { ...p, quantity: p.quantity + 1 } : p)
+            setSelectedParts((parts) =>
+                parts.map((part) => (part.id === product.id ? { ...part, quantity: part.quantity + 1 } : part))
             );
         } else {
             setSelectedParts([...selectedParts, { ...product, quantity: 1 }]);
         }
     };
 
-    // Remove part
     const removePart = (id) => {
-        setSelectedParts(parts => parts.filter(p => p.id !== id));
+        setSelectedParts((parts) => parts.filter((part) => part.id !== id));
     };
 
-    // Update part quantity
     const updatePartQuantity = (id, quantity) => {
         if (quantity < 1) {
             removePart(id);
             return;
         }
-        setSelectedParts(parts =>
-            parts.map(p => p.id === id ? { ...p, quantity } : p)
-        );
+
+        setSelectedParts((parts) => parts.map((part) => (part.id === id ? { ...part, quantity } : part)));
     };
 
-    // Toggle service
     const toggleService = (service) => {
-        const existing = selectedServices.find(s => s.id === service.id);
+        const existing = selectedServices.find((selected) => selected.id === service.id);
         if (existing) {
-            setSelectedServices(services => services.filter(s => s.id !== service.id));
+            setSelectedServices((services) => services.filter((selected) => selected.id !== service.id));
         } else {
             setSelectedServices([...selectedServices, service]);
         }
     };
 
-    // Calculate totals
-    const partsTotal = selectedParts.reduce((sum, p) => sum + (p.price * p.quantity), 0);
-    const servicesTotal = selectedServices.reduce((sum, s) => sum + s.price, 0);
+    const partsTotal = selectedParts.reduce((sum, part) => sum + (part.price * part.quantity), 0);
+    const servicesTotal = selectedServices.reduce((sum, service) => sum + service.price, 0);
     const subtotal = partsTotal + servicesTotal;
     const vat = subtotal * 0.12;
     const total = subtotal + vat;
 
-    const availableProducts = storeProducts.map(p => ({
-        id: p.id,
-        name: p.name,
-        sku: p.sku,
-        price: p.price,
-        category: p.category,
-        model: p.model,
+    const availableProducts = storeProducts.map((product) => ({
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        price: product.price,
+        category: product.category,
+        model: product.model,
     }));
 
-    // Filter products
-    const filteredProducts = availableProducts.filter(p =>
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()))
+    const filteredProducts = availableProducts.filter((product) =>
+        product.name.toLowerCase().includes(searchQuery.toLowerCase())
+        || (product.sku && product.sku.toLowerCase().includes(searchQuery.toLowerCase()))
+        || (product.model && product.model.toLowerCase().includes(searchQuery.toLowerCase()))
     );
 
-    // Handle save quote
     const handleSave = () => {
-        success('Quotation saved successfully!');
+        success('Quotation saved successfully.');
     };
 
-    // Handle print
     const handlePrint = () => {
         setShowPreview(true);
     };
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left Panel - Parts & Services Selection */}
             <div className="lg:col-span-2 space-y-6">
-                {/* Customer Info */}
                 <Card title="Customer Information">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Input
@@ -130,24 +110,31 @@ const QuoteBuilder = () => {
                     </div>
                 </Card>
 
-                {/* Parts Selection */}
                 <Card title="Select Parts">
-                    {/* Search */}
+                    <p className="mb-4 text-sm text-primary-500">Current Mitsubishi retail price list from Supabase.</p>
+
                     <div className="relative mb-4">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                         <input
                             type="text"
-                            placeholder="Search parts..."
+                            placeholder="Search parts by name, SKU, or model..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full pl-10 pr-4 py-2.5 bg-white border border-primary-200 rounded-lg text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue shadow-sm"
                         />
                     </div>
 
-                    {/* Parts Grid */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {filteredProducts.map((product) => {
-                            const isSelected = selectedParts.some(p => p.id === product.id);
+                        {loading ? (
+                            <div className="col-span-full rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-500">
+                                Loading the current price list from Supabase...
+                            </div>
+                        ) : filteredProducts.length === 0 ? (
+                            <div className="col-span-full rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-500">
+                                No priced parts matched your search.
+                            </div>
+                        ) : filteredProducts.map((product) => {
+                            const isSelected = selectedParts.some((part) => part.id === product.id);
                             return (
                                 <motion.button
                                     key={product.id}
@@ -162,8 +149,11 @@ const QuoteBuilder = () => {
                                     <p className="text-sm font-semibold text-primary-950 line-clamp-2 mb-1">
                                         {product.name}
                                     </p>
-                                    <p className="text-xs text-primary-500 font-mono mb-2">
+                                    <p className="text-xs text-primary-500 font-mono mb-1">
                                         {product.sku || 'NO PN'}
+                                    </p>
+                                    <p className="text-[11px] text-primary-400 mb-2">
+                                        {product.model || 'Universal fitment'}
                                     </p>
                                     <p className="text-sm font-bold text-accent-blue">
                                         {formatCurrency(product.price)}
@@ -174,11 +164,24 @@ const QuoteBuilder = () => {
                     </div>
                 </Card>
 
-                {/* Services Selection */}
                 <Card title="Select Services">
+                    <p className="mb-4 text-sm text-primary-500">Active services from the Supabase service catalog.</p>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {availableServices.map((service) => {
-                            const isSelected = selectedServices.some(s => s.id === service.id);
+                        {servicesLoading ? (
+                            <div className="col-span-full rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-500">
+                                Loading services from Supabase...
+                            </div>
+                        ) : servicesError ? (
+                            <div className="col-span-full rounded-lg border border-accent-danger/20 bg-accent-danger/5 p-4 text-sm text-accent-danger">
+                                {servicesError}
+                            </div>
+                        ) : availableServices.length === 0 ? (
+                            <div className="col-span-full rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-500">
+                                No active services were returned from the database.
+                            </div>
+                        ) : availableServices.map((service) => {
+                            const isSelected = selectedServices.some((selected) => selected.id === service.id);
                             return (
                                 <button
                                     key={service.id}
@@ -200,7 +203,6 @@ const QuoteBuilder = () => {
                     </div>
                 </Card>
 
-                {/* Notes */}
                 <Card title="Additional Notes">
                     <textarea
                         value={notes}
@@ -212,14 +214,12 @@ const QuoteBuilder = () => {
                 </Card>
             </div>
 
-            {/* Right Panel - Quote Summary */}
             <div className="lg:col-span-1">
                 <div className="bg-white border border-primary-200 rounded-xl shadow-sm p-4 sticky top-20">
                     <h3 className="text-lg font-display font-bold text-primary-950 mb-4 pb-3 border-b border-primary-100">
                         Quote Summary
                     </h3>
 
-                    {/* Selected Parts */}
                     {selectedParts.length > 0 && (
                         <div className="mb-4">
                             <p className="text-sm font-semibold text-primary-500 uppercase tracking-widest mb-2">Parts</p>
@@ -229,13 +229,13 @@ const QuoteBuilder = () => {
                                         <div className="flex-1 min-w-0 mr-2">
                                             <p className="text-sm font-semibold text-primary-950 truncate">{part.name}</p>
                                             <p className="text-[10px] text-primary-500 font-mono">{part.sku || 'NO PN'}</p>
-                                            <p className="text-xs font-bold text-accent-blue mt-1">{formatCurrency(part.price)} × {part.quantity}</p>
+                                            <p className="text-xs font-bold text-accent-blue mt-1">{formatCurrency(part.price)} x {part.quantity}</p>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <input
                                                 type="number"
                                                 value={part.quantity}
-                                                onChange={(e) => updatePartQuantity(part.id, parseInt(e.target.value) || 0)}
+                                                onChange={(e) => updatePartQuantity(part.id, parseInt(e.target.value, 10) || 0)}
                                                 className="w-14 px-2 py-1 bg-white border border-primary-200 rounded text-sm text-center font-bold text-primary-950 focus:outline-none focus:border-accent-blue shadow-sm"
                                                 min="1"
                                             />
@@ -252,7 +252,6 @@ const QuoteBuilder = () => {
                         </div>
                     )}
 
-                    {/* Selected Services */}
                     {selectedServices.length > 0 && (
                         <div className="mb-4">
                             <p className="text-sm font-semibold text-primary-500 uppercase tracking-widest mb-2">Services</p>
@@ -267,7 +266,6 @@ const QuoteBuilder = () => {
                         </div>
                     )}
 
-                    {/* Empty State */}
                     {selectedParts.length === 0 && selectedServices.length === 0 && (
                         <div className="text-center py-8">
                             <FileText className="w-12 h-12 text-primary-300 mx-auto mb-3" />
@@ -276,7 +274,6 @@ const QuoteBuilder = () => {
                         </div>
                     )}
 
-                    {/* Totals */}
                     {(selectedParts.length > 0 || selectedServices.length > 0) && (
                         <div className="border-t border-primary-200 pt-4 mt-4 space-y-2">
                             <div className="flex justify-between text-sm text-primary-600 font-medium">
@@ -298,7 +295,6 @@ const QuoteBuilder = () => {
                         </div>
                     )}
 
-                    {/* Actions */}
                     <div className="mt-6 space-y-3">
                         <Button
                             variant="primary"
@@ -322,7 +318,6 @@ const QuoteBuilder = () => {
                 </div>
             </div>
 
-            {/* Print Preview Modal */}
             <Modal
                 isOpen={showPreview}
                 onClose={() => setShowPreview(false)}
@@ -330,7 +325,6 @@ const QuoteBuilder = () => {
                 size="lg"
             >
                 <div className="receipt-preview" style={{ fontFamily: 'Inter, Arial, sans-serif' }}>
-                    {/* Company Header */}
                     <div style={{ textAlign: 'center', borderBottom: '2px solid black', paddingBottom: '12px', marginBottom: '12px' }}>
                         <img src="/LogoLimen.jpg" alt="Limen Logo" style={{ height: '48px', margin: '0 auto 6px', display: 'block', filter: 'grayscale(1) contrast(1.3)' }} />
                         <h2 style={{ fontSize: '16px', fontWeight: '800', margin: 0, letterSpacing: '-0.5px' }}>LIMEN AUTO PARTS CENTER</h2>
@@ -338,7 +332,6 @@ const QuoteBuilder = () => {
                         <p style={{ fontSize: '11px', margin: '1px 0 0', color: '#555' }}>Tel: +63 917 123 4567 | TIN: 000-123-456-000</p>
                     </div>
 
-                    {/* Prepared For / Date / Ref No */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
                         <div>
                             <div>
@@ -358,10 +351,8 @@ const QuoteBuilder = () => {
                         </div>
                     </div>
 
-                    {/* Title */}
                     <h3 style={{ textAlign: 'center', fontSize: '20px', fontWeight: '800', margin: '12px 0 14px', letterSpacing: '2px' }}>QUOTATION</h3>
 
-                    {/* Items Table */}
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr>
@@ -372,31 +363,28 @@ const QuoteBuilder = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {/* Parts */}
-                            {selectedParts.map(p => (
-                                <tr key={p.id}>
-                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>{p.quantity}</td>
+                            {selectedParts.map((part) => (
+                                <tr key={part.id}>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>{part.quantity}</td>
                                     <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>
-                                        {p.name}
-                                        <span style={{ display: 'block', fontSize: '10px', color: '#888', fontFamily: 'monospace' }}>{p.sku || 'NO PN'}</span>
+                                        {part.name}
+                                        <span style={{ display: 'block', fontSize: '10px', color: '#888', fontFamily: 'monospace' }}>{part.sku || 'NO PN'}</span>
                                     </td>
-                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right' }}>{formatCurrency(p.price)}</td>
-                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(p.price * p.quantity)}</td>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right' }}>{formatCurrency(part.price)}</td>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(part.price * part.quantity)}</td>
                                 </tr>
                             ))}
-                            {/* Services */}
-                            {selectedServices.map(s => (
-                                <tr key={s.id}>
+                            {selectedServices.map((service) => (
+                                <tr key={service.id}>
                                     <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>1</td>
                                     <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>
-                                        {s.name}
+                                        {service.name}
                                         <span style={{ display: 'block', fontSize: '10px', color: '#888' }}>Service / Labor</span>
                                     </td>
-                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right' }}>{formatCurrency(s.price)}</td>
-                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(s.price)}</td>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right' }}>{formatCurrency(service.price)}</td>
+                                    <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(service.price)}</td>
                                 </tr>
                             ))}
-                            {/* Empty rows to fill space */}
                             {(selectedParts.length + selectedServices.length) < 8 && Array.from({ length: 8 - selectedParts.length - selectedServices.length }).map((_, i) => (
                                 <tr key={`empty-${i}`}>
                                     <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>&nbsp;</td>
@@ -408,7 +396,6 @@ const QuoteBuilder = () => {
                         </tbody>
                     </table>
 
-                    {/* Totals - Right Aligned */}
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
                         <div style={{ width: '220px', fontSize: '12px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #ddd' }}>
@@ -426,7 +413,6 @@ const QuoteBuilder = () => {
                         </div>
                     </div>
 
-                    {/* Footer */}
                     <div style={{ textAlign: 'center', marginTop: '28px', paddingTop: '12px', borderTop: '1px solid #ccc' }}>
                         <p style={{ fontSize: '10px', color: '#666', fontWeight: '500' }}>This is a quotation only. Actual costs may vary upon service.</p>
                         <p style={{ fontSize: '9px', color: '#888', marginTop: '2px' }}>Validity: 30 Days from issue date</p>

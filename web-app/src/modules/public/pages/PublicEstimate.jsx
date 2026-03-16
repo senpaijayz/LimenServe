@@ -3,20 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Plus, Minus, Trash2, Calculator, Printer, User, Phone, Car, Wrench, X, Check, ChevronRight, Package, ArrowLeft } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
 import useDataStore from '../../../store/useDataStore';
+import useServiceCatalog from '../../../hooks/useServiceCatalog';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
-
-// Services (modern naming)
-const availableServices = [
-    { id: 's1', name: 'Comprehensive Oil Change Service', price: 500 },
-    { id: 's2', name: 'Brake System Overhaul', price: 800 },
-    { id: 's3', name: 'Engine Diagnostic & Tuning', price: 1500 },
-    { id: 's4', name: 'Air Filter Replacement', price: 200 },
-    { id: 's5', name: 'Wheel Alignment & Balancing', price: 1000 },
-    { id: 's6', name: 'Tire Rotation', price: 400 },
-    { id: 's7', name: 'Battery Replacement & Testing', price: 300 },
-    { id: 's8', name: 'Cooling System Flush', price: 600 },
-];
 
 const createQuoteMeta = () => ({
     issuedAt: new Date(),
@@ -28,6 +17,7 @@ const createQuoteMeta = () => ({
  */
 const PublicEstimate = () => {
     const { products: storeProducts, loading } = useDataStore();
+    const { services: availableServices } = useServiceCatalog();
     const [step, setStep] = useState(1); // 1 = build, 2 = review, 3 = result
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
@@ -81,7 +71,8 @@ const PublicEstimate = () => {
 
     const filteredProducts = availableProducts.filter(p =>
         p.name.toLowerCase().includes(partSearch.toLowerCase()) ||
-        p.sku.toLowerCase().includes(partSearch.toLowerCase())
+        (p.sku || '').toLowerCase().includes(partSearch.toLowerCase()) ||
+        (p.model || '').toLowerCase().includes(partSearch.toLowerCase())
     );
 
     const hasItems = selectedParts.length > 0 || selectedServices.length > 0;
@@ -675,3 +666,4 @@ const PublicEstimate = () => {
 };
 
 export default PublicEstimate;
+

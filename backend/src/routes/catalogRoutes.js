@@ -34,6 +34,34 @@ router.get('/products', async (_req, res, next) => {
   }
 });
 
+router.get('/services', async (_req, res, next) => {
+  try {
+    const { data: services, error } = await supabaseAdmin
+      .schema('app')
+      .from('services')
+      .select('id, code, name, description, standard_price, estimated_duration_minutes')
+      .eq('is_active', true)
+      .order('name', { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({
+      services: (services ?? []).map((service) => ({
+        id: service.id,
+        code: service.code,
+        name: service.name,
+        description: service.description,
+        price: Number(service.standard_price ?? 0),
+        estimatedDurationMinutes: Number(service.estimated_duration_minutes ?? 0),
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/prices/current', requireRole('admin'), async (_req, res, next) => {
   try {
     const products = await callRpc('get_product_catalog');
