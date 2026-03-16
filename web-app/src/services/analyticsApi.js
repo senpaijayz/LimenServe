@@ -45,11 +45,49 @@ export async function getMonthlyServiceForecasts(targetMonth = null) {
   }
 }
 
-export async function getAnalyticsDashboardSnapshot() {
+export async function getAnalyticsDashboardSnapshot(params = {}) {
   try {
-    const { data } = await apiClient.get('/analytics/dashboard');
+    const { data } = await apiClient.get('/analytics/dashboard', {
+      params,
+    });
     return data ?? {};
   } catch (error) {
     extractApiError(error, 'Failed to load analytics dashboard snapshot.');
+  }
+}
+
+export async function getTopSellingItems(params = {}) {
+  try {
+    const { data } = await apiClient.get('/analytics/items/top-selling', { params });
+    return data.items ?? [];
+  } catch (error) {
+    extractApiError(error, 'Failed to load top-selling items.');
+  }
+}
+
+export async function getItemSalesTrend(params = {}) {
+  try {
+    const { data } = await apiClient.get('/analytics/items/trend', { params });
+    return data.trend ?? [];
+  } catch (error) {
+    extractApiError(error, 'Failed to load item sales trend.');
+  }
+}
+
+export async function getItemPeakPeriods(params = {}) {
+  try {
+    const { data } = await apiClient.get('/analytics/items/peak-periods', { params });
+    return data.periods ?? [];
+  } catch (error) {
+    extractApiError(error, 'Failed to load item peak periods.');
+  }
+}
+
+export async function getDashboardItemSalesSnapshot(params = {}) {
+  try {
+    const { data } = await apiClient.get('/analytics/items/snapshot', { params });
+    return data ?? {};
+  } catch (error) {
+    extractApiError(error, 'Failed to load item sales snapshot.');
   }
 }

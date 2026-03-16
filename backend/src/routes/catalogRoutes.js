@@ -568,11 +568,17 @@ router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next)
 router.get('/products/:productId/recommendations', async (req, res, next) => {
   try {
     const limitCount = Number(req.query.limit || 5);
-    const [directRecommendations, catalog, serviceCatalog] = await Promise.all([
+    const vehicleModelId = req.query.vehicleModelId || null;
+    const [directRecommendations, curatedRecommendations, catalog, serviceCatalog] = await Promise.all([
       callRpc('get_product_upsell_recommendations', {
         product_id: req.params.productId,
-        vehicle_model_id: req.query.vehicleModelId || null,
+        vehicle_model_id: vehicleModelId,
         limit_count: limitCount,
+      }),
+      callRpc('get_curated_quote_recommendations', {
+        p_product_id: req.params.productId,
+        p_vehicle_model_name: vehicleModelId,
+        p_limit_count: limitCount,
       }),
       getCachedProductCatalog(),
       getCachedServiceCatalog(),
@@ -589,6 +595,7 @@ router.get('/products/:productId/recommendations', async (req, res, next) => {
       : [];
 
     const mergedRecommendations = dedupeRecommendations([
+      ...(curatedRecommendations ?? []),
       ...(directRecommendations ?? []),
       ...fallbackRecommendations,
     ]).slice(0, limitCount);
@@ -617,4 +624,6 @@ router.get('/products/:productId/recommendations', async (req, res, next) => {
 });
 
 export default router;
+
+
 

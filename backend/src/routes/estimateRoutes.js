@@ -1,8 +1,39 @@
 import { Router } from 'express';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 import { callRpc } from '../services/supabaseRpc.js';
 
 const router = Router();
+
+router.get('/', requireRole('admin', 'cashier', 'staff', 'stock_clerk'), async (req, res, next) => {
+  try {
+    const estimates = await callRpc('list_estimates', {
+      p_search: req.query.search || null,
+      p_limit_count: Number(req.query.limit || 20),
+    });
+
+    res.json({ estimates: estimates ?? [] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/public/lookup', async (req, res, next) => {
+  try {
+    const estimate = await callRpc('lookup_public_estimate', {
+      p_estimate_number: req.body?.estimateNumber,
+      p_phone: req.body?.phone,
+    });
+
+    if (!estimate) {
+      res.status(404).json({ error: 'No active quote matched that number and phone.' });
+      return;
+    }
+
+    res.json({ estimate });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.post('/', async (req, res, next) => {
   try {
@@ -11,6 +42,65 @@ router.post('/', async (req, res, next) => {
     });
 
     res.status(201).json({ estimateId });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:estimateId', requireRole('admin', 'cashier', 'staff', 'stock_clerk'), async (req, res, next) => {
+  try {
+    const estimate = await callRpc('get_estimate_detail', {
+      p_estimate_id: req.params.estimateId,
+    });
+
+    if (!estimate) {
+      res.status(404).json({ error: 'Estimate not found.' });
+      return;
+    }
+
+    res.json({ estimate });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:estimateId/revisions', requireRole('admin', 'cashier', 'staff', 'stock_clerk'), async (req, res, next) => {
+  try {
+    const revisions = await callRpc('get_estimate_revisions', {
+      p_estimate_id: req.params.estimateId,
+    });
+
+    res.json({ revisions: revisions ?? [] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/:estimateId', requireRole('admin', 'cashier', 'staff', 'stock_clerk'), async (req, res, next) => {
+  try {
+    const revisionId = await callRpc('revise_estimate', {
+      p_estimate_id: req.params.estimateId,
+      p_payload: req.body,
+      p_editor_id: req.user?.id || null,
+      p_change_note: req.body?.changeNote || null,
+    });
+
+    res.json({ revisionId });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/:estimateId/revise', requireRole('admin', 'cashier', 'staff', 'stock_clerk'), async (req, res, next) => {
+  try {
+    const revisionId = await callRpc('revise_estimate', {
+      p_estimate_id: req.params.estimateId,
+      p_payload: req.body,
+      p_editor_id: req.user?.id || null,
+      p_change_note: req.body?.changeNote || null,
+    });
+
+    res.status(201).json({ revisionId });
   } catch (error) {
     next(error);
   }

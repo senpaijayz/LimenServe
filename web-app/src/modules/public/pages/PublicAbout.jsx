@@ -1,7 +1,39 @@
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Package, Shield, Settings, Zap, MapPin, Building, Wrench } from 'lucide-react';
+import { getPublicMechanics } from '../../../services/mechanicsApi';
 
 const PublicAbout = () => {
+    const [mechanics, setMechanics] = useState([]);
+    const [mechanicsLoading, setMechanicsLoading] = useState(true);
+
+    useEffect(() => {
+        let active = true;
+
+        const loadMechanics = async () => {
+            try {
+                const rows = await getPublicMechanics();
+                if (active) {
+                    setMechanics(rows);
+                }
+            } catch (_error) {
+                if (active) {
+                    setMechanics([]);
+                }
+            } finally {
+                if (active) {
+                    setMechanicsLoading(false);
+                }
+            }
+        };
+
+        void loadMechanics();
+
+        return () => {
+            active = false;
+        };
+    }, []);
+
     return (
         <div className="bg-primary-50 min-h-screen relative font-sans text-primary-900 pb-20 overflow-hidden">
 
@@ -151,6 +183,42 @@ const PublicAbout = () => {
                     </div>
                 </div>
 
+                <div className="mb-16">
+                    <div className="text-center mb-12">
+                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">Meet Our Mechanics</h2>
+                        <p className="text-primary-600 max-w-2xl mx-auto">Customers can view the service team currently connected to the shop, what they specialize in, and whether they are available.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                        {mechanicsLoading ? (
+                            <div className="surface p-8 bg-white border border-primary-200 shadow-sm md:col-span-2 xl:col-span-3">
+                                <p className="text-sm text-primary-500">Loading mechanics from the database...</p>
+                            </div>
+                        ) : mechanics.length === 0 ? (
+                            <div className="surface p-8 bg-white border border-primary-200 shadow-sm md:col-span-2 xl:col-span-3">
+                                <p className="text-sm text-primary-500">No public mechanic profiles have been published yet.</p>
+                            </div>
+                        ) : mechanics.map((mechanic) => (
+                            <div key={mechanic.id} className="surface p-8 bg-white border border-primary-200 shadow-sm">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                        <p className="text-xs uppercase tracking-[0.22em] text-primary-400">{mechanic.location_name}</p>
+                                        <h3 className="mt-2 text-xl font-display font-semibold text-primary-950">{mechanic.full_name}</h3>
+                                        <p className="mt-2 text-sm font-medium text-accent-primary">{mechanic.specialization}</p>
+                                    </div>
+                                    <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${mechanic.availability_status === 'available' ? 'bg-accent-success/10 text-accent-success' : mechanic.availability_status === 'booked' ? 'bg-accent-warning/10 text-accent-warning' : 'bg-primary-100 text-primary-500'}`}>
+                                        {mechanic.availability_status.replace('_', ' ')}
+                                    </span>
+                                </div>
+                                <p className="mt-4 text-sm leading-relaxed text-primary-600">{mechanic.bio || 'Experienced Mitsubishi service technician.'}</p>
+                                <div className="mt-5 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600">
+                                    <p><span className="font-semibold text-primary-950">Shift:</span> {mechanic.shift_label || 'Schedule to be assigned'}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
                 {/* Location Banner */}
                 <motion.div
                     initial={{ opacity: 0, scale: 0.98 }}
@@ -189,3 +257,6 @@ const PublicAbout = () => {
 };
 
 export default PublicAbout;
+
+
+

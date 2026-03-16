@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Search, Plus, Edit2, Trash2, Shield, User, UserCheck } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -8,9 +8,9 @@ import Dropdown from '../../../components/ui/Dropdown';
 import { RoleBadge } from '../../../components/ui/Badge';
 import Table from '../../../components/ui/Table';
 import { useToast } from '../../../components/ui/Toast';
-import { ROLES, ROLE_LABELS } from '../../../utils/constants';
+import { listMechanics } from '../../../services/mechanicsApi';
+import MechanicManagementPanel from '../components/MechanicManagementPanel';
 
-// Mock users
 const mockUsers = [
     { id: '1', firstName: 'Wilson', lastName: 'Limen', email: 'admin@limen.com', role: 'admin', status: 'active', lastLogin: '2024-01-15' },
     { id: '2', firstName: 'Maria', lastName: 'Santos', email: 'cashier@limen.com', role: 'cashier', status: 'active', lastLogin: '2024-01-15' },
@@ -24,15 +24,12 @@ const roleOptions = [
     { value: 'stock_clerk', label: 'Stock Clerk' },
 ];
 
-/**
- * User Management Page
- * Manage system users and roles
- */
 const UserManagement = () => {
     const { success } = useToast();
     const [searchQuery, setSearchQuery] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
+    const [mechanics, setMechanics] = useState([]);
     const [formData, setFormData] = useState({
         firstName: '',
         lastName: '',
@@ -41,23 +38,25 @@ const UserManagement = () => {
         password: '',
     });
 
-    // Filter users
-    const filteredUsers = mockUsers.filter(user =>
-        user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    // Handle form submit
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        success(editingUser ? 'User updated successfully!' : 'User created successfully!');
-        setShowAddModal(false);
-        setEditingUser(null);
-        resetForm();
+    const loadMechanics = async () => {
+        try {
+            const rows = await listMechanics();
+            setMechanics(rows);
+        } catch (_error) {
+            setMechanics([]);
+        }
     };
 
-    // Reset form
+    useEffect(() => {
+        void loadMechanics();
+    }, []);
+
+    const filteredUsers = mockUsers.filter((user) =>
+        user.firstName.toLowerCase().includes(searchQuery.toLowerCase())
+        || user.lastName.toLowerCase().includes(searchQuery.toLowerCase())
+        || user.email.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
     const resetForm = () => {
         setFormData({
             firstName: '',
@@ -68,7 +67,14 @@ const UserManagement = () => {
         });
     };
 
-    // Handle edit
+    const handleSubmit = (event) => {
+        event.preventDefault();
+        success(editingUser ? 'User updated successfully!' : 'User created successfully!');
+        setShowAddModal(false);
+        setEditingUser(null);
+        resetForm();
+    };
+
     const handleEdit = (user) => {
         setEditingUser(user);
         setFormData({
@@ -81,7 +87,6 @@ const UserManagement = () => {
         setShowAddModal(true);
     };
 
-    // Table columns
     const columns = [
         {
             key: 'name',
@@ -89,9 +94,7 @@ const UserManagement = () => {
             render: (_, row) => (
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center border border-primary-200">
-                        <span className="text-sm font-bold text-primary-500">
-                            {row.firstName[0]}{row.lastName[0]}
-                        </span>
+                        <span className="text-sm font-bold text-primary-500">{row.firstName[0]}{row.lastName[0]}</span>
                     </div>
                     <div>
                         <p className="font-bold text-primary-950">{row.firstName} {row.lastName}</p>
@@ -109,8 +112,7 @@ const UserManagement = () => {
             key: 'status',
             label: 'Status',
             render: (status) => (
-                <span className={`inline-flex items-center gap-1 text-sm ${status === 'active' ? 'text-accent-success' : 'text-primary-500'
-                    }`}>
+                <span className={`inline-flex items-center gap-1 text-sm ${status === 'active' ? 'text-accent-success' : 'text-primary-500'}`}>
                     <span className={`w-2 h-2 rounded-full ${status === 'active' ? 'bg-accent-success' : 'bg-primary-500'}`} />
                     {status === 'active' ? 'Active' : 'Inactive'}
                 </span>
@@ -133,9 +135,7 @@ const UserManagement = () => {
                     >
                         <Edit2 className="w-4 h-4" />
                     </button>
-                    <button
-                        className="p-1.5 rounded-lg hover:bg-primary-50 text-primary-400 hover:text-accent-danger transition-colors border border-transparent hover:border-primary-200"
-                    >
+                    <button className="p-1.5 rounded-lg hover:bg-primary-50 text-primary-400 hover:text-accent-danger transition-colors border border-transparent hover:border-primary-200">
                         <Trash2 className="w-4 h-4" />
                     </button>
                 </div>
@@ -143,58 +143,39 @@ const UserManagement = () => {
         },
     ];
 
-    // Role stats
-    const adminCount = mockUsers.filter(u => u.role === 'admin').length;
-    const cashierCount = mockUsers.filter(u => u.role === 'cashier').length;
-    const clerkCount = mockUsers.filter(u => u.role === 'stock_clerk').length;
+    const adminCount = mockUsers.filter((user) => user.role === 'admin').length;
+    const cashierCount = mockUsers.filter((user) => user.role === 'cashier').length;
+    const clerkCount = mockUsers.filter((user) => user.role === 'stock_clerk').length;
 
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-display font-bold text-primary-950">
-                        User Management
-                    </h1>
-                    <p className="text-primary-500 font-medium mt-1">
-                        Manage system users and their access roles
-                    </p>
+                    <h1 className="text-2xl font-display font-bold text-primary-950">User Management</h1>
+                    <p className="text-primary-500 font-medium mt-1">Manage system users, roles, and public mechanic profiles.</p>
                 </div>
-                <Button
-                    variant="primary"
-                    leftIcon={<Plus className="w-4 h-4" />}
-                    onClick={() => { resetForm(); setShowAddModal(true); }}
-                >
+                <Button variant="primary" leftIcon={<Plus className="w-4 h-4" />} onClick={() => { resetForm(); setShowAddModal(true); }}>
                     Add User
                 </Button>
             </div>
 
-            {/* Role Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Card padding="default" className="flex items-center gap-4">
-                    <div className="p-3 rounded-xl bg-accent-danger/20">
-                        <Shield className="w-6 h-6 text-accent-danger" />
-                    </div>
+                    <div className="p-3 rounded-xl bg-accent-danger/20"><Shield className="w-6 h-6 text-accent-danger" /></div>
                     <div>
                         <p className="text-2xl font-bold font-display text-primary-100">{adminCount}</p>
                         <p className="text-sm text-primary-400">Administrators</p>
                     </div>
                 </Card>
-
                 <Card padding="default" className="flex items-center gap-4">
-                    <div className="p-3 rounded-xl bg-accent-info/20">
-                        <UserCheck className="w-6 h-6 text-accent-info" />
-                    </div>
+                    <div className="p-3 rounded-xl bg-accent-info/20"><UserCheck className="w-6 h-6 text-accent-info" /></div>
                     <div>
                         <p className="text-2xl font-bold font-display text-primary-100">{cashierCount}</p>
                         <p className="text-sm text-primary-400">Cashiers</p>
                     </div>
                 </Card>
-
                 <Card padding="default" className="flex items-center gap-4">
-                    <div className="p-3 rounded-xl bg-accent-success/20">
-                        <User className="w-6 h-6 text-accent-success" />
-                    </div>
+                    <div className="p-3 rounded-xl bg-accent-success/20"><User className="w-6 h-6 text-accent-success" /></div>
                     <div>
                         <p className="text-2xl font-bold font-display text-primary-100">{clerkCount}</p>
                         <p className="text-sm text-primary-400">Stock Clerks</p>
@@ -202,7 +183,6 @@ const UserManagement = () => {
                 </Card>
             </div>
 
-            {/* Search */}
             <div className="flex gap-4">
                 <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
@@ -216,14 +196,10 @@ const UserManagement = () => {
                 </div>
             </div>
 
-            {/* Users Table */}
-            <Table
-                columns={columns}
-                data={filteredUsers}
-                emptyMessage="No users found"
-            />
+            <Table columns={columns} data={filteredUsers} emptyMessage="No users found" />
 
-            {/* Add/Edit Modal */}
+            <MechanicManagementPanel mechanics={mechanics} onReload={loadMechanics} onNotify={success} />
+
             <Modal
                 isOpen={showAddModal}
                 onClose={() => { setShowAddModal(false); setEditingUser(null); }}
@@ -232,34 +208,13 @@ const UserManagement = () => {
             >
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-                        <Input
-                            label="First Name"
-                            value={formData.firstName}
-                            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                            required
-                        />
-                        <Input
-                            label="Last Name"
-                            value={formData.lastName}
-                            onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                            required
-                        />
+                        <Input label="First Name" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} required />
+                        <Input label="Last Name" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} required />
                     </div>
 
-                    <Input
-                        label="Email Address"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        required
-                    />
+                    <Input label="Email Address" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
 
-                    <Dropdown
-                        label="Role"
-                        options={roleOptions}
-                        value={formData.role}
-                        onChange={(value) => setFormData({ ...formData, role: value })}
-                    />
+                    <Dropdown label="Role" options={roleOptions} value={formData.role} onChange={(value) => setFormData({ ...formData, role: value })} />
 
                     <Input
                         label={editingUser ? 'New Password (leave blank to keep current)' : 'Password'}

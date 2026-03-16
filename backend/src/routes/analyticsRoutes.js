@@ -4,9 +4,86 @@ import { callRpc } from '../services/supabaseRpc.js';
 
 const router = Router();
 
-router.get('/dashboard', async (_req, res, next) => {
+router.get('/dashboard', async (req, res, next) => {
   try {
-    const snapshot = await callRpc('get_analytics_dashboard_snapshot');
+    const [snapshot, itemSnapshot] = await Promise.all([
+      callRpc('get_analytics_dashboard_snapshot'),
+      callRpc('get_dashboard_item_sales_snapshot', {
+        start_date: req.query.startDate || null,
+        end_date: req.query.endDate || null,
+        category_filter: req.query.category || null,
+        product_id_filter: req.query.productId || null,
+      }),
+    ]);
+
+    res.json({
+      ...(snapshot ?? {}),
+      ...(itemSnapshot ?? {}),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/items/top-selling', async (req, res, next) => {
+  try {
+    const items = await callRpc('get_top_selling_items', {
+      start_date: req.query.startDate || null,
+      end_date: req.query.endDate || null,
+      category_filter: req.query.category || null,
+      product_id_filter: req.query.productId || null,
+      location_filter: req.query.location || null,
+      limit_count: Number(req.query.limit || 10),
+    });
+
+    res.json({ items: items ?? [] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/items/trend', async (req, res, next) => {
+  try {
+    const trend = await callRpc('get_item_sales_trend', {
+      start_date: req.query.startDate || null,
+      end_date: req.query.endDate || null,
+      product_id_filter: req.query.productId || null,
+      category_filter: req.query.category || null,
+      location_filter: req.query.location || null,
+      granularity: req.query.granularity || 'month',
+    });
+
+    res.json({ trend: trend ?? [] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/items/peak-periods', async (req, res, next) => {
+  try {
+    const periods = await callRpc('get_item_peak_periods', {
+      start_date: req.query.startDate || null,
+      end_date: req.query.endDate || null,
+      product_id_filter: req.query.productId || null,
+      category_filter: req.query.category || null,
+      location_filter: req.query.location || null,
+    });
+
+    res.json({ periods: periods ?? [] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/items/snapshot', async (req, res, next) => {
+  try {
+    const snapshot = await callRpc('get_dashboard_item_sales_snapshot', {
+      start_date: req.query.startDate || null,
+      end_date: req.query.endDate || null,
+      category_filter: req.query.category || null,
+      product_id_filter: req.query.productId || null,
+    });
+
     res.json(snapshot ?? {});
   } catch (error) {
     next(error);

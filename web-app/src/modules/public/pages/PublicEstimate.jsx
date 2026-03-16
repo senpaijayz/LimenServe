@@ -7,6 +7,7 @@ import useServiceCatalog from '../../../hooks/useServiceCatalog';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import ProductPackageSuggestions from '../components/ProductPackageSuggestions';
+import PublicQuoteLookupCard from '../components/PublicQuoteLookupCard';
 
 const createQuoteMeta = () => ({
     issuedAt: new Date(),
@@ -145,6 +146,8 @@ const PublicEstimate = () => {
             </section>
 
             <section className="relative z-10 max-w-[1600px] mx-auto px-4 md:px-8 xl:px-12 py-2 print:hidden">
+                <PublicQuoteLookupCard />
+
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                     <div className="lg:col-span-8 space-y-8">
                         <div className="surface p-6">
@@ -487,6 +490,12 @@ const PublicEstimate = () => {
 };
 
 export default PublicEstimate;
+
+
+
+
+
+
 
 
 

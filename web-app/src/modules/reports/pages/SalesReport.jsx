@@ -1,19 +1,30 @@
-import { useEffect, useState } from 'react';
-import { Download, Package, TrendingUp, Wrench, RefreshCw, AlertTriangle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Download, Filter, RefreshCw, TrendingUp } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
+import SalesChart from '../../dashboard/components/SalesChart';
 import {
     getAnalyticsDashboardSnapshot,
-    getMonthlyProductForecasts,
-    getMonthlyServiceForecasts,
+    getItemPeakPeriods,
+    getItemSalesTrend,
+    getTopSellingItems,
     runFullAnalyticsRefresh,
 } from '../../../services/analyticsApi';
-import { formatCurrency } from '../../../utils/formatters';
+import { formatCurrency, formatNumber } from '../../../utils/formatters';
 
 const SalesReport = () => {
-    const [productForecasts, setProductForecasts] = useState([]);
-    const [serviceForecasts, setServiceForecasts] = useState([]);
+    const [filters, setFilters] = useState({
+        startDate: new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10),
+        endDate: new Date().toISOString().slice(0, 10),
+        category: '',
+        productId: '',
+        location: 'Main Shop',
+        granularity: 'month',
+    });
     const [dashboardSnapshot, setDashboardSnapshot] = useState(null);
+    const [topSellingItems, setTopSellingItems] = useState([]);
+    const [itemTrend, setItemTrend] = useState([]);
+    const [peakPeriods, setPeakPeriods] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
@@ -23,15 +34,26 @@ const SalesReport = () => {
         setError('');
 
         try {
-            const [products, services, snapshot] = await Promise.all([
-                getMonthlyProductForecasts(),
-                getMonthlyServiceForecasts(),
-                getAnalyticsDashboardSnapshot(),
+            const params = {
+                startDate: filters.startDate,
+                endDate: filters.endDate,
+                category: filters.category || null,
+                productId: filters.productId || null,
+                location: filters.location || null,
+                granularity: filters.granularity,
+            };
+
+            const [snapshot, items, trend, periods] = await Promise.all([
+                getAnalyticsDashboardSnapshot(params),
+                getTopSellingItems(params),
+                getItemSalesTrend(params),
+                getItemPeakPeriods(params),
             ]);
 
-            setProductForecasts(products);
-            setServiceForecasts(services);
             setDashboardSnapshot(snapshot);
+            setTopSellingItems(items);
+            setItemTrend(trend);
+            setPeakPeriods(periods);
         } catch (loadError) {
             setError(loadError.message || 'Unable to load analytics from Supabase.');
         } finally {
@@ -40,8 +62,8 @@ const SalesReport = () => {
     };
 
     useEffect(() => {
-        loadAnalytics();
-    }, []);
+        void loadAnalytics();
+    }, [filters.startDate, filters.endDate, filters.category, filters.productId, filters.location, filters.granularity]);
 
     const handleRefresh = async () => {
         setRefreshing(true);
@@ -57,46 +79,21 @@ const SalesReport = () => {
         }
     };
 
-    const totalPredictedProductRevenue = productForecasts.reduce(
-        (sum, item) => sum + Number(item.predicted_revenue || 0),
-        0
-    );
-    const totalPredictedProductQuantity = productForecasts.reduce(
-        (sum, item) => sum + Number(item.predicted_quantity || 0),
-        0
-    );
-    const totalPredictedServiceRevenue = serviceForecasts.reduce(
-        (sum, item) => sum + Number(item.predicted_revenue || 0),
-        0
-    );
-    const lowStockRiskCount = (dashboardSnapshot?.predictedLowStockRisk || []).length;
-    const topUpsells = dashboardSnapshot?.topUpsellOpportunities || [];
-    const latestRefresh = dashboardSnapshot?.latestRefresh;
+    const topLeader = topSellingItems[0];
+    const peakLeader = peakPeriods[0];
+    const trendRevenue = useMemo(() => itemTrend.reduce((sum, item) => sum + Number(item.revenue ?? 0), 0), [itemTrend]);
 
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 className="text-2xl font-display font-bold text-primary-950">
-                        Predictive Analytics Report
-                    </h1>
-                    <p className="mt-1 text-primary-500">
-                        Monthly demand forecasting, upsell mining, and stock-risk visibility from Supabase analytics.
-                    </p>
+                    <h1 className="text-2xl font-display font-bold text-primary-950">Item Sales Analytics Report</h1>
+                    <p className="mt-1 text-primary-500">Track top-selling Mitsubishi parts, identify peak periods, and review item-level sales trends.</p>
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                    <Button
-                        variant="secondary"
-                        leftIcon={<RefreshCw className="w-4 h-4" />}
-                        isLoading={refreshing}
-                        onClick={handleRefresh}
-                    >
-                        Refresh Analytics
-                    </Button>
-                    <Button variant="outline" leftIcon={<Download className="w-4 h-4" />}>
-                        Export
-                    </Button>
+                    <Button variant="secondary" leftIcon={<RefreshCw className="w-4 h-4" />} isLoading={refreshing} onClick={handleRefresh}>Refresh Analytics</Button>
+                    <Button variant="outline" leftIcon={<Download className="w-4 h-4" />}>Export</Button>
                 </div>
             </div>
 
@@ -112,63 +109,43 @@ const SalesReport = () => {
                 </Card>
             )}
 
+            <Card title="Report Filters" subtitle="Narrow the period, category, and trend granularity.">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+                    <input type="date" value={filters.startDate} onChange={(e) => setFilters((current) => ({ ...current, startDate: e.target.value }))} className="input py-2.5 text-sm" />
+                    <input type="date" value={filters.endDate} onChange={(e) => setFilters((current) => ({ ...current, endDate: e.target.value }))} className="input py-2.5 text-sm" />
+                    <input type="text" value={filters.category} onChange={(e) => setFilters((current) => ({ ...current, category: e.target.value }))} placeholder="Category" className="input py-2.5 text-sm" />
+                    <input type="text" value={filters.productId} onChange={(e) => setFilters((current) => ({ ...current, productId: e.target.value }))} placeholder="Product ID (optional)" className="input py-2.5 text-sm" />
+                    <input type="text" value={filters.location} onChange={(e) => setFilters((current) => ({ ...current, location: e.target.value }))} placeholder="Location" className="input py-2.5 text-sm" />
+                    <select value={filters.granularity} onChange={(e) => setFilters((current) => ({ ...current, granularity: e.target.value }))} className="input py-2.5 text-sm">
+                        <option value="month">Monthly Trend</option>
+                        <option value="day">Daily Trend</option>
+                    </select>
+                </div>
+            </Card>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <KPICard
-                    title="Predicted Product Revenue"
-                    value={loading ? 'Loading...' : formatCurrency(totalPredictedProductRevenue)}
-                    icon={<TrendingUp className="w-6 h-6" />}
-                    trend="up"
-                    trendValue={`${productForecasts.length} forecasted items`}
-                />
-                <KPICard
-                    title="Predicted Product Units"
-                    value={loading ? 'Loading...' : totalPredictedProductQuantity.toLocaleString()}
-                    icon={<Package className="w-6 h-6" />}
-                    trend="up"
-                    trendValue="Next month demand"
-                    accentColor="border-indigo-500"
-                    iconBg="bg-indigo-50 text-indigo-600"
-                />
-                <KPICard
-                    title="Predicted Service Revenue"
-                    value={loading ? 'Loading...' : formatCurrency(totalPredictedServiceRevenue)}
-                    icon={<Wrench className="w-6 h-6" />}
-                    trend="up"
-                    trendValue={`${serviceForecasts.length} forecasted services`}
-                    accentColor="border-amber-500"
-                    iconBg="bg-amber-50 text-amber-600"
-                />
-                <KPICard
-                    title="Low Stock Risk"
-                    value={loading ? 'Loading...' : String(lowStockRiskCount)}
-                    icon={<AlertTriangle className="w-6 h-6" />}
-                    trend={lowStockRiskCount > 0 ? 'down' : 'up'}
-                    trendValue={lowStockRiskCount > 0 ? 'Needs restock review' : 'Healthy forecast'}
-                    accentColor="border-rose-500"
-                    iconBg="bg-rose-50 text-rose-600"
-                />
+                <KPICard title="Top Selling Item" value={loading ? 'Loading...' : (topLeader?.product_name || 'N/A')} icon={<TrendingUp className="w-6 h-6" />} trend="up" trendValue={topLeader ? `${formatNumber(topLeader.quantity)} units` : 'No data'} />
+                <KPICard title="Item Trend Revenue" value={loading ? 'Loading...' : formatCurrency(trendRevenue)} icon={<Filter className="w-6 h-6" />} trend="up" trendValue={`${itemTrend.length} periods`} accentColor="border-indigo-500" iconBg="bg-indigo-50 text-indigo-600" />
+                <KPICard title="Peak Month Leader" value={loading ? 'Loading...' : (peakLeader?.product_name || 'N/A')} icon={<TrendingUp className="w-6 h-6" />} trend="up" trendValue={peakLeader?.peak_month ? new Date(peakLeader.peak_month).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' }) : 'No data'} accentColor="border-emerald-500" iconBg="bg-emerald-50 text-emerald-600" />
+                <KPICard title="Low Stock Risks" value={loading ? 'Loading...' : String((dashboardSnapshot?.predictedLowStockRisk || []).length)} icon={<AlertTriangle className="w-6 h-6" />} trend="down" trendValue="Forecast-based risk watch" accentColor="border-amber-500" iconBg="bg-amber-50 text-amber-600" />
             </div>
 
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-                <Card
-                    title="Top Product Forecasts"
-                    subtitle={latestRefresh?.endedAt ? `Last refresh: ${new Date(latestRefresh.endedAt).toLocaleString()}` : 'Forecast output'}
-                    className="xl:col-span-2"
-                >
+            <SalesChart data={itemTrend} title="Item-Level Sales Trend" subtitle="Revenue and units sold over the selected period" />
+
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <Card title="Top-Selling Items" subtitle="Best performing items in the selected time frame">
                     <div className="overflow-x-auto">
                         <table className="table">
                             <thead>
                                 <tr>
-                                    <th>Product</th>
-                                    <th>Month</th>
-                                    <th className="text-right">Predicted Qty</th>
-                                    <th className="text-right">Predicted Revenue</th>
-                                    <th>Trend</th>
-                                    <th>Confidence</th>
+                                    <th>Item</th>
+                                    <th>Category</th>
+                                    <th className="text-right">Units</th>
+                                    <th className="text-right">Revenue</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {productForecasts.slice(0, 8).map((item) => (
+                                {topSellingItems.map((item) => (
                                     <tr key={item.product_id}>
                                         <td>
                                             <div className="flex flex-col">
@@ -176,18 +153,14 @@ const SalesReport = () => {
                                                 <span className="text-xs font-mono text-primary-500">{item.sku}</span>
                                             </div>
                                         </td>
-                                        <td>{new Date(item.target_month).toLocaleDateString('en-PH', { year: 'numeric', month: 'short' })}</td>
-                                        <td className="text-right">{Number(item.predicted_quantity || 0).toLocaleString()}</td>
-                                        <td className="text-right font-medium text-accent-blue">{formatCurrency(item.predicted_revenue || 0)}</td>
-                                        <td className="capitalize">{item.trend_label}</td>
-                                        <td className="capitalize">{item.confidence_label}</td>
+                                        <td>{item.category}</td>
+                                        <td className="text-right">{formatNumber(item.quantity)}</td>
+                                        <td className="text-right font-medium text-accent-blue">{formatCurrency(item.revenue)}</td>
                                     </tr>
                                 ))}
-                                {!loading && productForecasts.length === 0 && (
+                                {!loading && topSellingItems.length === 0 && (
                                     <tr>
-                                        <td colSpan="6" className="py-8 text-center text-primary-500">
-                                            No product forecasts yet. Run the analytics refresh after seeding the warehouse.
-                                        </td>
+                                        <td colSpan="4" className="py-8 text-center text-primary-500">No item sales data matched the selected filters.</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -195,101 +168,38 @@ const SalesReport = () => {
                     </div>
                 </Card>
 
-                <Card title="Top Upsell Opportunities" subtitle="Association-rule mining output">
-                    <div className="space-y-3">
-                        {topUpsells.slice(0, 6).map((item) => (
-                            <div key={item.rule_id} className="rounded-xl border border-primary-200 bg-primary-50 p-4">
-                                <p className="font-semibold text-primary-950">{item.product_name}</p>
-                                <p className="mt-1 text-sm text-primary-600">
-                                    Recommend:{' '}
-                                    <span className="font-medium text-primary-900">
-                                        {item.recommended_product_name || item.recommended_service_name}
-                                    </span>
-                                </p>
-                                <div className="mt-3 flex flex-wrap gap-2 text-xs text-primary-500">
-                                    <span className="rounded-full bg-white px-2 py-1">Lift {item.lift}</span>
-                                    <span className="rounded-full bg-white px-2 py-1">Confidence {item.confidence}</span>
-                                    <span className="rounded-full bg-white px-2 py-1">{item.sample_count} baskets</span>
-                                </div>
-                            </div>
-                        ))}
-                        {!loading && topUpsells.length === 0 && (
-                            <p className="text-sm text-primary-500">
-                                No upsell rules available yet. Seed transaction history and refresh analytics.
-                            </p>
-                        )}
-                    </div>
-                </Card>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                <Card title="Service Demand Forecast" subtitle="Next-month predicted service load">
+                <Card title="Peak Periods" subtitle="When each product performed best">
                     <div className="overflow-x-auto">
                         <table className="table">
                             <thead>
                                 <tr>
-                                    <th>Service</th>
-                                    <th className="text-right">Predicted Qty</th>
-                                    <th className="text-right">Predicted Revenue</th>
-                                    <th>Trend</th>
+                                    <th>Item</th>
+                                    <th>Peak Month</th>
+                                    <th className="text-right">Peak Units</th>
+                                    <th className="text-right">Peak Revenue</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {serviceForecasts.slice(0, 8).map((item) => (
-                                    <tr key={item.service_id}>
+                                {peakPeriods.map((item) => (
+                                    <tr key={`${item.product_id}-${item.peak_month}`}>
                                         <td>
                                             <div className="flex flex-col">
-                                                <span className="font-medium text-primary-950">{item.service_name}</span>
-                                                <span className="text-xs font-mono text-primary-500">{item.service_code}</span>
+                                                <span className="font-medium text-primary-950">{item.product_name}</span>
+                                                <span className="text-xs font-mono text-primary-500">{item.sku}</span>
                                             </div>
                                         </td>
-                                        <td className="text-right">{Number(item.predicted_quantity || 0).toLocaleString()}</td>
-                                        <td className="text-right font-medium text-accent-blue">{formatCurrency(item.predicted_revenue || 0)}</td>
-                                        <td className="capitalize">{item.trend_label}</td>
+                                        <td>{new Date(item.peak_month).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' })}</td>
+                                        <td className="text-right">{formatNumber(item.peak_quantity)}</td>
+                                        <td className="text-right font-medium text-accent-blue">{formatCurrency(item.peak_revenue)}</td>
                                     </tr>
                                 ))}
-                                {!loading && serviceForecasts.length === 0 && (
+                                {!loading && peakPeriods.length === 0 && (
                                     <tr>
-                                        <td colSpan="4" className="py-8 text-center text-primary-500">
-                                            No service forecasts yet.
-                                        </td>
+                                        <td colSpan="4" className="py-8 text-center text-primary-500">No peak-period data matched the selected filters.</td>
                                     </tr>
                                 )}
                             </tbody>
                         </table>
-                    </div>
-                </Card>
-
-                <Card title="Predicted Stock Risk" subtitle="Forecast vs available stock">
-                    <div className="space-y-3">
-                        {(dashboardSnapshot?.predictedLowStockRisk || []).slice(0, 6).map((item) => (
-                            <div key={`${item.product_id}-${item.target_month}`} className="rounded-xl border border-primary-200 bg-white p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                        <p className="font-semibold text-primary-950">{item.product_name}</p>
-                                        <p className="text-xs font-mono text-primary-500">{item.sku}</p>
-                                    </div>
-                                    <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold uppercase text-amber-700">
-                                        {item.risk_level}
-                                    </span>
-                                </div>
-                                <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-primary-600">
-                                    <div>
-                                        <p className="text-xs uppercase tracking-wide text-primary-400">Forecast Qty</p>
-                                        <p className="font-medium text-primary-950">{Number(item.predicted_quantity || 0).toLocaleString()}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs uppercase tracking-wide text-primary-400">On Hand</p>
-                                        <p className="font-medium text-primary-950">{Number(item.on_hand || 0).toLocaleString()}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                        {!loading && (dashboardSnapshot?.predictedLowStockRisk || []).length === 0 && (
-                            <p className="text-sm text-primary-500">
-                                No forecasted stock risks detected.
-                            </p>
-                        )}
                     </div>
                 </Card>
             </div>
