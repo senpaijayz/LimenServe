@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, Filter, Grid, List, Package, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Grid, List, Package, AlertTriangle, Camera } from 'lucide-react';
 import Button from '../../../components/ui/Button';
-import Input from '../../../components/ui/Input';
 import Card from '../../../components/ui/Card';
 import { StockBadge } from '../../../components/ui/Badge';
 import Dropdown from '../../../components/ui/Dropdown';
@@ -10,47 +9,46 @@ import ProductCard from '../components/ProductCard';
 import AddStockModal from '../components/AddStockModal';
 import { formatCurrency } from '../../../utils/formatters';
 import { useToast } from '../../../components/ui/Toast';
-import { PRODUCT_CATEGORIES, TOTAL_CATALOG_SIZE } from '../../../data/productData';
+import { PRODUCT_CATEGORIES } from '../../../data/productData';
 import useDataStore from '../../../store/useDataStore';
-import { Camera } from 'lucide-react';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
+import { useAuth } from '../../../context/useAuth';
+import PriceListManager from '../components/PriceListManager';
 
 const categories = [
     { value: 'all', label: 'All Categories' },
-    ...PRODUCT_CATEGORIES.map(c => ({ value: c.toLowerCase(), label: c })),
+    ...PRODUCT_CATEGORIES.map((category) => ({ value: category.toLowerCase(), label: category })),
 ];
 
-/**
- * Inventory List Page
- * Main inventory management view with search, filter, and product cards
- */
 const InventoryList = () => {
     const { success } = useToast();
-    const { products: storeProducts, loading, updateProduct } = useDataStore();
+    const { isAdmin } = useAuth();
+    const {
+        products: storeProducts,
+        loading,
+        updateProduct,
+        fetchProducts,
+    } = useDataStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
-    const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+    const [viewMode, setViewMode] = useState('grid');
     const [showAddModal, setShowAddModal] = useState(false);
     const [showCameraScanner, setShowCameraScanner] = useState(false);
-    const [editingProduct, setEditingProduct] = useState(null);
 
-    // Filter products
     const filteredProducts = storeProducts.filter((product) => {
-        const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            product.sku.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesCategory = selectedCategory === 'all' ||
-            product.category.toLowerCase() === selectedCategory.toLowerCase();
+        const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase())
+            || product.sku.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesCategory = selectedCategory === 'all'
+            || product.category.toLowerCase() === selectedCategory.toLowerCase();
         return matchesSearch && matchesCategory;
     });
 
-    // Calculate stats
     const totalProducts = storeProducts.length;
-    const lowStockCount = storeProducts.filter(p => p.quantity <= 5).length;
-    const totalValue = storeProducts.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+    const lowStockCount = storeProducts.filter((product) => product.quantity <= 5).length;
+    const totalValue = storeProducts.reduce((sum, product) => sum + (product.price * product.quantity), 0);
 
     return (
         <div className="space-y-6">
-            {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Card padding="default" className="flex items-center gap-4">
                     <div className="p-3 rounded-xl bg-accent-info/20">
@@ -83,10 +81,8 @@ const InventoryList = () => {
                 </Card>
             </div>
 
-            {/* Toolbar */}
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                 <div className="flex flex-col sm:flex-row gap-3 flex-1 w-full sm:w-auto">
-                    {/* Search */}
                     <div className="relative flex-1 max-w-md flex gap-2">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
@@ -94,7 +90,7 @@ const InventoryList = () => {
                                 type="text"
                                 placeholder="Search products or scan barcode..."
                                 value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onChange={(event) => setSearchQuery(event.target.value)}
                                 className="w-full pl-10 pr-4 py-2.5 bg-white border border-primary-200 rounded-lg text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue shadow-sm"
                             />
                         </div>
@@ -108,7 +104,6 @@ const InventoryList = () => {
                         </Button>
                     </div>
 
-                    {/* Category Filter */}
                     <Dropdown
                         options={categories}
                         value={selectedCategory}
@@ -117,8 +112,11 @@ const InventoryList = () => {
                     />
                 </div>
 
-                <div className="flex items-center gap-2">
-                    {/* View Toggle */}
+                <div className="flex items-center gap-2 flex-wrap">
+                    {isAdmin && (
+                        <PriceListManager onUpdated={fetchProducts} />
+                    )}
+
                     <div className="flex items-center glass rounded-lg p-1">
                         <button
                             onClick={() => setViewMode('grid')}
@@ -134,7 +132,6 @@ const InventoryList = () => {
                         </button>
                     </div>
 
-                    {/* Add Stock Button */}
                     <Button
                         variant="primary"
                         leftIcon={<Plus className="w-4 h-4" />}
@@ -145,7 +142,6 @@ const InventoryList = () => {
                 </div>
             </div>
 
-            {/* Products Grid/List */}
             {loading ? (
                 <Card className="text-center py-12">
                     <Package className="w-12 h-12 text-primary-400 mx-auto mb-4 animate-pulse" />
@@ -203,7 +199,6 @@ const InventoryList = () => {
                 </Card>
             )}
 
-            {/* Add Stock Modal */}
             <AddStockModal
                 isOpen={showAddModal}
                 onClose={() => setShowAddModal(false)}
@@ -213,7 +208,7 @@ const InventoryList = () => {
                     setShowAddModal(false);
                 }}
             />
-            {/* Camera Scanner Modal */}
+
             <CameraScannerModal
                 isOpen={showCameraScanner}
                 onClose={() => setShowCameraScanner(false)}
