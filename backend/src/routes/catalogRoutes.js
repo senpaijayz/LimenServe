@@ -37,7 +37,7 @@ const SERVICE_GROUP_CONFIG = {
     packageKey: 'tune-up-package',
     packageName: 'Compatible Tune-Up Package',
     packageDescription: 'Compatible ignition and tune-up parts and labor for this Mitsubishi model.',
-    serviceKeywords: ['tune', 'diagnostic', 'inspection'],
+    serviceKeywords: ['tune', 'diagnostic', 'inspection', 'engine', 'injector', 'fuel', 'throttle', 'gasket', 'pcv'],
   },
   filter_service: {
     packageKey: 'filter-service-package',
@@ -57,6 +57,7 @@ const PART_FUNCTION_RULES = [
   { partFunction: 'oil_filter', serviceGroup: 'oil_change', keywords: ['oil filter'] },
   { partFunction: 'engine_oil', serviceGroup: 'oil_change', keywords: ['engine oil', 'synthetic oil', 'motor oil'] },
   { partFunction: 'drain_washer', serviceGroup: 'oil_change', keywords: ['drain washer', 'drain plug washer'] },
+  { partFunction: 'oil_pan_component', serviceGroup: 'oil_change', keywords: ['oil pan', 'oil level', 'oil pressure', 'eng oil pan', 'oil strainer'] },
   { partFunction: 'brake_pad', serviceGroup: 'brake_service', keywords: ['brake pad'] },
   { partFunction: 'brake_shoe', serviceGroup: 'brake_service', keywords: ['brake shoe'] },
   { partFunction: 'brake_fluid', serviceGroup: 'brake_service', keywords: ['brake fluid'] },
@@ -64,6 +65,13 @@ const PART_FUNCTION_RULES = [
   { partFunction: 'disc_rotor', serviceGroup: 'brake_service', keywords: ['disc rotor', 'rotor'] },
   { partFunction: 'spark_plug', serviceGroup: 'tune_up', keywords: ['spark plug', 'glow plug'] },
   { partFunction: 'ignition_coil', serviceGroup: 'tune_up', keywords: ['ignition coil'] },
+  { partFunction: 'head_gasket', serviceGroup: 'tune_up', keywords: ['gasket,cylinder head', 'cylinder head gasket', 'head gasket'] },
+  { partFunction: 'engine_gasket', serviceGroup: 'tune_up', keywords: ['gasket', 'o-ring', 'seal'] },
+  { partFunction: 'breather_hose', serviceGroup: 'tune_up', keywords: ['breather hose', 'rocker cover breather'] },
+  { partFunction: 'crank_bearing', serviceGroup: 'tune_up', keywords: ['crankshaft', 'connrod', 'bearing'] },
+  { partFunction: 'fuel_injector', serviceGroup: 'tune_up', keywords: ['fuel injector', 'injector'] },
+  { partFunction: 'air_intake', serviceGroup: 'tune_up', keywords: ['air cleaner', 'air clnr', 'throt body', 'throttle body', 'air guide', 'duct,air'] },
+  { partFunction: 'pcv_component', serviceGroup: 'tune_up', keywords: ['pcv valve'] },
   { partFunction: 'air_filter', serviceGroup: 'filter_service', keywords: ['air filter'] },
   { partFunction: 'cabin_filter', serviceGroup: 'filter_service', keywords: ['cabin air filter', 'cabin filter'] },
   { partFunction: 'fuel_filter', serviceGroup: 'filter_service', keywords: ['fuel filter'] },
@@ -73,7 +81,7 @@ const PART_FUNCTION_RULES = [
   { partFunction: 'coolant', serviceGroup: 'cooling_service', keywords: ['coolant'] },
   { partFunction: 'thermostat', serviceGroup: 'cooling_service', keywords: ['thermostat'] },
   { partFunction: 'water_pump', serviceGroup: 'cooling_service', keywords: ['water pump'] },
-  { partFunction: 'radiator_hose', serviceGroup: 'cooling_service', keywords: ['radiator hose', 'hose'] },
+  { partFunction: 'radiator_hose', serviceGroup: 'cooling_service', keywords: ['radiator hose', 'water feed', 'water pump inlet', 'hose,throt body water', 'hose'] },
   { partFunction: 'tire', serviceGroup: 'tire_service', keywords: ['tire', 'tyre'] },
   { partFunction: 'wheel', serviceGroup: 'tire_service', keywords: ['wheel'] },
   { partFunction: 'wheel_valve', serviceGroup: 'tire_service', keywords: ['valve'] },
@@ -81,31 +89,43 @@ const PART_FUNCTION_RULES = [
 ];
 
 const COMPANION_FUNCTIONS = {
-  oil_filter: ['engine_oil', 'drain_washer'],
-  engine_oil: ['oil_filter', 'drain_washer'],
-  drain_washer: ['engine_oil', 'oil_filter'],
+  oil_filter: ['engine_oil', 'drain_washer', 'oil_pan_component'],
+  engine_oil: ['oil_filter', 'drain_washer', 'oil_pan_component'],
+  drain_washer: ['engine_oil', 'oil_filter', 'oil_pan_component'],
+  oil_pan_component: ['engine_oil', 'oil_filter', 'drain_washer'],
   brake_pad: ['disc_rotor', 'brake_cleaner', 'brake_fluid', 'brake_shoe'],
   brake_shoe: ['brake_cleaner', 'brake_fluid', 'brake_pad'],
   brake_fluid: ['brake_pad', 'brake_shoe', 'brake_cleaner'],
   brake_cleaner: ['brake_pad', 'brake_shoe', 'brake_fluid'],
   disc_rotor: ['brake_pad', 'brake_cleaner', 'brake_fluid'],
-  spark_plug: ['air_filter', 'cabin_filter', 'fuel_filter', 'ignition_coil'],
-  ignition_coil: ['spark_plug', 'air_filter'],
-  air_filter: ['cabin_filter', 'fuel_filter', 'spark_plug'],
+  spark_plug: ['air_filter', 'cabin_filter', 'fuel_filter', 'ignition_coil', 'fuel_injector'],
+  ignition_coil: ['spark_plug', 'air_filter', 'fuel_injector'],
+  head_gasket: ['engine_gasket', 'breather_hose', 'fuel_injector', 'air_intake'],
+  engine_gasket: ['head_gasket', 'breather_hose', 'oil_pan_component', 'fuel_injector'],
+  breather_hose: ['engine_gasket', 'air_intake', 'head_gasket'],
+  crank_bearing: ['engine_gasket', 'oil_pan_component'],
+  fuel_injector: ['air_intake', 'fuel_filter', 'spark_plug'],
+  air_intake: ['fuel_injector', 'air_filter', 'spark_plug', 'pcv_component'],
+  pcv_component: ['air_filter', 'engine_gasket', 'air_intake'],
+  air_filter: ['cabin_filter', 'fuel_filter', 'spark_plug', 'air_intake'],
   cabin_filter: ['air_filter', 'fuel_filter'],
-  fuel_filter: ['air_filter', 'cabin_filter', 'spark_plug'],
+  fuel_filter: ['air_filter', 'cabin_filter', 'spark_plug', 'fuel_injector'],
   battery: ['battery_terminal'],
   battery_terminal: ['battery'],
   radiator: ['coolant', 'thermostat', 'water_pump', 'radiator_hose'],
   coolant: ['radiator', 'thermostat', 'radiator_hose'],
-  thermostat: ['coolant', 'radiator', 'water_pump'],
-  water_pump: ['coolant', 'thermostat', 'radiator_hose'],
-  radiator_hose: ['coolant', 'radiator', 'thermostat'],
+  thermostat: ['coolant', 'radiator', 'water_pump', 'radiator_hose'],
+  water_pump: ['coolant', 'thermostat', 'radiator_hose', 'radiator'],
+  radiator_hose: ['coolant', 'radiator', 'thermostat', 'water_pump'],
   tire: ['wheel', 'wheel_valve', 'lug_nut'],
   wheel: ['tire', 'wheel_valve', 'lug_nut'],
   wheel_valve: ['tire', 'wheel'],
   lug_nut: ['tire', 'wheel'],
 };
+
+const RECOMMENDATION_STOP_WORDS = new Set([
+  'assy', 'kit', 'set', 'rh', 'lh', 'upr', 'lwr', 'eng', 'body', 'case', 'cover', 'support', 'main', 'pc', 'md', 'for', 'the', 'and', 'with'
+]);
 
 let productCatalogCache = {
   data: null,
@@ -201,6 +221,40 @@ function extractVehicleFamily(modelName) {
   return base || null;
 }
 
+function inferHeuristicServiceGroup(text) {
+  if (matchesAnyKeyword(text, ['radiator', 'coolant', 'thermostat', 'water pump', 'water feed', 'hose'])) {
+    return 'cooling_service';
+  }
+  if (matchesAnyKeyword(text, ['brake', 'rotor'])) {
+    return 'brake_service';
+  }
+  if (matchesAnyKeyword(text, ['battery', 'terminal'])) {
+    return 'battery_service';
+  }
+  if (matchesAnyKeyword(text, ['tire', 'tyre', 'wheel', 'lug', 'valve'])) {
+    return 'tire_service';
+  }
+  if (matchesAnyKeyword(text, ['filter'])) {
+    return 'filter_service';
+  }
+  if (matchesAnyKeyword(text, ['oil', 'drain'])) {
+    return 'oil_change';
+  }
+  if (matchesAnyKeyword(text, ['gasket', 'injector', 'throt body', 'throttle body', 'air cleaner', 'pcv', 'bearing', 'crankshaft', 'connrod', 'mounting', 'breather'])) {
+    return 'tune_up';
+  }
+  return null;
+}
+
+function extractMeaningfulTokens(text) {
+  return Array.from(new Set(
+    normalizeText(text)
+      .split(/[^a-z0-9]+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 4 && !RECOMMENDATION_STOP_WORDS.has(token))
+  ));
+}
+
 function inferProductProfile(product) {
   const text = buildProductSearchText(product);
   const matchingRule = PART_FUNCTION_RULES.find((rule) => matchesAnyKeyword(text, rule.keywords));
@@ -215,7 +269,8 @@ function inferProductProfile(product) {
     vehicleFamily,
     normalizedVehicleFamily: normalizeText(vehicleFamily),
     partFunction: matchingRule?.partFunction || null,
-    serviceGroup: matchingRule?.serviceGroup || null,
+    serviceGroup: matchingRule?.serviceGroup || inferHeuristicServiceGroup(text),
+    keywords: extractMeaningfulTokens([product.name, product.model].filter(Boolean).join(' ')),
     isVehicleSpecific: Boolean(product.model && !normalizeText(product.model).includes('various') && !normalizeText(product.model).includes('universal')),
   };
 }
@@ -260,6 +315,86 @@ function scoreCandidate(candidate, desiredFunction, matchLevel) {
   const exactFunctionBonus = candidate.profile.partFunction === desiredFunction ? 1000 : 0;
   const matchBonus = matchLevel === 'exact_model' ? 500 : 250;
   return exactFunctionBonus + matchBonus + stockScore;
+}
+
+function scoreKeywordCandidate(candidate, clickedKeywords, matchLevel, preferredServiceGroup) {
+  const overlap = candidate.profile.keywords.filter((token) => clickedKeywords.includes(token)).length;
+  const stockScore = Number(candidate.product.stock ?? 0);
+  const groupBonus = preferredServiceGroup && candidate.profile.serviceGroup === preferredServiceGroup ? 200 : 0;
+  const matchBonus = matchLevel === 'exact_model' ? 300 : 150;
+  return overlap * 100 + stockScore + groupBonus + matchBonus;
+}
+
+function pickKeywordClusterProducts({ clickedProduct, catalog, clickedProfile, limitCount }) {
+  const clickedKeywords = clickedProfile.keywords || [];
+
+  if (!clickedProfile.modelName || clickedKeywords.length === 0) {
+    return [];
+  }
+
+  const catalogProfiles = catalog.map((product) => ({ product, profile: inferProductProfile(product) }));
+  const matchByTokens = (targetMatchLevel) => catalogProfiles
+    .filter(({ product, profile }) => product.id !== clickedProduct.id)
+    .filter(({ profile }) => {
+      if (targetMatchLevel === 'exact_model') {
+        return profile.normalizedModel && profile.normalizedModel === clickedProfile.normalizedModel;
+      }
+      return profile.normalizedVehicleFamily && profile.normalizedVehicleFamily === clickedProfile.normalizedVehicleFamily;
+    })
+    .map((candidate) => ({
+      ...candidate,
+      overlap: candidate.profile.keywords.filter((token) => clickedKeywords.includes(token)).length,
+    }))
+    .filter((candidate) => candidate.overlap > 0)
+    .sort((left, right) => scoreKeywordCandidate(right, clickedKeywords, targetMatchLevel, clickedProfile.serviceGroup) - scoreKeywordCandidate(left, clickedKeywords, targetMatchLevel, clickedProfile.serviceGroup));
+
+  const exactMatches = matchByTokens('exact_model').slice(0, limitCount).map(({ product }) => ({
+    ruleId: null,
+    consequentKind: 'product',
+    recommendedProductId: product.id,
+    recommendedProductName: product.name,
+    recommendedServiceId: null,
+    recommendedServiceName: null,
+    recommendedPrice: Number(product.price ?? 0),
+    support: null,
+    confidence: null,
+    lift: null,
+    sampleCount: null,
+    reasonLabel: 'Related Mitsubishi part for the same exact vehicle',
+    packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || 'vehicle-package',
+    packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Compatible Mitsubishi Package',
+    packageDescription: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageDescription || 'Compatible Mitsubishi parts and services for this vehicle.',
+    matchLevel: 'exact_model',
+    vehicleModelName: clickedProfile.modelName,
+    vehicleFamily: clickedProfile.vehicleFamily,
+    serviceGroup: clickedProfile.serviceGroup,
+  }));
+
+  if (exactMatches.length > 0) {
+    return exactMatches;
+  }
+
+  return matchByTokens('family_match').slice(0, limitCount).map(({ product }) => ({
+    ruleId: null,
+    consequentKind: 'product',
+    recommendedProductId: product.id,
+    recommendedProductName: product.name,
+    recommendedServiceId: null,
+    recommendedServiceName: null,
+    recommendedPrice: Number(product.price ?? 0),
+    support: null,
+    confidence: null,
+    lift: null,
+    sampleCount: null,
+    reasonLabel: 'Related Mitsubishi family part for ' + clickedProfile.vehicleFamily,
+    packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || 'vehicle-package',
+    packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Compatible Mitsubishi Package',
+    packageDescription: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageDescription || 'Compatible Mitsubishi parts and services for this vehicle family.',
+    matchLevel: 'family_match',
+    vehicleModelName: clickedProfile.modelName,
+    vehicleFamily: clickedProfile.vehicleFamily,
+    serviceGroup: clickedProfile.serviceGroup,
+  }));
 }
 
 function pickCompanionProducts({ clickedProduct, catalog, clickedProfile, limitCount }) {
@@ -767,3 +902,6 @@ router.get('/products/:productId/recommendations', async (req, res, next) => {
 });
 
 export default router;
+
+
+
