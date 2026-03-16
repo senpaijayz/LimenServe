@@ -172,34 +172,15 @@ router.get('/products/all', async (_req, res, next) => {
 
 router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, next) => {
   try {
-    const [
-      { count: pricelistRows, error: pricelistError },
-      { count: uniqueProducts, error: productsError },
-      { count: currentPriceRows, error: pricesError },
-    ] = await Promise.all([
-      supabaseAdmin.from('pricelist').select('sku', { count: 'exact', head: true }),
-      supabaseAdmin.schema('app').from('products').select('id', { count: 'exact', head: true }).eq('is_active', true),
-      supabaseAdmin.schema('app').from('product_prices').select('product_id', { count: 'exact', head: true }).eq('price_type', 'retail').eq('is_current', true),
-    ]);
-
-    if (pricelistError) {
-      throw pricelistError;
-    }
-
-    if (productsError) {
-      throw productsError;
-    }
-
-    if (pricesError) {
-      throw pricesError;
-    }
+    const summaryRows = await callRpc('get_catalog_summary');
+    const summary = Array.isArray(summaryRows) ? (summaryRows[0] ?? null) : summaryRows;
 
     res.json({
       summary: {
-        totalProducts: Number(pricelistRows ?? 0),
-        pricelistRows: Number(pricelistRows ?? 0),
-        uniqueProducts: Number(uniqueProducts ?? 0),
-        currentPrices: Number(currentPriceRows ?? 0),
+        totalProducts: Number(summary?.total_products ?? 0),
+        pricelistRows: Number(summary?.pricelist_rows ?? 0),
+        uniqueProducts: Number(summary?.unique_products ?? 0),
+        currentPrices: Number(summary?.current_prices ?? 0),
       },
     });
   } catch (error) {
@@ -209,16 +190,7 @@ router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, ne
 
 router.get('/services', async (_req, res, next) => {
   try {
-    const { data: services, error } = await supabaseAdmin
-      .schema('app')
-      .from('services')
-      .select('id, code, name, description, standard_price, estimated_duration_minutes')
-      .eq('is_active', true)
-      .order('name', { ascending: true });
-
-    if (error) {
-      throw error;
-    }
+    const services = await callRpc('get_service_catalog');
 
     res.json({
       services: (services ?? []).map((service) => ({
@@ -226,7 +198,7 @@ router.get('/services', async (_req, res, next) => {
         code: service.code,
         name: service.name,
         description: service.description,
-        price: Number(service.standard_price ?? 0),
+        price: Number(service.price ?? 0),
         estimatedDurationMinutes: Number(service.estimated_duration_minutes ?? 0),
       })),
     });
@@ -352,3 +324,4 @@ router.get('/products/:productId/recommendations', async (req, res, next) => {
 });
 
 export default router;
+
