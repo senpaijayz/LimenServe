@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, Minus, Calculator, Printer, User, Phone, Car, Wrench, X, Package } from 'lucide-react';
+import { Search, Plus, Minus, Calculator, Printer, User, Phone, Car, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
@@ -8,6 +8,13 @@ import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import ProductPackageSuggestions from '../components/ProductPackageSuggestions';
 import PublicQuoteLookupCard from '../components/PublicQuoteLookupCard';
+
+const SORT_OPTIONS = [
+    { value: 'name-asc', label: 'A-Z' },
+    { value: 'name-desc', label: 'Z-A' },
+    { value: 'price-asc', label: 'Price: Low to High' },
+    { value: 'price-desc', label: 'Price: High to Low' },
+];
 
 const createQuoteMeta = () => ({
     issuedAt: new Date(),
@@ -21,21 +28,28 @@ const PublicEstimate = () => {
     const [selectedParts, setSelectedParts] = useState([]);
     const [selectedServices, setSelectedServices] = useState([]);
     const [partSearch, setPartSearch] = useState('');
+    const [sortBy, setSortBy] = useState('name-asc');
+    const [currentPage, setCurrentPage] = useState(1);
     const [focusedProduct, setFocusedProduct] = useState(null);
     const [showPrintPreview, setShowPrintPreview] = useState(false);
     const [quoteMeta, setQuoteMeta] = useState(() => createQuoteMeta());
 
     const {
         products: priceListProducts,
+        pagination,
         loading,
         error: partsError,
     } = useProductCatalog({
-        page: 1,
+        page: currentPage,
         pageSize: 12,
         searchQuery: partSearch,
-        sortBy: 'name-asc',
+        sortBy,
     });
     const { services: availableServices, loading: servicesLoading, error: servicesError } = useServiceCatalog();
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [partSearch, sortBy]);
 
     const filteredProducts = priceListProducts.map((product) => ({
         id: product.id,
@@ -45,6 +59,13 @@ const PublicEstimate = () => {
         category: product.category,
         model: product.model,
     }));
+
+    const totalCount = pagination.totalCount || 0;
+    const totalPages = pagination.totalPages || 1;
+    const rangeStart = totalCount === 0 ? 0 : ((pagination.page - 1) * pagination.pageSize) + 1;
+    const rangeEnd = totalCount === 0 ? 0 : Math.min(pagination.page * pagination.pageSize, totalCount);
+    const canGoPrev = pagination.page > 1;
+    const canGoNext = pagination.page < totalPages;
 
     const addPart = (product) => {
         setFocusedProduct(product);
@@ -118,8 +139,17 @@ const PublicEstimate = () => {
         setSelectedParts([]);
         setSelectedServices([]);
         setPartSearch('');
+        setSortBy('name-asc');
+        setCurrentPage(1);
+        setFocusedProduct(null);
         setShowPrintPreview(false);
         setQuoteMeta(createQuoteMeta());
+    };
+
+    const resetPriceListView = () => {
+        setPartSearch('');
+        setSortBy('name-asc');
+        setCurrentPage(1);
     };
 
     return (
@@ -139,7 +169,7 @@ const PublicEstimate = () => {
                             Get Estimate
                         </h1>
                         <p className="mt-4 text-lg text-primary-600 max-w-2xl">
-                            Pick genuine parts straight from the live Supabase price list, then add optional services before printing the quotation.
+                            Pick genuine parts from the live pricelist, then add optional services before printing the quotation.
                         </p>
                     </div>
                 </div>
@@ -177,34 +207,61 @@ const PublicEstimate = () => {
                         </div>
 
                         <div className="surface p-6">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                            <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-end lg:justify-between">
                                 <div className="flex items-start gap-3">
                                     <div className="w-10 h-10 rounded-lg bg-accent-primary/5 border border-accent-primary/20 flex items-center justify-center">
                                         <Package className="w-5 h-5 text-accent-primary" />
                                     </div>
                                     <div>
-                                        <h3 className="text-xl font-display font-semibold text-primary-950">Genuine Parts Price List</h3>
-                                        <p className="text-sm text-primary-500">Top 12 matches from the imported Supabase retail price list.</p>
+                                        <h3 className="text-xl font-display font-semibold text-primary-950">Genuine Parts Pricelist</h3>
+                                        <p className="text-sm text-primary-500">Showing 12 priced items at a time from the current pricelist.</p>
                                         <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary-400">Click a part to add it and reveal its matched package.</p>
                                     </div>
                                 </div>
 
-                                <div className="relative w-full sm:w-72">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-500" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search by part name, SKU, or model..."
-                                        value={partSearch}
-                                        onChange={(e) => setPartSearch(e.target.value)}
-                                        className="input pl-10 py-2.5 text-sm"
-                                    />
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                                    <div className="relative w-full sm:w-72">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-500" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search by part name, SKU, or model..."
+                                            value={partSearch}
+                                            onChange={(e) => setPartSearch(e.target.value)}
+                                            className="input pl-10 py-2.5 text-sm"
+                                        />
+                                    </div>
+                                    <div className="relative min-w-[220px]">
+                                        <ArrowUpDown className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
+                                        <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
+                                        <select
+                                            value={sortBy}
+                                            onChange={(e) => setSortBy(e.target.value)}
+                                            className="w-full appearance-none rounded-xl border border-primary-200 bg-primary-50 py-3 pl-11 pr-11 text-sm font-semibold text-primary-900 outline-none transition focus:border-accent-blue focus:bg-white"
+                                        >
+                                            {SORT_OPTIONS.map((option) => (
+                                                <option key={option.value} value={option.value}>{option.label}</option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 </div>
+                            </div>
+
+                            <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-primary-200 bg-white/90 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                                <div className="text-sm text-primary-600">
+                                    <span>
+                                        Showing <strong className="text-primary-950">{rangeStart}-{rangeEnd}</strong> of <strong className="text-primary-950">{totalCount}</strong> priced items
+                                    </span>
+                                    <p className="mt-1 text-xs uppercase tracking-[0.22em] text-primary-400">Page {pagination.page} of {totalPages}</p>
+                                </div>
+                                <button type="button" onClick={resetPriceListView} className="text-sm font-semibold text-accent-blue hover:text-accent-primary transition">
+                                    Reset list view
+                                </button>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
                                 {loading ? (
                                     <div className="sm:col-span-2 rounded-xl border border-primary-200 bg-white p-6 text-sm text-primary-500">
-                                        Loading the current price list from Supabase...
+                                        Loading the current pricelist...
                                     </div>
                                 ) : partsError ? (
                                     <div className="sm:col-span-2 rounded-xl border border-accent-danger/20 bg-accent-danger/5 p-6 text-sm text-accent-danger">
@@ -232,6 +289,37 @@ const PublicEstimate = () => {
                                         </button>
                                     );
                                 })}
+                            </div>
+
+                            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => canGoPrev && setCurrentPage((page) => Math.max(1, page - 1))}
+                                    disabled={!canGoPrev}
+                                    className="inline-flex items-center gap-2 rounded-xl border border-primary-200 px-4 py-2 text-sm font-semibold text-primary-700 transition disabled:cursor-not-allowed disabled:opacity-40 hover:border-primary-300 hover:bg-primary-50"
+                                >
+                                    <ChevronLeft className="h-4 w-4" /> Previous
+                                </button>
+
+                                <div className="flex items-center gap-3">
+                                    {canGoNext && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                                            className="inline-flex items-center gap-2 rounded-xl bg-primary-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-800"
+                                        >
+                                            Show More <ChevronRight className="h-4 w-4" />
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => canGoNext && setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                                        disabled={!canGoNext}
+                                        className="inline-flex items-center gap-2 rounded-xl border border-primary-200 px-4 py-2 text-sm font-semibold text-primary-700 transition disabled:cursor-not-allowed disabled:opacity-40 hover:border-primary-300 hover:bg-primary-50"
+                                    >
+                                        Next <ChevronRight className="h-4 w-4" />
+                                    </button>
+                                </div>
                             </div>
                         </div>
 

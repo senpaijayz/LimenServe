@@ -235,6 +235,26 @@ function dedupeRecommendations(recommendations = []) {
   });
 }
 
+async function getOptionalCuratedRecommendations(productId, vehicleModelId, limitCount) {
+  try {
+    const rows = await callRpc('get_curated_quote_recommendations', {
+      p_product_id: productId,
+      p_vehicle_model_name: vehicleModelId,
+      p_limit_count: limitCount,
+    });
+
+    return rows ?? [];
+  } catch (error) {
+    const message = String(error?.message || error || '');
+
+    if (message.includes('get_curated_quote_recommendations') || message.includes('schema cache')) {
+      return [];
+    }
+
+    throw error;
+  }
+}
+
 function buildRuleBasedPackageRecommendations({ clickedProduct, catalog, serviceCatalog, limitCount }) {
   const productText = buildProductSearchText(clickedProduct);
   const matchingRule = PACKAGE_RULES.find((rule) => matchesAnyKeyword(productText, rule.anchorKeywords));
@@ -575,11 +595,7 @@ router.get('/products/:productId/recommendations', async (req, res, next) => {
         vehicle_model_id: vehicleModelId,
         limit_count: limitCount,
       }),
-      callRpc('get_curated_quote_recommendations', {
-        p_product_id: req.params.productId,
-        p_vehicle_model_name: vehicleModelId,
-        p_limit_count: limitCount,
-      }),
+      getOptionalCuratedRecommendations(req.params.productId, vehicleModelId, limitCount),
       getCachedProductCatalog(),
       getCachedServiceCatalog(),
     ]);

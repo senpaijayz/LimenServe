@@ -708,6 +708,7 @@ set search_path = app, public, dw
 as $$
 declare
   v_rows integer := 0;
+  v_more_rows integer := 0;
 begin
   truncate table dw.fact_daily_item_sales, dw.fact_monthly_item_sales restart identity;
 
