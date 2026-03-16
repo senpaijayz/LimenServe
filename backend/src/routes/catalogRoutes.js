@@ -62,76 +62,58 @@ async function getCachedProductCatalog() {
   return productCatalogCache.data;
 }
 
-function filterBySearch(products, query) {
-  const trimmedQuery = String(query || '').trim().toLowerCase();
-  if (!trimmedQuery) {
-    return products;
-  }
-
-  return products.filter((product) => (
-    String(product.name || '').toLowerCase().includes(trimmedQuery)
-    || String(product.sku || '').toLowerCase().includes(trimmedQuery)
-    || String(product.model || '').toLowerCase().includes(trimmedQuery)
-  ));
-}
-
-function sortProducts(products, sortBy) {
-  const items = [...products];
-
-  switch (sortBy) {
-    case 'name-desc':
-      return items.sort((a, b) => String(b.name || '').localeCompare(String(a.name || '')));
-    case 'price-asc':
-      return items.sort((a, b) => Number(a.price ?? 0) - Number(b.price ?? 0) || String(a.name || '').localeCompare(String(b.name || '')));
-    case 'price-desc':
-      return items.sort((a, b) => Number(b.price ?? 0) - Number(a.price ?? 0) || String(a.name || '').localeCompare(String(b.name || '')));
-    case 'name-asc':
-    default:
-      return items.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
-  }
-}
-
-function buildCategorySummary(products, totalCount) {
-  const counts = new Map();
-
-  products.forEach((product) => {
-    const category = String(product.category || 'Uncategorized');
-    counts.set(category, (counts.get(category) || 0) + 1);
-  });
-
-  return [
-    { value: 'all', label: 'All Categories', count: totalCount },
-    ...Array.from(counts.entries())
-      .sort(([categoryA], [categoryB]) => categoryA.localeCompare(categoryB))
-      .map(([category, count]) => ({ value: category, label: category, count })),
-  ];
-}
-
 router.get('/products', async (req, res, next) => {
   try {
     const page = parsePositiveInteger(req.query.page, 1, 10000);
     const pageSize = parsePositiveInteger(req.query.pageSize, 10, 100);
-    const sortBy = String(req.query.sortBy || 'name-asc');
+    const searchQuery = String(req.query.q || '').trim();
     const selectedCategory = String(req.query.category || 'all');
-    const catalog = await getCachedProductCatalog();
+    const sortBy = String(req.query.sortBy || 'name-asc');
 
-    const searchFiltered = filterBySearch(catalog, req.query.q);
-    const categories = buildCategorySummary(searchFiltered, searchFiltered.length);
-    const categoryFiltered = selectedCategory === 'all'
-      ? searchFiltered
-      : searchFiltered.filter((product) => String(product.category || '') === selectedCategory);
-    const sortedProducts = sortProducts(categoryFiltered, sortBy);
-    const totalCount = sortedProducts.length;
+    const [pageRows, categoryRows] = await Promise.all([
+      callRpc('get_product_catalog_page', {
+        p_page: page,
+        p_page_size: pageSize,
+        p_search: searchQuery || null,
+        p_category: selectedCategory,
+        p_sort_by: sortBy,
+      }),
+      callRpc('get_product_catalog_categories', {
+        p_search: searchQuery || null,
+      }),
+    ]);
+
+    const products = (pageRows ?? []).map((row) => ({
+      id: row.id,
+      sku: row.sku,
+      name: row.name,
+      model: row.model,
+      category: row.category,
+      price: Number(row.price ?? 0),
+      stock: Number(row.stock ?? 0),
+      status: row.status,
+      uom: row.uom,
+      brand: row.brand,
+      location: row.location ?? {},
+    }));
+
+    const totalCount = Number(pageRows?.[0]?.total_count ?? 0);
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-    const currentPage = Math.min(page, totalPages);
-    const startIndex = (currentPage - 1) * pageSize;
-    const products = sortedProducts.slice(startIndex, startIndex + pageSize);
+    const categoryCountTotal = (categoryRows ?? []).reduce((sum, row) => sum + Number(row.count ?? 0), 0);
+    const categories = [
+      { value: 'all', label: 'All Categories', count: categoryCountTotal || totalCount },
+      ...(categoryRows ?? []).map((row) => ({
+        value: row.value,
+        label: row.label,
+        count: Number(row.count ?? 0),
+      })),
+    ];
 
     res.json({
       products,
       categories,
       pagination: {
-        page: currentPage,
+        page,
         pageSize,
         totalCount,
         totalPages,
