@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, X, Check, Printer, Wrench } from 'lucide-react';
 import Button from '../../../components/ui/Button';
@@ -25,7 +25,7 @@ const POSTerminal = () => {
     } = useCart();
 
     const { success } = useToast();
-    const { products: storeProducts, loading } = useDataStore();
+    const { products: storeProducts, loading, fetchProducts, hasLoadedProducts } = useDataStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showServiceModal, setShowServiceModal] = useState(false);
@@ -33,6 +33,12 @@ const POSTerminal = () => {
     const [showCameraScanner, setShowCameraScanner] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState('');
     const [lastTransaction, setLastTransaction] = useState(null);
+
+    useEffect(() => {
+        if (!hasLoadedProducts && !loading) {
+            void fetchProducts();
+        }
+    }, [fetchProducts, hasLoadedProducts, loading]);
 
     // Filter products
     const filteredProducts = storeProducts.filter(p =>
@@ -524,3 +530,4 @@ const POSTerminal = () => {
 };
 
 export default POSTerminal;
+

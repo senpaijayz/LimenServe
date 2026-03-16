@@ -1,16 +1,36 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/constants';
-import { supabase } from './supabase';
+import { ensureSessionLoaded, getCachedAccessToken } from './supabase';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
 });
 
+function wait(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 apiClient.interceptors.request.use(async (config) => {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  let token = getCachedAccessToken();
+
+  if (!token) {
+    try {
+      const session = await ensureSessionLoaded();
+      token = session?.access_token ?? null;
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        await wait(50);
+        token = getCachedAccessToken();
+      } else {
+        throw error;
+      }
+    }
+  }
 
   if (token) {
+    config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
   }
 

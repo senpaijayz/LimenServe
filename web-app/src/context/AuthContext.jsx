@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AuthContext from './auth-context';
 import { ROLES } from '../utils/constants';
-import { supabase } from '../services/supabase';
+import { ensureSessionLoaded, supabase } from '../services/supabase';
 import { getCurrentUserProfile } from '../services/authApi';
 
 function normalizeRole(role, email) {
@@ -50,12 +50,14 @@ export function AuthProvider({ children }) {
     const hydrateUser = useCallback(async (session) => {
         if (!session?.user) {
             setUser(null);
+            setError(null);
             return;
         }
 
         try {
             const profile = await getCurrentUserProfile();
             setUser(mapSupabaseUser(session.user, profile));
+            setError(null);
         } catch (profileError) {
             setUser(mapSupabaseUser(session.user, null));
             setError(profileError.message);
@@ -67,17 +69,13 @@ export function AuthProvider({ children }) {
 
         const initializeAuth = async () => {
             try {
-                const { data, error: sessionError } = await supabase.auth.getSession();
-
-                if (sessionError) {
-                    throw sessionError;
-                }
+                const session = await ensureSessionLoaded();
 
                 if (!mounted) {
                     return;
                 }
 
-                await hydrateUser(data.session);
+                await hydrateUser(session);
             } catch (authError) {
                 if (mounted) {
                     setError(authError.message || 'Unable to restore session.');
@@ -92,13 +90,18 @@ export function AuthProvider({ children }) {
 
         initializeAuth();
 
-        const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
             if (!mounted) {
                 return;
             }
 
-            await hydrateUser(session);
-            setIsLoading(false);
+            void (async () => {
+                await hydrateUser(session);
+
+                if (mounted) {
+                    setIsLoading(false);
+                }
+            })();
         });
 
         return () => {
@@ -112,7 +115,7 @@ export function AuthProvider({ children }) {
         setError(null);
 
         try {
-            const { data, error: signInError } = await supabase.auth.signInWithPassword({
+            const { error: signInError } = await supabase.auth.signInWithPassword({
                 email,
                 password,
             });
@@ -121,7 +124,6 @@ export function AuthProvider({ children }) {
                 throw signInError;
             }
 
-            await hydrateUser(data.session);
             return { success: true };
         } catch (loginError) {
             const message = loginError.message || 'Invalid email or password.';
@@ -130,7 +132,7 @@ export function AuthProvider({ children }) {
         } finally {
             setIsLoading(false);
         }
-    }, [hydrateUser]);
+    }, []);
 
     const logout = useCallback(async () => {
         await supabase.auth.signOut();

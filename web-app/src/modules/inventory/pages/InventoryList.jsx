@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Plus, Grid, List, Package, AlertTriangle, Camera } from 'lucide-react';
 import Button from '../../../components/ui/Button';
@@ -23,12 +23,19 @@ const InventoryList = () => {
         error,
         updateProduct,
         fetchProducts,
+        hasLoadedProducts,
     } = useDataStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [viewMode, setViewMode] = useState('grid');
     const [showAddModal, setShowAddModal] = useState(false);
     const [showCameraScanner, setShowCameraScanner] = useState(false);
+
+    useEffect(() => {
+        if (!hasLoadedProducts && !loading) {
+            void fetchProducts();
+        }
+    }, [fetchProducts, hasLoadedProducts, loading]);
 
     const categories = useMemo(() => ([
         { value: 'all', label: 'All Categories' },
@@ -233,3 +240,4 @@ const InventoryList = () => {
 };
 
 export default InventoryList;
+

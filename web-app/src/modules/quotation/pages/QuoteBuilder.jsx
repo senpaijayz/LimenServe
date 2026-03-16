@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Plus, Trash2, Printer, Save, FileText, User, Phone } from 'lucide-react';
 import Button from '../../../components/ui/Button';
@@ -16,7 +16,7 @@ import useServiceCatalog from '../../../hooks/useServiceCatalog';
  */
 const QuoteBuilder = () => {
     const { success } = useToast();
-    const { products: storeProducts, loading } = useDataStore();
+    const { products: storeProducts, loading, fetchProducts, hasLoadedProducts } = useDataStore();
     const { services: availableServices, loading: servicesLoading, error: servicesError } = useServiceCatalog();
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
@@ -25,6 +25,12 @@ const QuoteBuilder = () => {
     const [notes, setNotes] = useState('');
     const [showPreview, setShowPreview] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+
+    useEffect(() => {
+        if (!hasLoadedProducts && !loading) {
+            void fetchProducts();
+        }
+    }, [fetchProducts, hasLoadedProducts, loading]);
 
     const addPart = (product) => {
         const existing = selectedParts.find((part) => part.id === product.id);
@@ -432,3 +438,4 @@ const QuoteBuilder = () => {
 };
 
 export default QuoteBuilder;
+

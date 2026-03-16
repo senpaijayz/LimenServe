@@ -1,8 +1,6 @@
-import { useEffect } from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
 import { useTheme } from '../../context/ThemeContext';
-import useDataStore from '../../store/useDataStore';
 import Sidebar from './Sidebar';
 import Header from './Header';
 
@@ -13,15 +11,6 @@ import Header from './Header';
 const MainLayout = () => {
     const { isAuthenticated, isLoading } = useAuth();
     const { sidebarCollapsed } = useTheme();
-    const fetchProducts = useDataStore((state) => state.fetchProducts);
-
-    useEffect(() => {
-        if (!isAuthenticated) {
-            return;
-        }
-
-        fetchProducts();
-    }, [isAuthenticated, fetchProducts]);
 
     if (isLoading) {
         return (
