@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Plus, Grid, List, Package, AlertTriangle, Camera } from 'lucide-react';
 import Button from '../../../components/ui/Button';
@@ -9,16 +9,10 @@ import ProductCard from '../components/ProductCard';
 import AddStockModal from '../components/AddStockModal';
 import { formatCurrency } from '../../../utils/formatters';
 import { useToast } from '../../../components/ui/Toast';
-import { PRODUCT_CATEGORIES } from '../../../data/productData';
 import useDataStore from '../../../store/useDataStore';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
-
-const categories = [
-    { value: 'all', label: 'All Categories' },
-    ...PRODUCT_CATEGORIES.map((category) => ({ value: category.toLowerCase(), label: category })),
-];
 
 const InventoryList = () => {
     const { success } = useToast();
@@ -26,6 +20,7 @@ const InventoryList = () => {
     const {
         products: storeProducts,
         loading,
+        error,
         updateProduct,
         fetchProducts,
     } = useDataStore();
@@ -34,6 +29,14 @@ const InventoryList = () => {
     const [viewMode, setViewMode] = useState('grid');
     const [showAddModal, setShowAddModal] = useState(false);
     const [showCameraScanner, setShowCameraScanner] = useState(false);
+
+    const categories = useMemo(() => ([
+        { value: 'all', label: 'All Categories' },
+        ...Array.from(new Set(storeProducts.map((product) => product.category)))
+            .filter(Boolean)
+            .sort((a, b) => a.localeCompare(b))
+            .map((category) => ({ value: category.toLowerCase(), label: category })),
+    ]), [storeProducts]);
 
     const filteredProducts = storeProducts.filter((product) => {
         const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -147,6 +150,12 @@ const InventoryList = () => {
                     <Package className="w-12 h-12 text-primary-400 mx-auto mb-4 animate-pulse" />
                     <h3 className="text-lg font-semibold text-primary-300 mb-2">Connecting to Supabase...</h3>
                     <p className="text-primary-500">Fetching live inventory data</p>
+                </Card>
+            ) : error ? (
+                <Card className="text-center py-12">
+                    <AlertTriangle className="w-12 h-12 text-accent-danger mx-auto mb-4" />
+                    <h3 className="text-lg font-bold text-primary-900 mb-2">Database catalog unavailable</h3>
+                    <p className="text-primary-500 font-medium">{error}</p>
                 </Card>
             ) : filteredProducts.length === 0 ? (
                 <Card className="text-center py-12">
