@@ -25,6 +25,27 @@ This directory contains the database implementation for the LimenServe transacti
 2. Run `seed.sql` in a development environment.
 3. Call `run_full_analytics_refresh` after loading new transactional history.
 
+## Smaller manual SQL files
+
+If you prefer smaller files in Supabase SQL Editor instead of one large setup script, use:
+
+- `manual-sql/README.md`
+- `manual-sql/01_login_and_roles.sql`
+- `manual-sql/02_inventory_and_catalog.sql`
+- `manual-sql/03_estimation_and_services.sql`
+- `manual-sql/04_sales_service_and_upsell.sql`
+- `manual-sql/05_data_warehouse_tables.sql`
+- `manual-sql/06_operational_functions.sql`
+- `manual-sql/07_analytics_and_refresh_functions.sql`
+- `manual-sql/08_public_rpcs.sql`
+- `manual-sql/09_security_and_permissions.sql`
+- `manual-sql/10_auth_profile_sync.sql`
+- `manual-sql/11_demo_seed.sql`
+
+The ERD is available in:
+
+- `manual-sql/ERD.md`
+
 ## Catalog seeding from the current frontend data
 
 To convert the existing curated product catalog into SQL seed statements:

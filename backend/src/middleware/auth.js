@@ -1,18 +1,15 @@
 import { supabaseAdmin, supabaseAuth } from '../config/supabase.js';
 
 async function fetchProfile(userId) {
-  const { data, error } = await supabaseAdmin
-    .schema('app')
-    .from('user_profiles')
-    .select('id, user_id, email, full_name, role')
-    .eq('user_id', userId)
-    .maybeSingle();
+  const { data, error } = await supabaseAdmin.rpc('get_user_profile_by_user_id', {
+    p_user_id: userId,
+  });
 
   if (error) {
     throw error;
   }
 
-  return data;
+  return Array.isArray(data) ? (data[0] ?? null) : data;
 }
 
 export async function attachUser(req, _res, next) {

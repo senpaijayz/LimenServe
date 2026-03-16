@@ -865,4 +865,5 @@ insert into app.product_prices (product_id, price_type, amount, is_current, effe
 insert into app.inventory_balances (product_id, on_hand, reserved, reorder_point, reorder_quantity, location, as_of_date) select id, 12.00, 0, 3, 6, '{"floor":2,"section":"H","shelf":"1"}'::jsonb, current_date from app.products where sku = '5070A575' on conflict (product_id) do update set on_hand = excluded.on_hand, reorder_point = excluded.reorder_point, reorder_quantity = excluded.reorder_quantity, location = excluded.location, updated_at = timezone('utc', now());
 
 select app.seed_demo_data();
-select app.run_full_analytics_refresh(''Initial demo analytics refresh'');
+select app.run_full_analytics_refresh('Initial demo analytics refresh');
+

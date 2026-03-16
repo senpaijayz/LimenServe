@@ -2459,12 +2459,12 @@ begin
     )
     returning id into v_estimate_id;
 
-    insert into app.estimate_items (estimate_id, line_type, product_id, quantity, unit_price, line_total, business_date)
+    insert into app.estimate_items (estimate_id, line_type, product_id, service_id, quantity, unit_price, line_total, business_date)
     values
-      (v_estimate_id, 'product', p_oil_filter, 1, 450.00, 450.00, v_month + 2),
-      (v_estimate_id, 'product', p_engine_oil, 1, 1850.00, 1850.00, v_month + 2),
-      (v_estimate_id, 'product', p_drain_washer, 1, 55.00, 55.00, v_month + 2),
-      (v_estimate_id, 'service', s_oil_change, 1, 650.00, 650.00, v_month + 2);
+      (v_estimate_id, 'product', p_oil_filter, null, 1, 450.00, 450.00, v_month + 2),
+      (v_estimate_id, 'product', p_engine_oil, null, 1, 1850.00, 1850.00, v_month + 2),
+      (v_estimate_id, 'product', p_drain_washer, null, 1, 55.00, 55.00, v_month + 2),
+      (v_estimate_id, 'service', null, s_oil_change, 1, 650.00, 650.00, v_month + 2);
 
     insert into app.sales_transactions (
       transaction_number,
@@ -2492,12 +2492,12 @@ begin
     )
     returning id into v_sale_id;
 
-    insert into app.sales_transaction_items (transaction_id, line_type, product_id, quantity, unit_price, line_total, business_date)
+    insert into app.sales_transaction_items (transaction_id, line_type, product_id, service_id, quantity, unit_price, line_total, business_date)
     values
-      (v_sale_id, 'product', p_oil_filter, 1, 450.00, 450.00, v_month + 2),
-      (v_sale_id, 'product', p_engine_oil, 1 + case when v_idx >= 4 then 1 else 0 end, 1850.00, 1850.00 * (1 + case when v_idx >= 4 then 1 else 0 end), v_month + 2),
-      (v_sale_id, 'product', p_drain_washer, 1, 55.00, 55.00, v_month + 2),
-      (v_sale_id, 'service', s_oil_change, 1, 650.00, 650.00, v_month + 2);
+      (v_sale_id, 'product', p_oil_filter, null, 1, 450.00, 450.00, v_month + 2),
+      (v_sale_id, 'product', p_engine_oil, null, 1 + case when v_idx >= 4 then 1 else 0 end, 1850.00, 1850.00 * (1 + case when v_idx >= 4 then 1 else 0 end), v_month + 2),
+      (v_sale_id, 'product', p_drain_washer, null, 1, 55.00, 55.00, v_month + 2),
+      (v_sale_id, 'service', null, s_oil_change, 1, 650.00, 650.00, v_month + 2);
 
     insert into app.upsell_interactions (
       context_type,
@@ -2545,17 +2545,17 @@ begin
     returning id into v_estimate_id;
 
     if v_idx % 2 = 0 then
-      insert into app.estimate_items (estimate_id, line_type, product_id, quantity, unit_price, line_total, business_date)
+      insert into app.estimate_items (estimate_id, line_type, product_id, service_id, quantity, unit_price, line_total, business_date)
       values
-        (v_estimate_id, 'product', p_brake_pads, 1, 3200.00, 3200.00, v_month + 15),
-        (v_estimate_id, 'product', p_brake_cleaner, 1, 280.00, 280.00, v_month + 15),
-        (v_estimate_id, 'service', s_brake_service, 1, 1200.00, 1200.00, v_month + 15);
+        (v_estimate_id, 'product', p_brake_pads, null, 1, 3200.00, 3200.00, v_month + 15),
+        (v_estimate_id, 'product', p_brake_cleaner, null, 1, 280.00, 280.00, v_month + 15),
+        (v_estimate_id, 'service', null, s_brake_service, 1, 1200.00, 1200.00, v_month + 15);
     else
-      insert into app.estimate_items (estimate_id, line_type, product_id, quantity, unit_price, line_total, business_date)
+      insert into app.estimate_items (estimate_id, line_type, product_id, service_id, quantity, unit_price, line_total, business_date)
       values
-        (v_estimate_id, 'product', p_air_filter, 1, 780.00, 780.00, v_month + 15),
-        (v_estimate_id, 'product', p_spark_plugs, 1, 1680.00, 1680.00, v_month + 15),
-        (v_estimate_id, 'service', s_tune_up, 1, 1500.00, 1500.00, v_month + 15);
+        (v_estimate_id, 'product', p_air_filter, null, 1, 780.00, 780.00, v_month + 15),
+        (v_estimate_id, 'product', p_spark_plugs, null, 1, 1680.00, 1680.00, v_month + 15),
+        (v_estimate_id, 'service', null, s_tune_up, 1, 1500.00, 1500.00, v_month + 15);
     end if;
 
     insert into app.service_orders (
@@ -2585,11 +2585,11 @@ begin
     returning id into v_service_order_id;
 
     if v_idx % 2 = 0 then
-      insert into app.service_order_items (service_order_id, line_type, product_id, quantity, unit_price, line_total, business_date)
+      insert into app.service_order_items (service_order_id, line_type, product_id, service_id, quantity, unit_price, line_total, business_date)
       values
-        (v_service_order_id, 'product', p_brake_pads, 1, 3200.00, 3200.00, v_month + 16),
-        (v_service_order_id, 'product', p_brake_cleaner, 1, 280.00, 280.00, v_month + 16),
-        (v_service_order_id, 'service', s_brake_service, 1, 1200.00, 1200.00, v_month + 16);
+        (v_service_order_id, 'product', p_brake_pads, null, 1, 3200.00, 3200.00, v_month + 16),
+        (v_service_order_id, 'product', p_brake_cleaner, null, 1, 280.00, 280.00, v_month + 16),
+        (v_service_order_id, 'service', null, s_brake_service, 1, 1200.00, 1200.00, v_month + 16);
 
       insert into app.upsell_interactions (
         context_type,
@@ -2603,11 +2603,11 @@ begin
       values
         ('service', v_service_order_id, p_brake_pads, p_brake_cleaner, 'accepted', 'Recommended installation add-on', v_month + 16);
     else
-      insert into app.service_order_items (service_order_id, line_type, product_id, quantity, unit_price, line_total, business_date)
+      insert into app.service_order_items (service_order_id, line_type, product_id, service_id, quantity, unit_price, line_total, business_date)
       values
-        (v_service_order_id, 'product', p_air_filter, 1, 780.00, 780.00, v_month + 16),
-        (v_service_order_id, 'product', p_spark_plugs, 1, 1680.00, 1680.00, v_month + 16),
-        (v_service_order_id, 'service', s_tune_up, 1, 1500.00, 1500.00, v_month + 16);
+        (v_service_order_id, 'product', p_air_filter, null, 1, 780.00, 780.00, v_month + 16),
+        (v_service_order_id, 'product', p_spark_plugs, null, 1, 1680.00, 1680.00, v_month + 16),
+        (v_service_order_id, 'service', null, s_tune_up, 1, 1500.00, 1500.00, v_month + 16);
 
       insert into app.upsell_interactions (
         context_type,
@@ -2647,10 +2647,10 @@ begin
       )
       returning id into v_sale_id;
 
-      insert into app.sales_transaction_items (transaction_id, line_type, product_id, quantity, unit_price, line_total, business_date)
+      insert into app.sales_transaction_items (transaction_id, line_type, product_id, service_id, quantity, unit_price, line_total, business_date)
       values
-        (v_sale_id, 'product', p_terminal_cleaner, 1, 240.00, 240.00, v_month + 24),
-        (v_sale_id, 'service', s_battery_check, 1, 350.00, 350.00, v_month + 24);
+        (v_sale_id, 'product', p_terminal_cleaner, null, 1, 240.00, 240.00, v_month + 24),
+        (v_sale_id, 'service', null, s_battery_check, 1, 350.00, 350.00, v_month + 24);
 
       insert into app.upsell_interactions (
         context_type,
@@ -3861,5 +3861,6 @@ insert into app.product_prices (product_id, price_type, amount, is_current, effe
 insert into app.inventory_balances (product_id, on_hand, reserved, reorder_point, reorder_quantity, location, as_of_date) select id, 12.00, 0, 3, 6, '{"floor":2,"section":"H","shelf":"1"}'::jsonb, current_date from app.products where sku = '5070A575' on conflict (product_id) do update set on_hand = excluded.on_hand, reorder_point = excluded.reorder_point, reorder_quantity = excluded.reorder_quantity, location = excluded.location, updated_at = timezone('utc', now());
 
 select app.seed_demo_data();
-select app.run_full_analytics_refresh(''Initial demo analytics refresh'');
+select app.run_full_analytics_refresh('Initial demo analytics refresh');
+
 
