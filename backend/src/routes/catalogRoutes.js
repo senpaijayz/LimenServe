@@ -486,21 +486,40 @@ function pickCompanionProducts({ clickedProduct, catalog, clickedProfile, limitC
 function buildVehicleMatchedRecommendations({ clickedProduct, catalog, serviceCatalog, limitCount }) {
   const clickedProfile = inferProductProfile(clickedProduct);
 
-  if (!clickedProfile.partFunction || !clickedProfile.serviceGroup || !clickedProfile.modelName) {
+  if (!clickedProfile.modelName) {
     return [];
   }
 
-  const partRecommendations = pickCompanionProducts({
-    clickedProduct,
-    catalog,
-    clickedProfile,
-    limitCount,
-  });
+  const directFunctionRecommendations = clickedProfile.partFunction
+    ? pickCompanionProducts({
+        clickedProduct,
+        catalog,
+        clickedProfile,
+        limitCount,
+      })
+    : [];
 
-  const service = findBestMatchingService({
-    serviceCatalog,
-    serviceGroup: clickedProfile.serviceGroup,
-  });
+  const keywordClusterRecommendations = directFunctionRecommendations.length === 0
+    ? pickKeywordClusterProducts({
+        clickedProduct,
+        catalog,
+        clickedProfile,
+        limitCount,
+      })
+    : [];
+
+  const partRecommendations = [...directFunctionRecommendations, ...keywordClusterRecommendations].slice(0, limitCount);
+
+  const service = clickedProfile.serviceGroup
+    ? findBestMatchingService({
+        serviceCatalog,
+        serviceGroup: clickedProfile.serviceGroup,
+      })
+    : null;
+
+  const serviceReason = clickedProfile.partFunction
+    ? 'Suggested service for ' + clickedProfile.partFunction.replace(/_/g, ' ')
+    : 'Suggested service based on this Mitsubishi part and vehicle';
 
   const serviceRecommendation = service
     ? [{
@@ -515,8 +534,8 @@ function buildVehicleMatchedRecommendations({ clickedProduct, catalog, serviceCa
         confidence: null,
         lift: null,
         sampleCount: null,
-        reasonLabel: `Suggested service for ${clickedProfile.partFunction.replace(/_/g, ' ')}`,
-        packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || `${clickedProfile.serviceGroup}-package`,
+        reasonLabel: serviceReason,
+        packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || 'vehicle-service-package',
         packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Compatible Mitsubishi Service Package',
         packageDescription: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageDescription || 'Compatible Mitsubishi parts and services for this vehicle.',
         matchLevel: partRecommendations[0]?.matchLevel || 'exact_model',
@@ -528,7 +547,6 @@ function buildVehicleMatchedRecommendations({ clickedProduct, catalog, serviceCa
 
   return [...partRecommendations, ...serviceRecommendation].slice(0, limitCount);
 }
-
 function normalizeMatchMetadata(recommendation, clickedProduct, recommendedProduct) {
   const clickedProfile = inferProductProfile(clickedProduct);
   const recommendedProfile = recommendedProduct ? inferProductProfile(recommendedProduct) : null;
@@ -902,6 +920,11 @@ router.get('/products/:productId/recommendations', async (req, res, next) => {
 });
 
 export default router;
+
+
+
+
+
 
 
 
