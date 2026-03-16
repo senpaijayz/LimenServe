@@ -1,251 +1,298 @@
-import { useState } from 'react';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Calendar, Download, TrendingUp, DollarSign, ShoppingCart, Package } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Download, Package, TrendingUp, Wrench, RefreshCw, AlertTriangle } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
-import Dropdown from '../../../components/ui/Dropdown';
-import Tabs from '../../../components/ui/Tabs';
+import {
+    getAnalyticsDashboardSnapshot,
+    getMonthlyProductForecasts,
+    getMonthlyServiceForecasts,
+    runFullAnalyticsRefresh,
+} from '../../../services/analyticsApi';
 import { formatCurrency } from '../../../utils/formatters';
 
-// Mock data
-const salesData = [
-    { month: 'Jan', sales: 125000, transactions: 180 },
-    { month: 'Feb', sales: 142000, transactions: 205 },
-    { month: 'Mar', sales: 138000, transactions: 195 },
-    { month: 'Apr', sales: 165000, transactions: 240 },
-    { month: 'May', sales: 178000, transactions: 260 },
-    { month: 'Jun', sales: 192000, transactions: 285 },
-];
-
-const categoryData = [
-    { name: 'Filters', value: 35, color: '#ef4444' },
-    { name: 'Brakes', value: 25, color: '#f97316' },
-    { name: 'Engine', value: 20, color: '#22c55e' },
-    { name: 'Electrical', value: 12, color: '#3b82f6' },
-    { name: 'Others', value: 8, color: '#64748b' },
-];
-
-const topProducts = [
-    { name: 'Oil Filter - Montero Sport', sales: 156, revenue: 132600 },
-    { name: 'Brake Pads Front - Mirage', sales: 98, revenue: 245000 },
-    { name: 'Air Filter - Xpander', sales: 124, revenue: 80600 },
-    { name: 'Spark Plug Set - Strada', sales: 89, revenue: 106800 },
-    { name: 'Radiator Coolant 1L', sales: 187, revenue: 65450 },
-];
-
-const recentTransactions = [
-    { id: 'TRX-8925', date: '2025-10-24T14:30:00', amount: 15400, items: 8, status: 'Completed', customer: 'Walk-in' },
-    { id: 'TRX-8924', date: '2025-10-24T13:15:00', amount: 2100, items: 2, status: 'Completed', customer: 'Walk-in' },
-    { id: 'TRX-8923', date: '2025-10-24T11:20:00', amount: 8900, items: 4, status: 'Completed', customer: 'John Doe' },
-    { id: 'TRX-8922', date: '2025-10-24T10:45:00', amount: 1250, items: 1, status: 'Completed', customer: 'Walk-in' },
-    { id: 'TRX-8921', date: '2025-10-24T09:12:00', amount: 5400, items: 3, status: 'Completed', customer: 'Jane Smith' },
-];
-
-const dateRangeOptions = [
-    { value: '7d', label: 'Last 7 Days' },
-    { value: '30d', label: 'Last 30 Days' },
-    { value: '90d', label: 'Last 90 Days' },
-    { value: '6m', label: 'Last 6 Months' },
-    { value: '1y', label: 'Last Year' },
-];
-
-/**
- * Sales Report Page
- * Analytics and reporting for sales data
- */
 const SalesReport = () => {
-    const [dateRange, setDateRange] = useState('6m');
+    const [productForecasts, setProductForecasts] = useState([]);
+    const [serviceForecasts, setServiceForecasts] = useState([]);
+    const [dashboardSnapshot, setDashboardSnapshot] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState('');
 
-    // Custom tooltip for charts
-    const CustomTooltip = ({ active, payload, label }) => {
-        if (active && payload && payload.length) {
-            return (
-                <div className="glass-card py-2 px-3 text-sm">
-                    <p className="font-semibold text-primary-100">{label}</p>
-                    {payload.map((item, index) => (
-                        <p key={index} style={{ color: item.color }}>
-                            {item.name}: {item.name === 'sales' ? formatCurrency(item.value) : item.value}
-                        </p>
-                    ))}
-                </div>
-            );
+    const loadAnalytics = async () => {
+        setLoading(true);
+        setError('');
+
+        try {
+            const [products, services, snapshot] = await Promise.all([
+                getMonthlyProductForecasts(),
+                getMonthlyServiceForecasts(),
+                getAnalyticsDashboardSnapshot(),
+            ]);
+
+            setProductForecasts(products);
+            setServiceForecasts(services);
+            setDashboardSnapshot(snapshot);
+        } catch (loadError) {
+            setError(loadError.message || 'Unable to load analytics from Supabase.');
+        } finally {
+            setLoading(false);
         }
-        return null;
     };
+
+    useEffect(() => {
+        loadAnalytics();
+    }, []);
+
+    const handleRefresh = async () => {
+        setRefreshing(true);
+        setError('');
+
+        try {
+            await runFullAnalyticsRefresh('Manual refresh from reports page');
+            await loadAnalytics();
+        } catch (refreshError) {
+            setError(refreshError.message || 'Unable to refresh analytics.');
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
+    const totalPredictedProductRevenue = productForecasts.reduce(
+        (sum, item) => sum + Number(item.predicted_revenue || 0),
+        0
+    );
+    const totalPredictedProductQuantity = productForecasts.reduce(
+        (sum, item) => sum + Number(item.predicted_quantity || 0),
+        0
+    );
+    const totalPredictedServiceRevenue = serviceForecasts.reduce(
+        (sum, item) => sum + Number(item.predicted_revenue || 0),
+        0
+    );
+    const lowStockRiskCount = (dashboardSnapshot?.predictedLowStockRisk || []).length;
+    const topUpsells = dashboardSnapshot?.topUpsellOpportunities || [];
+    const latestRefresh = dashboardSnapshot?.latestRefresh;
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 className="text-2xl font-display font-bold text-primary-100">
-                        Sales Report
+                    <h1 className="text-2xl font-display font-bold text-primary-950">
+                        Predictive Analytics Report
                     </h1>
-                    <p className="text-primary-400 mt-1">
-                        Analytics and insights for business performance
+                    <p className="mt-1 text-primary-500">
+                        Monthly demand forecasting, upsell mining, and stock-risk visibility from Supabase analytics.
                     </p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <Dropdown
-                        options={dateRangeOptions}
-                        value={dateRange}
-                        onChange={setDateRange}
-                        className="w-40"
-                    />
-                    <Button variant="secondary" leftIcon={<Download className="w-4 h-4" />}>
+
+                <div className="flex flex-wrap gap-3">
+                    <Button
+                        variant="secondary"
+                        leftIcon={<RefreshCw className="w-4 h-4" />}
+                        isLoading={refreshing}
+                        onClick={handleRefresh}
+                    >
+                        Refresh Analytics
+                    </Button>
+                    <Button variant="outline" leftIcon={<Download className="w-4 h-4" />}>
                         Export
                     </Button>
                 </div>
             </div>
 
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {error && (
+                <Card className="border border-accent-danger/20 bg-accent-danger/5" padding="sm">
+                    <div className="flex items-start gap-3 text-sm text-accent-danger">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                            <p className="font-semibold">Analytics unavailable</p>
+                            <p>{error}</p>
+                        </div>
+                    </div>
+                </Card>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <KPICard
-                    title="Total Revenue"
-                    value={formatCurrency(940000)}
-                    icon={<DollarSign className="w-6 h-6" />}
-                    trend="up"
-                    trendValue="+18.2%"
-                />
-                <KPICard
-                    title="Total Orders"
-                    value="1,365"
-                    icon={<ShoppingCart className="w-6 h-6" />}
-                    trend="up"
-                    trendValue="+12.5%"
-                />
-                <KPICard
-                    title="Avg Order Value"
-                    value={formatCurrency(688)}
+                    title="Predicted Product Revenue"
+                    value={loading ? 'Loading...' : formatCurrency(totalPredictedProductRevenue)}
                     icon={<TrendingUp className="w-6 h-6" />}
                     trend="up"
-                    trendValue="+5.1%"
+                    trendValue={`${productForecasts.length} forecasted items`}
                 />
                 <KPICard
-                    title="Products Sold"
-                    value="4,892"
+                    title="Predicted Product Units"
+                    value={loading ? 'Loading...' : totalPredictedProductQuantity.toLocaleString()}
                     icon={<Package className="w-6 h-6" />}
                     trend="up"
-                    trendValue="+22.3%"
+                    trendValue="Next month demand"
+                    accentColor="border-indigo-500"
+                    iconBg="bg-indigo-50 text-indigo-600"
+                />
+                <KPICard
+                    title="Predicted Service Revenue"
+                    value={loading ? 'Loading...' : formatCurrency(totalPredictedServiceRevenue)}
+                    icon={<Wrench className="w-6 h-6" />}
+                    trend="up"
+                    trendValue={`${serviceForecasts.length} forecasted services`}
+                    accentColor="border-amber-500"
+                    iconBg="bg-amber-50 text-amber-600"
+                />
+                <KPICard
+                    title="Low Stock Risk"
+                    value={loading ? 'Loading...' : String(lowStockRiskCount)}
+                    icon={<AlertTriangle className="w-6 h-6" />}
+                    trend={lowStockRiskCount > 0 ? 'down' : 'up'}
+                    trendValue={lowStockRiskCount > 0 ? 'Needs restock review' : 'Healthy forecast'}
+                    accentColor="border-rose-500"
+                    iconBg="bg-rose-50 text-rose-600"
                 />
             </div>
 
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Sales Trend Chart */}
-                <Card title="Sales Trend" subtitle="Monthly revenue performance" className="lg:col-span-2">
-                    <div className="h-[300px] mt-4">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={salesData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={(v) => `₱${v / 1000}k`} />
-                                <Tooltip content={<CustomTooltip />} />
-                                <Bar dataKey="sales" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+                <Card
+                    title="Top Product Forecasts"
+                    subtitle={latestRefresh?.endedAt ? `Last refresh: ${new Date(latestRefresh.endedAt).toLocaleString()}` : 'Forecast output'}
+                    className="xl:col-span-2"
+                >
+                    <div className="overflow-x-auto">
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Month</th>
+                                    <th className="text-right">Predicted Qty</th>
+                                    <th className="text-right">Predicted Revenue</th>
+                                    <th>Trend</th>
+                                    <th>Confidence</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {productForecasts.slice(0, 8).map((item) => (
+                                    <tr key={item.product_id}>
+                                        <td>
+                                            <div className="flex flex-col">
+                                                <span className="font-medium text-primary-950">{item.product_name}</span>
+                                                <span className="text-xs font-mono text-primary-500">{item.sku}</span>
+                                            </div>
+                                        </td>
+                                        <td>{new Date(item.target_month).toLocaleDateString('en-PH', { year: 'numeric', month: 'short' })}</td>
+                                        <td className="text-right">{Number(item.predicted_quantity || 0).toLocaleString()}</td>
+                                        <td className="text-right font-medium text-accent-blue">{formatCurrency(item.predicted_revenue || 0)}</td>
+                                        <td className="capitalize">{item.trend_label}</td>
+                                        <td className="capitalize">{item.confidence_label}</td>
+                                    </tr>
+                                ))}
+                                {!loading && productForecasts.length === 0 && (
+                                    <tr>
+                                        <td colSpan="6" className="py-8 text-center text-primary-500">
+                                            No product forecasts yet. Run the analytics refresh after seeding the warehouse.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </Card>
 
-                {/* Category Breakdown */}
-                <Card title="Sales by Category" subtitle="Product category distribution">
-                    <div className="h-[300px] mt-4">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={categoryData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={100}
-                                    paddingAngle={2}
-                                    dataKey="value"
-                                >
-                                    {categoryData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.color} />
-                                    ))}
-                                </Pie>
-                                <Tooltip />
-                                <Legend
-                                    verticalAlign="bottom"
-                                    height={36}
-                                    formatter={(value) => <span className="text-primary-300 text-sm">{value}</span>}
-                                />
-                            </PieChart>
-                        </ResponsiveContainer>
+                <Card title="Top Upsell Opportunities" subtitle="Association-rule mining output">
+                    <div className="space-y-3">
+                        {topUpsells.slice(0, 6).map((item) => (
+                            <div key={item.rule_id} className="rounded-xl border border-primary-200 bg-primary-50 p-4">
+                                <p className="font-semibold text-primary-950">{item.product_name}</p>
+                                <p className="mt-1 text-sm text-primary-600">
+                                    Recommend:{' '}
+                                    <span className="font-medium text-primary-900">
+                                        {item.recommended_product_name || item.recommended_service_name}
+                                    </span>
+                                </p>
+                                <div className="mt-3 flex flex-wrap gap-2 text-xs text-primary-500">
+                                    <span className="rounded-full bg-white px-2 py-1">Lift {item.lift}</span>
+                                    <span className="rounded-full bg-white px-2 py-1">Confidence {item.confidence}</span>
+                                    <span className="rounded-full bg-white px-2 py-1">{item.sample_count} baskets</span>
+                                </div>
+                            </div>
+                        ))}
+                        {!loading && topUpsells.length === 0 && (
+                            <p className="text-sm text-primary-500">
+                                No upsell rules available yet. Seed transaction history and refresh analytics.
+                            </p>
+                        )}
                     </div>
                 </Card>
             </div>
 
-            {/* Top Products Table */}
-            <Card title="Top Selling Products" subtitle="Best performers this period">
-                <div className="overflow-x-auto mt-4">
-                    <table className="table">
-                        <thead>
-                            <tr>
-                                <th>Rank</th>
-                                <th>Product</th>
-                                <th className="text-right">Units Sold</th>
-                                <th className="text-right">Revenue</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {topProducts.map((product, index) => (
-                                <tr key={index}>
-                                    <td>
-                                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${index < 3 ? 'bg-accent-primary/20 text-accent-primary' : 'bg-primary-700 text-primary-400'
-                                            }`}>
-                                            {index + 1}
-                                        </span>
-                                    </td>
-                                    <td className="font-medium text-primary-100">{product.name}</td>
-                                    <td className="text-right">{product.sales}</td>
-                                    <td className="text-right font-medium text-accent-primary">{formatCurrency(product.revenue)}</td>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <Card title="Service Demand Forecast" subtitle="Next-month predicted service load">
+                    <div className="overflow-x-auto">
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th>Service</th>
+                                    <th className="text-right">Predicted Qty</th>
+                                    <th className="text-right">Predicted Revenue</th>
+                                    <th>Trend</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </Card>
+                            </thead>
+                            <tbody>
+                                {serviceForecasts.slice(0, 8).map((item) => (
+                                    <tr key={item.service_id}>
+                                        <td>
+                                            <div className="flex flex-col">
+                                                <span className="font-medium text-primary-950">{item.service_name}</span>
+                                                <span className="text-xs font-mono text-primary-500">{item.service_code}</span>
+                                            </div>
+                                        </td>
+                                        <td className="text-right">{Number(item.predicted_quantity || 0).toLocaleString()}</td>
+                                        <td className="text-right font-medium text-accent-blue">{formatCurrency(item.predicted_revenue || 0)}</td>
+                                        <td className="capitalize">{item.trend_label}</td>
+                                    </tr>
+                                ))}
+                                {!loading && serviceForecasts.length === 0 && (
+                                    <tr>
+                                        <td colSpan="4" className="py-8 text-center text-primary-500">
+                                            No service forecasts yet.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
 
-            {/* Recent Transactions Table */}
-            <Card title="Recent Transactions" subtitle="Detailed sales history with date and time">
-                <div className="overflow-x-auto mt-4">
-                    <table className="table">
-                        <thead>
-                            <tr>
-                                <th>Transaction ID</th>
-                                <th>Date & Time</th>
-                                <th>Customer</th>
-                                <th>Items</th>
-                                <th>Status</th>
-                                <th className="text-right">Total Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {recentTransactions.map((trx, index) => (
-                                <tr key={index}>
-                                    <td className="font-mono text-primary-300">{trx.id}</td>
-                                    <td>
-                                        <div className="flex flex-col">
-                                            <span className="text-primary-100 font-medium">{new Date(trx.date).toLocaleDateString()}</span>
-                                            <span className="text-xs text-primary-500 font-mono">{new Date(trx.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
-                                        </div>
-                                    </td>
-                                    <td className="text-primary-100">{trx.customer}</td>
-                                    <td>{trx.items}</td>
-                                    <td>
-                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-accent-success/20 text-accent-success">
-                                            {trx.status}
-                                        </span>
-                                    </td>
-                                    <td className="text-right font-medium text-accent-primary">{formatCurrency(trx.amount)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </Card>
+                <Card title="Predicted Stock Risk" subtitle="Forecast vs available stock">
+                    <div className="space-y-3">
+                        {(dashboardSnapshot?.predictedLowStockRisk || []).slice(0, 6).map((item) => (
+                            <div key={`${item.product_id}-${item.target_month}`} className="rounded-xl border border-primary-200 bg-white p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <p className="font-semibold text-primary-950">{item.product_name}</p>
+                                        <p className="text-xs font-mono text-primary-500">{item.sku}</p>
+                                    </div>
+                                    <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold uppercase text-amber-700">
+                                        {item.risk_level}
+                                    </span>
+                                </div>
+                                <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-primary-600">
+                                    <div>
+                                        <p className="text-xs uppercase tracking-wide text-primary-400">Forecast Qty</p>
+                                        <p className="font-medium text-primary-950">{Number(item.predicted_quantity || 0).toLocaleString()}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs uppercase tracking-wide text-primary-400">On Hand</p>
+                                        <p className="font-medium text-primary-950">{Number(item.on_hand || 0).toLocaleString()}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        {!loading && (dashboardSnapshot?.predictedLowStockRisk || []).length === 0 && (
+                            <p className="text-sm text-primary-500">
+                                No forecasted stock risks detected.
+                            </p>
+                        )}
+                    </div>
+                </Card>
+            </div>
         </div>
     );
 };

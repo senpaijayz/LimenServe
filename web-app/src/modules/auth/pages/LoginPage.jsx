@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
 import { Mail, Lock, LogIn, ArrowLeft } from 'lucide-react';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../../../context/useAuth';
 import { loginSchema } from '../../../utils/validators';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
@@ -14,6 +14,7 @@ import Input from '../../../components/ui/Input';
  * Authentication page for staff members
  */
 const LoginPage = () => {
+    const MotionDiv = motion.div;
     const navigate = useNavigate();
     const { login, error: authError } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
@@ -56,7 +57,7 @@ const LoginPage = () => {
                 <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-accent-secondary/20 rounded-full blur-[100px]" />
             </div>
 
-            <motion.div
+            <MotionDiv
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
@@ -78,13 +79,13 @@ const LoginPage = () => {
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                         {/* Error Message */}
                         {authError && (
-                            <motion.div
+                            <MotionDiv
                                 initial={{ opacity: 0, y: -10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 className="p-4 rounded-lg bg-accent-danger/20 border border-accent-danger/30"
                             >
                                 <p className="text-sm text-accent-danger">{authError}</p>
-                            </motion.div>
+                            </MotionDiv>
                         )}
 
                         {/* Email Input */}
@@ -136,26 +137,15 @@ const LoginPage = () => {
                         </Button>
                     </form>
 
-                    {/* Demo Credentials */}
+                    {/* Auth Source */}
                     <div className="mt-6 pt-6 border-t border-primary-200">
                         <p className="text-xs font-bold text-primary-500 text-center mb-3 uppercase tracking-widest">
-                            Demo Credentials
+                            Supabase Authentication
                         </p>
-                        <div className="grid grid-cols-1 gap-2 text-xs">
-                            <div className="flex justify-between px-3 py-2 rounded bg-primary-50 border border-primary-100">
-                                <span className="text-primary-600 font-bold">Admin:</span>
-                                <span className="text-primary-950 font-medium">admin@limen.com</span>
-                            </div>
-                            <div className="flex justify-between px-3 py-2 rounded bg-primary-50 border border-primary-100">
-                                <span className="text-primary-600 font-bold">Cashier:</span>
-                                <span className="text-primary-950 font-medium">cashier@limen.com</span>
-                            </div>
-                            <div className="flex justify-between px-3 py-2 rounded bg-primary-50 border border-primary-100">
-                                <span className="text-primary-600 font-bold">Clerk:</span>
-                                <span className="text-primary-950 font-medium">clerk@limen.com</span>
-                            </div>
-                            <p className="text-center text-primary-400 mt-2 font-mono">
-                                Password: any 6+ characters
+                        <div className="rounded-xl border border-primary-100 bg-primary-50 px-4 py-3 text-xs text-primary-500">
+                            <p className="text-center">
+                                Sign in with a user created in Supabase Auth. Access level is controlled by the matching
+                                `app.user_profiles` role in the database.
                             </p>
                         </div>
                     </div>
@@ -165,7 +155,7 @@ const LoginPage = () => {
                 <p className="text-center text-sm font-medium text-primary-500 mt-8">
                     © {new Date().getFullYear()} Limen Auto Parts Center
                 </p>
-            </motion.div>
+            </MotionDiv>
         </div>
     );
 };

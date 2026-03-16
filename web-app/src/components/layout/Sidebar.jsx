@@ -13,7 +13,7 @@ import {
     LogOut,
     X,
 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import { useTheme } from '../../context/ThemeContext';
 import { NAV_ITEMS } from '../../utils/constants';
 
@@ -34,6 +34,8 @@ const iconMap = {
  * Main navigation sidebar with collapsible state
  */
 const Sidebar = () => {
+    const MotionDiv = motion.div;
+    const MotionSpan = motion.span;
     const { user, logout } = useAuth();
     const { sidebarCollapsed, sidebarOpen, toggleSidebar, closeMobileSidebar } = useTheme();
     const location = useLocation();
@@ -63,14 +65,14 @@ const Sidebar = () => {
                 {Icon && <Icon className="w-5 h-5 flex-shrink-0" />}
                 <AnimatePresence>
                     {!sidebarCollapsed && (
-                        <motion.span
+                        <MotionSpan
                             initial={{ opacity: 0, width: 0 }}
                             animate={{ opacity: 1, width: 'auto' }}
                             exit={{ opacity: 0, width: 0 }}
                             className="whitespace-nowrap overflow-hidden"
                         >
                             {item.label}
-                        </motion.span>
+                        </MotionSpan>
                     )}
                 </AnimatePresence>
             </NavLink>
@@ -82,7 +84,7 @@ const Sidebar = () => {
             {/* Mobile Overlay */}
             <AnimatePresence>
                 {sidebarOpen && (
-                    <motion.div
+                    <MotionDiv
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
@@ -105,7 +107,7 @@ const Sidebar = () => {
                     <img src="/LogoLimen.jpg" alt="Limen Logo" className="w-10 h-10 object-contain rounded-lg bg-white p-1 flex-shrink-0 border border-primary-200" />
                     <AnimatePresence>
                         {!sidebarCollapsed && (
-                            <motion.div
+                            <MotionDiv
                                 initial={{ opacity: 0, width: 0 }}
                                 animate={{ opacity: 1, width: 'auto' }}
                                 exit={{ opacity: 0, width: 0 }}
@@ -115,7 +117,7 @@ const Sidebar = () => {
                                     LimenServe
                                 </h1>
                                 <p className="text-xs text-primary-500 whitespace-nowrap">Auto Parts MIS</p>
-                            </motion.div>
+                            </MotionDiv>
                         )}
                     </AnimatePresence>
 
@@ -164,7 +166,7 @@ const Sidebar = () => {
                         </div>
                         <AnimatePresence>
                             {!sidebarCollapsed && (
-                                <motion.div
+                                <MotionDiv
                                     initial={{ opacity: 0, width: 0 }}
                                     animate={{ opacity: 1, width: 'auto' }}
                                     exit={{ opacity: 0, width: 0 }}
@@ -176,7 +178,7 @@ const Sidebar = () => {
                                     <p className="text-xs text-primary-500 capitalize whitespace-nowrap">
                                         {user?.role?.replace('_', ' ')}
                                     </p>
-                                </motion.div>
+                                </MotionDiv>
                             )}
                         </AnimatePresence>
                     </div>

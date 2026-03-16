@@ -1,10 +1,11 @@
 import { Outlet, Navigate, Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import { Phone, MapPin, Clock, Menu, X, ChevronRight } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const PublicLayout = () => {
+    const MotionDiv = motion.div;
     const { isAuthenticated } = useAuth();
     const location = useLocation();
     const [scrolled, setScrolled] = useState(false);
@@ -62,7 +63,7 @@ const PublicLayout = () => {
                                 >
                                     {link.label}
                                     {location.pathname === link.path && (
-                                        <motion.div
+                                        <MotionDiv
                                             layoutId="activeNav"
                                             className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-primary"
                                         />
@@ -91,7 +92,7 @@ const PublicLayout = () => {
             {/* Mobile Menu Overlay */}
             <AnimatePresence>
                 {mobileMenuOpen && (
-                    <motion.div
+                    <MotionDiv
                         initial={{ opacity: 0, y: -20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
@@ -116,7 +117,7 @@ const PublicLayout = () => {
                                 Staff Portal Access
                             </Link>
                         </div>
-                    </motion.div>
+                    </MotionDiv>
                 )}
             </AnimatePresence>
 

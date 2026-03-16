@@ -1,121 +1,146 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { ROLES, STORAGE_KEYS } from '../utils/constants';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import AuthContext from './auth-context';
+import { ROLES } from '../utils/constants';
+import { supabase } from '../services/supabase';
+import { getCurrentUserProfile } from '../services/authApi';
 
-// Create Auth Context
-const AuthContext = createContext(null);
+function normalizeRole(role) {
+    if (role === 'staff') {
+        return ROLES.STOCK_CLERK;
+    }
 
-// Mock user data for development
-const MOCK_USERS = {
-    'admin@limen.com': { id: '1', email: 'admin@limen.com', firstName: 'Wilson', lastName: 'Limen', role: ROLES.ADMIN },
-    'cashier@limen.com': { id: '2', email: 'cashier@limen.com', firstName: 'Maria', lastName: 'Santos', role: ROLES.CASHIER },
-    'clerk@limen.com': { id: '3', email: 'clerk@limen.com', firstName: 'Juan', lastName: 'Dela Cruz', role: ROLES.STOCK_CLERK },
-};
+    return role || ROLES.CUSTOMER;
+}
 
-/**
- * Auth Provider Component
- * Manages authentication state and provides auth methods to children
- */
+function mapSupabaseUser(sessionUser, profile) {
+    const fullName = profile?.fullName || sessionUser.user_metadata?.full_name || '';
+    const [firstName = '', ...lastNameParts] = fullName.split(' ').filter(Boolean);
+
+    return {
+        id: sessionUser.id,
+        email: profile?.email || sessionUser.email,
+        firstName,
+        lastName: lastNameParts.join(' '),
+        fullName,
+        role: normalizeRole(profile?.role || sessionUser.app_metadata?.role),
+    };
+}
+
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Check for existing session on mount
-    useEffect(() => {
-        const checkAuth = async () => {
-            try {
-                const savedUser = localStorage.getItem(STORAGE_KEYS.USER_DATA);
-                const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+    const hydrateUser = useCallback(async (session) => {
+        if (!session?.user) {
+            setUser(null);
+            return;
+        }
 
-                if (savedUser && token) {
-                    setUser(JSON.parse(savedUser));
+        try {
+            const profile = await getCurrentUserProfile();
+            setUser(mapSupabaseUser(session.user, profile));
+        } catch (profileError) {
+            setUser(mapSupabaseUser(session.user, null));
+            setError(profileError.message);
+        }
+    }, []);
+
+    useEffect(() => {
+        let mounted = true;
+
+        const initializeAuth = async () => {
+            try {
+                const { data, error: sessionError } = await supabase.auth.getSession();
+
+                if (sessionError) {
+                    throw sessionError;
                 }
-            } catch (err) {
-                console.error('Auth check failed:', err);
-                localStorage.removeItem(STORAGE_KEYS.USER_DATA);
-                localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+
+                if (!mounted) {
+                    return;
+                }
+
+                await hydrateUser(data.session);
+            } catch (authError) {
+                if (mounted) {
+                    setError(authError.message || 'Unable to restore session.');
+                    setUser(null);
+                }
             } finally {
-                setIsLoading(false);
+                if (mounted) {
+                    setIsLoading(false);
+                }
             }
         };
 
-        checkAuth();
-    }, []);
+        initializeAuth();
 
-    /**
-     * Login with email and password
-     */
+        const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (!mounted) {
+                return;
+            }
+
+            await hydrateUser(session);
+            setIsLoading(false);
+        });
+
+        return () => {
+            mounted = false;
+            subscription.subscription.unsubscribe();
+        };
+    }, [hydrateUser]);
+
     const login = useCallback(async (email, password) => {
         setIsLoading(true);
         setError(null);
 
         try {
-            // Simulate API call delay
-            await new Promise(resolve => setTimeout(resolve, 800));
+            const { data, error: signInError } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
 
-            // Mock authentication (replace with real API call)
-            const mockUser = MOCK_USERS[email.toLowerCase()];
-
-            if (!mockUser || password.length < 6) {
-                throw new Error('Invalid email or password');
+            if (signInError) {
+                throw signInError;
             }
 
-            // Store auth data
-            const token = `mock_token_${Date.now()}`;
-            localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
-            localStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(mockUser));
-
-            setUser(mockUser);
-            return { success: true, user: mockUser };
-        } catch (err) {
-            setError(err.message);
-            return { success: false, error: err.message };
+            await hydrateUser(data.session);
+            return { success: true };
+        } catch (loginError) {
+            const message = loginError.message || 'Invalid email or password.';
+            setError(message);
+            return { success: false, error: message };
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [hydrateUser]);
 
-    /**
-     * Logout current user
-     */
-    const logout = useCallback(() => {
-        localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
-        localStorage.removeItem(STORAGE_KEYS.USER_DATA);
+    const logout = useCallback(async () => {
+        await supabase.auth.signOut();
         setUser(null);
         setError(null);
     }, []);
 
-    /**
-     * Check if user has specific role
-     */
     const hasRole = useCallback((roles) => {
         if (!user) return false;
         if (typeof roles === 'string') {
             return user.role === roles;
         }
+
         return roles.includes(user.role);
     }, [user]);
 
-    /**
-     * Check if user is authenticated
-     */
-    const isAuthenticated = !!user;
-
-    /**
-     * Check if user is admin
-     */
-    const isAdmin = user?.role === ROLES.ADMIN;
-
-    const value = {
+    const value = useMemo(() => ({
         user,
         isLoading,
         error,
-        isAuthenticated,
-        isAdmin,
+        isAuthenticated: !!user,
+        isAdmin: user?.role === ROLES.ADMIN,
         login,
         logout,
         hasRole,
-    };
+    }), [user, isLoading, error, login, logout, hasRole]);
 
     return (
         <AuthContext.Provider value={value}>
@@ -123,18 +148,3 @@ export function AuthProvider({ children }) {
         </AuthContext.Provider>
     );
 }
-
-/**
- * Hook to access auth context
- */
-export function useAuth() {
-    const context = useContext(AuthContext);
-
-    if (!context) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
-
-    return context;
-}
-
-export default AuthContext;
