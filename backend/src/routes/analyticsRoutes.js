@@ -4,16 +4,49 @@ import { callRpc } from '../services/supabaseRpc.js';
 
 const router = Router();
 
+function isMissingItemAnalyticsRpcError(error) {
+  const message = String(error?.message || error || '');
+
+  return (
+    message.includes('get_dashboard_item_sales_snapshot') ||
+    message.includes('get_top_selling_items') ||
+    message.includes('get_item_sales_trend') ||
+    message.includes('get_item_peak_periods') ||
+    message.includes('schema cache') ||
+    message.includes('Could not find the function')
+  );
+}
+
+async function callOptionalItemAnalyticsRpc(name, params = {}, fallbackValue = null) {
+  try {
+    return await callRpc(name, params);
+  } catch (error) {
+    if (isMissingItemAnalyticsRpcError(error)) {
+      return fallbackValue;
+    }
+
+    throw error;
+  }
+}
+
 router.get('/dashboard', async (req, res, next) => {
   try {
     const [snapshot, itemSnapshot] = await Promise.all([
       callRpc('get_analytics_dashboard_snapshot'),
-      callRpc('get_dashboard_item_sales_snapshot', {
-        start_date: req.query.startDate || null,
-        end_date: req.query.endDate || null,
-        category_filter: req.query.category || null,
-        product_id_filter: req.query.productId || null,
-      }),
+      callOptionalItemAnalyticsRpc(
+        'get_dashboard_item_sales_snapshot',
+        {
+          start_date: req.query.startDate || null,
+          end_date: req.query.endDate || null,
+          category_filter: req.query.category || null,
+          product_id_filter: req.query.productId || null,
+        },
+        {
+          topSellingItems: [],
+          itemTrend: [],
+          peakPeriods: [],
+        },
+      ),
     ]);
 
     res.json({
@@ -27,14 +60,18 @@ router.get('/dashboard', async (req, res, next) => {
 
 router.get('/items/top-selling', async (req, res, next) => {
   try {
-    const items = await callRpc('get_top_selling_items', {
-      start_date: req.query.startDate || null,
-      end_date: req.query.endDate || null,
-      category_filter: req.query.category || null,
-      product_id_filter: req.query.productId || null,
-      location_filter: req.query.location || null,
-      limit_count: Number(req.query.limit || 10),
-    });
+    const items = await callOptionalItemAnalyticsRpc(
+      'get_top_selling_items',
+      {
+        start_date: req.query.startDate || null,
+        end_date: req.query.endDate || null,
+        category_filter: req.query.category || null,
+        product_id_filter: req.query.productId || null,
+        location_filter: req.query.location || null,
+        limit_count: Number(req.query.limit || 10),
+      },
+      [],
+    );
 
     res.json({ items: items ?? [] });
   } catch (error) {
@@ -44,14 +81,18 @@ router.get('/items/top-selling', async (req, res, next) => {
 
 router.get('/items/trend', async (req, res, next) => {
   try {
-    const trend = await callRpc('get_item_sales_trend', {
-      start_date: req.query.startDate || null,
-      end_date: req.query.endDate || null,
-      product_id_filter: req.query.productId || null,
-      category_filter: req.query.category || null,
-      location_filter: req.query.location || null,
-      granularity: req.query.granularity || 'month',
-    });
+    const trend = await callOptionalItemAnalyticsRpc(
+      'get_item_sales_trend',
+      {
+        start_date: req.query.startDate || null,
+        end_date: req.query.endDate || null,
+        product_id_filter: req.query.productId || null,
+        category_filter: req.query.category || null,
+        location_filter: req.query.location || null,
+        granularity: req.query.granularity || 'month',
+      },
+      [],
+    );
 
     res.json({ trend: trend ?? [] });
   } catch (error) {
@@ -61,13 +102,17 @@ router.get('/items/trend', async (req, res, next) => {
 
 router.get('/items/peak-periods', async (req, res, next) => {
   try {
-    const periods = await callRpc('get_item_peak_periods', {
-      start_date: req.query.startDate || null,
-      end_date: req.query.endDate || null,
-      product_id_filter: req.query.productId || null,
-      category_filter: req.query.category || null,
-      location_filter: req.query.location || null,
-    });
+    const periods = await callOptionalItemAnalyticsRpc(
+      'get_item_peak_periods',
+      {
+        start_date: req.query.startDate || null,
+        end_date: req.query.endDate || null,
+        product_id_filter: req.query.productId || null,
+        category_filter: req.query.category || null,
+        location_filter: req.query.location || null,
+      },
+      [],
+    );
 
     res.json({ periods: periods ?? [] });
   } catch (error) {
@@ -77,12 +122,20 @@ router.get('/items/peak-periods', async (req, res, next) => {
 
 router.get('/items/snapshot', async (req, res, next) => {
   try {
-    const snapshot = await callRpc('get_dashboard_item_sales_snapshot', {
-      start_date: req.query.startDate || null,
-      end_date: req.query.endDate || null,
-      category_filter: req.query.category || null,
-      product_id_filter: req.query.productId || null,
-    });
+    const snapshot = await callOptionalItemAnalyticsRpc(
+      'get_dashboard_item_sales_snapshot',
+      {
+        start_date: req.query.startDate || null,
+        end_date: req.query.endDate || null,
+        category_filter: req.query.category || null,
+        product_id_filter: req.query.productId || null,
+      },
+      {
+        topSellingItems: [],
+        itemTrend: [],
+        peakPeriods: [],
+      },
+    );
 
     res.json(snapshot ?? {});
   } catch (error) {
