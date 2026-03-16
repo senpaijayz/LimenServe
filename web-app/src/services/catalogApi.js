@@ -5,7 +5,7 @@ export async function getProductCatalog(params = {}) {
     const { data } = await apiClient.get('/catalog/products', { params });
     return {
       products: data.products ?? [],
-      pagination: data.pagination ?? { page: 1, pageSize: 10, totalCount: 0, totalPages: 1 },
+      pagination: data.pagination ?? { page: 1, pageSize: 12, totalCount: 0, totalPages: 1 },
       categories: data.categories ?? [],
     };
   } catch (error) {
@@ -63,3 +63,4 @@ export async function getAnalyticsRefreshRuns(limitCount = 10) {
     extractApiError(error, 'Failed to load analytics refresh runs.');
   }
 }
+

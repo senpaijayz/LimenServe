@@ -28,7 +28,7 @@ const PublicEstimate = () => {
         error: partsError,
     } = useProductCatalog({
         page: 1,
-        pageSize: 20,
+        pageSize: 12,
         searchQuery: partSearch,
         sortBy: 'name-asc',
     });
@@ -157,7 +157,7 @@ const PublicEstimate = () => {
                                     </div>
                                     <div>
                                         <h3 className="text-xl font-display font-semibold text-primary-950">Genuine Parts Price List</h3>
-                                        <p className="text-sm text-primary-500">Top 20 matches from the imported Supabase retail price list.</p>
+                                        <p className="text-sm text-primary-500">Top 12 matches from the imported Supabase retail price list.</p>
                                     </div>
                                 </div>
 
@@ -434,3 +434,4 @@ const PublicEstimate = () => {
 };
 
 export default PublicEstimate;
+
