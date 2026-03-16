@@ -4,25 +4,41 @@ import { ROLES } from '../utils/constants';
 import { supabase } from '../services/supabase';
 import { getCurrentUserProfile } from '../services/authApi';
 
-function normalizeRole(role) {
+function normalizeRole(role, email) {
     if (role === 'staff') {
         return ROLES.STOCK_CLERK;
     }
 
-    return role || ROLES.CUSTOMER;
+    if (role) {
+        return role;
+    }
+
+    const normalizedEmail = email?.trim().toLowerCase();
+
+    // Keep the staff portal usable even when the profile row is missing or stale.
+    if (normalizedEmail === 'admin@limen.com') {
+        return ROLES.ADMIN;
+    }
+
+    if (normalizedEmail?.endsWith('@limen.com')) {
+        return ROLES.STOCK_CLERK;
+    }
+
+    return ROLES.CUSTOMER;
 }
 
 function mapSupabaseUser(sessionUser, profile) {
     const fullName = profile?.fullName || sessionUser.user_metadata?.full_name || '';
     const [firstName = '', ...lastNameParts] = fullName.split(' ').filter(Boolean);
+    const email = profile?.email || sessionUser.email;
 
     return {
         id: sessionUser.id,
-        email: profile?.email || sessionUser.email,
+        email,
         firstName,
         lastName: lastNameParts.join(' '),
         fullName,
-        role: normalizeRole(profile?.role || sessionUser.app_metadata?.role),
+        role: normalizeRole(profile?.role || sessionUser.app_metadata?.role, email),
     };
 }
 
