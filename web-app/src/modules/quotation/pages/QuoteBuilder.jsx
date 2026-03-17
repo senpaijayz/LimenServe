@@ -172,6 +172,7 @@ const QuoteBuilder = () => {
             total: subtotal + vat,
         };
     }, [selectedParts, selectedServices]);
+    const focusedPartSelection = selectedParts.find((part) => part.id === focusedProduct?.id);
 
     useEffect(() => {
         let active = true;
@@ -433,6 +434,7 @@ const QuoteBuilder = () => {
                         <ProductPackageSuggestions
                             product={focusedProduct}
                             vehicleModelId={focusedProduct.model || null}
+                            anchorQuantity={focusedPartSelection?.quantity ?? 1}
                             onAddProduct={(recommendation) => {
                                 if (!recommendation.recommendedProduct) {
                                     return;
@@ -440,7 +442,7 @@ const QuoteBuilder = () => {
 
                                 addPart(recommendation.recommendedProduct, {
                                     isUpsell: true,
-                                    recommendationRuleId: recommendation.ruleId || null,
+                                    recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
                                 });
                             }}
                             onAddService={(recommendation) => {
@@ -458,10 +460,10 @@ const QuoteBuilder = () => {
                                         {
                                             id: recommendation.recommendedServiceId,
                                             name: recommendation.recommendedServiceName,
-                                            price: Number(recommendation.recommendedPrice ?? 0),
+                                            price: Number(recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? 0),
                                             quantity: 1,
                                             isUpsell: true,
-                                            recommendationRuleId: recommendation.ruleId || null,
+                                            recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
                                         },
                                     ];
                                 });
@@ -673,4 +675,5 @@ const QuoteBuilder = () => {
 };
 
 export default QuoteBuilder;
+
 

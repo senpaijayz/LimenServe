@@ -67,7 +67,7 @@ const PublicEstimate = () => {
     const canGoPrev = pagination.page > 1;
     const canGoNext = pagination.page < totalPages;
 
-    const addPart = (product) => {
+    const addPart = (product, extra = {}) => {
         setFocusedProduct(product);
         setSelectedParts((parts) => {
             const existing = parts.find((part) => part.id === product.id);
@@ -75,7 +75,7 @@ const PublicEstimate = () => {
                 return parts.map((part) => (part.id === product.id ? { ...part, quantity: part.quantity + 1 } : part));
             }
 
-            return [...parts, { ...product, quantity: 1 }];
+            return [...parts, { ...product, quantity: 1, ...extra }];
         });
     };
 
@@ -108,7 +108,10 @@ const PublicEstimate = () => {
         const service = {
             id: recommendation.recommendedServiceId,
             name: recommendation.recommendedServiceName,
-            price: Number(recommendation.recommendedPrice ?? 0),
+            price: Number(recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? 0),
+            quantity: 1,
+            isUpsell: true,
+            recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
         };
 
         setSelectedServices((services) => {
@@ -126,6 +129,7 @@ const PublicEstimate = () => {
     const vat = subtotal * 0.12;
     const total = subtotal + vat;
     const hasItems = selectedParts.length > 0 || selectedServices.length > 0;
+    const focusedPartSelection = selectedParts.find((part) => part.id === focusedProduct?.id);
 
     const openPreview = () => {
         setQuoteMeta(createQuoteMeta());
@@ -327,6 +331,7 @@ const PublicEstimate = () => {
                             <ProductPackageSuggestions
                                 product={focusedProduct}
                                 vehicleModelId={focusedProduct.model || vehicleInfo}
+                                anchorQuantity={focusedPartSelection?.quantity ?? 1}
                                 onAddProduct={(recommendation) => {
                                     const matchedProduct = recommendation.recommendedProduct;
 
@@ -338,9 +343,12 @@ const PublicEstimate = () => {
                                         id: matchedProduct.id,
                                         name: matchedProduct.name,
                                         sku: matchedProduct.sku,
-                                        price: Number(matchedProduct.price ?? recommendation.recommendedPrice ?? 0),
+                                        price: Number(matchedProduct.price ?? recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? 0),
                                         category: matchedProduct.category,
                                         model: matchedProduct.model,
+                                    }, {
+                                        isUpsell: true,
+                                        recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
                                     });
                                 }}
                                 onAddService={addSuggestedService}
@@ -578,6 +586,7 @@ const PublicEstimate = () => {
 };
 
 export default PublicEstimate;
+
 
 
 

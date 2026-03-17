@@ -7,6 +7,9 @@ const router = Router();
 const PRODUCT_CATALOG_CACHE_TTL_MS = 60 * 1000;
 const FULL_CATALOG_PAGE_SIZE = 1000;
 const SERVICE_CATALOG_CACHE_TTL_MS = 60 * 1000;
+const DEFAULT_PART_LIMIT = 6;
+const DEFAULT_SERVICE_LIMIT = 4;
+const DEFAULT_PACKAGE_DESCRIPTION = 'Compatible Mitsubishi parts and services for this vehicle.';
 
 const SERVICE_GROUP_CONFIG = {
   oil_change: {
@@ -275,22 +278,22 @@ function inferProductProfile(product) {
   };
 }
 
-function findBestMatchingService({ serviceCatalog, serviceGroup }) {
+function findMatchingServices({ serviceCatalog, serviceGroup, limitCount = DEFAULT_SERVICE_LIMIT }) {
   const groupConfig = SERVICE_GROUP_CONFIG[serviceGroup];
 
   if (!groupConfig) {
-    return null;
+    return [];
   }
 
-  const rankedMatches = serviceCatalog
+  return serviceCatalog
     .map((service) => ({
       service,
       text: buildServiceSearchText(service),
     }))
     .filter(({ text }) => matchesAnyKeyword(text, groupConfig.serviceKeywords))
-    .sort((left, right) => left.service.name.localeCompare(right.service.name));
-
-  return rankedMatches[0]?.service ?? null;
+    .sort((left, right) => left.service.name.localeCompare(right.service.name))
+    .slice(0, limitCount)
+    .map(({ service }) => service);
 }
 
 function dedupeRecommendations(recommendations = []) {
@@ -483,7 +486,7 @@ function pickCompanionProducts({ clickedProduct, catalog, clickedProfile, limitC
   })).slice(0, limitCount);
 }
 
-function buildVehicleMatchedRecommendations({ clickedProduct, catalog, serviceCatalog, limitCount }) {
+function buildVehicleMatchedRecommendations({ clickedProduct, catalog, serviceCatalog, partLimit, serviceLimit }) {
   const clickedProfile = inferProductProfile(clickedProduct);
 
   if (!clickedProfile.modelName) {
@@ -495,7 +498,7 @@ function buildVehicleMatchedRecommendations({ clickedProduct, catalog, serviceCa
         clickedProduct,
         catalog,
         clickedProfile,
-        limitCount,
+        limitCount: partLimit,
       })
     : [];
 
@@ -504,48 +507,49 @@ function buildVehicleMatchedRecommendations({ clickedProduct, catalog, serviceCa
         clickedProduct,
         catalog,
         clickedProfile,
-        limitCount,
+        limitCount: partLimit,
       })
     : [];
 
-  const partRecommendations = [...directFunctionRecommendations, ...keywordClusterRecommendations].slice(0, limitCount);
+  const partRecommendations = [...directFunctionRecommendations, ...keywordClusterRecommendations].slice(0, partLimit);
 
-  const service = clickedProfile.serviceGroup
-    ? findBestMatchingService({
+  const services = clickedProfile.serviceGroup
+    ? findMatchingServices({
         serviceCatalog,
         serviceGroup: clickedProfile.serviceGroup,
+        limitCount: serviceLimit,
       })
-    : null;
-
-  const serviceReason = clickedProfile.partFunction
-    ? 'Suggested service for ' + clickedProfile.partFunction.replace(/_/g, ' ')
-    : 'Suggested service based on this Mitsubishi part and vehicle';
-
-  const serviceRecommendation = service
-    ? [{
-        ruleId: null,
-        consequentKind: 'service',
-        recommendedProductId: null,
-        recommendedProductName: null,
-        recommendedServiceId: service.id,
-        recommendedServiceName: service.name,
-        recommendedPrice: Number(service.price ?? 0),
-        support: null,
-        confidence: null,
-        lift: null,
-        sampleCount: null,
-        reasonLabel: serviceReason,
-        packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || 'vehicle-service-package',
-        packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Compatible Mitsubishi Service Package',
-        packageDescription: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageDescription || 'Compatible Mitsubishi parts and services for this vehicle.',
-        matchLevel: partRecommendations[0]?.matchLevel || 'exact_model',
-        vehicleModelName: clickedProfile.modelName,
-        vehicleFamily: clickedProfile.vehicleFamily,
-        serviceGroup: clickedProfile.serviceGroup,
-      }]
     : [];
 
-  return [...partRecommendations, ...serviceRecommendation].slice(0, limitCount);
+  const serviceRecommendations = services.map((service) => ({
+    ruleId: null,
+    consequentKind: 'service',
+    recommendedProductId: null,
+    recommendedProductName: null,
+    recommendedServiceId: service.id,
+    recommendedServiceName: service.name,
+    recommendedPrice: Number(service.price ?? 0),
+    resolvedPrice: Number(service.price ?? 0),
+    pricingMode: 'catalog',
+    displayPriceLabel: null,
+    support: null,
+    confidence: null,
+    lift: null,
+    sampleCount: null,
+    reasonLabel: clickedProfile.partFunction
+      ? 'Suggested service for ' + clickedProfile.partFunction.replace(/_/g, ' ')
+      : 'Suggested service based on this Mitsubishi part and vehicle',
+    packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || 'vehicle-service-package',
+    packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Compatible Mitsubishi Service Package',
+    packageDescription: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageDescription || DEFAULT_PACKAGE_DESCRIPTION,
+    matchLevel: 'service_bundle',
+    vehicleModelName: clickedProfile.modelName,
+    vehicleFamily: clickedProfile.vehicleFamily,
+    serviceGroup: clickedProfile.serviceGroup,
+    minAnchorQuantity: clickedProfile.serviceGroup === 'oil_change' && clickedProfile.partFunction === 'engine_oil' ? 4 : 1,
+  }));
+
+  return [...partRecommendations, ...serviceRecommendations];
 }
 function normalizeMatchMetadata(recommendation, clickedProduct, recommendedProduct) {
   const clickedProfile = inferProductProfile(clickedProduct);
@@ -571,6 +575,137 @@ function normalizeMatchMetadata(recommendation, clickedProduct, recommendedProdu
   };
 }
 
+function normalizeRecommendationRecord({ recommendation, clickedProduct, matchedProduct = null, matchedService = null }) {
+  const pricingMode = recommendation.pricingMode ?? recommendation.pricing_mode ?? 'catalog';
+  const rawResolvedPrice = recommendation.resolvedPrice ?? recommendation.resolved_price ?? recommendation.recommendedPrice ?? recommendation.recommended_price ?? 0;
+  const resolvedPrice = Number.isFinite(Number(rawResolvedPrice)) ? Number(Number(rawResolvedPrice).toFixed(2)) : 0;
+  const consequentKind = recommendation.consequentKind
+    ?? recommendation.consequent_kind
+    ?? recommendation.itemKind
+    ?? recommendation.item_kind
+    ?? ((recommendation.recommendedServiceId ?? recommendation.recommended_service_id) ? 'service' : 'product');
+  const packageItemId = recommendation.packageItemId ?? recommendation.package_item_id ?? recommendation.ruleId ?? recommendation.rule_id ?? null;
+  const baseRecord = {
+    ...recommendation,
+    packageId: recommendation.packageId ?? recommendation.package_id ?? null,
+    packageKey: recommendation.packageKey ?? recommendation.package_key ?? recommendation.packageName ?? recommendation.package_name ?? null,
+    packageName: recommendation.packageName ?? recommendation.package_name ?? 'Compatible Mitsubishi Package',
+    packageDescription: recommendation.packageDescription ?? recommendation.package_description ?? DEFAULT_PACKAGE_DESCRIPTION,
+    minAnchorQuantity: Number(recommendation.minAnchorQuantity ?? recommendation.min_anchor_quantity ?? recommendation.packageMinAnchorQuantity ?? 1),
+    priority: Number(recommendation.priority ?? recommendation.packagePriority ?? recommendation.package_priority ?? 100),
+    packageItemId,
+    ruleId: packageItemId,
+    consequentKind,
+    recommendedProductId: recommendation.recommendedProductId ?? recommendation.recommended_product_id ?? null,
+    recommendedProductName: recommendation.recommendedProductName ?? recommendation.recommended_product_name ?? matchedProduct?.name ?? null,
+    recommendedServiceId: recommendation.recommendedServiceId ?? recommendation.recommended_service_id ?? null,
+    recommendedServiceName: recommendation.recommendedServiceName ?? recommendation.recommended_service_name ?? matchedService?.name ?? null,
+    recommendedPrice: resolvedPrice,
+    resolvedPrice,
+    pricingMode,
+    displayPriceLabel: recommendation.displayPriceLabel ?? recommendation.display_price_label ?? (pricingMode === 'complimentary' ? 'Free With Package' : pricingMode === 'override' ? 'Package Rate' : null),
+    reasonLabel: recommendation.reasonLabel ?? recommendation.reason_label ?? 'Compatible Mitsubishi recommendation',
+    vehicleModelName: recommendation.vehicleModelName ?? recommendation.vehicle_model_name ?? clickedProduct.model ?? null,
+    vehicleFamily: recommendation.vehicleFamily ?? recommendation.vehicle_family ?? null,
+    serviceGroup: recommendation.serviceGroup ?? recommendation.service_group ?? null,
+    matchLevel: recommendation.matchLevel ?? recommendation.match_level ?? null,
+    recommendedProduct: matchedProduct ?? recommendation.recommendedProduct ?? null,
+    recommendedService: matchedService ?? recommendation.recommendedService ?? null,
+    recommendedProductSku: recommendation.recommendedProductSku ?? recommendation.recommended_product_sku ?? matchedProduct?.sku ?? null,
+    recommendedServiceCode: recommendation.recommendedServiceCode ?? recommendation.recommended_service_code ?? matchedService?.code ?? null,
+  };
+
+  return {
+    ...normalizeMatchMetadata(baseRecord, clickedProduct, matchedProduct),
+    recommendedProduct: matchedProduct ?? recommendation.recommendedProduct ?? null,
+    recommendedService: matchedService ?? recommendation.recommendedService ?? null,
+    recommendedProductSku: baseRecord.recommendedProductSku,
+    recommendedServiceCode: baseRecord.recommendedServiceCode,
+    pricingMode,
+    resolvedPrice,
+    displayPriceLabel: baseRecord.displayPriceLabel,
+    minAnchorQuantity: baseRecord.minAnchorQuantity,
+    packageItemId,
+    ruleId: packageItemId,
+    priority: baseRecord.priority,
+  };
+}
+
+function groupPackageRecommendations(recommendations = [], partLimit = DEFAULT_PART_LIMIT, serviceLimit = DEFAULT_SERVICE_LIMIT) {
+  const groupedPackages = new Map();
+
+  recommendations.forEach((recommendation, index) => {
+    const packageKey = recommendation.packageKey || recommendation.packageName || `suggested-package-${index}`;
+
+    if (!groupedPackages.has(packageKey)) {
+      groupedPackages.set(packageKey, {
+        packageId: recommendation.packageId ?? null,
+        packageKey,
+        packageName: recommendation.packageName || 'Compatible Mitsubishi Package',
+        packageDescription: recommendation.packageDescription || DEFAULT_PACKAGE_DESCRIPTION,
+        serviceGroup: recommendation.serviceGroup || null,
+        vehicleModelName: recommendation.vehicleModelName || null,
+        vehicleFamily: recommendation.vehicleFamily || null,
+        minAnchorQuantity: Number(recommendation.minAnchorQuantity ?? 1),
+        priority: Number(recommendation.priority ?? 100),
+        parts: [],
+        services: [],
+      });
+    }
+
+    const targetPackage = groupedPackages.get(packageKey);
+    const isService = recommendation.consequentKind === 'service';
+    const targetItems = isService ? targetPackage.services : targetPackage.parts;
+    const itemLimit = isService ? serviceLimit : partLimit;
+    const itemId = isService ? recommendation.recommendedServiceId : recommendation.recommendedProductId;
+
+    if (itemId && targetItems.some((item) => (isService ? item.recommendedServiceId : item.recommendedProductId) === itemId)) {
+      return;
+    }
+
+    if (targetItems.length >= itemLimit) {
+      return;
+    }
+
+    targetItems.push(recommendation);
+  });
+
+  return Array.from(groupedPackages.values())
+    .filter((pkg) => pkg.parts.length > 0 || pkg.services.length > 0)
+    .sort((left, right) => Number(left.priority ?? 100) - Number(right.priority ?? 100));
+}
+
+function flattenPackageRecommendations(packages = []) {
+  return packages.flatMap((pkg) => [...pkg.parts, ...pkg.services]);
+}
+
+function buildPackageResponse({ recommendationRows = [], clickedProduct, productMap, serviceMap, partLimit, serviceLimit }) {
+  const normalizedRecommendations = recommendationRows
+    .map((recommendation) => {
+      const matchedProduct = (recommendation.recommendedProductId ?? recommendation.recommended_product_id)
+        ? productMap.get(recommendation.recommendedProductId ?? recommendation.recommended_product_id) ?? null
+        : null;
+      const matchedService = (recommendation.recommendedServiceId ?? recommendation.recommended_service_id)
+        ? serviceMap.get(recommendation.recommendedServiceId ?? recommendation.recommended_service_id) ?? null
+        : null;
+
+      return normalizeRecommendationRecord({
+        recommendation,
+        clickedProduct,
+        matchedProduct,
+        matchedService,
+      });
+    })
+    .filter((recommendation) => recommendation.consequentKind === 'service' || recommendation.recommendedProduct);
+
+  const packages = groupPackageRecommendations(normalizedRecommendations, partLimit, serviceLimit);
+
+  return {
+    packages,
+    recommendations: flattenPackageRecommendations(packages),
+  };
+}
+
 async function getOptionalCuratedRecommendations(productId, vehicleModelId, limitCount) {
   try {
     const rows = await callRpc('get_curated_quote_recommendations', {
@@ -584,6 +719,27 @@ async function getOptionalCuratedRecommendations(productId, vehicleModelId, limi
     const message = String(error?.message || error || '');
 
     if (message.includes('get_curated_quote_recommendations') || message.includes('schema cache')) {
+      return [];
+    }
+
+    throw error;
+  }
+}
+
+async function getOptionalPackageRecommendationRows(productId, vehicleModelId, partLimit, serviceLimit) {
+  try {
+    const rows = await callRpc('get_product_recommendation_packages', {
+      p_product_id: productId,
+      p_vehicle_model_name: vehicleModelId,
+      p_part_limit: partLimit,
+      p_service_limit: serviceLimit,
+    });
+
+    return rows ?? [];
+  } catch (error) {
+    const message = String(error?.message || error || '');
+
+    if (message.includes('get_product_recommendation_packages') || message.includes('schema cache')) {
       return [];
     }
 
@@ -848,15 +1004,12 @@ router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next)
 
 router.get('/products/:productId/recommendations', async (req, res, next) => {
   try {
-    const limitCount = Number(req.query.limit || 6);
+    const limitCount = parsePositiveInteger(req.query.limit, DEFAULT_PART_LIMIT, 24);
+    const partLimit = parsePositiveInteger(req.query.partLimit, limitCount, 24);
+    const serviceLimit = parsePositiveInteger(req.query.serviceLimit, limitCount, 24);
     const vehicleModelId = req.query.vehicleModelId || null;
-    const [directRecommendations, curatedRecommendations, catalog, serviceCatalog] = await Promise.all([
-      callRpc('get_product_upsell_recommendations', {
-        product_id: req.params.productId,
-        vehicle_model_id: vehicleModelId,
-        limit_count: limitCount,
-      }).catch(() => []),
-      getOptionalCuratedRecommendations(req.params.productId, vehicleModelId, limitCount),
+
+    const [catalog, serviceCatalog] = await Promise.all([
       getCachedProductCatalog(),
       getCachedServiceCatalog(),
     ]);
@@ -864,62 +1017,86 @@ router.get('/products/:productId/recommendations', async (req, res, next) => {
     const clickedProduct = catalog.find((product) => product.id === req.params.productId);
 
     if (!clickedProduct) {
-      return res.json({ recommendations: [] });
+      return res.json({ packages: [], recommendations: [] });
     }
+
+    const productMap = new Map(catalog.map((product) => [product.id, product]));
+    const serviceMap = new Map(serviceCatalog.map((service) => [service.id, service]));
+    const packageRows = await getOptionalPackageRecommendationRows(req.params.productId, vehicleModelId, partLimit, serviceLimit);
+
+    if (packageRows.length > 0) {
+      return res.json(buildPackageResponse({
+        recommendationRows: packageRows,
+        clickedProduct,
+        productMap,
+        serviceMap,
+        partLimit,
+        serviceLimit,
+      }));
+    }
+
+    const mergedLimit = Math.min(partLimit + serviceLimit, 24);
+    const [directRecommendations, curatedRecommendations] = await Promise.all([
+      callRpc('get_product_upsell_recommendations', {
+        product_id: req.params.productId,
+        vehicle_model_id: vehicleModelId,
+        limit_count: mergedLimit,
+      }).catch(() => []),
+      getOptionalCuratedRecommendations(req.params.productId, vehicleModelId, mergedLimit),
+    ]);
 
     const fallbackRecommendations = buildVehicleMatchedRecommendations({
       clickedProduct,
       catalog,
       serviceCatalog,
-      limitCount,
+      partLimit,
+      serviceLimit,
     });
 
-    const productMap = new Map(catalog.map((product) => [product.id, product]));
-    const serviceMap = new Map(serviceCatalog.map((service) => [service.id, service]));
     const normalizeExternalRecommendations = (recommendations = []) => recommendations
       .map((recommendation) => {
-        const matchedProduct = recommendation.recommendedProductId
-          ? productMap.get(recommendation.recommendedProductId)
+        const matchedProduct = (recommendation.recommendedProductId ?? recommendation.recommended_product_id)
+          ? productMap.get(recommendation.recommendedProductId ?? recommendation.recommended_product_id) ?? null
           : null;
-        const matchedService = recommendation.recommendedServiceId
-          ? serviceMap.get(recommendation.recommendedServiceId)
+        const matchedService = (recommendation.recommendedServiceId ?? recommendation.recommended_service_id)
+          ? serviceMap.get(recommendation.recommendedServiceId ?? recommendation.recommended_service_id) ?? null
           : null;
 
-        const normalized = normalizeMatchMetadata(recommendation, clickedProduct, matchedProduct);
-
-        return {
-          ...normalized,
-          recommendedProduct: matchedProduct ?? null,
-          recommendedService: matchedService ?? null,
-        };
+        return normalizeRecommendationRecord({
+          recommendation,
+          clickedProduct,
+          matchedProduct,
+          matchedService,
+        });
       })
-      .filter((recommendation) => {
-        if (!recommendation.recommendedProduct) {
-          return true;
-        }
-
-        return recommendation.matchLevel === 'exact_model' || recommendation.matchLevel === 'family_match' || recommendation.matchLevel === 'curated_override';
-      });
-
-    const fallbackEnriched = fallbackRecommendations.map((recommendation) => ({
-      ...recommendation,
-      recommendedProduct: recommendation.recommendedProductId ? productMap.get(recommendation.recommendedProductId) ?? null : null,
-      recommendedService: recommendation.recommendedServiceId ? serviceMap.get(recommendation.recommendedServiceId) ?? null : null,
-    }));
+      .filter((recommendation) => recommendation.consequentKind === 'service' || recommendation.recommendedProduct);
 
     const mergedRecommendations = dedupeRecommendations([
       ...normalizeExternalRecommendations(curatedRecommendations ?? []),
-      ...fallbackEnriched,
+      ...fallbackRecommendations,
       ...normalizeExternalRecommendations(directRecommendations ?? []),
-    ]).slice(0, limitCount);
+    ]);
 
-    res.json({ recommendations: mergedRecommendations ?? [] });
+    res.json(buildPackageResponse({
+      recommendationRows: mergedRecommendations,
+      clickedProduct,
+      productMap,
+      serviceMap,
+      partLimit,
+      serviceLimit,
+    }));
   } catch (error) {
     next(error);
   }
 });
 
 export default router;
+
+
+
+
+
+
 
 
 

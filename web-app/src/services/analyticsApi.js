@@ -9,18 +9,28 @@ export async function runFullAnalyticsRefresh(notes = null) {
   }
 }
 
-export async function getProductUpsellRecommendations(productId, vehicleModelId = null, limitCount = 5) {
+export async function getProductRecommendationPackages(productId, vehicleModelId = null, partLimit = 6, serviceLimit = 4) {
   try {
     const { data } = await apiClient.get(`/catalog/products/${productId}/recommendations`, {
       params: {
         vehicleModelId,
-        limit: limitCount,
+        partLimit,
+        serviceLimit,
       },
     });
-    return data.recommendations ?? [];
+
+    return {
+      packages: data.packages ?? [],
+      recommendations: data.recommendations ?? [],
+    };
   } catch (error) {
-    extractApiError(error, 'Failed to load upsell recommendations.');
+    extractApiError(error, 'Failed to load recommendation packages.');
   }
+}
+
+export async function getProductUpsellRecommendations(productId, vehicleModelId = null, limitCount = 5) {
+  const data = await getProductRecommendationPackages(productId, vehicleModelId, limitCount, limitCount);
+  return data?.recommendations ?? [];
 }
 
 export async function getMonthlyProductForecasts(targetMonth = null) {
