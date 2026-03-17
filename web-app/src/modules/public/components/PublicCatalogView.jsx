@@ -27,12 +27,12 @@ const SORT_OPTIONS = [
     { value: 'price-desc', label: 'Price: High to Low' },
 ];
 
-const GenuinePartsLabel = ({ product, compact = false }) => {
-    const labelHeight = compact ? 'h-56' : 'h-full min-h-[300px]';
-    const barcodeWidth = compact ? 1.45 : 1.7;
-    const barcodeHeight = compact ? 48 : 68;
-    const skuTextSize = compact ? 'text-[1.95rem]' : 'text-[2.4rem]';
-    const headerLabelSize = compact ? 'text-[8px]' : 'text-[10px]';
+const GenuinePartsLabel = ({ product, compact = false, dense = false }) => {
+    const labelHeight = dense ? 'h-48 sm:h-52' : compact ? 'h-56' : 'h-full min-h-[300px]';
+    const barcodeWidth = dense ? 1.2 : compact ? 1.45 : 1.7;
+    const barcodeHeight = dense ? 38 : compact ? 48 : 68;
+    const skuTextSize = dense ? 'text-[1.55rem] sm:text-[1.75rem]' : compact ? 'text-[1.95rem]' : 'text-[2.4rem]';
+    const headerLabelSize = dense ? 'text-[7px]' : compact ? 'text-[8px]' : 'text-[10px]';
 
     return (
         <div className={`${labelHeight} bg-[#f7f7f5] rounded-[1.35rem] border-2 border-primary-200 flex flex-col relative overflow-hidden shadow-[0_14px_34px_rgba(17,18,22,0.08)]`}>
@@ -366,7 +366,7 @@ const PublicCatalogView = () => {
                             exit={{ scale: 0.98, opacity: 0, y: 28 }}
                             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                             onClick={(event) => event.stopPropagation()}
-                            className="relative w-full overflow-hidden rounded-t-[2rem] border border-primary-200 bg-white shadow-2xl sm:my-8 sm:max-w-4xl sm:rounded-3xl"
+                            className="relative w-full overflow-hidden rounded-t-[2rem] border border-primary-200 bg-white shadow-2xl sm:my-6 sm:max-w-[min(88vw,1040px)] sm:rounded-3xl"
                         >
                             <div className="pointer-events-none flex justify-center pt-3 sm:hidden">
                                 <span className="h-1.5 w-14 rounded-full bg-primary-300" />
@@ -380,13 +380,13 @@ const PublicCatalogView = () => {
                                 <X className="w-5 h-5" />
                             </button>
 
-                            <div className="max-h-[88dvh] overflow-y-auto sm:max-h-[min(92vh,1100px)]">
-                                <div className="grid md:grid-cols-5">
-                                    <div className="relative flex min-h-[240px] flex-col overflow-hidden bg-gradient-to-br from-primary-50 to-white p-5 sm:p-8 md:col-span-2 md:min-h-[300px]">
+                            <div className="max-h-[84dvh] overflow-y-auto sm:max-h-[86vh]">
+                                <div className="grid lg:grid-cols-[minmax(240px,0.82fr)_minmax(0,1.18fr)]">
+                                    <div className="relative flex min-h-[210px] flex-col overflow-hidden bg-gradient-to-br from-primary-50 to-white p-4 sm:p-5 lg:min-h-[250px] lg:p-6">
                                         <div className="absolute inset-0 bg-grid-pattern opacity-10" />
                                         <div className="relative z-10 mb-4 font-mono text-[11px] uppercase tracking-[0.18em] text-primary-500 sm:mb-6 sm:text-xs">ID: {selectedProduct.sku}</div>
                                         <div className="relative z-10 flex-1">
-                                            <GenuinePartsLabel product={selectedProduct} compact />
+                                            <GenuinePartsLabel product={selectedProduct} dense />
                                         </div>
                                         <div className="relative z-10 mt-4 flex items-center gap-2 sm:mt-6">
                                             <Award className="w-4 h-4 text-accent-primary" />
@@ -394,8 +394,8 @@ const PublicCatalogView = () => {
                                         </div>
                                     </div>
 
-                                    <div className="flex flex-col bg-white p-5 sm:p-8 md:col-span-3 md:border-l md:border-primary-200 md:p-10">
-                                        <div className="mb-4 flex flex-wrap gap-2">
+                                    <div className="flex flex-col bg-white p-4 sm:p-5 lg:border-l lg:border-primary-200 lg:p-6">
+                                        <div className="mb-3 flex flex-wrap gap-1.5">
                                             <span className="rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary-600">
                                                 {selectedProduct.category}
                                             </span>
@@ -406,41 +406,42 @@ const PublicCatalogView = () => {
                                             )}
                                         </div>
 
-                                        <h2 className="mb-4 pr-12 text-2xl font-display font-bold leading-tight text-primary-950 sm:mb-6 sm:text-4xl">
+                                        <h2 className="mb-3 pr-12 text-xl font-display font-bold leading-tight text-primary-950 sm:text-[2rem]">
                                             {selectedProduct.name}
                                         </h2>
 
-                                        <p className="mb-6 text-sm leading-relaxed text-primary-600 sm:mb-8 sm:text-base">
+                                        <p className="mb-4 text-sm leading-relaxed text-primary-600 sm:mb-5">
                                             {selectedProduct.description} Designed to meet exact specifications and ensure optimal performance for your vehicle.
                                         </p>
 
-                                        <div className="mb-6 sm:mb-8">
-                                            <h4 className="mb-3 text-xs font-bold uppercase tracking-widest text-primary-500">Model Compatibility</h4>
+                                        <div className="mb-4 sm:mb-5">
+                                            <h4 className="mb-2 text-[11px] font-bold uppercase tracking-[0.22em] text-primary-500">Model Compatibility</h4>
                                             <div className="flex flex-wrap gap-2">
                                                 {selectedProduct.compatibility.map((model, index) => (
-                                                    <span key={index} className="rounded-lg border border-primary-200 bg-primary-50 px-4 py-2 text-sm text-primary-600">
+                                                    <span key={index} className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs text-primary-600">
                                                         {model}
                                                     </span>
                                                 ))}
                                             </div>
                                         </div>
 
-                                        <div className="mb-6 sm:mb-8">
+                                        <div className="mb-4 sm:mb-5">
                                             <ProductPackageSuggestions
                                                 product={selectedProduct}
                                                 vehicleModelId={selectedProduct.model}
                                                 title="Compatible Mitsubishi Packages"
                                                 subtitle="Same-vehicle Mitsubishi parts and service matches for this exact component."
+                                                compact
                                             />
                                         </div>
 
-                                        <div className="mt-auto flex flex-col gap-4 border-t border-primary-200 pt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:pt-8">
+                                        <div className="mt-auto flex flex-col gap-3 border-t border-primary-200 pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:pt-5">
                                             <div>
-                                                <p className="mb-1 text-xs font-medium uppercase tracking-widest text-primary-500">Unit Valuation (VAT Inc.)</p>
-                                                <p className="text-3xl font-display font-bold text-accent-blue sm:text-4xl">{formatCurrency(selectedProduct.price)}</p>
+                                                <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.22em] text-primary-500">Unit Valuation (VAT Inc.)</p>
+                                                <p className="text-2xl font-display font-bold text-accent-blue sm:text-[2rem]">{formatCurrency(selectedProduct.price)}</p>
                                             </div>
 
-                                            <div className="flex flex-col gap-3 sm:flex-row">
+                                            <div className="flex flex-col gap-2.5 sm:flex-row">
                                                 <button
                                                     type="button"
                                                     onClick={() => setSelectedProduct(null)}
