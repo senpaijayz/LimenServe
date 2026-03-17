@@ -150,8 +150,8 @@ const ProductPackageSuggestions = ({
               </div>
 
               <div className="w-full max-w-full overflow-hidden">
-                <div className="overflow-x-auto overscroll-x-contain pb-2 sm:overflow-visible sm:pb-0">
-                  <div className="flex w-max min-w-full snap-x snap-mandatory gap-3 sm:block sm:space-y-3">
+                <div className="overflow-x-auto overscroll-x-contain pb-2">
+                  <div className="flex w-max min-w-full snap-x snap-mandatory gap-3 lg:gap-4">
                     {pkg.items.map((item) => {
                       const isProduct = item.consequentKind === 'product';
                       const id = isProduct ? item.recommendedProductId : item.recommendedServiceId;
@@ -166,7 +166,7 @@ const ProductPackageSuggestions = ({
                       return (
                         <div
                           key={`${item.consequentKind}-${id || itemName}`}
-                          className="flex w-[calc(100%-0.75rem)] max-w-[18rem] min-w-0 shrink-0 snap-start flex-col gap-3 rounded-xl border border-primary-200 bg-primary-50/60 p-4 sm:w-auto sm:max-w-none sm:flex-row sm:items-center sm:justify-between"
+                          className="flex w-[16.5rem] shrink-0 snap-start flex-col gap-3 rounded-xl border border-primary-200 bg-primary-50/60 p-4 sm:w-[18.5rem] lg:w-[21rem] xl:w-[23rem] sm:flex-row sm:items-center sm:justify-between"
                         >
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
