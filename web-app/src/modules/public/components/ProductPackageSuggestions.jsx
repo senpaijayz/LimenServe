@@ -108,16 +108,16 @@ const ProductPackageSuggestions = ({
   }
 
   return (
-    <div className="rounded-2xl border border-primary-200 bg-primary-50/70 p-5 sm:p-6">
-      <div className="flex items-start gap-3 mb-5">
+    <div className="overflow-hidden rounded-2xl border border-primary-200 bg-primary-50/70 p-4 sm:p-6">
+      <div className="mb-5 flex items-start gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-accent-primary/20 bg-accent-primary/5 text-accent-primary">
           <Sparkles className="h-5 w-5" />
         </div>
-        <div>
+        <div className="min-w-0">
           <h4 className="text-lg font-display font-semibold text-primary-950">{title}</h4>
           <p className="mt-1 text-sm text-primary-500">{subtitle}</p>
-          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-primary-400">
-            Based on: {product.name} {activeVehicleLabel ? `• ${activeVehicleLabel}` : ''}
+          <p className="mt-2 break-words text-xs font-semibold uppercase tracking-[0.22em] text-primary-400">
+            Based on: {product.name} {activeVehicleLabel ? ` - ${activeVehicleLabel}` : ''}
           </p>
         </div>
       </div>
@@ -139,71 +139,76 @@ const ProductPackageSuggestions = ({
         <div className="space-y-4">
           {groupedPackages.map((pkg) => (
             <div key={pkg.key} className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm">
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <h5 className="text-base font-display font-semibold text-primary-950">{pkg.name}</h5>
                   <p className="mt-1 text-sm text-primary-500">{pkg.description || defaultPackageDescription}</p>
                 </div>
-                <span className="rounded-full bg-primary-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-primary-600">
+                <span className="w-fit rounded-full bg-primary-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-primary-600">
                   {pkg.items.length} items
                 </span>
               </div>
 
-              <div className="space-y-3">
-                {pkg.items.map((item) => {
-                  const isProduct = item.consequentKind === 'product';
-                  const id = isProduct ? item.recommendedProductId : item.recommendedServiceId;
-                  const isSelected = isProduct
-                    ? selectedProductIds.includes(id)
-                    : selectedServiceIds.includes(id);
-                  const itemName = isProduct ? item.recommendedProductName : item.recommendedServiceName;
-                  const actionHandler = isProduct ? onAddProduct : onAddService;
-                  const canAdd = typeof actionHandler === 'function' && id;
-                  const matchBadge = getMatchBadge(item.matchLevel);
+              <div className="-mx-1 overflow-x-auto pb-2 sm:mx-0 sm:overflow-visible sm:pb-0">
+                <div className="flex snap-x snap-mandatory gap-3 px-1 sm:block sm:space-y-3 sm:px-0">
+                  {pkg.items.map((item) => {
+                    const isProduct = item.consequentKind === 'product';
+                    const id = isProduct ? item.recommendedProductId : item.recommendedServiceId;
+                    const isSelected = isProduct
+                      ? selectedProductIds.includes(id)
+                      : selectedServiceIds.includes(id);
+                    const itemName = isProduct ? item.recommendedProductName : item.recommendedServiceName;
+                    const actionHandler = isProduct ? onAddProduct : onAddService;
+                    const canAdd = typeof actionHandler === 'function' && id;
+                    const matchBadge = getMatchBadge(item.matchLevel);
 
-                  return (
-                    <div key={`${item.consequentKind}-${id || itemName}`} className="flex flex-col gap-3 rounded-xl border border-primary-200 bg-primary-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${isProduct ? 'bg-accent-blue/10 text-accent-blue' : 'bg-accent-success/10 text-accent-success'}`}>
-                            {isProduct ? <PackagePlus className="h-3.5 w-3.5" /> : <Wrench className="h-3.5 w-3.5" />}
-                            {isProduct ? 'Part' : 'Service'}
-                          </span>
-                          <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${matchBadge.className}`}>
-                            {matchBadge.label}
-                          </span>
-                          {item.serviceGroup && (
-                            <span className="text-xs font-medium text-primary-500 uppercase tracking-[0.16em]">
-                              {item.serviceGroup.replace(/_/g, ' ')}
+                    return (
+                      <div
+                        key={`${item.consequentKind}-${id || itemName}`}
+                        className="flex min-w-[280px] max-w-[84vw] shrink-0 snap-start flex-col gap-3 rounded-xl border border-primary-200 bg-primary-50/60 p-4 sm:min-w-0 sm:max-w-none sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${isProduct ? 'bg-accent-blue/10 text-accent-blue' : 'bg-accent-success/10 text-accent-success'}`}>
+                              {isProduct ? <PackagePlus className="h-3.5 w-3.5" /> : <Wrench className="h-3.5 w-3.5" />}
+                              {isProduct ? 'Part' : 'Service'}
                             </span>
-                          )}
-                        </div>
-
-                        <div className="mt-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-primary-950">{itemName}</p>
-                            <p className="mt-1 text-xs text-primary-500">
-                              {item.reasonLabel || 'Compatible Mitsubishi recommendation'}
-                              {item.vehicleModelName ? ` • ${item.vehicleModelName}` : ''}
-                            </p>
+                            <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${matchBadge.className}`}>
+                              {matchBadge.label}
+                            </span>
+                            {item.serviceGroup && (
+                              <span className="text-xs font-medium uppercase tracking-[0.16em] text-primary-500">
+                                {item.serviceGroup.replace(/_/g, ' ')}
+                              </span>
+                            )}
                           </div>
-                          <p className="text-sm font-bold text-accent-blue">{formatCurrency(Number(item.recommendedPrice ?? 0))}</p>
-                        </div>
-                      </div>
 
-                      {canAdd && (
-                        <button
-                          type="button"
-                          onClick={() => actionHandler(item)}
-                          disabled={isSelected}
-                          className="inline-flex min-w-[132px] items-center justify-center rounded-xl border border-primary-200 px-4 py-2 text-sm font-semibold text-primary-700 transition hover:border-accent-primary hover:bg-accent-primary/5 hover:text-accent-primary disabled:cursor-not-allowed disabled:border-primary-100 disabled:bg-primary-100 disabled:text-primary-400"
-                        >
-                          {isSelected ? 'Added' : isProduct ? 'Add Part' : 'Add Service'}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+                          <div className="mt-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="break-words text-sm font-semibold text-primary-950">{itemName}</p>
+                              <p className="mt-1 break-words text-xs text-primary-500">
+                                {item.reasonLabel || 'Compatible Mitsubishi recommendation'}
+                                {item.vehicleModelName ? ` - ${item.vehicleModelName}` : ''}
+                              </p>
+                            </div>
+                            <p className="text-sm font-bold text-accent-blue sm:pl-3">{formatCurrency(Number(item.recommendedPrice ?? 0))}</p>
+                          </div>
+                        </div>
+
+                        {canAdd && (
+                          <button
+                            type="button"
+                            onClick={() => actionHandler(item)}
+                            disabled={isSelected}
+                            className="inline-flex w-full min-w-[132px] items-center justify-center rounded-xl border border-primary-200 px-4 py-2 text-sm font-semibold text-primary-700 transition hover:border-accent-primary hover:bg-accent-primary/5 hover:text-accent-primary disabled:cursor-not-allowed disabled:border-primary-100 disabled:bg-primary-100 disabled:text-primary-400 sm:w-auto"
+                          >
+                            {isSelected ? 'Added' : isProduct ? 'Add Part' : 'Add Service'}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           ))}

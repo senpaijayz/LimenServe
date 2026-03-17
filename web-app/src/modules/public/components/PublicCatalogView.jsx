@@ -357,90 +357,106 @@ const PublicCatalogView = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-primary-950/40 backdrop-blur-sm overflow-y-auto"
+                        className="fixed inset-0 z-50 flex items-end justify-center bg-primary-950/40 backdrop-blur-sm sm:items-center sm:p-6"
                         onClick={() => setSelectedProduct(null)}
                     >
                         <motion.div
-                            initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                            initial={{ scale: 0.98, opacity: 0, y: 28 }}
                             animate={{ scale: 1, opacity: 1, y: 0 }}
-                            exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                            exit={{ scale: 0.98, opacity: 0, y: 28 }}
                             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                             onClick={(event) => event.stopPropagation()}
-                            className="bg-white border border-primary-200 rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden relative my-8"
+                            className="relative w-full overflow-hidden rounded-t-[2rem] border border-primary-200 bg-white shadow-2xl sm:my-8 sm:max-w-4xl sm:rounded-3xl"
                         >
+                            <div className="pointer-events-none flex justify-center pt-3 sm:hidden">
+                                <span className="h-1.5 w-14 rounded-full bg-primary-300" />
+                            </div>
+
                             <button
                                 onClick={() => setSelectedProduct(null)}
-                                className="absolute top-4 right-4 z-10 w-10 h-10 bg-white/80 hover:bg-primary-100 rounded-full flex items-center justify-center text-primary-600 hover:text-primary-950 transition-colors backdrop-blur-sm shadow-sm"
+                                className="absolute right-4 top-4 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-primary-600 shadow-sm backdrop-blur-sm transition-colors hover:bg-primary-100 hover:text-primary-950"
+                                aria-label="Close product details"
                             >
                                 <X className="w-5 h-5" />
                             </button>
 
-                            <div className="grid md:grid-cols-5 h-full">
-                                <div className="md:col-span-2 bg-gradient-to-br from-primary-50 to-white flex flex-col relative overflow-hidden p-8 min-h-[300px]">
-                                    <div className="absolute inset-0 bg-grid-pattern opacity-10" />
-                                    <div className="relative z-10 font-mono text-xs text-primary-500 mb-6">ID: {selectedProduct.sku}</div>
-                                    <div className="relative z-10 flex-1">
-                                        <GenuinePartsLabel product={selectedProduct} />
+                            <div className="max-h-[88dvh] overflow-y-auto sm:max-h-[min(92vh,1100px)]">
+                                <div className="grid md:grid-cols-5">
+                                    <div className="relative flex min-h-[240px] flex-col overflow-hidden bg-gradient-to-br from-primary-50 to-white p-5 sm:p-8 md:col-span-2 md:min-h-[300px]">
+                                        <div className="absolute inset-0 bg-grid-pattern opacity-10" />
+                                        <div className="relative z-10 mb-4 font-mono text-[11px] uppercase tracking-[0.18em] text-primary-500 sm:mb-6 sm:text-xs">ID: {selectedProduct.sku}</div>
+                                        <div className="relative z-10 flex-1">
+                                            <GenuinePartsLabel product={selectedProduct} compact />
+                                        </div>
+                                        <div className="relative z-10 mt-4 flex items-center gap-2 sm:mt-6">
+                                            <Award className="w-4 h-4 text-accent-primary" />
+                                            <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-600 sm:text-xs">OEM Verified</span>
+                                        </div>
                                     </div>
-                                    <div className="relative z-10 mt-auto flex items-center gap-2">
-                                        <Award className="w-4 h-4 text-accent-primary" />
-                                        <span className="text-xs font-semibold uppercase tracking-wider text-primary-600">OEM Verified</span>
-                                    </div>
-                                </div>
 
-                                <div className="md:col-span-3 p-8 sm:p-10 flex flex-col bg-white border-l border-primary-200">
-                                    <div className="flex gap-2 mb-4">
-                                        <span className="px-3 py-1 bg-primary-100 text-xs font-semibold rounded-full uppercase tracking-wider text-primary-600">
-                                            {selectedProduct.category}
-                                        </span>
-                                        {selectedProduct.inStock && (
-                                            <span className="px-3 py-1 bg-accent-success/10 text-accent-success text-xs font-semibold rounded-full flex items-center gap-1 uppercase tracking-wider">
-                                                <Check className="w-3 h-3" /> In Stock
+                                    <div className="flex flex-col bg-white p-5 sm:p-8 md:col-span-3 md:border-l md:border-primary-200 md:p-10">
+                                        <div className="mb-4 flex flex-wrap gap-2">
+                                            <span className="rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary-600">
+                                                {selectedProduct.category}
                                             </span>
-                                        )}
-                                    </div>
-
-                                    <h2 className="text-3xl sm:text-4xl font-display font-bold text-primary-950 mb-6 leading-tight">
-                                        {selectedProduct.name}
-                                    </h2>
-
-                                    <p className="text-primary-600 font-sans leading-relaxed mb-8">
-                                        {selectedProduct.description} Designed to meet exact specifications and ensure optimal performance for your vehicle.
-                                    </p>
-
-                                    <div className="mb-8">
-                                        <h4 className="text-xs font-bold uppercase tracking-widest text-primary-500 mb-3">Model Compatibility</h4>
-                                        <div className="flex flex-wrap gap-2">
-                                            {selectedProduct.compatibility.map((model, index) => (
-                                                <span key={index} className="px-4 py-2 bg-primary-50 border border-primary-200 rounded-lg text-sm text-primary-600">
-                                                    {model}
+                                            {selectedProduct.inStock && (
+                                                <span className="flex items-center gap-1 rounded-full bg-accent-success/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-accent-success">
+                                                    <Check className="w-3 h-3" /> In Stock
                                                 </span>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <div className="mb-8">
-                                        <ProductPackageSuggestions
-                                            product={selectedProduct}
-                                            vehicleModelId={selectedProduct.model}
-                                            title="Compatible Mitsubishi Packages"
-                                            subtitle="Same-vehicle Mitsubishi parts and service matches for this exact component."
-                                        />
-                                    </div>
-
-                                    <div className="mt-auto pt-8 border-t border-primary-200 flex flex-col sm:flex-row items-center justify-between gap-6">
-                                        <div>
-                                            <p className="text-xs font-medium text-primary-500 uppercase tracking-widest mb-1">Unit Valuation (VAT Inc.)</p>
-                                            <p className="text-4xl font-display font-bold text-accent-blue">{formatCurrency(selectedProduct.price)}</p>
+                                            )}
                                         </div>
 
-                                        <Link
-                                            to="/estimate"
-                                            className="btn btn-primary w-full sm:w-auto px-8"
-                                            onClick={() => setSelectedProduct(null)}
-                                        >
-                                            <ShoppingCart className="w-5 h-5" /> Calculate Quote
-                                        </Link>
+                                        <h2 className="mb-4 pr-12 text-2xl font-display font-bold leading-tight text-primary-950 sm:mb-6 sm:text-4xl">
+                                            {selectedProduct.name}
+                                        </h2>
+
+                                        <p className="mb-6 text-sm leading-relaxed text-primary-600 sm:mb-8 sm:text-base">
+                                            {selectedProduct.description} Designed to meet exact specifications and ensure optimal performance for your vehicle.
+                                        </p>
+
+                                        <div className="mb-6 sm:mb-8">
+                                            <h4 className="mb-3 text-xs font-bold uppercase tracking-widest text-primary-500">Model Compatibility</h4>
+                                            <div className="flex flex-wrap gap-2">
+                                                {selectedProduct.compatibility.map((model, index) => (
+                                                    <span key={index} className="rounded-lg border border-primary-200 bg-primary-50 px-4 py-2 text-sm text-primary-600">
+                                                        {model}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="mb-6 sm:mb-8">
+                                            <ProductPackageSuggestions
+                                                product={selectedProduct}
+                                                vehicleModelId={selectedProduct.model}
+                                                title="Compatible Mitsubishi Packages"
+                                                subtitle="Same-vehicle Mitsubishi parts and service matches for this exact component."
+                                            />
+                                        </div>
+
+                                        <div className="mt-auto flex flex-col gap-4 border-t border-primary-200 pt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:pt-8">
+                                            <div>
+                                                <p className="mb-1 text-xs font-medium uppercase tracking-widest text-primary-500">Unit Valuation (VAT Inc.)</p>
+                                                <p className="text-3xl font-display font-bold text-accent-blue sm:text-4xl">{formatCurrency(selectedProduct.price)}</p>
+                                            </div>
+
+                                            <div className="flex flex-col gap-3 sm:flex-row">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSelectedProduct(null)}
+                                                    className="btn btn-secondary w-full sm:w-auto"
+                                                >
+                                                    Back to Catalog
+                                                </button>
+                                                <Link
+                                                    to="/estimate"
+                                                    className="btn btn-primary w-full sm:w-auto px-8"
+                                                    onClick={() => setSelectedProduct(null)}
+                                                >
+                                                    <ShoppingCart className="w-5 h-5" /> Calculate Quote
+                                                </Link>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -453,6 +469,3 @@ const PublicCatalogView = () => {
 };
 
 export default PublicCatalogView;
-
-
-
