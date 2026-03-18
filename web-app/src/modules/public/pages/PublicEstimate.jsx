@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Search, Plus, Minus, Calculator, Printer, User, Phone, Car, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Search, Plus, Minus, Calculator, Printer, User, Phone, Car, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, ShoppingCart } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
@@ -32,6 +32,7 @@ const PublicEstimate = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [focusedProduct, setFocusedProduct] = useState(null);
     const [showPrintPreview, setShowPrintPreview] = useState(false);
+    const [showSummaryDrawer, setShowSummaryDrawer] = useState(false);
     const [quoteMeta, setQuoteMeta] = useState(() => createQuoteMeta());
 
     const {
@@ -50,6 +51,19 @@ const PublicEstimate = () => {
     useEffect(() => {
         setCurrentPage(1);
     }, [partSearch, sortBy]);
+
+    useEffect(() => {
+        if (!showSummaryDrawer) {
+            return undefined;
+        }
+
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
+        return () => {
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [showSummaryDrawer]);
 
     const filteredProducts = priceListProducts.map((product) => ({
         id: product.id,
@@ -108,6 +122,10 @@ const PublicEstimate = () => {
         setSelectedParts((parts) => parts.map((part) => (part.id === id ? { ...part, quantity: qty } : part)));
     };
 
+    const removeService = (id) => {
+        setSelectedServices((services) => services.filter((service) => service.id !== id));
+    };
+
     const toggleService = (service) => {
         const existing = selectedServices.find((selected) => selected.id === service.id);
         if (existing) {
@@ -148,8 +166,11 @@ const PublicEstimate = () => {
     const total = subtotal + vat;
     const hasItems = selectedParts.length > 0 || selectedServices.length > 0;
     const focusedPartSelection = selectedParts.find((part) => part.id === focusedProduct?.id);
+    const totalItemCount = selectedParts.reduce((sum, part) => sum + part.quantity, 0) + selectedServices.length;
+    const totalLineCount = selectedParts.length + selectedServices.length;
 
     const openPreview = () => {
+        setShowSummaryDrawer(false);
         setQuoteMeta(createQuoteMeta());
         setShowPrintPreview(true);
     };
@@ -164,6 +185,7 @@ const PublicEstimate = () => {
         setSortBy('name-asc');
         setCurrentPage(1);
         setFocusedProduct(null);
+        setShowSummaryDrawer(false);
         setShowPrintPreview(false);
         setQuoteMeta(createQuoteMeta());
     };
@@ -200,8 +222,8 @@ const PublicEstimate = () => {
             <section className="relative z-10 max-w-[1600px] mx-auto px-4 md:px-8 xl:px-12 py-2 print:hidden">
                 <PublicQuoteLookupCard />
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                    <div className="lg:col-span-8 space-y-8">
+                <div className="grid grid-cols-1 gap-8">
+                    <div className="space-y-8">
                         <div className="surface p-6">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                                 <div>
@@ -422,44 +444,157 @@ const PublicEstimate = () => {
                         </div>
                     </div>
 
-                    <div className="lg:col-span-4">
-                        <div className="surface sticky top-28 flex flex-col min-h-[500px]">
-                            <div className="p-6 border-b border-primary-200">
-                                <h3 className="text-lg font-display font-semibold text-primary-950">Quotation Summary</h3>
-                                <p className="text-sm text-primary-500 mt-1">Review your selected parts and services.</p>
+                </div>
+            </section>
+
+            <motion.button
+                type="button"
+                onClick={() => setShowSummaryDrawer(true)}
+                className="fixed bottom-5 right-5 z-30 flex items-center gap-3 rounded-[26px] border border-primary-200 bg-primary-950 px-4 py-3 text-left text-white shadow-[0_18px_48px_rgba(15,23,42,0.28)] transition hover:bg-primary-900 print:hidden sm:bottom-6 sm:right-6 sm:px-5"
+                whileTap={{ scale: 0.98 }}
+                animate={{ opacity: showSummaryDrawer ? 0 : 1, y: showSummaryDrawer ? 12 : 0, scale: showSummaryDrawer ? 0.96 : 1 }}
+                aria-label="Open quotation summary cart"
+            >
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
+                    <ShoppingCart className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                    <span className="block text-[0.65rem] font-bold uppercase tracking-[0.24em] text-white/65">
+                        Quote Cart
+                    </span>
+                    <span className="block text-sm font-semibold text-white">
+                        {totalItemCount} item{totalItemCount === 1 ? '' : 's'} - {formatCurrency(total)}
+                    </span>
+                    <span className="block text-xs text-white/60">
+                        {totalLineCount} line{totalLineCount === 1 ? '' : 's'} in summary
+                    </span>
+                </div>
+            </motion.button>
+
+            <AnimatePresence>
+                {showSummaryDrawer && (
+                    <>
+                        <motion.button
+                            type="button"
+                            className="fixed inset-0 z-40 bg-primary-950/45 backdrop-blur-sm print:hidden"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowSummaryDrawer(false)}
+                            aria-label="Close quotation summary"
+                        />
+                        <motion.aside
+                            className="fixed inset-x-3 bottom-3 z-50 flex max-h-[84vh] flex-col overflow-hidden rounded-[30px] border border-primary-200 bg-primary-50 shadow-[0_32px_90px_rgba(15,23,42,0.28)] print:hidden md:inset-y-6 md:right-6 md:left-auto md:w-[440px] md:max-h-none"
+                            initial={{ opacity: 0, y: 28, scale: 0.97 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 24, scale: 0.98 }}
+                            transition={{ duration: 0.22, ease: 'easeOut' }}
+                        >
+                            <div className="border-b border-primary-200 bg-white/90 px-5 py-5 backdrop-blur md:px-6">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                        <span className="text-[0.65rem] font-bold uppercase tracking-[0.28em] text-primary-500">
+                                            Public Quotation
+                                        </span>
+                                        <h3 className="mt-2 text-xl font-display font-semibold text-primary-950">Quotation Summary</h3>
+                                        <p className="mt-1 text-sm text-primary-500">Customer details, selected items, and quote totals in one cart view.</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowSummaryDrawer(false)}
+                                        className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-primary-200 bg-primary-50 text-primary-500 transition hover:border-primary-300 hover:bg-white hover:text-primary-950"
+                                        aria-label="Close quotation summary"
+                                    >
+                                        <X className="h-5 w-5" />
+                                    </button>
+                                </div>
+
+                                <div className="mt-5 grid grid-cols-3 gap-3">
+                                    <div className="rounded-2xl border border-primary-200 bg-primary-50/80 px-3 py-3">
+                                        <span className="block text-[0.65rem] font-bold uppercase tracking-[0.22em] text-primary-400">Items</span>
+                                        <span className="mt-2 block text-lg font-display font-semibold text-primary-950">{totalItemCount}</span>
+                                    </div>
+                                    <div className="rounded-2xl border border-primary-200 bg-primary-50/80 px-3 py-3">
+                                        <span className="block text-[0.65rem] font-bold uppercase tracking-[0.22em] text-primary-400">Lines</span>
+                                        <span className="mt-2 block text-lg font-display font-semibold text-primary-950">{totalLineCount}</span>
+                                    </div>
+                                    <div className="rounded-2xl border border-accent-blue/20 bg-accent-blue/5 px-3 py-3">
+                                        <span className="block text-[0.65rem] font-bold uppercase tracking-[0.22em] text-accent-blue/70">Total</span>
+                                        <span className="mt-2 block text-lg font-display font-semibold text-accent-blue">{formatCurrency(total)}</span>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="p-6 flex-1 flex flex-col bg-white">
+                            <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 md:px-6">
+                                <div className="rounded-[24px] border border-primary-200 bg-white p-4 shadow-sm">
+                                    <div className="flex items-center gap-2">
+                                        <User className="h-4 w-4 text-accent-primary" />
+                                        <span className="text-[0.7rem] font-bold uppercase tracking-[0.26em] text-primary-500">Customer & Vehicle</span>
+                                    </div>
+                                    <div className="mt-4 space-y-3">
+                                        <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-3 py-3">
+                                            <span className="block text-[0.65rem] font-bold uppercase tracking-[0.2em] text-primary-400">Customer Name</span>
+                                            <span className="mt-1 block text-sm font-semibold text-primary-950">{customerName || 'Walk-in Customer'}</span>
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                            <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-3 py-3">
+                                                <span className="block text-[0.65rem] font-bold uppercase tracking-[0.2em] text-primary-400">Phone Number</span>
+                                                <span className="mt-1 block text-sm font-semibold text-primary-950">{customerPhone || 'Not provided yet'}</span>
+                                            </div>
+                                            <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-3 py-3">
+                                                <span className="block text-[0.65rem] font-bold uppercase tracking-[0.2em] text-primary-400">Vehicle Info</span>
+                                                <span className="mt-1 block text-sm font-semibold text-primary-950">{vehicleInfo || 'No vehicle linked yet'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {!hasItems ? (
-                                    <div className="flex-1 flex flex-col items-center justify-center text-center">
-                                        <div className="w-16 h-16 rounded-full bg-accent-primary/5 border border-accent-primary/20 flex items-center justify-center mb-4">
-                                            <Calculator className="w-8 h-8 text-accent-primary" />
+                                    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-[24px] border border-dashed border-primary-200 bg-white px-6 py-10 text-center">
+                                        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-accent-primary/20 bg-accent-primary/5">
+                                            <Calculator className="h-8 w-8 text-accent-primary" />
                                         </div>
                                         <span className="text-lg font-display font-medium text-primary-950">No items selected</span>
-                                        <span className="text-sm text-primary-500 mt-2">Add parts or services to begin estimating.</span>
+                                        <span className="mt-2 max-w-xs text-sm text-primary-500">Add parts or services from the public estimate page and they will appear here instantly.</span>
                                     </div>
                                 ) : (
-                                    <div className="flex-1 flex flex-col gap-6">
+                                    <div className="space-y-5">
                                         {selectedParts.length > 0 && (
-                                            <div>
-                                                <span className="text-xs font-bold uppercase tracking-widest text-primary-500 mb-3 block">Parts</span>
+                                            <div className="rounded-[24px] border border-primary-200 bg-white p-4 shadow-sm">
+                                                <div className="mb-4 flex items-center justify-between gap-3">
+                                                    <div>
+                                                        <span className="block text-[0.7rem] font-bold uppercase tracking-[0.26em] text-primary-500">Parts</span>
+                                                        <span className="mt-1 block text-sm text-primary-500">Adjust quantities directly from the cart.</span>
+                                                    </div>
+                                                    <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
+                                                        {selectedParts.length} selected
+                                                    </span>
+                                                </div>
                                                 <div className="space-y-3">
                                                     {selectedParts.map((part) => (
-                                                        <div key={part.id} className="flex flex-col gap-2 p-3 bg-white rounded-xl border border-primary-200 shadow-sm">
-                                                            <div className="flex justify-between items-start">
-                                                                <span className="text-sm font-medium text-primary-950 line-clamp-1 pr-2">{part.name}</span>
-                                                                <button onClick={() => removePart(part.id)} className="p-0.5 text-primary-400 hover:text-accent-danger hover:bg-accent-danger/10 rounded transition-colors">
-                                                                    <X className="w-4 h-4" />
+                                                        <div key={part.id} className="rounded-2xl border border-primary-200 bg-primary-50/60 p-3">
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <div className="min-w-0">
+                                                                    <span className="block text-sm font-semibold text-primary-950">{part.name}</span>
+                                                                    <span className="mt-1 block text-xs text-primary-500">{part.sku || 'Pricelist item'}</span>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => removePart(part.id)}
+                                                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-primary-400 transition hover:bg-accent-danger/10 hover:text-accent-danger"
+                                                                    aria-label={`Remove ${part.name}`}
+                                                                >
+                                                                    <X className="h-4 w-4" />
                                                                 </button>
                                                             </div>
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="flex items-center bg-primary-50 border border-primary-200 rounded-lg p-0.5">
-                                                                    <button onClick={() => updateQty(part.id, part.quantity - 1)} className="p-1 hover:bg-white rounded-md text-primary-500 hover:text-primary-950 transition-colors">
-                                                                        <Minus className="w-4 h-4" />
+                                                            <div className="mt-3 flex items-center justify-between gap-3">
+                                                                <div className="flex items-center rounded-xl border border-primary-200 bg-white p-0.5">
+                                                                    <button type="button" onClick={() => updateQty(part.id, part.quantity - 1)} className="rounded-lg p-1.5 text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Decrease ${part.name} quantity`}>
+                                                                        <Minus className="h-4 w-4" />
                                                                     </button>
-                                                                    <span className="text-xs font-semibold w-8 text-center text-primary-900">{part.quantity}</span>
-                                                                    <button onClick={() => updateQty(part.id, part.quantity + 1)} className="p-1 hover:bg-white rounded-md text-primary-500 hover:text-primary-950 transition-colors">
-                                                                        <Plus className="w-4 h-4" />
+                                                                    <span className="w-9 text-center text-sm font-semibold text-primary-950">{part.quantity}</span>
+                                                                    <button type="button" onClick={() => updateQty(part.id, part.quantity + 1)} className="rounded-lg p-1.5 text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Increase ${part.name} quantity`}>
+                                                                        <Plus className="h-4 w-4" />
                                                                     </button>
                                                                 </div>
                                                                 <span className="text-sm font-bold text-accent-blue">{formatCurrency(part.price * part.quantity)}</span>
@@ -471,13 +606,34 @@ const PublicEstimate = () => {
                                         )}
 
                                         {selectedServices.length > 0 && (
-                                            <div>
-                                                <span className="text-xs font-bold uppercase tracking-widest text-primary-500 mb-3 block">Services</span>
-                                                <div className="space-y-2">
+                                            <div className="rounded-[24px] border border-primary-200 bg-white p-4 shadow-sm">
+                                                <div className="mb-4 flex items-center justify-between gap-3">
+                                                    <div>
+                                                        <span className="block text-[0.7rem] font-bold uppercase tracking-[0.26em] text-primary-500">Services</span>
+                                                        <span className="mt-1 block text-sm text-primary-500">Selected labor and maintenance items.</span>
+                                                    </div>
+                                                    <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
+                                                        {selectedServices.length} selected
+                                                    </span>
+                                                </div>
+                                                <div className="space-y-3">
                                                     {selectedServices.map((service) => (
-                                                        <div key={service.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-primary-200 shadow-sm">
-                                                            <span className="text-sm font-medium text-primary-950 pr-4">{service.name}</span>
-                                                            <span className="text-sm font-bold text-accent-blue">{formatCurrency(service.price)}</span>
+                                                        <div key={service.id} className="flex items-center justify-between gap-3 rounded-2xl border border-primary-200 bg-primary-50/60 p-3">
+                                                            <div className="min-w-0">
+                                                                <span className="block text-sm font-semibold text-primary-950">{service.name}</span>
+                                                                <span className="mt-1 block text-xs text-primary-500">Service / labor line</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm font-bold text-accent-blue">{formatCurrency(service.price)}</span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => removeService(service.id)}
+                                                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-primary-400 transition hover:bg-accent-danger/10 hover:text-accent-danger"
+                                                                    aria-label={`Remove ${service.name}`}
+                                                                >
+                                                                    <X className="h-4 w-4" />
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -485,8 +641,10 @@ const PublicEstimate = () => {
                                         )}
                                     </div>
                                 )}
+                            </div>
 
-                                <div className="border-t border-primary-200 pt-5 mt-6 space-y-3">
+                            <div className="border-t border-primary-200 bg-white/95 px-5 py-5 backdrop-blur md:px-6">
+                                <div className="space-y-3">
                                     <div className="flex justify-between text-sm text-primary-600">
                                         <span>Parts Subtotal</span>
                                         <span className="font-medium text-primary-950">{formatCurrency(partsTotal)}</span>
@@ -499,23 +657,25 @@ const PublicEstimate = () => {
                                         <span>VAT (12%)</span>
                                         <span className="font-medium text-primary-950">{formatCurrency(vat)}</span>
                                     </div>
-                                    <div className="flex justify-between text-lg font-bold text-primary-950 pt-3 border-t border-primary-200">
+                                    <div className="flex justify-between border-t border-primary-200 pt-3 text-lg font-bold text-primary-950">
                                         <span>Total Due</span>
                                         <span className="text-accent-blue">{formatCurrency(total)}</span>
                                     </div>
                                 </div>
 
-                                <div className="mt-6 flex gap-3">
-                                    <Button variant="secondary" fullWidth onClick={resetForm}>Reset</Button>
-                                    <Button variant="primary" fullWidth leftIcon={<Printer className="w-4 h-4" />} onClick={openPreview} disabled={!hasItems}>
+                                <div className="mt-5 flex gap-3">
+                                    <Button variant="secondary" fullWidth onClick={resetForm}>
+                                        Reset
+                                    </Button>
+                                    <Button variant="primary" fullWidth leftIcon={<Printer className="h-4 w-4" />} onClick={openPreview} isDisabled={!hasItems}>
                                         Preview
                                     </Button>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
+                        </motion.aside>
+                    </>
+                )}
+            </AnimatePresence>
 
             <Modal
                 isOpen={showPrintPreview}
