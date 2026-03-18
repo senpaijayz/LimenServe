@@ -8,7 +8,6 @@ function normalizeVehicle(vehicle = {}) {
   const normalized = {
     model: vehicle.model ? String(vehicle.model).trim() : '',
     year: vehicle.year ? String(vehicle.year).trim() : '',
-    engine: vehicle.engine ? String(vehicle.engine).trim() : '',
     plateNo: vehicle.plateNo ? String(vehicle.plateNo).trim() : '',
   };
 
@@ -35,7 +34,6 @@ function readVehicleFromSearch(searchParams) {
   return normalizeVehicle({
     model: searchParams.get('vehicleModel') || '',
     year: searchParams.get('vehicleYear') || '',
-    engine: searchParams.get('vehicleEngine') || '',
     plateNo: searchParams.get('plateNo') || '',
   });
 }
@@ -77,7 +75,6 @@ export default function usePublicVehicleSelection({ syncToSearch = false, includ
     const pairs = [
       ['vehicleModel', vehicle.model],
       ['vehicleYear', vehicle.year],
-      ['vehicleEngine', vehicle.engine],
     ];
 
     if (includePlate) {
@@ -98,6 +95,11 @@ export default function usePublicVehicleSelection({ syncToSearch = false, includ
       }
     });
 
+    if (nextParams.has('vehicleEngine')) {
+      nextParams.delete('vehicleEngine');
+      didChange = true;
+    }
+
     if (didChange) {
       setSearchParams(nextParams, { replace: true });
     }
@@ -106,7 +108,6 @@ export default function usePublicVehicleSelection({ syncToSearch = false, includ
   const apiVehicle = useMemo(() => ({
     model: vehicle.model,
     year: vehicle.year,
-    engine: vehicle.engine,
     plateNo: vehicle.plateNo,
     displayLabel: vehicle.displayLabel,
   }), [vehicle]);

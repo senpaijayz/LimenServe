@@ -1,4 +1,4 @@
-import { CarFront, Gauge, CalendarRange, Sparkles, X } from 'lucide-react';
+import { CarFront, CalendarRange, Sparkles, X } from 'lucide-react';
 import useVehicleFitmentOptions from '../../../hooks/useVehicleFitmentOptions';
 
 const fieldBaseClassName = 'w-full rounded-2xl border border-primary-200 bg-white px-4 py-3 text-sm font-semibold text-primary-900 outline-none transition focus:border-accent-blue focus:bg-white';
@@ -9,9 +9,9 @@ export default function PublicVehicleSelector({
   onClear,
   includePlate = false,
   title = 'Choose your Mitsubishi first',
-  subtitle = 'Select your model, year, and engine to unlock more relevant bundles, service packages, and fitment copy.',
+  subtitle = 'Select your model and year from the current pricelist to unlock more relevant bundles, service packages, and fitment copy.',
 }) {
-  const { models, years, engines, loading, error } = useVehicleFitmentOptions(vehicle?.model, vehicle?.year);
+  const { models, years, loading, error } = useVehicleFitmentOptions(vehicle?.model);
   const hasVehicle = Boolean(vehicle?.model);
 
   return (
@@ -34,14 +34,14 @@ export default function PublicVehicleSelector({
           )}
         </div>
 
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className={`grid gap-3 ${includePlate ? 'md:grid-cols-3' : 'md:grid-cols-3'}`}>
           <label className="block">
             <span className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-primary-500">
               <CarFront className="h-4 w-4 text-accent-primary" /> Model
             </span>
             <select
               value={vehicle?.model || ''}
-              onChange={(event) => onChange({ model: event.target.value, year: '', engine: '' })}
+              onChange={(event) => onChange({ model: event.target.value, year: '' })}
               className={fieldBaseClassName}
             >
               <option value="">Select model</option>
@@ -57,30 +57,13 @@ export default function PublicVehicleSelector({
             </span>
             <select
               value={vehicle?.year || ''}
-              onChange={(event) => onChange({ year: event.target.value, engine: '' })}
+              onChange={(event) => onChange({ year: event.target.value })}
               disabled={!vehicle?.model}
               className={`${fieldBaseClassName} disabled:cursor-not-allowed disabled:bg-primary-100 disabled:text-primary-400`}
             >
               <option value="">Select year</option>
               {years.map((yearOption) => (
                 <option key={yearOption.value} value={yearOption.value}>{yearOption.label}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="block">
-            <span className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-primary-500">
-              <Gauge className="h-4 w-4 text-accent-primary" /> Engine
-            </span>
-            <select
-              value={vehicle?.engine || ''}
-              onChange={(event) => onChange({ engine: event.target.value })}
-              disabled={!vehicle?.model || !vehicle?.year}
-              className={`${fieldBaseClassName} disabled:cursor-not-allowed disabled:bg-primary-100 disabled:text-primary-400`}
-            >
-              <option value="">Select engine</option>
-              {engines.map((engineOption) => (
-                <option key={engineOption.value} value={engineOption.value}>{engineOption.label}</option>
               ))}
             </select>
           </label>
@@ -112,7 +95,7 @@ export default function PublicVehicleSelector({
 
         {includePlate && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary-200 bg-primary-50/60 px-4 py-3 text-sm text-primary-500">
-            <span>{hasVehicle ? `Recommended bundles and copy are now tuned for ${vehicle.displayLabel}.` : 'Choose a vehicle to unlock compatible packages and fitment-first bundles.'}</span>
+            <span>{hasVehicle ? `Recommended bundles and copy are now tuned for ${vehicle.displayLabel}.` : 'Choose a vehicle from the current pricelist to unlock compatible packages and fitment-first bundles.'}</span>
             <button
               type="button"
               onClick={onClear}
@@ -125,7 +108,7 @@ export default function PublicVehicleSelector({
 
         {(loading || error) && (
           <div className={`rounded-2xl border px-4 py-3 text-sm ${error ? 'border-accent-danger/20 bg-accent-danger/5 text-accent-danger' : 'border-primary-200 bg-primary-50/70 text-primary-500'}`}>
-            {error || 'Refreshing Mitsubishi fitment options...'}
+            {error || 'Refreshing available models from the pricelist...'}
           </div>
         )}
       </div>

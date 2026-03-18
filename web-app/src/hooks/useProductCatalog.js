@@ -9,7 +9,6 @@ const useProductCatalog = ({
   sortBy = 'name-asc',
   vehicleModel = '',
   vehicleYear = '',
-  vehicleEngine = '',
 } = {}) => {
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [products, setProducts] = useState([]);
@@ -34,7 +33,6 @@ const useProductCatalog = ({
           sortBy,
           vehicleModel,
           vehicleYear,
-          vehicleEngine,
         });
 
         if (!active) {
@@ -65,7 +63,7 @@ const useProductCatalog = ({
     return () => {
       active = false;
     };
-  }, [page, pageSize, deferredSearchQuery, selectedCategory, sortBy, vehicleModel, vehicleYear, vehicleEngine]);
+  }, [page, pageSize, deferredSearchQuery, selectedCategory, sortBy, vehicleModel, vehicleYear]);
 
   return {
     products,

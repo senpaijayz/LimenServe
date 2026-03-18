@@ -19,7 +19,6 @@ export async function getVehicleFitmentOptions(params = {}) {
     return {
       models: data.models ?? [],
       years: data.years ?? [],
-      engines: data.engines ?? [],
     };
   } catch (error) {
     extractApiError(error, 'Failed to load Mitsubishi fitment options.');

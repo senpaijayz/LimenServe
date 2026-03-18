@@ -191,13 +191,12 @@ const PublicEstimate = () => {
         sortBy,
         vehicleModel: vehicle.model,
         vehicleYear: vehicle.year,
-        vehicleEngine: vehicle.engine,
     });
     const { services: availableServices, loading: servicesLoading, error: servicesError } = useServiceCatalog();
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [partSearch, sortBy, vehicle.model, vehicle.year, vehicle.engine]);
+    }, [partSearch, sortBy, vehicle.model, vehicle.year]);
 
     useEffect(() => {
         if (typeof window === 'undefined') {

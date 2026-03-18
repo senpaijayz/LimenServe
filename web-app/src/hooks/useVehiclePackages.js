@@ -52,7 +52,7 @@ export default function useVehiclePackages(vehicle) {
     return () => {
       active = false;
     };
-  }, [vehicle?.engine, vehicle?.model, vehicle?.year]);
+  }, [vehicle?.model, vehicle?.year]);
 
   return {
     packages,

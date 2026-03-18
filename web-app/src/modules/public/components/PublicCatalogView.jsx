@@ -113,12 +113,11 @@ const PublicCatalogView = () => {
     sortBy,
     vehicleModel: vehicle.model,
     vehicleYear: vehicle.year,
-    vehicleEngine: vehicle.engine,
   });
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedCategory, sortBy, vehicle.model, vehicle.year, vehicle.engine]);
+  }, [searchQuery, selectedCategory, sortBy, vehicle.model, vehicle.year]);
 
   const visibleProducts = useMemo(() => products.map((product) => ({
     id: product.id,
@@ -149,7 +148,6 @@ const PublicCatalogView = () => {
     const params = new URLSearchParams();
     if (vehicle.model) params.set('vehicleModel', vehicle.model);
     if (vehicle.year) params.set('vehicleYear', vehicle.year);
-    if (vehicle.engine) params.set('vehicleEngine', vehicle.engine);
     if (packageKey) params.set('packageKey', packageKey);
     if (serviceGroup) params.set('serviceGroup', serviceGroup);
     return {

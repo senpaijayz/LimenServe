@@ -272,6 +272,6 @@ export function formatVehicleDisplayLabel(vehicle) {
     return 'your Mitsubishi vehicle';
   }
 
-  const parts = [vehicle.model, vehicle.year, vehicle.engine].filter(Boolean);
+  const parts = [vehicle.model, vehicle.year].filter(Boolean);
   return parts.length > 0 ? parts.join(' ') : 'your Mitsubishi vehicle';
 }

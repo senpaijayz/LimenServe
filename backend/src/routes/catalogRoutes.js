@@ -387,7 +387,7 @@ function productMentionsEngine(text) {
   return ENGINE_SIGNATURE_PATTERN.test(String(text || ''));
 }
 
-function buildVehicleFilterContext({ vehicleModel = '', vehicleYear = '', vehicleEngine = '', vehicleFamily = '' } = {}) {
+function buildVehicleFilterContext({ vehicleModel = '', vehicleYear = '', vehicleFamily = '' } = {}) {
   const model = normalizeVehicleSelectorValue(vehicleModel);
   const family = normalizeVehicleSelectorValue(vehicleFamily || extractVehicleFamily(vehicleModel));
   const parsedYear = Number.parseInt(vehicleYear, 10);
@@ -395,16 +395,14 @@ function buildVehicleFilterContext({ vehicleModel = '', vehicleYear = '', vehicl
   return {
     rawModel: vehicleModel || '',
     rawYear: vehicleYear || '',
-    rawEngine: vehicleEngine || '',
     model,
     family,
     year: Number.isFinite(parsedYear) ? parsedYear : null,
-    engine: normalizeVehicleSelectorValue(vehicleEngine),
   };
 }
 
-function buildVehicleDisplayLabel({ model, year, engine }) {
-  return [model, year, engine].filter(Boolean).join(' ').trim();
+function buildVehicleDisplayLabel({ model, year }) {
+  return [model, year].filter(Boolean).join(' ').trim();
 }
 
 function matchesVehicleModel(productModel, context) {
@@ -422,20 +420,6 @@ function matchesVehicleModel(productModel, context) {
     || Boolean(context.family && normalizedModel.includes(context.family));
 }
 
-function matchesVehicleEngine(product, context) {
-  if (!context.engine) {
-    return true;
-  }
-
-  const searchText = buildProductSearchText(product);
-  if (!productMentionsEngine(searchText)) {
-    return true;
-  }
-
-  const engineTokens = context.engine.split(/[^a-z0-9]+/).filter(Boolean);
-  return engineTokens.length === 0 || engineTokens.some((token) => searchText.includes(token));
-}
-
 function matchesVehicleFilters(product, context) {
   if (!context.model) {
     return true;
@@ -450,7 +434,7 @@ function matchesVehicleFilters(product, context) {
     return false;
   }
 
-  return matchesVehicleEngine(product, context);
+  return true;
 }
 
 function matchesCatalogFilters(product, { searchQuery = '', selectedCategory = 'all', vehicleContext = null } = {}) {
@@ -536,40 +520,85 @@ async function getCachedVehicleFitments() {
   return vehicleFitmentCachePromise;
 }
 
-function buildVehicleFitmentOptions(fitments = [], selectedModel = '', selectedYear = '') {
+const VEHICLE_MODEL_EXCLUSION_TERMS = ['various', 'universal', 'tools', 'manuals', 'collaterals', 'merchandise', 'accessories'];
+
+function isCatalogVehicleModel(modelName) {
+  const normalized = normalizeVehicleSelectorValue(modelName);
+  return Boolean(normalized) && !VEHICLE_MODEL_EXCLUSION_TERMS.some((term) => normalized.includes(term));
+}
+
+function cleanVehicleModelLabel(modelName) {
+  return String(modelName || '')
+    .replace(/\((?:19|20)\d{2}\s*[-/]\s*(?:present|(?:19|20)\d{2})\)/ig, ' ')
+    .replace(/\b(?:19|20)\d{2}\s*[-/]\s*(?:present|(?:19|20)\d{2})\b/ig, ' ')
+    .replace(/\b(?:19|20)\d{2}\b/ig, ' ')
+    .replace(/\(\s*\)/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function expandYearRange(range) {
+  if (!range) {
+    return [];
+  }
+
+  const span = Number(range.end) - Number(range.start);
+  if (!Number.isFinite(span) || span < 0 || span > 25) {
+    return [];
+  }
+
+  return Array.from({ length: span + 1 }, (_, index) => range.start + index);
+}
+
+function extractCatalogVehicleYears(product) {
+  const text = String(product?.model || '');
+  const years = new Set(expandYearRange(parseModelYearRange(text)));
+  const yearMatches = text.match(/\b(?:19|20)\d{2}\b/g) ?? [];
+
+  yearMatches.forEach((value) => years.add(Number(value)));
+
+  return Array.from(years).filter((value) => Number.isFinite(value));
+}
+
+function buildVehicleFitmentOptions(products = [], selectedModel = '') {
   const modelMap = new Map();
+  const yearMap = new Map();
 
-  fitments.forEach((fitment) => {
-    if (!modelMap.has(fitment.modelName)) {
-      modelMap.set(fitment.modelName, {
-        value: fitment.modelName,
-        label: fitment.modelName,
-        vehicleFamily: fitment.vehicleFamily,
-        sortOrder: fitment.sortOrder,
-      });
+  products.forEach((product) => {
+    if (!isCatalogVehicleModel(product?.model)) {
+      return;
     }
+
+    const modelLabel = cleanVehicleModelLabel(product.model);
+    if (!modelLabel) {
+      return;
+    }
+
+    const existing = modelMap.get(modelLabel) || { value: modelLabel, label: modelLabel, count: 0 };
+    existing.count += 1;
+    modelMap.set(modelLabel, existing);
+
+    const years = extractCatalogVehicleYears(product);
+    if (!yearMap.has(modelLabel)) {
+      yearMap.set(modelLabel, new Set());
+    }
+
+    years.forEach((year) => {
+      yearMap.get(modelLabel).add(year);
+    });
   });
 
-  const models = Array.from(modelMap.values()).sort((left, right) => {
-    const sortScore = Number(left.sortOrder ?? 100) - Number(right.sortOrder ?? 100);
-    return sortScore !== 0 ? sortScore : left.label.localeCompare(right.label);
-  });
+  const models = Array.from(modelMap.values())
+    .sort((left, right) => Number(right.count ?? 0) - Number(left.count ?? 0) || left.label.localeCompare(right.label))
+    .map(({ count, ...model }) => model);
 
-  const years = selectedModel
-    ? Array.from(new Set(fitments.filter((fitment) => fitment.modelName === selectedModel).map((fitment) => fitment.year)))
+  const years = selectedModel && yearMap.has(selectedModel)
+    ? Array.from(yearMap.get(selectedModel))
       .sort((left, right) => right - left)
       .map((year) => ({ value: String(year), label: String(year) }))
     : [];
 
-  const engines = selectedModel && selectedYear
-    ? Array.from(new Set(
-      fitments
-        .filter((fitment) => fitment.modelName === selectedModel && String(fitment.year) === String(selectedYear))
-        .map((fitment) => fitment.engine)
-    )).sort((left, right) => left.localeCompare(right)).map((engine) => ({ value: engine, label: engine }))
-    : [];
-
-  return { models, years, engines };
+  return { models, years };
 }
 
 function buildVehiclePackageCopy(serviceGroup, fallbackName) {
@@ -1465,18 +1494,11 @@ async function getCachedServiceCatalog() {
 
 router.get('/vehicle-fitment/options', async (req, res, next) => {
   try {
-    const fitments = await getCachedVehicleFitments();
+    const catalog = await getCachedProductCatalog();
     const selectedModel = String(req.query.model || '').trim();
-    const selectedYear = String(req.query.year || '').trim();
 
-    res.json(buildVehicleFitmentOptions(fitments, selectedModel, selectedYear));
+    res.json(buildVehicleFitmentOptions(catalog, selectedModel));
   } catch (error) {
-    const message = String(error?.message || error || '');
-    if (message.includes('public_vehicle_fitments') || message.includes('get_public_vehicle_fitments') || message.includes('schema cache')) {
-      res.json({ models: [], years: [], engines: [] });
-      return;
-    }
-
     next(error);
   }
 });
@@ -1485,26 +1507,21 @@ router.get('/vehicle-packages', async (req, res, next) => {
   try {
     const vehicleModel = String(req.query.vehicleModel || '').trim();
     const vehicleYear = String(req.query.vehicleYear || '').trim();
-    const vehicleEngine = String(req.query.vehicleEngine || '').trim();
 
     if (!vehicleModel) {
       res.json({ vehicleContext: null, packages: [] });
       return;
     }
 
-    const [catalog, serviceCatalog, fitments] = await Promise.all([
+    const [catalog, serviceCatalog] = await Promise.all([
       getCachedProductCatalog(),
       getCachedServiceCatalog(),
-      getCachedVehicleFitments().catch(() => []),
     ]);
 
-    const matchedFitment = fitments.find((fitment) => fitment.modelName === vehicleModel && (!vehicleYear || String(fitment.year) === String(vehicleYear)) && (!vehicleEngine || fitment.engine === vehicleEngine))
-      || fitments.find((fitment) => fitment.modelName === vehicleModel);
     const vehicleContext = buildVehicleFilterContext({
       vehicleModel,
       vehicleYear,
-      vehicleEngine,
-      vehicleFamily: matchedFitment?.vehicleFamily || extractVehicleFamily(vehicleModel),
+      vehicleFamily: extractVehicleFamily(vehicleModel),
     });
     const packages = buildVehiclePackages({ catalog, serviceCatalog, vehicleContext });
 
@@ -1512,9 +1529,8 @@ router.get('/vehicle-packages', async (req, res, next) => {
       vehicleContext: {
         model: vehicleModel,
         year: vehicleYear || '',
-        engine: vehicleEngine || '',
-        vehicleFamily: matchedFitment?.vehicleFamily || extractVehicleFamily(vehicleModel),
-        displayLabel: buildVehicleDisplayLabel({ model: vehicleModel, year: vehicleYear, engine: vehicleEngine }),
+        vehicleFamily: extractVehicleFamily(vehicleModel),
+        displayLabel: buildVehicleDisplayLabel({ model: vehicleModel, year: vehicleYear }),
       },
       packages,
     });
@@ -1532,21 +1548,14 @@ router.get('/products', async (req, res, next) => {
     const sortBy = String(req.query.sortBy || 'name-asc');
     const vehicleModel = String(req.query.vehicleModel || '').trim();
     const vehicleYear = String(req.query.vehicleYear || '').trim();
-    const vehicleEngine = String(req.query.vehicleEngine || '').trim();
     const includeCategories = String(req.query.includeCategories || 'true').trim().toLowerCase() !== 'false';
 
     if (vehicleModel) {
-      const [catalog, fitments] = await Promise.all([
-        getCachedProductCatalog(),
-        getCachedVehicleFitments().catch(() => []),
-      ]);
-      const matchedFitment = fitments.find((fitment) => fitment.modelName === vehicleModel && (!vehicleYear || String(fitment.year) === String(vehicleYear)) && (!vehicleEngine || fitment.engine === vehicleEngine))
-        || fitments.find((fitment) => fitment.modelName === vehicleModel);
+      const catalog = await getCachedProductCatalog();
       const vehicleContext = buildVehicleFilterContext({
         vehicleModel,
         vehicleYear,
-        vehicleEngine,
-        vehicleFamily: matchedFitment?.vehicleFamily || extractVehicleFamily(vehicleModel),
+        vehicleFamily: extractVehicleFamily(vehicleModel),
       });
       const vehicleScopedProducts = catalog.filter((product) => matchesCatalogFilters(product, {
         searchQuery,
@@ -1877,6 +1886,7 @@ router.get('/products/:productId/recommendations', async (req, res, next) => {
 });
 
 export default router;
+
 
 
 

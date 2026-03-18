@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { getVehicleFitmentOptions } from '../services/catalogApi';
 
-export default function useVehicleFitmentOptions(model = '', year = '') {
-  const [options, setOptions] = useState({ models: [], years: [], engines: [] });
+export default function useVehicleFitmentOptions(model = '') {
+  const [options, setOptions] = useState({ models: [], years: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -14,7 +14,7 @@ export default function useVehicleFitmentOptions(model = '', year = '') {
       setError(null);
 
       try {
-        const data = await getVehicleFitmentOptions({ model, year });
+        const data = await getVehicleFitmentOptions({ model });
         if (!active) {
           return;
         }
@@ -22,14 +22,13 @@ export default function useVehicleFitmentOptions(model = '', year = '') {
         setOptions({
           models: data.models ?? [],
           years: data.years ?? [],
-          engines: data.engines ?? [],
         });
       } catch (loadError) {
         if (!active) {
           return;
         }
 
-        setOptions({ models: [], years: [], engines: [] });
+        setOptions({ models: [], years: [] });
         setError(loadError.message || 'Failed to load vehicle fitment options.');
       } finally {
         if (active) {
@@ -43,7 +42,7 @@ export default function useVehicleFitmentOptions(model = '', year = '') {
     return () => {
       active = false;
     };
-  }, [model, year]);
+  }, [model]);
 
   return {
     ...options,
