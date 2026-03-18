@@ -450,7 +450,7 @@ const PublicEstimate = () => {
             <motion.button
                 type="button"
                 onClick={() => setShowSummaryDrawer(true)}
-                className="fixed bottom-5 right-5 z-30 flex items-center gap-3 rounded-[26px] border border-primary-200 bg-primary-950 px-4 py-3 text-left text-white shadow-[0_18px_48px_rgba(15,23,42,0.28)] transition hover:bg-primary-900 print:hidden sm:bottom-6 sm:right-6 sm:px-5"
+                className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-30 flex items-center justify-between gap-3 rounded-[28px] border border-primary-200 bg-primary-950 px-4 py-3 text-left text-white shadow-[0_18px_48px_rgba(15,23,42,0.28)] transition hover:bg-primary-900 print:hidden sm:inset-x-auto sm:bottom-6 sm:right-6 sm:px-5"
                 whileTap={{ scale: 0.98 }}
                 animate={{ opacity: showSummaryDrawer ? 0 : 1, y: showSummaryDrawer ? 12 : 0, scale: showSummaryDrawer ? 0.96 : 1 }}
                 aria-label="Open quotation summary cart"
@@ -484,13 +484,13 @@ const PublicEstimate = () => {
                             aria-label="Close quotation summary"
                         />
                         <motion.aside
-                            className="fixed inset-x-3 bottom-3 z-50 flex max-h-[84vh] flex-col overflow-hidden rounded-[30px] border border-primary-200 bg-primary-50 shadow-[0_32px_90px_rgba(15,23,42,0.28)] print:hidden md:inset-y-6 md:right-6 md:left-auto md:w-[440px] md:max-h-none"
+                            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-[32px] border border-primary-200 border-b-0 bg-primary-50 shadow-[0_32px_90px_rgba(15,23,42,0.28)] print:hidden md:inset-y-6 md:right-6 md:bottom-auto md:left-auto md:w-[440px] md:max-h-none md:rounded-[30px] md:border"
                             initial={{ opacity: 0, y: 28, scale: 0.97 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 24, scale: 0.98 }}
                             transition={{ duration: 0.22, ease: 'easeOut' }}
                         >
-                            <div className="border-b border-primary-200 bg-white/90 px-5 py-5 backdrop-blur md:px-6">
+                            <div className="border-b border-primary-200 bg-white/90 px-4 py-4 backdrop-blur sm:px-5 sm:py-5 md:px-6"><div className="mx-auto mb-4 h-1.5 w-14 rounded-full bg-primary-200 md:hidden" />
                                 <div className="flex items-start justify-between gap-4">
                                     <div>
                                         <span className="text-[0.65rem] font-bold uppercase tracking-[0.28em] text-primary-500">
@@ -509,7 +509,7 @@ const PublicEstimate = () => {
                                     </button>
                                 </div>
 
-                                <div className="mt-5 grid grid-cols-3 gap-3">
+                                <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
                                     <div className="rounded-2xl border border-primary-200 bg-primary-50/80 px-3 py-3">
                                         <span className="block text-[0.65rem] font-bold uppercase tracking-[0.22em] text-primary-400">Items</span>
                                         <span className="mt-2 block text-lg font-display font-semibold text-primary-950">{totalItemCount}</span>
@@ -518,14 +518,14 @@ const PublicEstimate = () => {
                                         <span className="block text-[0.65rem] font-bold uppercase tracking-[0.22em] text-primary-400">Lines</span>
                                         <span className="mt-2 block text-lg font-display font-semibold text-primary-950">{totalLineCount}</span>
                                     </div>
-                                    <div className="rounded-2xl border border-accent-blue/20 bg-accent-blue/5 px-3 py-3">
+                                    <div className="col-span-2 rounded-2xl border border-accent-blue/20 bg-accent-blue/5 px-3 py-3 sm:col-span-1">
                                         <span className="block text-[0.65rem] font-bold uppercase tracking-[0.22em] text-accent-blue/70">Total</span>
                                         <span className="mt-2 block text-lg font-display font-semibold text-accent-blue">{formatCurrency(total)}</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 md:px-6">
+                            <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:space-y-5 sm:px-5 sm:py-5 md:px-6">
                                 <div className="rounded-[24px] border border-primary-200 bg-white p-4 shadow-sm">
                                     <div className="flex items-center gap-2">
                                         <User className="h-4 w-4 text-accent-primary" />
@@ -643,7 +643,7 @@ const PublicEstimate = () => {
                                 )}
                             </div>
 
-                            <div className="border-t border-primary-200 bg-white/95 px-5 py-5 backdrop-blur md:px-6">
+                            <div className="border-t border-primary-200 bg-white/95 px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] backdrop-blur sm:px-5 sm:py-5 md:px-6 md:pb-5">
                                 <div className="space-y-3">
                                     <div className="flex justify-between text-sm text-primary-600">
                                         <span>Parts Subtotal</span>
@@ -663,7 +663,7 @@ const PublicEstimate = () => {
                                     </div>
                                 </div>
 
-                                <div className="mt-5 flex gap-3">
+                                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
                                     <Button variant="secondary" fullWidth onClick={resetForm}>
                                         Reset
                                     </Button>
