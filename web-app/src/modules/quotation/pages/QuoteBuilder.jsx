@@ -206,11 +206,23 @@ const QuoteBuilder = () => {
         setFocusedProduct(product);
         setSelectedParts((parts) => {
             const existing = parts.find((part) => part.id === product.id);
+            const nextPrice = Number(extra.price ?? product.price ?? existing?.price ?? 0);
+            const hasPriceOverride = Number.isFinite(nextPrice);
+
             if (existing) {
-                return parts.map((part) => (part.id === product.id ? { ...part, quantity: part.quantity + 1 } : part));
+                return parts.map((part) => (part.id === product.id ? {
+                    ...part,
+                    ...extra,
+                    price: hasPriceOverride ? nextPrice : part.price,
+                    quantity: part.quantity + 1,
+                } : part));
             }
 
-            return [...parts, { ...mapCatalogProduct(product), ...extra }];
+            return [...parts, {
+                ...mapCatalogProduct(product),
+                ...extra,
+                price: hasPriceOverride ? nextPrice : Number(product.price ?? 0),
+            }];
         });
     };
 
@@ -343,7 +355,7 @@ const QuoteBuilder = () => {
                                                 <span className="text-xs uppercase tracking-[0.18em] text-primary-400">{quote.status}</span>
                                             </div>
                                             <p className="mt-2 text-sm text-primary-700">{quote.customer_name || 'Walk-in Customer'}</p>
-                                            <p className="text-xs text-primary-500">{quote.customer_phone || 'No phone'} · Valid until {quote.valid_until || 'N/A'}</p>
+                                            <p className="text-xs text-primary-500">{quote.customer_phone || 'No phone'} ï¿½ Valid until {quote.valid_until || 'N/A'}</p>
                                             <p className="mt-2 text-sm font-semibold text-accent-blue">{formatCurrency(quote.grand_total || 0)}</p>
                                         </button>
                                     ))}
@@ -441,6 +453,7 @@ const QuoteBuilder = () => {
                                 }
 
                                 addPart(recommendation.recommendedProduct, {
+                                    price: Number(recommendation.resolvedPrice ?? recommendation.recommendedProduct.price ?? recommendation.recommendedPrice ?? 0),
                                     isUpsell: true,
                                     recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
                                 });
@@ -451,27 +464,34 @@ const QuoteBuilder = () => {
                                 }
 
                                 setSelectedServices((services) => {
-                                    if (services.some((service) => service.id === recommendation.recommendedServiceId)) {
-                                        return services;
+                                    const nextService = {
+                                        id: recommendation.recommendedServiceId,
+                                        name: recommendation.recommendedServiceName,
+                                        price: Number(recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? 0),
+                                        quantity: 1,
+                                        isUpsell: true,
+                                        recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
+                                    };
+                                    const existing = services.find((service) => service.id === recommendation.recommendedServiceId);
+
+                                    if (existing) {
+                                        return services.map((service) => (service.id === recommendation.recommendedServiceId ? {
+                                            ...service,
+                                            ...nextService,
+                                            price: Math.min(Number(service.price ?? 0), Number(nextService.price ?? 0)),
+                                        } : service));
                                     }
 
                                     return [
                                         ...services,
-                                        {
-                                            id: recommendation.recommendedServiceId,
-                                            name: recommendation.recommendedServiceName,
-                                            price: Number(recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? 0),
-                                            quantity: 1,
-                                            isUpsell: true,
-                                            recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
-                                        },
+                                        nextService,
                                     ];
                                 });
                             }}
                             selectedProductIds={selectedParts.map((part) => part.id)}
                             selectedServiceIds={selectedServices.map((service) => service.id)}
-                            title="Compatible Mitsubishi Packages"
-                            subtitle="Same-vehicle Mitsubishi parts and service matches based on exact model first, then family fallback."
+                            title="Smart Mitsubishi Bundles"
+                            subtitle="Smart upsell bundles of matched parts and services, ranked by exact model first and family fallback second."
                         />
                     )}
 

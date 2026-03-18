@@ -3,25 +3,59 @@ import { Loader2, PackagePlus, Sparkles, Wrench } from 'lucide-react';
 import { getProductRecommendationPackages } from '../../../services/analyticsApi';
 import { formatCurrency } from '../../../utils/formatters';
 
-const defaultPackageDescription = 'Matched parts and labor that fit this Mitsubishi vehicle.';
+const defaultPackageDescription = 'Data-driven Mitsubishi upsell bundles with matched parts, services, and light package savings.';
+
+function toNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
 
 function getDefaultTab(pkg) {
   return (pkg.parts?.length ?? 0) > 0 ? 'parts' : 'services';
 }
 
+function summarizePackageItems(parts = [], services = []) {
+  const items = [...parts, ...services];
+  const catalogTotal = items.reduce((sum, item) => sum + toNumber(item.catalogPrice ?? item.resolvedPrice ?? item.recommendedPrice, 0), 0);
+  const smartTotal = items.reduce((sum, item) => sum + toNumber(item.resolvedPrice ?? item.recommendedPrice, 0), 0);
+  const savingsAmount = Math.max(catalogTotal - smartTotal, 0);
+  const savingsPercent = catalogTotal > 0 && savingsAmount > 0
+    ? Math.round((savingsAmount / catalogTotal) * 100)
+    : 0;
+
+  return {
+    itemCount: items.length,
+    catalogTotal,
+    smartTotal,
+    savingsAmount,
+    savingsPercent,
+  };
+}
+
 function normalizePackage(pkg = {}, index = 0) {
+  const parts = Array.isArray(pkg.parts) ? pkg.parts : [];
+  const services = Array.isArray(pkg.services) ? pkg.services : [];
+  const calculatedSummary = summarizePackageItems(parts, services);
+
   return {
     packageId: pkg.packageId ?? pkg.package_id ?? null,
     packageKey: pkg.packageKey ?? pkg.package_key ?? pkg.packageName ?? `suggested-package-${index}`,
-    packageName: pkg.packageName ?? pkg.package_name ?? 'Suggested Package',
+    packageName: pkg.packageName ?? pkg.package_name ?? 'Smart Mitsubishi Bundle',
     packageDescription: pkg.packageDescription ?? pkg.package_description ?? defaultPackageDescription,
     serviceGroup: pkg.serviceGroup ?? pkg.service_group ?? null,
     minAnchorQuantity: Number(pkg.minAnchorQuantity ?? pkg.min_anchor_quantity ?? 1),
     priority: Number(pkg.priority ?? pkg.packagePriority ?? pkg.package_priority ?? 100),
     vehicleModelName: pkg.vehicleModelName ?? pkg.vehicle_model_name ?? null,
     vehicleFamily: pkg.vehicleFamily ?? pkg.vehicle_family ?? null,
-    parts: Array.isArray(pkg.parts) ? pkg.parts : [],
-    services: Array.isArray(pkg.services) ? pkg.services : [],
+    recommendationMode: pkg.recommendationMode ?? pkg.recommendation_mode ?? 'smart_bundle',
+    recommendationLabel: pkg.recommendationLabel ?? pkg.recommendation_label ?? 'Smart Recommendation',
+    catalogTotal: toNumber(pkg.catalogTotal ?? pkg.catalog_total, calculatedSummary.catalogTotal),
+    smartTotal: toNumber(pkg.smartTotal ?? pkg.smart_total, calculatedSummary.smartTotal),
+    savingsAmount: toNumber(pkg.savingsAmount ?? pkg.savings_amount, calculatedSummary.savingsAmount),
+    savingsPercent: toNumber(pkg.savingsPercent ?? pkg.savings_percent, calculatedSummary.savingsPercent),
+    itemCount: Number(pkg.itemCount ?? pkg.item_count ?? calculatedSummary.itemCount),
+    parts,
+    services,
   };
 }
 
@@ -36,12 +70,14 @@ function groupRecommendations(recommendations = []) {
       groupedPackages.set(packageKey, normalizePackage({
         packageId: recommendation.packageId ?? recommendation.package_id ?? null,
         packageKey,
-        packageName: recommendation.packageName || recommendation.package_name || 'Suggested Package',
+        packageName: recommendation.packageName || recommendation.package_name || 'Smart Mitsubishi Bundle',
         packageDescription: recommendation.packageDescription || recommendation.package_description || defaultPackageDescription,
         serviceGroup: recommendation.serviceGroup || recommendation.service_group || null,
         minAnchorQuantity: recommendation.minAnchorQuantity ?? recommendation.min_anchor_quantity ?? recommendation.packageMinAnchorQuantity ?? 1,
         vehicleModelName: recommendation.vehicleModelName || recommendation.vehicle_model_name || null,
         vehicleFamily: recommendation.vehicleFamily || recommendation.vehicle_family || null,
+        recommendationMode: recommendation.recommendationMode || recommendation.recommendation_mode || 'smart_bundle',
+        recommendationLabel: recommendation.recommendationLabel || recommendation.recommendation_label || 'Smart Recommendation',
       }, index));
     }
 
@@ -50,31 +86,34 @@ function groupRecommendations(recommendations = []) {
     targetItems.push(recommendation);
   });
 
-  return Array.from(groupedPackages.values());
+  return Array.from(groupedPackages.values()).map((pkg, index) => normalizePackage(pkg, index));
 }
 
 function getMatchBadge(matchLevel) {
   switch (matchLevel) {
     case 'exact_model':
-      return { label: 'Exact Vehicle Match', className: 'bg-accent-success/10 text-accent-success' };
+      return { label: 'Exact Match', className: 'bg-accent-success/10 text-accent-success' };
     case 'family_match':
-      return { label: 'Same Mitsubishi Family', className: 'bg-accent-blue/10 text-accent-blue' };
+      return { label: 'Family Match', className: 'bg-accent-blue/10 text-accent-blue' };
     case 'service_bundle':
-      return { label: 'Service Bundle', className: 'bg-accent-primary/10 text-accent-primary' };
+      return { label: 'Bundle Labor', className: 'bg-accent-primary/10 text-accent-primary' };
     case 'curated_override':
-      return { label: 'Curated Rule', className: 'bg-accent-warning/10 text-accent-warning' };
+      return { label: 'Curated Match', className: 'bg-accent-warning/10 text-accent-warning' };
     default:
-      return { label: 'Compatible Match', className: 'bg-primary-100 text-primary-600' };
+      return { label: 'Smart Match', className: 'bg-primary-100 text-primary-600' };
   }
 }
 
-function getPricingBadge(pricingMode, displayPriceLabel) {
+function getPricingBadge(pricingMode, displayPriceLabel, discountPercent) {
   if (pricingMode === 'complimentary') {
     return { label: displayPriceLabel || 'Free With Package', className: 'bg-accent-success/10 text-accent-success' };
   }
 
   if (pricingMode === 'override') {
-    return { label: displayPriceLabel || 'Package Rate', className: 'bg-accent-warning/10 text-accent-warning' };
+    return {
+      label: displayPriceLabel || (discountPercent > 0 ? `Smart Save ${discountPercent}%` : 'Smart Package Rate'),
+      className: 'bg-accent-warning/10 text-accent-warning',
+    };
   }
 
   if (displayPriceLabel) {
@@ -91,8 +130,8 @@ const ProductPackageSuggestions = ({
   onAddService = null,
   selectedProductIds = [],
   selectedServiceIds = [],
-  title = 'Compatible Mitsubishi Package',
-  subtitle = 'Vehicle-matched parts and services based on the selected Mitsubishi part.',
+  title = 'Smart Mitsubishi Bundles',
+  subtitle = 'Data-driven upsell packages of matched parts and services for the selected Mitsubishi part.',
   compact = false,
   anchorQuantity = 1,
 }) => {
@@ -135,7 +174,7 @@ const ProductPackageSuggestions = ({
 
         setPackages([]);
         setRecommendations([]);
-        setError(loadError.message || 'Failed to load package suggestions.');
+        setError(loadError.message || 'Failed to load smart recommendation bundles.');
       } finally {
         if (active) {
           setLoading(false);
@@ -227,7 +266,12 @@ const ProductPackageSuggestions = ({
           <Sparkles className="h-5 w-5" />
         </div>
         <div className="min-w-0">
-          <h4 className={panelTitleClassName}>{title}</h4>
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className={panelTitleClassName}>{title}</h4>
+            <span className="rounded-full bg-primary-950 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-white">
+              Smart Recommendation
+            </span>
+          </div>
           <p className={panelSubtitleClassName}>{subtitle}</p>
           <p className={panelMetaClassName}>
             Based on: {product.name} {activeVehicleLabel ? ` - ${activeVehicleLabel}` : ''}
@@ -238,7 +282,7 @@ const ProductPackageSuggestions = ({
       {loading ? (
         <div className="flex items-center gap-3 rounded-xl border border-primary-200 bg-white p-4 text-sm text-primary-500 shadow-sm">
           <Loader2 className="h-4 w-4 animate-spin text-accent-primary" />
-          Loading compatible Mitsubishi package suggestions...
+          Loading smart Mitsubishi bundles...
         </div>
       ) : error ? (
         <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/5 p-4 text-sm text-accent-danger">
@@ -246,7 +290,7 @@ const ProductPackageSuggestions = ({
         </div>
       ) : groupedPackages.length === 0 ? (
         <div className="rounded-xl border border-primary-200 bg-white p-4 text-sm text-primary-500 shadow-sm">
-          No same-vehicle package has been learned for {activeVehicleLabel} yet.
+          No smart package has been learned for {activeVehicleLabel} yet.
         </div>
       ) : (
         <div className="space-y-4">
@@ -263,7 +307,12 @@ const ProductPackageSuggestions = ({
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                      <h5 className={packageTitleClassName}>{pkg.packageName}</h5>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h5 className={packageTitleClassName}>{pkg.packageName}</h5>
+                        <span className="rounded-full bg-primary-950 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white">
+                          {pkg.recommendationLabel || 'Smart Recommendation'}
+                        </span>
+                      </div>
                       <p className={packageDescriptionClassName}>{pkg.packageDescription || defaultPackageDescription}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -278,13 +327,39 @@ const ProductPackageSuggestions = ({
                     </div>
                   </div>
 
+                  <div className="rounded-2xl bg-primary-950 px-4 py-3 text-white">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">Bundle Total</p>
+                        <div className="mt-1 flex items-end gap-3">
+                          <p className="text-xl font-display font-bold text-white">{formatCurrency(pkg.smartTotal || 0)}</p>
+                          {pkg.savingsAmount > 0 && (
+                            <p className="text-xs text-white/45 line-through">{formatCurrency(pkg.catalogTotal || 0)}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">
+                          {pkg.itemCount} smart item{pkg.itemCount === 1 ? '' : 's'}
+                        </p>
+                        {pkg.savingsAmount > 0 ? (
+                          <p className="mt-1 text-sm font-semibold text-accent-success">
+                            Save {formatCurrency(pkg.savingsAmount)}{pkg.savingsPercent > 0 ? ` (${pkg.savingsPercent}%)` : ''}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-sm text-white/75">Fitment-first bundle pricing</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-2 rounded-2xl bg-primary-50 p-1.5">
                     <button
                       type="button"
                       onClick={() => setActiveTabs((current) => ({ ...current, [pkg.packageKey]: 'parts' }))}
                       className={`rounded-xl px-3 py-2 text-left transition ${activeTab === 'parts' ? 'bg-white shadow-sm text-primary-950' : 'text-primary-500 hover:text-primary-900'}`}
                     >
-                      <span className="block text-[11px] font-bold uppercase tracking-[0.18em]">Recommended Parts</span>
+                      <span className="block text-[11px] font-bold uppercase tracking-[0.18em]">Smart Parts</span>
                       <span className="mt-1 block text-sm font-semibold">{pkg.parts.length} item{pkg.parts.length === 1 ? '' : 's'}</span>
                     </button>
                     <button
@@ -292,7 +367,7 @@ const ProductPackageSuggestions = ({
                       onClick={() => setActiveTabs((current) => ({ ...current, [pkg.packageKey]: 'services' }))}
                       className={`rounded-xl px-3 py-2 text-left transition ${activeTab === 'services' ? 'bg-white shadow-sm text-primary-950' : 'text-primary-500 hover:text-primary-900'}`}
                     >
-                      <span className="block text-[11px] font-bold uppercase tracking-[0.18em]">Recommended Services</span>
+                      <span className="block text-[11px] font-bold uppercase tracking-[0.18em]">Smart Services</span>
                       <span className="mt-1 block text-sm font-semibold">{pkg.services.length} item{pkg.services.length === 1 ? '' : 's'}</span>
                     </button>
                   </div>
@@ -301,7 +376,7 @@ const ProductPackageSuggestions = ({
                 <div className="mt-4 w-full max-w-full overflow-hidden">
                   {activeItems.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-primary-200 bg-primary-50/60 p-4 text-sm text-primary-500">
-                      No {activeTab === 'services' ? 'service' : 'part'} recommendations are available for this package yet.
+                      No {activeTab === 'services' ? 'smart service' : 'smart part'} recommendations are available for this bundle yet.
                     </div>
                   ) : (
                     <div className="overflow-x-auto overscroll-x-contain pb-2">
@@ -316,9 +391,11 @@ const ProductPackageSuggestions = ({
                           const actionHandler = isProduct ? onAddProduct : onAddService;
                           const canAdd = typeof actionHandler === 'function' && id;
                           const matchBadge = getMatchBadge(item.matchLevel);
-                          const pricingBadge = getPricingBadge(item.pricingMode, item.displayPriceLabel);
+                          const pricingBadge = getPricingBadge(item.pricingMode, item.displayPriceLabel, item.discountPercent);
                           const requiresQuantity = !isProduct && item.pricingMode === 'complimentary' && !isQuantityEligible;
-                          const resolvedPrice = Number(item.resolvedPrice ?? item.recommendedPrice ?? 0);
+                          const catalogPrice = toNumber(item.catalogPrice ?? item.recommendedPrice, 0);
+                          const resolvedPrice = toNumber(item.resolvedPrice ?? item.recommendedPrice, 0);
+                          const savingsAmount = toNumber(item.savingsAmount, Math.max(catalogPrice - resolvedPrice, 0));
 
                           return (
                             <div
@@ -350,14 +427,24 @@ const ProductPackageSuggestions = ({
                                   <div className="min-w-0">
                                     <p className={itemNameClassName}>{itemName}</p>
                                     <p className={itemReasonClassName}>
-                                      {item.reasonLabel || 'Compatible Mitsubishi recommendation'}
+                                      {item.reasonLabel || 'Smart Mitsubishi upsell recommendation'}
                                       {item.vehicleModelName ? ` - ${item.vehicleModelName}` : ''}
                                     </p>
                                   </div>
                                   <div className="flex items-center justify-between gap-3">
-                                    <p className={itemPriceClassName}>
-                                      {item.pricingMode === 'complimentary' ? (item.displayPriceLabel || 'Free With Package') : formatCurrency(resolvedPrice)}
-                                    </p>
+                                    <div>
+                                      {savingsAmount > 0 && item.pricingMode !== 'complimentary' && (
+                                        <p className="text-[11px] text-primary-400 line-through">{formatCurrency(catalogPrice)}</p>
+                                      )}
+                                      <p className={itemPriceClassName}>
+                                        {item.pricingMode === 'complimentary'
+                                          ? (item.displayPriceLabel || 'Free With Package')
+                                          : formatCurrency(resolvedPrice)}
+                                      </p>
+                                      {savingsAmount > 0 && item.pricingMode !== 'complimentary' && (
+                                        <p className="mt-1 text-[11px] font-medium text-accent-success">Save {formatCurrency(savingsAmount)}</p>
+                                      )}
+                                    </div>
                                     {requiresQuantity && (
                                       <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-warning">
                                         Need {pkg.minAnchorQuantity}x selected part
@@ -379,8 +466,8 @@ const ProductPackageSuggestions = ({
                                     : isSelected
                                       ? 'Added'
                                       : isProduct
-                                        ? 'Add Part'
-                                        : 'Add Service'}
+                                        ? 'Add Smart Part'
+                                        : 'Add Smart Service'}
                                 </button>
                               )}
                             </div>

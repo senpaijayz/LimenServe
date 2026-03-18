@@ -9,49 +9,52 @@ const FULL_CATALOG_PAGE_SIZE = 1000;
 const SERVICE_CATALOG_CACHE_TTL_MS = 60 * 1000;
 const DEFAULT_PART_LIMIT = 6;
 const DEFAULT_SERVICE_LIMIT = 4;
-const DEFAULT_PACKAGE_DESCRIPTION = 'Compatible Mitsubishi parts and services for this vehicle.';
+const DEFAULT_PACKAGE_DESCRIPTION = 'Smart upsell bundle of Mitsubishi-matched parts and services for this vehicle.';
+const SMART_PART_DISCOUNT_RATE = 0.05;
+const SMART_SERVICE_DISCOUNT_RATE = 0.03;
+const SMART_RECOMMENDATION_LABEL = 'Smart Recommendation';
 
 const SERVICE_GROUP_CONFIG = {
   oil_change: {
     packageKey: 'oil-change-package',
-    packageName: 'Compatible Oil Change Package',
-    packageDescription: 'Compatible oil service parts and labor for this Mitsubishi model.',
+    packageName: 'Smart Oil Care Bundle',
+    packageDescription: 'Upsell bundle of oil, filter, washer, and labor with light package savings for this Mitsubishi model.',
     serviceKeywords: ['oil change', 'change oil', 'preventive maintenance'],
   },
   brake_service: {
     packageKey: 'brake-service-package',
-    packageName: 'Compatible Brake Service Package',
-    packageDescription: 'Compatible brake parts and labor for this Mitsubishi model.',
+    packageName: 'Smart Brake Care Bundle',
+    packageDescription: 'Upsell bundle of brake parts, installation, and cleaning labor for this Mitsubishi model.',
     serviceKeywords: ['brake', 'installation', 'overhaul'],
   },
   cooling_service: {
     packageKey: 'cooling-service-package',
-    packageName: 'Compatible Cooling System Package',
-    packageDescription: 'Compatible cooling-system parts and labor for this Mitsubishi model.',
+    packageName: 'Smart Cooling Care Bundle',
+    packageDescription: 'Upsell bundle of cooling-system parts and labor with smart package pricing for this Mitsubishi model.',
     serviceKeywords: ['cooling', 'radiator', 'coolant'],
   },
   battery_service: {
     packageKey: 'battery-service-package',
-    packageName: 'Compatible Battery Service Package',
-    packageDescription: 'Compatible battery and electrical service recommendations for this Mitsubishi model.',
+    packageName: 'Smart Battery Care Bundle',
+    packageDescription: 'Upsell bundle of battery, terminal, and electrical service recommendations for this Mitsubishi model.',
     serviceKeywords: ['battery', 'terminal', 'electrical'],
   },
   tune_up: {
     packageKey: 'tune-up-package',
-    packageName: 'Compatible Tune-Up Package',
-    packageDescription: 'Compatible ignition and tune-up parts and labor for this Mitsubishi model.',
+    packageName: 'Smart Tune-Up Bundle',
+    packageDescription: 'Upsell bundle of ignition, filter, and tune-up labor tailored to this Mitsubishi model.',
     serviceKeywords: ['tune', 'diagnostic', 'inspection', 'engine', 'injector', 'fuel', 'throttle', 'gasket', 'pcv'],
   },
   filter_service: {
     packageKey: 'filter-service-package',
-    packageName: 'Compatible Filter Service Package',
-    packageDescription: 'Compatible filter replacement parts and labor for this Mitsubishi model.',
+    packageName: 'Smart Filter Service Bundle',
+    packageDescription: 'Upsell bundle of replacement filters and labor with light package savings for this Mitsubishi model.',
     serviceKeywords: ['filter', 'maintenance', 'inspection'],
   },
   tire_service: {
     packageKey: 'tire-service-package',
-    packageName: 'Compatible Tire Service Package',
-    packageDescription: 'Compatible tire parts and labor for this Mitsubishi model.',
+    packageName: 'Smart Tire Care Bundle',
+    packageDescription: 'Upsell bundle of tire, wheel, balancing, and alignment services for this Mitsubishi model.',
     serviceKeywords: ['tire', 'wheel alignment', 'wheel balancing', 'installation', 'alignment', 'balancing'],
   },
 };
@@ -167,6 +170,133 @@ function parsePositiveInteger(value, fallback, max = Number.MAX_SAFE_INTEGER) {
   }
 
   return Math.min(parsed, max);
+}
+
+function roundCurrency(value, fallback = 0) {
+  const parsed = parsePrice(value);
+  return parsed === null ? fallback : parsed;
+}
+
+function shouldUseSmartPackageCopy(value) {
+  const normalized = normalizeText(value);
+  return !normalized
+    || normalized.startsWith('compatible ')
+    || normalized.startsWith('matched ')
+    || normalized.startsWith('suggested ')
+    || normalized.includes('parts and services for this vehicle');
+}
+
+function getServiceGroupConfig(serviceGroup) {
+  return SERVICE_GROUP_CONFIG[serviceGroup] || null;
+}
+
+function buildSmartPackageCopy(serviceGroup, packageName, packageDescription) {
+  const groupConfig = getServiceGroupConfig(serviceGroup);
+
+  return {
+    packageName: shouldUseSmartPackageCopy(packageName)
+      ? (groupConfig?.packageName || 'Smart Mitsubishi Bundle')
+      : packageName,
+    packageDescription: shouldUseSmartPackageCopy(packageDescription)
+      ? (groupConfig?.packageDescription || DEFAULT_PACKAGE_DESCRIPTION)
+      : packageDescription,
+  };
+}
+
+function getSmartDiscountRate({ consequentKind, serviceGroup, matchLevel }) {
+  if (consequentKind === 'service') {
+    return serviceGroup === 'brake_service' || serviceGroup === 'tire_service'
+      ? SMART_PART_DISCOUNT_RATE
+      : SMART_SERVICE_DISCOUNT_RATE;
+  }
+
+  return matchLevel === 'family_match' ? SMART_SERVICE_DISCOUNT_RATE : SMART_PART_DISCOUNT_RATE;
+}
+
+function resolveSmartPricing({ recommendation, matchedProduct = null, matchedService = null, consequentKind, serviceGroup, matchLevel, minAnchorQuantity }) {
+  const serviceCode = recommendation.recommendedServiceCode
+    ?? recommendation.recommended_service_code
+    ?? matchedService?.code
+    ?? null;
+  const catalogPrice = roundCurrency(
+    recommendation.catalogPrice
+      ?? recommendation.catalog_price
+      ?? recommendation.listPrice
+      ?? recommendation.list_price
+      ?? matchedProduct?.price
+      ?? matchedService?.price
+      ?? recommendation.recommendedCatalogPrice
+      ?? recommendation.recommended_catalog_price
+      ?? recommendation.recommendedPrice
+      ?? recommendation.recommended_price
+      ?? 0
+  );
+  const explicitPricingMode = recommendation.pricingMode ?? recommendation.pricing_mode ?? null;
+  const explicitResolvedPrice = recommendation.resolvedPrice ?? recommendation.resolved_price ?? null;
+  let pricingMode = explicitPricingMode;
+  let resolvedPrice = explicitResolvedPrice !== null && explicitResolvedPrice !== undefined
+    ? roundCurrency(explicitResolvedPrice)
+    : null;
+
+  if (!pricingMode) {
+    if (consequentKind === 'service' && serviceGroup === 'oil_change' && serviceCode === 'SVC-OIL') {
+      pricingMode = 'complimentary';
+      resolvedPrice = 0;
+    } else {
+      const discountRate = getSmartDiscountRate({ consequentKind, serviceGroup, matchLevel });
+      pricingMode = discountRate > 0 && catalogPrice > 0 ? 'override' : 'catalog';
+      resolvedPrice = pricingMode === 'override'
+        ? roundCurrency(catalogPrice * (1 - discountRate))
+        : catalogPrice;
+    }
+  }
+
+  if (pricingMode === 'complimentary') {
+    resolvedPrice = 0;
+  } else if (resolvedPrice === null) {
+    const discountRate = getSmartDiscountRate({ consequentKind, serviceGroup, matchLevel });
+    resolvedPrice = pricingMode === 'override' && catalogPrice > 0
+      ? roundCurrency(catalogPrice * (1 - discountRate))
+      : catalogPrice;
+  }
+
+  const savingsAmount = roundCurrency(Math.max(catalogPrice - resolvedPrice, 0));
+  const discountPercent = catalogPrice > 0 && savingsAmount > 0
+    ? Math.round((savingsAmount / catalogPrice) * 100)
+    : 0;
+  const fallbackDisplayLabel = pricingMode === 'complimentary'
+    ? (Number(minAnchorQuantity ?? 1) > 1 ? `Free With ${minAnchorQuantity}x Part` : 'Free With Package')
+    : pricingMode === 'override' && discountPercent > 0
+      ? `Smart Save ${discountPercent}%`
+      : pricingMode === 'override'
+        ? 'Smart Package Rate'
+        : null;
+  const providedLabel = recommendation.displayPriceLabel ?? recommendation.display_price_label ?? null;
+
+  return {
+    catalogPrice,
+    resolvedPrice,
+    pricingMode,
+    displayPriceLabel: providedLabel && providedLabel !== 'Package Rate' ? providedLabel : fallbackDisplayLabel,
+    savingsAmount,
+    discountPercent,
+  };
+}
+
+function summarizePackagePricing(items = []) {
+  const catalogTotal = roundCurrency(items.reduce((sum, item) => sum + Number(item.catalogPrice ?? item.resolvedPrice ?? 0), 0));
+  const smartTotal = roundCurrency(items.reduce((sum, item) => sum + Number(item.resolvedPrice ?? 0), 0));
+  const savingsAmount = roundCurrency(Math.max(catalogTotal - smartTotal, 0));
+  const savingsPercent = catalogTotal > 0 && savingsAmount > 0
+    ? Math.round((savingsAmount / catalogTotal) * 100)
+    : 0;
+
+  return {
+    catalogTotal,
+    smartTotal,
+    savingsAmount,
+    savingsPercent,
+  };
 }
 
 function invalidateProductCatalogCache() {
@@ -363,7 +493,7 @@ function pickKeywordClusterProducts({ clickedProduct, catalog, clickedProfile, l
     confidence: null,
     lift: null,
     sampleCount: null,
-    reasonLabel: 'Related Mitsubishi part for the same exact vehicle',
+    reasonLabel: 'Smart upsell add-on for the same exact Mitsubishi model',
     packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || 'vehicle-package',
     packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Compatible Mitsubishi Package',
     packageDescription: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageDescription || 'Compatible Mitsubishi parts and services for this vehicle.',
@@ -389,7 +519,7 @@ function pickKeywordClusterProducts({ clickedProduct, catalog, clickedProfile, l
     confidence: null,
     lift: null,
     sampleCount: null,
-    reasonLabel: 'Related Mitsubishi family part for ' + clickedProfile.vehicleFamily,
+    reasonLabel: 'Smart upsell add-on for the same Mitsubishi family',
     packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || 'vehicle-package',
     packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Compatible Mitsubishi Package',
     packageDescription: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageDescription || 'Compatible Mitsubishi parts and services for this vehicle family.',
@@ -449,7 +579,7 @@ function pickCompanionProducts({ clickedProduct, catalog, clickedProfile, limitC
     confidence: null,
     lift: null,
     sampleCount: null,
-    reasonLabel: `Compatible ${profile.partFunction?.replace(/_/g, ' ') || 'part'} for the same vehicle`,
+    reasonLabel: `Smart bundle add-on: ${profile.partFunction?.replace(/_/g, ' ') || 'part'} for the same vehicle`,
     packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || `${clickedProfile.serviceGroup || 'vehicle'}-package`,
     packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Compatible Mitsubishi Package',
     packageDescription: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageDescription || 'Compatible Mitsubishi parts and services for this vehicle.',
@@ -475,7 +605,7 @@ function pickCompanionProducts({ clickedProduct, catalog, clickedProfile, limitC
     confidence: null,
     lift: null,
     sampleCount: null,
-    reasonLabel: `Compatible Mitsubishi family match for ${clickedProfile.vehicleFamily}`,
+    reasonLabel: `Smart bundle add-on for ${clickedProfile.vehicleFamily}`,
     packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || `${clickedProfile.serviceGroup || 'vehicle'}-package`,
     packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Compatible Mitsubishi Package',
     packageDescription: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageDescription || 'Compatible Mitsubishi parts and services for this vehicle family.',
@@ -529,18 +659,15 @@ function buildVehicleMatchedRecommendations({ clickedProduct, catalog, serviceCa
     recommendedServiceId: service.id,
     recommendedServiceName: service.name,
     recommendedPrice: Number(service.price ?? 0),
-    resolvedPrice: Number(service.price ?? 0),
-    pricingMode: 'catalog',
-    displayPriceLabel: null,
-    support: null,
+        support: null,
     confidence: null,
     lift: null,
     sampleCount: null,
     reasonLabel: clickedProfile.partFunction
-      ? 'Suggested service for ' + clickedProfile.partFunction.replace(/_/g, ' ')
-      : 'Suggested service based on this Mitsubishi part and vehicle',
+      ? 'Smart service bundle for ' + clickedProfile.partFunction.replace(/_/g, ' ')
+      : 'Smart service bundle based on this Mitsubishi part and vehicle',
     packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || 'vehicle-service-package',
-    packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Compatible Mitsubishi Service Package',
+    packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Smart Mitsubishi Service Bundle',
     packageDescription: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageDescription || DEFAULT_PACKAGE_DESCRIPTION,
     matchLevel: 'service_bundle',
     vehicleModelName: clickedProfile.modelName,
@@ -576,23 +703,30 @@ function normalizeMatchMetadata(recommendation, clickedProduct, recommendedProdu
 }
 
 function normalizeRecommendationRecord({ recommendation, clickedProduct, matchedProduct = null, matchedService = null }) {
-  const pricingMode = recommendation.pricingMode ?? recommendation.pricing_mode ?? 'catalog';
-  const rawResolvedPrice = recommendation.resolvedPrice ?? recommendation.resolved_price ?? recommendation.recommendedPrice ?? recommendation.recommended_price ?? 0;
-  const resolvedPrice = Number.isFinite(Number(rawResolvedPrice)) ? Number(Number(rawResolvedPrice).toFixed(2)) : 0;
+  const clickedProfile = inferProductProfile(clickedProduct);
   const consequentKind = recommendation.consequentKind
     ?? recommendation.consequent_kind
     ?? recommendation.itemKind
     ?? recommendation.item_kind
     ?? ((recommendation.recommendedServiceId ?? recommendation.recommended_service_id) ? 'service' : 'product');
   const packageItemId = recommendation.packageItemId ?? recommendation.package_item_id ?? recommendation.ruleId ?? recommendation.rule_id ?? null;
+  const minAnchorQuantity = Number(recommendation.minAnchorQuantity ?? recommendation.min_anchor_quantity ?? recommendation.packageMinAnchorQuantity ?? 1);
+  const rawServiceGroup = recommendation.serviceGroup ?? recommendation.service_group ?? clickedProfile.serviceGroup ?? null;
+  const basePackageCopy = buildSmartPackageCopy(
+    rawServiceGroup,
+    recommendation.packageName ?? recommendation.package_name ?? null,
+    recommendation.packageDescription ?? recommendation.package_description ?? null,
+  );
   const baseRecord = {
     ...recommendation,
     packageId: recommendation.packageId ?? recommendation.package_id ?? null,
     packageKey: recommendation.packageKey ?? recommendation.package_key ?? recommendation.packageName ?? recommendation.package_name ?? null,
-    packageName: recommendation.packageName ?? recommendation.package_name ?? 'Compatible Mitsubishi Package',
-    packageDescription: recommendation.packageDescription ?? recommendation.package_description ?? DEFAULT_PACKAGE_DESCRIPTION,
-    minAnchorQuantity: Number(recommendation.minAnchorQuantity ?? recommendation.min_anchor_quantity ?? recommendation.packageMinAnchorQuantity ?? 1),
+    packageName: basePackageCopy.packageName,
+    packageDescription: basePackageCopy.packageDescription,
+    minAnchorQuantity,
     priority: Number(recommendation.priority ?? recommendation.packagePriority ?? recommendation.package_priority ?? 100),
+    recommendationMode: recommendation.recommendationMode ?? recommendation.recommendation_mode ?? 'smart_bundle',
+    recommendationLabel: recommendation.recommendationLabel ?? recommendation.recommendation_label ?? SMART_RECOMMENDATION_LABEL,
     packageItemId,
     ruleId: packageItemId,
     consequentKind,
@@ -600,34 +734,53 @@ function normalizeRecommendationRecord({ recommendation, clickedProduct, matched
     recommendedProductName: recommendation.recommendedProductName ?? recommendation.recommended_product_name ?? matchedProduct?.name ?? null,
     recommendedServiceId: recommendation.recommendedServiceId ?? recommendation.recommended_service_id ?? null,
     recommendedServiceName: recommendation.recommendedServiceName ?? recommendation.recommended_service_name ?? matchedService?.name ?? null,
-    recommendedPrice: resolvedPrice,
-    resolvedPrice,
-    pricingMode,
-    displayPriceLabel: recommendation.displayPriceLabel ?? recommendation.display_price_label ?? (pricingMode === 'complimentary' ? 'Free With Package' : pricingMode === 'override' ? 'Package Rate' : null),
-    reasonLabel: recommendation.reasonLabel ?? recommendation.reason_label ?? 'Compatible Mitsubishi recommendation',
+    reasonLabel: recommendation.reasonLabel ?? recommendation.reason_label ?? 'Smart Mitsubishi upsell recommendation',
     vehicleModelName: recommendation.vehicleModelName ?? recommendation.vehicle_model_name ?? clickedProduct.model ?? null,
     vehicleFamily: recommendation.vehicleFamily ?? recommendation.vehicle_family ?? null,
-    serviceGroup: recommendation.serviceGroup ?? recommendation.service_group ?? null,
+    serviceGroup: rawServiceGroup,
     matchLevel: recommendation.matchLevel ?? recommendation.match_level ?? null,
     recommendedProduct: matchedProduct ?? recommendation.recommendedProduct ?? null,
     recommendedService: matchedService ?? recommendation.recommendedService ?? null,
     recommendedProductSku: recommendation.recommendedProductSku ?? recommendation.recommended_product_sku ?? matchedProduct?.sku ?? null,
     recommendedServiceCode: recommendation.recommendedServiceCode ?? recommendation.recommended_service_code ?? matchedService?.code ?? null,
   };
+  const normalizedRecord = normalizeMatchMetadata(baseRecord, clickedProduct, matchedProduct);
+  const smartPricing = resolveSmartPricing({
+    recommendation: normalizedRecord,
+    matchedProduct,
+    matchedService,
+    consequentKind: normalizedRecord.consequentKind,
+    serviceGroup: normalizedRecord.serviceGroup,
+    matchLevel: normalizedRecord.matchLevel,
+    minAnchorQuantity: normalizedRecord.minAnchorQuantity,
+  });
+  const refinedPackageCopy = buildSmartPackageCopy(
+    normalizedRecord.serviceGroup,
+    normalizedRecord.packageName,
+    normalizedRecord.packageDescription,
+  );
 
   return {
-    ...normalizeMatchMetadata(baseRecord, clickedProduct, matchedProduct),
+    ...normalizedRecord,
+    packageName: refinedPackageCopy.packageName,
+    packageDescription: refinedPackageCopy.packageDescription,
     recommendedProduct: matchedProduct ?? recommendation.recommendedProduct ?? null,
     recommendedService: matchedService ?? recommendation.recommendedService ?? null,
-    recommendedProductSku: baseRecord.recommendedProductSku,
-    recommendedServiceCode: baseRecord.recommendedServiceCode,
-    pricingMode,
-    resolvedPrice,
-    displayPriceLabel: baseRecord.displayPriceLabel,
-    minAnchorQuantity: baseRecord.minAnchorQuantity,
+    recommendedProductSku: normalizedRecord.recommendedProductSku,
+    recommendedServiceCode: normalizedRecord.recommendedServiceCode,
+    pricingMode: smartPricing.pricingMode,
+    catalogPrice: smartPricing.catalogPrice,
+    recommendedPrice: smartPricing.resolvedPrice,
+    resolvedPrice: smartPricing.resolvedPrice,
+    displayPriceLabel: smartPricing.displayPriceLabel,
+    savingsAmount: smartPricing.savingsAmount,
+    discountPercent: smartPricing.discountPercent,
+    minAnchorQuantity: normalizedRecord.minAnchorQuantity,
     packageItemId,
     ruleId: packageItemId,
-    priority: baseRecord.priority,
+    priority: normalizedRecord.priority,
+    recommendationMode: normalizedRecord.recommendationMode,
+    recommendationLabel: normalizedRecord.recommendationLabel,
   };
 }
 
@@ -635,19 +788,27 @@ function groupPackageRecommendations(recommendations = [], partLimit = DEFAULT_P
   const groupedPackages = new Map();
 
   recommendations.forEach((recommendation, index) => {
-    const packageKey = recommendation.packageKey || recommendation.packageName || `suggested-package-${index}`;
+    const packageKey = recommendation.packageKey || recommendation.packageName || ('suggested-package-' + index);
 
     if (!groupedPackages.has(packageKey)) {
+      const packageCopy = buildSmartPackageCopy(
+        recommendation.serviceGroup || null,
+        recommendation.packageName || null,
+        recommendation.packageDescription || null,
+      );
+
       groupedPackages.set(packageKey, {
         packageId: recommendation.packageId ?? null,
         packageKey,
-        packageName: recommendation.packageName || 'Compatible Mitsubishi Package',
-        packageDescription: recommendation.packageDescription || DEFAULT_PACKAGE_DESCRIPTION,
+        packageName: packageCopy.packageName || 'Smart Mitsubishi Bundle',
+        packageDescription: packageCopy.packageDescription || DEFAULT_PACKAGE_DESCRIPTION,
         serviceGroup: recommendation.serviceGroup || null,
         vehicleModelName: recommendation.vehicleModelName || null,
         vehicleFamily: recommendation.vehicleFamily || null,
         minAnchorQuantity: Number(recommendation.minAnchorQuantity ?? 1),
         priority: Number(recommendation.priority ?? 100),
+        recommendationMode: recommendation.recommendationMode ?? 'smart_bundle',
+        recommendationLabel: recommendation.recommendationLabel ?? SMART_RECOMMENDATION_LABEL,
         parts: [],
         services: [],
       });
@@ -658,6 +819,9 @@ function groupPackageRecommendations(recommendations = [], partLimit = DEFAULT_P
     const targetItems = isService ? targetPackage.services : targetPackage.parts;
     const itemLimit = isService ? serviceLimit : partLimit;
     const itemId = isService ? recommendation.recommendedServiceId : recommendation.recommendedProductId;
+
+    targetPackage.minAnchorQuantity = Math.max(targetPackage.minAnchorQuantity, Number(recommendation.minAnchorQuantity ?? 1));
+    targetPackage.priority = Math.min(targetPackage.priority, Number(recommendation.priority ?? 100));
 
     if (itemId && targetItems.some((item) => (isService ? item.recommendedServiceId : item.recommendedProductId) === itemId)) {
       return;
@@ -672,10 +836,25 @@ function groupPackageRecommendations(recommendations = [], partLimit = DEFAULT_P
 
   return Array.from(groupedPackages.values())
     .filter((pkg) => pkg.parts.length > 0 || pkg.services.length > 0)
+    .map((pkg) => {
+      const packageCopy = buildSmartPackageCopy(pkg.serviceGroup, pkg.packageName, pkg.packageDescription);
+      const packageItems = [...pkg.parts, ...pkg.services];
+
+      return {
+        ...pkg,
+        packageName: packageCopy.packageName,
+        packageDescription: packageCopy.packageDescription,
+        itemCount: packageItems.length,
+        recommendationMode: pkg.recommendationMode || 'smart_bundle',
+        recommendationLabel: pkg.recommendationLabel || SMART_RECOMMENDATION_LABEL,
+        ...summarizePackagePricing(packageItems),
+      };
+    })
     .sort((left, right) => Number(left.priority ?? 100) - Number(right.priority ?? 100));
 }
 
 function flattenPackageRecommendations(packages = []) {
+
   return packages.flatMap((pkg) => [...pkg.parts, ...pkg.services]);
 }
 

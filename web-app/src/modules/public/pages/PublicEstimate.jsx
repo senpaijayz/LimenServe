@@ -71,11 +71,24 @@ const PublicEstimate = () => {
         setFocusedProduct(product);
         setSelectedParts((parts) => {
             const existing = parts.find((part) => part.id === product.id);
+            const nextPrice = Number(extra.price ?? product.price ?? existing?.price ?? 0);
+            const hasPriceOverride = Number.isFinite(nextPrice);
+
             if (existing) {
-                return parts.map((part) => (part.id === product.id ? { ...part, quantity: part.quantity + 1 } : part));
+                return parts.map((part) => (part.id === product.id ? {
+                    ...part,
+                    ...extra,
+                    price: hasPriceOverride ? nextPrice : part.price,
+                    quantity: part.quantity + 1,
+                } : part));
             }
 
-            return [...parts, { ...product, quantity: 1, ...extra }];
+            return [...parts, {
+                ...product,
+                quantity: 1,
+                ...extra,
+                price: hasPriceOverride ? nextPrice : Number(product.price ?? 0),
+            }];
         });
     };
 
@@ -115,8 +128,13 @@ const PublicEstimate = () => {
         };
 
         setSelectedServices((services) => {
-            if (services.some((selected) => selected.id === service.id)) {
-                return services;
+            const existing = services.find((selected) => selected.id === service.id);
+            if (existing) {
+                return services.map((selected) => (selected.id === service.id ? {
+                    ...selected,
+                    ...service,
+                    price: Math.min(Number(selected.price ?? 0), Number(service.price ?? 0)),
+                } : selected));
             }
 
             return [...services, service];
@@ -343,7 +361,7 @@ const PublicEstimate = () => {
                                         id: matchedProduct.id,
                                         name: matchedProduct.name,
                                         sku: matchedProduct.sku,
-                                        price: Number(matchedProduct.price ?? recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? 0),
+                                        price: Number(recommendation.resolvedPrice ?? matchedProduct.price ?? recommendation.recommendedPrice ?? 0),
                                         category: matchedProduct.category,
                                         model: matchedProduct.model,
                                     }, {
@@ -354,8 +372,8 @@ const PublicEstimate = () => {
                                 onAddService={addSuggestedService}
                                 selectedProductIds={selectedParts.map((part) => part.id)}
                                 selectedServiceIds={selectedServices.map((service) => service.id)}
-                                title="Matched Package Suggestions"
-                                subtitle="Same-vehicle Mitsubishi parts and service matches for the currently selected part."
+                                title="Smart Bundle Suggestions"
+                                subtitle="Smart upsell bundles of same-vehicle Mitsubishi parts and services for the currently selected part."
                             />
                         )}
 

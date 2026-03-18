@@ -429,8 +429,8 @@ const PublicCatalogView = () => {
                                             <ProductPackageSuggestions
                                                 product={selectedProduct}
                                                 vehicleModelId={selectedProduct.model}
-                                                title="Compatible Mitsubishi Packages"
-                                                subtitle="Same-vehicle Mitsubishi parts and service matches for this exact component."
+                                                title="Smart Mitsubishi Bundles"
+                                                subtitle="Smart upsell bundles of same-vehicle Mitsubishi parts and services for this exact component."
                                                 compact
                                             />
                                         </div>
