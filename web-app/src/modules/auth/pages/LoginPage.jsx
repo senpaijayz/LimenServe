@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -16,7 +16,7 @@ import Input from '../../../components/ui/Input';
 const LoginPage = () => {
     const MotionDiv = motion.div;
     const navigate = useNavigate();
-    const { login, error: authError } = useAuth();
+    const { login, error: authError, isAuthenticated, isLoading: isAuthLoading } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
 
     const {
@@ -31,19 +31,24 @@ const LoginPage = () => {
         },
     });
 
+    useEffect(() => {
+        if (!isAuthLoading && isAuthenticated) {
+            navigate('/dashboard', { replace: true });
+        }
+    }, [isAuthenticated, isAuthLoading, navigate]);
+
     const onSubmit = async (data) => {
         setIsLoading(true);
         const result = await login(data.email, data.password);
         setIsLoading(false);
 
         if (result.success) {
-            navigate('/dashboard');
+            navigate('/dashboard', { replace: true });
         }
     };
 
     return (
         <div className="min-h-screen flex items-center justify-center p-4 relative">
-            {/* Back Button */}
             <div className="absolute top-6 left-6 z-50">
                 <Link to="/" className="flex items-center gap-2 text-primary-600 hover:text-primary-950 transition-all group px-4 py-2 bg-white/80 backdrop-blur-sm border border-primary-200 rounded-full shadow-sm hover:shadow-md hover:bg-white">
                     <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
@@ -51,7 +56,6 @@ const LoginPage = () => {
                 </Link>
             </div>
 
-            {/* Background decoration */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-40 -right-40 w-80 h-80 bg-accent-primary/20 rounded-full blur-[100px]" />
                 <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-accent-secondary/20 rounded-full blur-[100px]" />
@@ -63,7 +67,6 @@ const LoginPage = () => {
                 transition={{ duration: 0.5 }}
                 className="w-full max-w-md relative"
             >
-                {/* Logo */}
                 <div className="text-center mb-8">
                     <img src="/LogoLimen.jpg" alt="Limen Logo" className="w-20 h-20 object-contain rounded-2xl mx-auto mb-4 bg-white shadow-sm border border-primary-200 p-1" />
                     <h1 className="font-display text-3xl font-bold text-primary-950">
@@ -74,10 +77,8 @@ const LoginPage = () => {
                     </p>
                 </div>
 
-                {/* Login Card */}
                 <div className="bg-white/90 backdrop-blur-lg border border-primary-200 shadow-xl rounded-2xl p-6 sm:p-8">
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                        {/* Error Message */}
                         {authError && (
                             <MotionDiv
                                 initial={{ opacity: 0, y: -10 }}
@@ -88,7 +89,6 @@ const LoginPage = () => {
                             </MotionDiv>
                         )}
 
-                        {/* Email Input */}
                         <Input
                             label="Email Address"
                             type="email"
@@ -98,7 +98,6 @@ const LoginPage = () => {
                             {...register('email')}
                         />
 
-                        {/* Password Input */}
                         <Input
                             label="Password"
                             type="password"
@@ -108,7 +107,6 @@ const LoginPage = () => {
                             {...register('password')}
                         />
 
-                        {/* Remember Me & Forgot Password */}
                         <div className="flex items-center justify-between">
                             <label className="flex items-center gap-2 cursor-pointer">
                                 <input
@@ -125,7 +123,6 @@ const LoginPage = () => {
                             </button>
                         </div>
 
-                        {/* Submit Button */}
                         <Button
                             type="submit"
                             variant="primary"
@@ -137,7 +134,6 @@ const LoginPage = () => {
                         </Button>
                     </form>
 
-                    {/* Auth Source */}
                     <div className="mt-6 pt-6 border-t border-primary-200">
                         <p className="text-xs font-bold text-primary-500 text-center mb-3 uppercase tracking-widest">
                             Supabase Authentication
@@ -151,9 +147,8 @@ const LoginPage = () => {
                     </div>
                 </div>
 
-                {/* Footer */}
                 <p className="text-center text-sm font-medium text-primary-500 mt-8">
-                    © {new Date().getFullYear()} Limen Auto Parts Center
+                    (c) {new Date().getFullYear()} Limen Auto Parts Center
                 </p>
             </MotionDiv>
         </div>

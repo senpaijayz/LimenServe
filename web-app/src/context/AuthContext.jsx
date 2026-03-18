@@ -15,7 +15,6 @@ function normalizeRole(role, email) {
 
     const normalizedEmail = email?.trim().toLowerCase();
 
-    // Keep the staff portal usable even when the profile row is missing or stale.
     if (normalizedEmail === 'admin@limen.com') {
         return ROLES.ADMIN;
     }
@@ -115,7 +114,7 @@ export function AuthProvider({ children }) {
         setError(null);
 
         try {
-            const { error: signInError } = await supabase.auth.signInWithPassword({
+            const { data, error: signInError } = await supabase.auth.signInWithPassword({
                 email,
                 password,
             });
@@ -123,6 +122,9 @@ export function AuthProvider({ children }) {
             if (signInError) {
                 throw signInError;
             }
+
+            const session = data?.session ?? await ensureSessionLoaded();
+            await hydrateUser(session);
 
             return { success: true };
         } catch (loginError) {
@@ -132,7 +134,7 @@ export function AuthProvider({ children }) {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [hydrateUser]);
 
     const logout = useCallback(async () => {
         await supabase.auth.signOut();
