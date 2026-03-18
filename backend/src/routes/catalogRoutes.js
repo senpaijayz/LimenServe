@@ -8,6 +8,7 @@ const PRODUCT_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 const FULL_CATALOG_PAGE_SIZE = 250;
 const FULL_CATALOG_PAGE_BATCH_SIZE = 3;
 const SERVICE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
+const VEHICLE_FITMENT_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_PART_LIMIT = 6;
 const DEFAULT_SERVICE_LIMIT = 4;
 const DEFAULT_PACKAGE_DESCRIPTION = 'Smart upsell bundle of Mitsubishi-matched parts and services for this vehicle.';
