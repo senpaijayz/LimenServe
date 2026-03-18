@@ -1,14 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, Plus, Minus, Calculator, Printer, User, Phone, Car, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, ShoppingCart } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Search, Plus, Minus, Calculator, Printer, User, Phone, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, ShoppingCart, Sparkles } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
+import usePublicVehicleSelection from '../../../hooks/usePublicVehicleSelection';
+import useVehiclePackages from '../../../hooks/useVehiclePackages';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import { lookupPublicEstimate } from '../../../services/estimatesApi';
 import ProductPackageSuggestions from '../components/ProductPackageSuggestions';
 import PublicQuoteLookupCard from '../components/PublicQuoteLookupCard';
+import PublicVehicleSelector from '../components/PublicVehicleSelector';
+import VehiclePackageShowcase from '../components/VehiclePackageShowcase';
 
 const SORT_OPTIONS = [
     { value: 'name-asc', label: 'A-Z' },
@@ -144,10 +149,13 @@ const buildRetrievedPrintableQuote = (quote) => {
 };
 
 const PublicEstimate = () => {
+    const [searchParams] = useSearchParams();
+    const packageShelfRef = useRef(null);
     const [mode, setMode] = useState('estimate');
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
-    const [vehicleInfo, setVehicleInfo] = useState('');
+    const { vehicle, updateVehicle, clearVehicle, hasVehicle } = usePublicVehicleSelection({ includePlate: true, syncToSearch: true });
+    const { packages: vehiclePackages, loading: vehiclePackagesLoading, error: vehiclePackagesError } = useVehiclePackages(vehicle);
     const [selectedParts, setSelectedParts] = useState([]);
     const [selectedServices, setSelectedServices] = useState([]);
     const [partSearch, setPartSearch] = useState('');
@@ -181,12 +189,15 @@ const PublicEstimate = () => {
         pageSize: 12,
         searchQuery: partSearch,
         sortBy,
+        vehicleModel: vehicle.model,
+        vehicleYear: vehicle.year,
+        vehicleEngine: vehicle.engine,
     });
     const { services: availableServices, loading: servicesLoading, error: servicesError } = useServiceCatalog();
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [partSearch, sortBy]);
+    }, [partSearch, sortBy, vehicle.model, vehicle.year, vehicle.engine]);
 
     useEffect(() => {
         if (typeof window === 'undefined') {
@@ -248,6 +259,25 @@ const PublicEstimate = () => {
             window.scrollTo(0, scrollY);
         };
     }, [showSummaryDrawer, isDesktopDock, mode]);
+    const incomingPackageKey = searchParams.get('packageKey') || '';
+    const incomingServiceGroup = searchParams.get('serviceGroup') || '';
+    const highlightedVehiclePackageKey = incomingPackageKey.startsWith('vehicle-') ? incomingPackageKey : incomingServiceGroup ? `vehicle-${incomingServiceGroup}` : '';
+    const vehicleInfo = [vehicle.displayLabel, vehicle.plateNo].filter(Boolean).join(' / ');
+
+    useEffect(() => {
+        if (mode !== 'estimate' || !hasVehicle) {
+            return;
+        }
+
+        if (!highlightedVehiclePackageKey || vehiclePackagesLoading || vehiclePackages.length === 0) {
+            return;
+        }
+
+        packageShelfRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+        });
+    }, [mode, hasVehicle, highlightedVehiclePackageKey, vehiclePackagesLoading, vehiclePackages.length]);
 
     const filteredProducts = priceListProducts.map((product) => ({
         id: product.id,
@@ -311,19 +341,74 @@ const PublicEstimate = () => {
     };
 
     const toggleService = (service) => {
-        const existing = selectedServices.find((selected) => selected.id === service.id);
-        if (existing) {
-            setSelectedServices((services) => services.filter((selected) => selected.id !== service.id));
-        } else {
-            setSelectedServices([...selectedServices, service]);
+        setSelectedServices((services) => {
+            const existing = services.find((selected) => selected.id === service.id);
+            if (existing) {
+                return services.filter((selected) => selected.id !== service.id);
+            }
+
+            return [...services, {
+                ...service,
+                price: Number(service.price ?? 0),
+                quantity: 1,
+            }];
+        });
+    };
+
+    const addSuggestedPart = (recommendation) => {
+        const matchedProduct = recommendation.recommendedProduct || null;
+        const productId = recommendation.recommendedProductId || matchedProduct?.id;
+
+        if (!productId || !matchedProduct) {
+            return;
         }
+
+        const recommendedPrice = Number(
+            recommendation.resolvedPrice
+            ?? recommendation.recommendedPrice
+            ?? matchedProduct.price
+            ?? 0
+        );
+
+        setSelectedParts((parts) => {
+            const existing = parts.find((part) => part.id === productId);
+            const recommendationRuleId = recommendation.packageItemId || recommendation.ruleId || null;
+
+            if (existing) {
+                return parts.map((part) => (part.id === productId ? {
+                    ...part,
+                    isUpsell: true,
+                    recommendationRuleId: recommendationRuleId || part.recommendationRuleId || null,
+                    price: Math.min(Number(part.price ?? recommendedPrice), recommendedPrice),
+                } : part));
+            }
+
+            return [...parts, {
+                id: matchedProduct.id,
+                name: matchedProduct.name,
+                sku: matchedProduct.sku,
+                price: recommendedPrice,
+                category: matchedProduct.category,
+                model: matchedProduct.model,
+                quantity: 1,
+                isUpsell: true,
+                recommendationRuleId,
+            }];
+        });
     };
 
     const addSuggestedService = (recommendation) => {
+        const recommendedService = recommendation.recommendedService || null;
+        const serviceId = recommendation.recommendedServiceId || recommendedService?.id;
+
+        if (!serviceId) {
+            return;
+        }
+
         const service = {
-            id: recommendation.recommendedServiceId,
-            name: recommendation.recommendedServiceName,
-            price: Number(recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? 0),
+            id: serviceId,
+            name: recommendation.recommendedServiceName || recommendedService?.name || 'Recommended service',
+            price: Number(recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? recommendedService?.price ?? 0),
             quantity: 1,
             isUpsell: true,
             recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
@@ -343,6 +428,22 @@ const PublicEstimate = () => {
         });
     };
 
+    const addBundleToEstimate = (_pkg, tier) => {
+        if (!tier?.items?.length) {
+            return;
+        }
+
+        tier.items.forEach((item) => {
+            const isService = (item.consequentKind || item.consequent_kind) === 'service';
+            if (isService) {
+                addSuggestedService(item);
+                return;
+            }
+
+            addSuggestedPart(item);
+        });
+    };
+
     const partsTotal = selectedParts.reduce((sum, part) => sum + (part.price * part.quantity), 0);
     const servicesTotal = selectedServices.reduce((sum, service) => sum + service.price, 0);
     const subtotal = partsTotal + servicesTotal;
@@ -352,6 +453,8 @@ const PublicEstimate = () => {
     const focusedPartSelection = selectedParts.find((part) => part.id === focusedProduct?.id);
     const totalItemCount = selectedParts.reduce((sum, part) => sum + part.quantity, 0) + selectedServices.length;
     const totalLineCount = selectedParts.length + selectedServices.length;
+    const selectedProductIds = selectedParts.map((part) => part.id);
+    const selectedServiceIds = selectedServices.map((service) => service.id);
     const draftPrintableQuote = buildDraftPrintableQuote({
         quoteMeta,
         customerName,
@@ -401,7 +504,7 @@ const PublicEstimate = () => {
     const resetForm = () => {
         setCustomerName('');
         setCustomerPhone('');
-        setVehicleInfo('');
+        clearVehicle();
         setSelectedParts([]);
         setSelectedServices([]);
         setPartSearch('');
@@ -449,10 +552,12 @@ const PublicEstimate = () => {
                             <span className="text-xs font-bold tracking-[0.3em] font-sans text-primary-500 uppercase">Quotations</span>
                         </div>
                         <h1 className="text-5xl md:text-7xl font-display font-extrabold text-primary-950 tracking-tighter leading-[1.1]">
-                            Get Estimate
+                            {hasVehicle ? `Estimate for ${vehicle.displayLabel}` : 'Get Estimate'}
                         </h1>
                         <p className="mt-4 text-lg text-primary-600 max-w-2xl">
-                            Build a draft quotation from the live Mitsubishi catalog or retrieve an active quote and print it instantly.
+                            {hasVehicle
+                                ? 'Vehicle-first browsing is active. Build a draft quotation with matched service packages and Good / Better / Best bundle offers for your Mitsubishi.'
+                                : 'Build a draft quotation from the live Mitsubishi catalog or retrieve an active quote and print it instantly.'}
                         </p>
                     </div>
                 </div>
@@ -507,8 +612,8 @@ const PublicEstimate = () => {
                 ) : (
                     <div className="grid grid-cols-1 gap-8">
                         <div className="space-y-8">
-                            <div className="surface p-6">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div className="surface p-6 md:p-7">
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                     <div>
                                         <label className="block text-sm font-semibold text-primary-700 mb-2">Customer Name</label>
                                         <div className="relative">
@@ -523,15 +628,59 @@ const PublicEstimate = () => {
                                             <input value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="09XX XXX XXXX" className="input pl-10 py-2.5 text-sm" />
                                         </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-semibold text-primary-700 mb-2">Vehicle Info</label>
-                                        <div className="relative">
-                                            <Car className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
-                                            <input value={vehicleInfo} onChange={(event) => setVehicleInfo(event.target.value)} placeholder="Model / year / plate" className="input pl-10 py-2.5 text-sm" />
+                                </div>
+
+                                <div className="mt-6">
+                                    <PublicVehicleSelector
+                                        vehicle={vehicle}
+                                        onChange={updateVehicle}
+                                        onClear={clearVehicle}
+                                        includePlate
+                                        title="Tell us which Mitsubishi you are shopping for"
+                                        subtitle="Model-first browsing unlocks vehicle-matched parts, visual service packages, and smarter Good / Better / Best bundle offers."
+                                    />
+                                </div>
+
+                                {hasVehicle && (
+                                    <div className="mt-6 rounded-[28px] border border-accent-blue/20 bg-gradient-to-r from-accent-blue/8 via-white to-accent-primary/5 px-5 py-5 shadow-sm">
+                                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                            <div className="flex items-start gap-3">
+                                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-accent-blue/20 bg-white text-accent-blue shadow-sm">
+                                                    <Sparkles className="h-5 w-5" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-bold uppercase tracking-[0.26em] text-accent-blue/70">Vehicle context active</p>
+                                                    <h2 className="mt-2 text-2xl font-display font-semibold text-primary-950">{`For your ${vehicle.displayLabel}`}</h2>
+                                                    <p className="mt-2 text-sm text-primary-500">Featured service packages, recommended labor, and clicked-part bundles now adapt to the Mitsubishi you selected.</p>
+                                                </div>
+                                            </div>
+                                            <div className="rounded-2xl border border-primary-200 bg-white/90 px-4 py-3 text-sm text-primary-500">
+                                                <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-400">Vehicle summary</p>
+                                                <p className="mt-2 text-base font-semibold text-primary-950">{vehicleInfo || vehicle.displayLabel}</p>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
+
+                            {hasVehicle && (
+                                <div ref={packageShelfRef}>
+                                    <VehiclePackageShowcase
+                                        vehicle={vehicle}
+                                        packages={vehiclePackages}
+                                        loading={vehiclePackagesLoading}
+                                        error={vehiclePackagesError}
+                                        mode="estimate"
+                                        onAddBundle={addBundleToEstimate}
+                                        selectedProductIds={selectedProductIds}
+                                        selectedServiceIds={selectedServiceIds}
+                                        title="Vehicle-first service bundles"
+                                        subtitle="Visual package cards for the vehicle you selected, complete with included parts, included labor, normal total, package total, and savings."
+                                        emptyLabel={`No featured packages are ready for ${vehicle.displayLabel} yet.`}
+                                        highlightPackageKey={highlightedVehiclePackageKey}
+                                    />
+                                </div>
+                            )}
 
                             <div className="surface p-6">
                                 <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-end lg:justify-between">
@@ -540,9 +689,9 @@ const PublicEstimate = () => {
                                             <Package className="w-5 h-5 text-accent-primary" />
                                         </div>
                                         <div>
-                                            <h3 className="text-xl font-display font-semibold text-primary-950">Genuine Parts Pricelist</h3>
-                                            <p className="text-sm text-primary-500">Showing 12 priced items at a time from the current pricelist.</p>
-                                            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary-400">Click a part to add it and reveal its matched package.</p>
+                                            <h3 className="text-xl font-display font-semibold text-primary-950">{hasVehicle ? `Genuine Parts for ${vehicle.displayLabel}` : 'Genuine Parts Pricelist'}</h3>
+                                            <p className="text-sm text-primary-500">{hasVehicle ? 'Showing vehicle-aware parts results and smart bundle anchors from the live Mitsubishi pricelist.' : 'Showing 12 priced items at a time from the current pricelist.'}</p>
+                                            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary-400">Click a part to add it and reveal its Good / Better / Best bundle options.</p>
                                         </div>
                                     </div>
 
@@ -551,7 +700,7 @@ const PublicEstimate = () => {
                                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-500" />
                                             <input
                                                 type="text"
-                                                placeholder="Search by part name, SKU, or model..."
+                                                placeholder={hasVehicle ? `Search parts for ${vehicle.model}...` : "Search by part name, SKU, or model..."}
                                                 value={partSearch}
                                                 onChange={(event) => setPartSearch(event.target.value)}
                                                 className="input pl-10 py-2.5 text-sm"
@@ -596,7 +745,7 @@ const PublicEstimate = () => {
                                         </div>
                                     ) : filteredProducts.length === 0 ? (
                                         <div className="sm:col-span-2 rounded-xl border border-primary-200 bg-white p-6 text-sm text-primary-500">
-                                            No priced parts matched your search.
+                                            {hasVehicle ? `No priced parts matched ${vehicle.displayLabel} with your current search.` : 'No priced parts matched your search.'}
                                         </div>
                                     ) : filteredProducts.map((product) => {
                                         const isSelected = selectedParts.some((part) => part.id === product.id);
@@ -653,32 +802,18 @@ const PublicEstimate = () => {
                             {focusedProduct && (
                                 <ProductPackageSuggestions
                                     product={focusedProduct}
-                                    vehicleModelId={focusedProduct.model || vehicleInfo}
+                                    vehicleModelId={vehicle.model || focusedProduct.model || focusedProduct.vehicleModelName || ''}
+                                    vehicleContext={vehicle}
                                     anchorQuantity={focusedPartSelection?.quantity ?? 1}
-                                    onAddProduct={(recommendation) => {
-                                        const matchedProduct = recommendation.recommendedProduct;
-
-                                        if (!matchedProduct?.id) {
-                                            return;
-                                        }
-
-                                        addPart({
-                                            id: matchedProduct.id,
-                                            name: matchedProduct.name,
-                                            sku: matchedProduct.sku,
-                                            price: Number(recommendation.resolvedPrice ?? matchedProduct.price ?? recommendation.recommendedPrice ?? 0),
-                                            category: matchedProduct.category,
-                                            model: matchedProduct.model,
-                                        }, {
-                                            isUpsell: true,
-                                            recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
-                                        });
-                                    }}
+                                    onAddProduct={addSuggestedPart}
                                     onAddService={addSuggestedService}
-                                    selectedProductIds={selectedParts.map((part) => part.id)}
-                                    selectedServiceIds={selectedServices.map((service) => service.id)}
-                                    title="Smart Bundle Suggestions"
-                                    subtitle="Smart upsell bundles of same-vehicle Mitsubishi parts and services for the currently selected part."
+                                    onAddBundle={addBundleToEstimate}
+                                    selectedProductIds={selectedProductIds}
+                                    selectedServiceIds={selectedServiceIds}
+                                    title="Good / Better / Best smart bundles"
+                                    subtitle="Vehicle-aware smart upsell bundles of matched Mitsubishi parts and labor for the selected anchor part."
+                                    highlightedPackageKey={incomingPackageKey}
+                                    bundleMode="estimate"
                                 />
                             )}
 
@@ -1054,4 +1189,5 @@ const PublicEstimate = () => {
 };
 
 export default PublicEstimate;
+
 

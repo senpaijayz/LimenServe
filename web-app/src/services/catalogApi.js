@@ -13,6 +13,31 @@ export async function getProductCatalog(params = {}) {
   }
 }
 
+export async function getVehicleFitmentOptions(params = {}) {
+  try {
+    const { data } = await apiClient.get('/catalog/vehicle-fitment/options', { params });
+    return {
+      models: data.models ?? [],
+      years: data.years ?? [],
+      engines: data.engines ?? [],
+    };
+  } catch (error) {
+    extractApiError(error, 'Failed to load Mitsubishi fitment options.');
+  }
+}
+
+export async function getVehiclePackages(params = {}) {
+  try {
+    const { data } = await apiClient.get('/catalog/vehicle-packages', { params });
+    return {
+      vehicleContext: data.vehicleContext ?? null,
+      packages: data.packages ?? [],
+    };
+  } catch (error) {
+    extractApiError(error, 'Failed to load vehicle smart bundles.');
+  }
+}
+
 export async function getFullProductCatalog() {
   try {
     const { data } = await apiClient.get('/catalog/products/all');

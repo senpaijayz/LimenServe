@@ -143,6 +143,11 @@ let serviceCatalogCache = {
   fetchedAt: 0,
 };
 
+let vehicleFitmentCache = {
+  data: null,
+  fetchedAt: 0,
+};
+
 function parsePrice(value) {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric >= 0 ? Number(numeric.toFixed(2)) : null;
@@ -352,6 +357,433 @@ function buildServiceSearchText(service) {
 function extractVehicleFamily(modelName) {
   const base = String(modelName || '').split('(')[0].trim();
   return base || null;
+}
+
+function normalizeVehicleSelectorValue(value) {
+  return normalizeText(value).replace(/\s+/g, ' ').trim();
+}
+
+function parseModelYearRange(value) {
+  const match = String(value || '').match(/(\d{4})\s*[-/]\s*(present|\d{4})/i);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    start: Number(match[1]),
+    end: match[2].toLowerCase() === 'present' ? new Date().getFullYear() + 1 : Number(match[2]),
+  };
+}
+
+function productMentionsEngine(text) {
+  return ENGINE_SIGNATURE_PATTERN.test(String(text || ''));
+}
+
+function buildVehicleFilterContext({ vehicleModel = '', vehicleYear = '', vehicleEngine = '', vehicleFamily = '' } = {}) {
+  const model = normalizeVehicleSelectorValue(vehicleModel);
+  const family = normalizeVehicleSelectorValue(vehicleFamily || extractVehicleFamily(vehicleModel));
+  const parsedYear = Number.parseInt(vehicleYear, 10);
+
+  return {
+    rawModel: vehicleModel || '',
+    rawYear: vehicleYear || '',
+    rawEngine: vehicleEngine || '',
+    model,
+    family,
+    year: Number.isFinite(parsedYear) ? parsedYear : null,
+    engine: normalizeVehicleSelectorValue(vehicleEngine),
+  };
+}
+
+function buildVehicleDisplayLabel({ model, year, engine }) {
+  return [model, year, engine].filter(Boolean).join(' ').trim();
+}
+
+function matchesVehicleModel(productModel, context) {
+  if (!context.model) {
+    return true;
+  }
+
+  const normalizedModel = normalizeVehicleSelectorValue(productModel);
+  if (!normalizedModel) {
+    return false;
+  }
+
+  return normalizedModel.includes(context.model)
+    || context.model.includes(normalizedModel)
+    || Boolean(context.family && normalizedModel.includes(context.family));
+}
+
+function matchesVehicleEngine(product, context) {
+  if (!context.engine) {
+    return true;
+  }
+
+  const searchText = buildProductSearchText(product);
+  if (!productMentionsEngine(searchText)) {
+    return true;
+  }
+
+  const engineTokens = context.engine.split(/[^a-z0-9]+/).filter(Boolean);
+  return engineTokens.length === 0 || engineTokens.some((token) => searchText.includes(token));
+}
+
+function matchesVehicleFilters(product, context) {
+  if (!context.model) {
+    return true;
+  }
+
+  if (!matchesVehicleModel(product.model, context)) {
+    return false;
+  }
+
+  const yearRange = parseModelYearRange(product.model);
+  if (context.year && yearRange && (context.year < yearRange.start || context.year > yearRange.end)) {
+    return false;
+  }
+
+  return matchesVehicleEngine(product, context);
+}
+
+function matchesCatalogFilters(product, { searchQuery = '', selectedCategory = 'all', vehicleContext = null } = {}) {
+  const normalizedSearch = normalizeText(searchQuery);
+  if (normalizedSearch) {
+    const productSearchText = buildProductSearchText(product);
+    if (!productSearchText.includes(normalizedSearch)) {
+      return false;
+    }
+  }
+
+  if (selectedCategory !== 'all' && product.category !== selectedCategory) {
+    return false;
+  }
+
+  return !vehicleContext || matchesVehicleFilters(product, vehicleContext);
+}
+
+function sortCatalogProducts(products = [], sortBy = 'name-asc') {
+  return [...products].sort((left, right) => {
+    if (sortBy === 'name-desc') {
+      return String(right.name || '').localeCompare(String(left.name || '')) || String(left.sku || '').localeCompare(String(right.sku || ''));
+    }
+
+    if (sortBy === 'price-asc') {
+      return Number(left.price ?? 0) - Number(right.price ?? 0) || String(left.name || '').localeCompare(String(right.name || ''));
+    }
+
+    if (sortBy === 'price-desc') {
+      return Number(right.price ?? 0) - Number(left.price ?? 0) || String(left.name || '').localeCompare(String(right.name || ''));
+    }
+
+    return String(left.name || '').localeCompare(String(right.name || '')) || String(left.sku || '').localeCompare(String(right.sku || ''));
+  });
+}
+
+function buildCategoryRows(products = []) {
+  const grouped = products.reduce((map, product) => {
+    const key = product.category || 'Other';
+    map.set(key, (map.get(key) || 0) + 1);
+    return map;
+  }, new Map());
+
+  return Array.from(grouped.entries())
+    .sort((left, right) => left[0].localeCompare(right[0]))
+    .map(([value, count]) => ({ value, label: value, count }));
+}
+
+function mapVehicleFitmentRow(row) {
+  return {
+    modelName: row.model_name,
+    vehicleFamily: row.vehicle_family,
+    year: Number(row.year ?? 0),
+    engine: row.engine,
+    sortOrder: Number(row.sort_order ?? 100),
+  };
+}
+
+async function getCachedVehicleFitments() {
+  const now = Date.now();
+  if (vehicleFitmentCache.data && (now - vehicleFitmentCache.fetchedAt) < VEHICLE_FITMENT_CACHE_TTL_MS) {
+    return vehicleFitmentCache.data;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .schema('app')
+    .from('public_vehicle_fitments')
+    .select('model_name, vehicle_family, year, engine, sort_order')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('model_name', { ascending: true })
+    .order('year', { ascending: false })
+    .order('engine', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  vehicleFitmentCache = {
+    data: (data ?? []).map(mapVehicleFitmentRow),
+    fetchedAt: now,
+  };
+
+  return vehicleFitmentCache.data;
+}
+
+function buildVehicleFitmentOptions(fitments = [], selectedModel = '', selectedYear = '') {
+  const modelMap = new Map();
+
+  fitments.forEach((fitment) => {
+    if (!modelMap.has(fitment.modelName)) {
+      modelMap.set(fitment.modelName, {
+        value: fitment.modelName,
+        label: fitment.modelName,
+        vehicleFamily: fitment.vehicleFamily,
+        sortOrder: fitment.sortOrder,
+      });
+    }
+  });
+
+  const models = Array.from(modelMap.values()).sort((left, right) => {
+    const sortScore = Number(left.sortOrder ?? 100) - Number(right.sortOrder ?? 100);
+    return sortScore !== 0 ? sortScore : left.label.localeCompare(right.label);
+  });
+
+  const years = selectedModel
+    ? Array.from(new Set(fitments.filter((fitment) => fitment.modelName === selectedModel).map((fitment) => fitment.year)))
+      .sort((left, right) => right - left)
+      .map((year) => ({ value: String(year), label: String(year) }))
+    : [];
+
+  const engines = selectedModel && selectedYear
+    ? Array.from(new Set(
+      fitments
+        .filter((fitment) => fitment.modelName === selectedModel && String(fitment.year) === String(selectedYear))
+        .map((fitment) => fitment.engine)
+    )).sort((left, right) => left.localeCompare(right)).map((engine) => ({ value: engine, label: engine }))
+    : [];
+
+  return { models, years, engines };
+}
+
+function buildVehiclePackageCopy(serviceGroup, fallbackName) {
+  switch (serviceGroup) {
+    case 'oil_change':
+      return {
+        packageName: 'Oil Change Package',
+        packageDescription: 'Fresh oil, filter, washer, and labor grouped for a cleaner maintenance stop.',
+      };
+    case 'brake_service':
+      return {
+        packageName: 'Brake Refresh Package',
+        packageDescription: 'Brake parts and labor bundled to restore stopping confidence for this Mitsubishi.',
+      };
+    case 'cooling_service':
+      return {
+        packageName: 'Cooling System Restore',
+        packageDescription: 'Cooling-system parts plus labor bundled to reduce heat-related breakdown risk.',
+      };
+    case 'battery_service':
+      return {
+        packageName: 'Battery + Charging Check',
+        packageDescription: 'Battery support parts and electrical labor grouped into one practical service package.',
+      };
+    case 'tune_up':
+      return {
+        packageName: 'Tune-Up Package',
+        packageDescription: 'Ignition and intake maintenance bundled with labor for smoother daily driving.',
+      };
+    case 'filter_service':
+      return {
+        packageName: 'Filter Service Package',
+        packageDescription: 'Replacement filters and service labor grouped into one cleaner maintenance visit.',
+      };
+    case 'tire_service':
+      return {
+        packageName: 'Tire Care Package',
+        packageDescription: 'Tire support parts with balancing and alignment-ready labor for steadier road feel.',
+      };
+    default:
+      return {
+        packageName: fallbackName || 'Smart Mitsubishi Bundle',
+        packageDescription: DEFAULT_PACKAGE_DESCRIPTION,
+      };
+  }
+}
+
+function getVehicleProductMatchLevel(product, context) {
+  const normalizedModel = normalizeVehicleSelectorValue(product.model);
+  if (context.model && normalizedModel.includes(context.model)) {
+    return 'exact_model';
+  }
+
+  if (context.family && normalizedModel.includes(context.family)) {
+    return 'family_match';
+  }
+
+  return null;
+}
+
+function scoreVehiclePackageCandidate(candidate) {
+  const matchScore = candidate.matchLevel === 'exact_model' ? 0 : 1;
+  const stockScore = Number(candidate.product.stock ?? 0) * -1;
+  const priceScore = Number(candidate.product.price ?? 0);
+  return matchScore * 10000 + stockScore * 10 + priceScore;
+}
+
+function pickVehiclePackageProducts({ catalog, vehicleContext, serviceGroup, limitCount = 4 }) {
+  const candidates = catalog
+    .map((product) => ({
+      product,
+      profile: inferProductProfile(product),
+      matchLevel: getVehicleProductMatchLevel(product, vehicleContext),
+    }))
+    .filter((candidate) => candidate.profile.serviceGroup === serviceGroup && candidate.matchLevel && matchesVehicleFilters(candidate.product, vehicleContext))
+    .sort((left, right) => scoreVehiclePackageCandidate(left) - scoreVehiclePackageCandidate(right));
+
+  const selected = [];
+  const seenFunctions = new Set();
+
+  candidates.forEach((candidate) => {
+    if (selected.length >= limitCount) {
+      return;
+    }
+
+    const functionKey = candidate.profile.partFunction || candidate.product.id;
+    if (seenFunctions.has(functionKey)) {
+      return;
+    }
+
+    seenFunctions.add(functionKey);
+    selected.push(candidate);
+  });
+
+  if (selected.length < Math.min(limitCount, candidates.length)) {
+    candidates.forEach((candidate) => {
+      if (selected.length >= limitCount) {
+        return;
+      }
+
+      if (selected.some((picked) => picked.product.id === candidate.product.id)) {
+        return;
+      }
+
+      selected.push(candidate);
+    });
+  }
+
+  return selected;
+}
+
+function buildVehiclePackageProductItem(candidate, vehicleContext, serviceGroup, index) {
+  const pricing = resolveSmartPricing({
+    recommendation: {
+      catalogPrice: candidate.product.price,
+      recommendedPrice: candidate.product.price,
+    },
+    matchedProduct: candidate.product,
+    consequentKind: 'product',
+    serviceGroup,
+    matchLevel: candidate.matchLevel,
+    minAnchorQuantity: 1,
+  });
+
+  return {
+    consequentKind: 'product',
+    packageItemId: 'vehicle-part-' + candidate.product.id,
+    recommendedProductId: candidate.product.id,
+    recommendedProductName: candidate.product.name,
+    recommendedProductSku: candidate.product.sku,
+    recommendedProduct: candidate.product,
+    reasonLabel: candidate.matchLevel === 'exact_model'
+      ? 'Matched core part for the exact Mitsubishi model you selected'
+      : 'Matched core part for the same Mitsubishi vehicle family',
+    vehicleModelName: vehicleContext.rawModel,
+    vehicleFamily: vehicleContext.family,
+    serviceGroup,
+    matchLevel: candidate.matchLevel,
+    displayPriority: index + 1,
+    pricingMode: pricing.pricingMode,
+    catalogPrice: pricing.catalogPrice,
+    recommendedPrice: pricing.resolvedPrice,
+    resolvedPrice: pricing.resolvedPrice,
+    displayPriceLabel: pricing.displayPriceLabel,
+    savingsAmount: pricing.savingsAmount,
+    discountPercent: pricing.discountPercent,
+  };
+}
+
+function buildVehiclePackageServiceItem(service, vehicleContext, serviceGroup, index) {
+  const pricing = resolveSmartPricing({
+    recommendation: {
+      catalogPrice: service.price,
+      recommendedPrice: service.price,
+      recommendedServiceCode: service.code,
+    },
+    matchedService: service,
+    consequentKind: 'service',
+    serviceGroup,
+    matchLevel: 'service_bundle',
+    minAnchorQuantity: 1,
+  });
+
+  return {
+    consequentKind: 'service',
+    packageItemId: 'vehicle-service-' + service.id,
+    recommendedServiceId: service.id,
+    recommendedServiceName: service.name,
+    recommendedServiceCode: service.code,
+    recommendedService: service,
+    reasonLabel: 'Recommended labor pairing for the selected Mitsubishi service package',
+    vehicleModelName: vehicleContext.rawModel,
+    vehicleFamily: vehicleContext.family,
+    serviceGroup,
+    matchLevel: 'service_bundle',
+    displayPriority: index + 1,
+    pricingMode: pricing.pricingMode,
+    catalogPrice: pricing.catalogPrice,
+    recommendedPrice: pricing.resolvedPrice,
+    resolvedPrice: pricing.resolvedPrice,
+    displayPriceLabel: pricing.displayPriceLabel,
+    savingsAmount: pricing.savingsAmount,
+    discountPercent: pricing.discountPercent,
+  };
+}
+
+function buildVehiclePackages({ catalog, serviceCatalog, vehicleContext }) {
+  return VEHICLE_PACKAGE_ORDER
+    .map((serviceGroup, index) => {
+      const products = pickVehiclePackageProducts({ catalog, vehicleContext, serviceGroup, limitCount: 4 });
+      const services = findMatchingServices({ serviceCatalog, serviceGroup, limitCount: 2 });
+
+      if (products.length === 0 && services.length === 0) {
+        return null;
+      }
+
+      const packageCopy = buildVehiclePackageCopy(serviceGroup, SERVICE_GROUP_CONFIG[serviceGroup]?.packageName);
+      const partItems = products.map((candidate, itemIndex) => buildVehiclePackageProductItem(candidate, vehicleContext, serviceGroup, itemIndex));
+      const serviceItems = services.map((service, itemIndex) => buildVehiclePackageServiceItem(service, vehicleContext, serviceGroup, itemIndex));
+      const packagePricing = summarizePackagePricing([...partItems, ...serviceItems]);
+
+      return {
+        packageId: null,
+        packageKey: 'vehicle-' + serviceGroup,
+        packageName: packageCopy.packageName,
+        packageDescription: packageCopy.packageDescription,
+        serviceGroup,
+        vehicleModelName: vehicleContext.rawModel,
+        vehicleFamily: vehicleContext.family,
+        minAnchorQuantity: 1,
+        priority: index + 1,
+        recommendationMode: 'vehicle_bundle',
+        recommendationLabel: 'Best for your vehicle',
+        itemCount: partItems.length + serviceItems.length,
+        parts: partItems,
+        services: serviceItems,
+        ...packagePricing,
+      };
+    })
+    .filter(Boolean);
 }
 
 function inferHeuristicServiceGroup(text) {
@@ -990,6 +1422,66 @@ async function getCachedServiceCatalog() {
   return serviceCatalogCache.data;
 }
 
+router.get('/vehicle-fitment/options', async (req, res, next) => {
+  try {
+    const fitments = await getCachedVehicleFitments();
+    const selectedModel = String(req.query.model || '').trim();
+    const selectedYear = String(req.query.year || '').trim();
+
+    res.json(buildVehicleFitmentOptions(fitments, selectedModel, selectedYear));
+  } catch (error) {
+    const message = String(error?.message || error || '');
+    if (message.includes('public_vehicle_fitments') || message.includes('schema cache')) {
+      res.json({ models: [], years: [], engines: [] });
+      return;
+    }
+
+    next(error);
+  }
+});
+
+router.get('/vehicle-packages', async (req, res, next) => {
+  try {
+    const vehicleModel = String(req.query.vehicleModel || '').trim();
+    const vehicleYear = String(req.query.vehicleYear || '').trim();
+    const vehicleEngine = String(req.query.vehicleEngine || '').trim();
+
+    if (!vehicleModel) {
+      res.json({ vehicleContext: null, packages: [] });
+      return;
+    }
+
+    const [catalog, serviceCatalog, fitments] = await Promise.all([
+      getCachedProductCatalog(),
+      getCachedServiceCatalog(),
+      getCachedVehicleFitments().catch(() => []),
+    ]);
+
+    const matchedFitment = fitments.find((fitment) => fitment.modelName === vehicleModel && (!vehicleYear || String(fitment.year) === String(vehicleYear)) && (!vehicleEngine || fitment.engine === vehicleEngine))
+      || fitments.find((fitment) => fitment.modelName === vehicleModel);
+    const vehicleContext = buildVehicleFilterContext({
+      vehicleModel,
+      vehicleYear,
+      vehicleEngine,
+      vehicleFamily: matchedFitment?.vehicleFamily || extractVehicleFamily(vehicleModel),
+    });
+    const packages = buildVehiclePackages({ catalog, serviceCatalog, vehicleContext });
+
+    res.json({
+      vehicleContext: {
+        model: vehicleModel,
+        year: vehicleYear || '',
+        engine: vehicleEngine || '',
+        vehicleFamily: matchedFitment?.vehicleFamily || extractVehicleFamily(vehicleModel),
+        displayLabel: buildVehicleDisplayLabel({ model: vehicleModel, year: vehicleYear, engine: vehicleEngine }),
+      },
+      packages,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/products', async (req, res, next) => {
   try {
     const page = parsePositiveInteger(req.query.page, 1, 10000);
@@ -997,6 +1489,56 @@ router.get('/products', async (req, res, next) => {
     const searchQuery = String(req.query.q || '').trim();
     const selectedCategory = String(req.query.category || 'all');
     const sortBy = String(req.query.sortBy || 'name-asc');
+    const vehicleModel = String(req.query.vehicleModel || '').trim();
+    const vehicleYear = String(req.query.vehicleYear || '').trim();
+    const vehicleEngine = String(req.query.vehicleEngine || '').trim();
+
+    if (vehicleModel) {
+      const [catalog, fitments] = await Promise.all([
+        getCachedProductCatalog(),
+        getCachedVehicleFitments().catch(() => []),
+      ]);
+      const matchedFitment = fitments.find((fitment) => fitment.modelName === vehicleModel && (!vehicleYear || String(fitment.year) === String(vehicleYear)) && (!vehicleEngine || fitment.engine === vehicleEngine))
+        || fitments.find((fitment) => fitment.modelName === vehicleModel);
+      const vehicleContext = buildVehicleFilterContext({
+        vehicleModel,
+        vehicleYear,
+        vehicleEngine,
+        vehicleFamily: matchedFitment?.vehicleFamily || extractVehicleFamily(vehicleModel),
+      });
+      const vehicleScopedProducts = catalog.filter((product) => matchesCatalogFilters(product, {
+        searchQuery,
+        selectedCategory,
+        vehicleContext,
+      }));
+      const categoryScopedProducts = catalog.filter((product) => matchesCatalogFilters(product, {
+        searchQuery,
+        selectedCategory: 'all',
+        vehicleContext,
+      }));
+      const sortedProducts = sortCatalogProducts(vehicleScopedProducts, sortBy);
+      const totalCount = sortedProducts.length;
+      const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+      const products = sortedProducts.slice((page - 1) * pageSize, page * pageSize);
+      const categoryRows = buildCategoryRows(categoryScopedProducts);
+      const categoryCountTotal = categoryRows.reduce((sum, row) => sum + Number(row.count ?? 0), 0);
+      const categories = [
+        { value: 'all', label: 'All Categories', count: categoryCountTotal || totalCount },
+        ...categoryRows,
+      ];
+
+      res.json({
+        products,
+        categories,
+        pagination: {
+          page,
+          pageSize,
+          totalCount,
+          totalPages,
+        },
+      });
+      return;
+    }
 
     const [pageRows, categoryRows] = await Promise.all([
       fetchProductCatalogPage({
@@ -1270,6 +1812,8 @@ router.get('/products/:productId/recommendations', async (req, res, next) => {
 });
 
 export default router;
+
+
 
 
 

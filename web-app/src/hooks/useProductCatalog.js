@@ -1,7 +1,16 @@
 import { useDeferredValue, useEffect, useState } from 'react';
 import { getProductCatalog } from '../services/catalogApi';
 
-const useProductCatalog = ({ page = 1, pageSize = 10, searchQuery = '', selectedCategory = 'all', sortBy = 'name-asc' } = {}) => {
+const useProductCatalog = ({
+  page = 1,
+  pageSize = 10,
+  searchQuery = '',
+  selectedCategory = 'all',
+  sortBy = 'name-asc',
+  vehicleModel = '',
+  vehicleYear = '',
+  vehicleEngine = '',
+} = {}) => {
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -23,6 +32,9 @@ const useProductCatalog = ({ page = 1, pageSize = 10, searchQuery = '', selected
           q: deferredSearchQuery,
           category: selectedCategory,
           sortBy,
+          vehicleModel,
+          vehicleYear,
+          vehicleEngine,
         });
 
         if (!active) {
@@ -53,7 +65,7 @@ const useProductCatalog = ({ page = 1, pageSize = 10, searchQuery = '', selected
     return () => {
       active = false;
     };
-  }, [page, pageSize, deferredSearchQuery, selectedCategory, sortBy]);
+  }, [page, pageSize, deferredSearchQuery, selectedCategory, sortBy, vehicleModel, vehicleYear, vehicleEngine]);
 
   return {
     products,
