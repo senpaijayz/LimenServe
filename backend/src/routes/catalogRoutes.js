@@ -371,7 +371,7 @@ function normalizeVehicleSelectorValue(value) {
 }
 
 function parseModelYearRange(value) {
-  const match = String(value || '').match(/(\d{4})\s*[-/]\s*(present|\d{4})/i);
+  const match = String(value || '').match(/(\d{4})\s*(?:-|\/|to)\s*(present|\d{4})/i);
 
   if (!match) {
     return null;
@@ -379,7 +379,7 @@ function parseModelYearRange(value) {
 
   return {
     start: Number(match[1]),
-    end: match[2].toLowerCase() === 'present' ? new Date().getFullYear() + 1 : Number(match[2]),
+    end: match[2].toLowerCase() === 'present' ? new Date().getFullYear() : Number(match[2]),
   };
 }
 

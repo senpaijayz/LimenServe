@@ -13,6 +13,15 @@ export default function PublicVehicleSelector({
 }) {
   const { models, years, loading, error } = useVehicleFitmentOptions(vehicle?.model);
   const hasVehicle = Boolean(vehicle?.model);
+  const newestYear = years[0]?.label || '';
+  const oldestYear = years[years.length - 1]?.label || '';
+  const yearHelperText = !vehicle?.model
+    ? 'Choose a model first to see the compatible years found in the pricelist.'
+    : years.length === 0
+      ? 'This model has no year-specific breakdown in the pricelist yet. Leave year blank to browse all compatible parts.'
+      : years.length === 1
+        ? `Pricelist entries for this model currently point to ${newestYear}.`
+        : `This model is compatible across multiple years. Leave it on All compatible years to browse everything from ${oldestYear} to ${newestYear}.`;
 
   return (
     <div className="surface p-5 md:p-6">
@@ -61,11 +70,12 @@ export default function PublicVehicleSelector({
               disabled={!vehicle?.model}
               className={`${fieldBaseClassName} disabled:cursor-not-allowed disabled:bg-primary-100 disabled:text-primary-400`}
             >
-              <option value="">Select year</option>
+              <option value="">{vehicle?.model ? 'All compatible years' : 'Select year'}</option>
               {years.map((yearOption) => (
                 <option key={yearOption.value} value={yearOption.value}>{yearOption.label}</option>
               ))}
             </select>
+            <p className="mt-2 text-xs leading-relaxed text-primary-500">{yearHelperText}</p>
           </label>
 
           {includePlate ? (
