@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, X, Check, Printer, Wrench } from 'lucide-react';
 import Button from '../../../components/ui/Button';
@@ -25,13 +25,14 @@ const POSTerminal = () => {
     } = useCart();
 
     const { success } = useToast();
-    const { products: storeProducts, loading, fetchProducts, hasLoadedProducts } = useDataStore();
+    const { products: storeProducts, loading, fetchProducts, hasLoadedProducts, isHydratingProducts, findProduct } = useDataStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showServiceModal, setShowServiceModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showCameraScanner, setShowCameraScanner] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState('');
+    const deferredSearchQuery = useDeferredValue(searchQuery);
     const [lastTransaction, setLastTransaction] = useState(null);
 
     useEffect(() => {
@@ -41,10 +42,12 @@ const POSTerminal = () => {
     }, [fetchProducts, hasLoadedProducts, loading]);
 
     // Filter products
-    const filteredProducts = storeProducts.filter(p =>
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredProducts = useMemo(() => (
+        storeProducts.filter((product) => (
+            product.name.toLowerCase().includes(deferredSearchQuery.toLowerCase())
+            || product.sku.toLowerCase().includes(deferredSearchQuery.toLowerCase())
+        ))
+    ), [deferredSearchQuery, storeProducts]);
 
     // Handle product click
     const handleProductClick = (product) => {
@@ -58,10 +61,13 @@ const POSTerminal = () => {
     });
 
     // Handle camera scanning
-    const handleBarcodeScanned = (barcode) => {
+    const handleBarcodeScanned = async (barcode) => {
         if (!barcode) return;
 
-        const product = storeProducts.find(p => p.sku.toLowerCase() === barcode.toLowerCase() || p.id.toString() === barcode);
+        const normalizedBarcode = String(barcode).trim().toLowerCase();
+        const localProduct = storeProducts.find((product) => product.sku.toLowerCase() === normalizedBarcode || String(product.id) === String(barcode));
+        const product = localProduct || await findProduct(barcode);
+
         if (product) {
             addItem(product, 1);
             success(`Scanned: ${product.name}`);
@@ -134,6 +140,10 @@ const POSTerminal = () => {
                 </div>
 
                 {/* Products Grid */}
+                {isHydratingProducts && !loading && (
+                    <p className="mb-3 text-sm text-primary-500">Loading more catalog pages in the background...</p>
+                )}
+
                 {loading ? (
                     <div className="flex-1 flex items-center justify-center text-primary-400">Loading catalog...</div>
                 ) : (

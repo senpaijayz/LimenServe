@@ -4,9 +4,10 @@ import { requireRole } from '../middleware/auth.js';
 import { callRpc } from '../services/supabaseRpc.js';
 
 const router = Router();
-const PRODUCT_CATALOG_CACHE_TTL_MS = 60 * 1000;
-const FULL_CATALOG_PAGE_SIZE = 1000;
-const SERVICE_CATALOG_CACHE_TTL_MS = 60 * 1000;
+const PRODUCT_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
+const FULL_CATALOG_PAGE_SIZE = 250;
+const FULL_CATALOG_PAGE_BATCH_SIZE = 3;
+const SERVICE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_PART_LIMIT = 6;
 const DEFAULT_SERVICE_LIMIT = 4;
 const DEFAULT_PACKAGE_DESCRIPTION = 'Smart upsell bundle of Mitsubishi-matched parts and services for this vehicle.';
@@ -147,6 +148,10 @@ let vehicleFitmentCache = {
   data: null,
   fetchedAt: 0,
 };
+
+let productCatalogCachePromise = null;
+let serviceCatalogCachePromise = null;
+let vehicleFitmentCachePromise = null;
 
 function parsePrice(value) {
   const numeric = Number(value);
@@ -309,6 +314,7 @@ function invalidateProductCatalogCache() {
     data: null,
     fetchedAt: 0,
   };
+  productCatalogCachePromise = null;
 }
 
 function mapCatalogRow(row) {
@@ -508,26 +514,25 @@ async function getCachedVehicleFitments() {
     return vehicleFitmentCache.data;
   }
 
-  const { data, error } = await supabaseAdmin
-    .schema('app')
-    .from('public_vehicle_fitments')
-    .select('model_name, vehicle_family, year, engine, sort_order')
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
-    .order('model_name', { ascending: true })
-    .order('year', { ascending: false })
-    .order('engine', { ascending: true });
-
-  if (error) {
-    throw error;
+  if (vehicleFitmentCachePromise) {
+    return vehicleFitmentCachePromise;
   }
 
-  vehicleFitmentCache = {
-    data: (data ?? []).map(mapVehicleFitmentRow),
-    fetchedAt: now,
-  };
+  vehicleFitmentCachePromise = (async () => {
+    try {
+      const rows = await callRpc('get_public_vehicle_fitments');
+      vehicleFitmentCache = {
+        data: (rows ?? []).map(mapVehicleFitmentRow),
+        fetchedAt: Date.now(),
+      };
 
-  return vehicleFitmentCache.data;
+      return vehicleFitmentCache.data;
+    } finally {
+      vehicleFitmentCachePromise = null;
+    }
+  })();
+
+  return vehicleFitmentCachePromise;
 }
 
 function buildVehicleFitmentOptions(fitments = [], selectedModel = '', selectedYear = '') {
@@ -1368,41 +1373,64 @@ async function fetchProductCatalogPage({ page, pageSize, searchQuery = null, sel
   });
 }
 
+async function fetchRemainingCatalogPagesInBatches(totalPages) {
+  const allRows = [];
+
+  for (let page = 2; page <= totalPages; page += FULL_CATALOG_PAGE_BATCH_SIZE) {
+    const pageRequests = Array.from(
+      { length: Math.min(FULL_CATALOG_PAGE_BATCH_SIZE, totalPages - page + 1) },
+      (_, index) => fetchProductCatalogPage({
+        page: page + index,
+        pageSize: FULL_CATALOG_PAGE_SIZE,
+      })
+    );
+    const pageResults = await Promise.all(pageRequests);
+    allRows.push(...pageResults.flat());
+  }
+
+  return allRows;
+}
+
 async function getCachedProductCatalog() {
   const now = Date.now();
   if (productCatalogCache.data && (now - productCatalogCache.fetchedAt) < PRODUCT_CATALOG_CACHE_TTL_MS) {
     return productCatalogCache.data;
   }
 
-  const firstPageRows = await fetchProductCatalogPage({
-    page: 1,
-    pageSize: FULL_CATALOG_PAGE_SIZE,
-  });
-
-  const totalCount = Number(firstPageRows?.[0]?.total_count ?? 0);
-  const totalPages = Math.max(1, Math.ceil(totalCount / FULL_CATALOG_PAGE_SIZE));
-
-  let allRows = firstPageRows ?? [];
-
-  if (totalPages > 1) {
-    const remainingPageRequests = Array.from({ length: totalPages - 1 }, (_, index) => (
-      fetchProductCatalogPage({
-        page: index + 2,
-        pageSize: FULL_CATALOG_PAGE_SIZE,
-      })
-    ));
-
-    const remainingPages = await Promise.all(remainingPageRequests);
-    allRows = allRows.concat(remainingPages.flat());
+  if (productCatalogCachePromise) {
+    return productCatalogCachePromise;
   }
 
-  const products = allRows.map(mapCatalogRow);
-  productCatalogCache = {
-    data: products,
-    fetchedAt: now,
-  };
+  productCatalogCachePromise = (async () => {
+    try {
+      const firstPageRows = await fetchProductCatalogPage({
+        page: 1,
+        pageSize: FULL_CATALOG_PAGE_SIZE,
+      });
 
-  return productCatalogCache.data;
+      const totalCount = Number(firstPageRows?.[0]?.total_count ?? 0);
+      const totalPages = Math.max(1, Math.ceil(totalCount / FULL_CATALOG_PAGE_SIZE));
+
+      let allRows = firstPageRows ?? [];
+
+      if (totalPages > 1) {
+        const remainingRows = await fetchRemainingCatalogPagesInBatches(totalPages);
+        allRows = allRows.concat(remainingRows);
+      }
+
+      const products = allRows.map(mapCatalogRow);
+      productCatalogCache = {
+        data: products,
+        fetchedAt: Date.now(),
+      };
+
+      return productCatalogCache.data;
+    } finally {
+      productCatalogCachePromise = null;
+    }
+  })();
+
+  return productCatalogCachePromise;
 }
 
 async function getCachedServiceCatalog() {
@@ -1411,15 +1439,27 @@ async function getCachedServiceCatalog() {
     return serviceCatalogCache.data;
   }
 
-  const services = await callRpc('get_service_catalog');
-  const mappedServices = (services ?? []).map(mapServiceRow);
+  if (serviceCatalogCachePromise) {
+    return serviceCatalogCachePromise;
+  }
 
-  serviceCatalogCache = {
-    data: mappedServices,
-    fetchedAt: now,
-  };
+  serviceCatalogCachePromise = (async () => {
+    try {
+      const services = await callRpc('get_service_catalog');
+      const mappedServices = (services ?? []).map(mapServiceRow);
 
-  return serviceCatalogCache.data;
+      serviceCatalogCache = {
+        data: mappedServices,
+        fetchedAt: Date.now(),
+      };
+
+      return serviceCatalogCache.data;
+    } finally {
+      serviceCatalogCachePromise = null;
+    }
+  })();
+
+  return serviceCatalogCachePromise;
 }
 
 router.get('/vehicle-fitment/options', async (req, res, next) => {
@@ -1431,7 +1471,7 @@ router.get('/vehicle-fitment/options', async (req, res, next) => {
     res.json(buildVehicleFitmentOptions(fitments, selectedModel, selectedYear));
   } catch (error) {
     const message = String(error?.message || error || '');
-    if (message.includes('public_vehicle_fitments') || message.includes('schema cache')) {
+    if (message.includes('public_vehicle_fitments') || message.includes('get_public_vehicle_fitments') || message.includes('schema cache')) {
       res.json({ models: [], years: [], engines: [] });
       return;
     }
@@ -1485,13 +1525,14 @@ router.get('/vehicle-packages', async (req, res, next) => {
 router.get('/products', async (req, res, next) => {
   try {
     const page = parsePositiveInteger(req.query.page, 1, 10000);
-    const pageSize = parsePositiveInteger(req.query.pageSize, 10, 100);
+    const pageSize = parsePositiveInteger(req.query.pageSize, 10, 250);
     const searchQuery = String(req.query.q || '').trim();
     const selectedCategory = String(req.query.category || 'all');
     const sortBy = String(req.query.sortBy || 'name-asc');
     const vehicleModel = String(req.query.vehicleModel || '').trim();
     const vehicleYear = String(req.query.vehicleYear || '').trim();
     const vehicleEngine = String(req.query.vehicleEngine || '').trim();
+    const includeCategories = String(req.query.includeCategories || 'true').trim().toLowerCase() !== 'false';
 
     if (vehicleModel) {
       const [catalog, fitments] = await Promise.all([
@@ -1540,32 +1581,35 @@ router.get('/products', async (req, res, next) => {
       return;
     }
 
-    const [pageRows, categoryRows] = await Promise.all([
-      fetchProductCatalogPage({
-        page,
-        pageSize,
-        searchQuery,
-        selectedCategory,
-        sortBy,
-      }),
-      callRpc('get_product_catalog_categories', {
+    const pageRows = await fetchProductCatalogPage({
+      page,
+      pageSize,
+      searchQuery,
+      selectedCategory,
+      sortBy,
+    });
+
+    const categoryRows = includeCategories
+      ? await callRpc('get_product_catalog_categories', {
         p_search: searchQuery || null,
-      }),
-    ]);
+      })
+      : [];
 
     const products = (pageRows ?? []).map(mapCatalogRow);
 
     const totalCount = Number(pageRows?.[0]?.total_count ?? 0);
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
     const categoryCountTotal = (categoryRows ?? []).reduce((sum, row) => sum + Number(row.count ?? 0), 0);
-    const categories = [
-      { value: 'all', label: 'All Categories', count: categoryCountTotal || totalCount },
-      ...(categoryRows ?? []).map((row) => ({
-        value: row.value,
-        label: row.label,
-        count: Number(row.count ?? 0),
-      })),
-    ];
+    const categories = includeCategories
+      ? [
+        { value: 'all', label: 'All Categories', count: categoryCountTotal || totalCount },
+        ...(categoryRows ?? []).map((row) => ({
+          value: row.value,
+          label: row.label,
+          count: Number(row.count ?? 0),
+        })),
+      ]
+      : [];
 
     res.json({
       products,
@@ -1593,15 +1637,35 @@ router.get('/products/all', async (_req, res, next) => {
 
 router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, next) => {
   try {
-    const summaryRows = await callRpc('get_catalog_summary');
-    const summary = Array.isArray(summaryRows) ? (summaryRows[0] ?? null) : summaryRows;
+    try {
+      const summaryRows = await callRpc('get_catalog_summary');
+      const summary = Array.isArray(summaryRows) ? (summaryRows[0] ?? null) : summaryRows;
+
+      res.json({
+        summary: {
+          totalProducts: Number(summary?.total_products ?? 0),
+          pricelistRows: Number(summary?.pricelist_rows ?? 0),
+          uniqueProducts: Number(summary?.unique_products ?? 0),
+          currentPrices: Number(summary?.current_prices ?? 0),
+        },
+      });
+      return;
+    } catch (error) {
+      const message = String(error?.message || error || '');
+      if (!message.includes('get_catalog_summary') && !message.includes('schema cache')) {
+        throw error;
+      }
+    }
+
+    const products = await getCachedProductCatalog();
+    const totalProducts = Number(products?.length ?? 0);
 
     res.json({
       summary: {
-        totalProducts: Number(summary?.total_products ?? 0),
-        pricelistRows: Number(summary?.pricelist_rows ?? 0),
-        uniqueProducts: Number(summary?.unique_products ?? 0),
-        currentPrices: Number(summary?.current_prices ?? 0),
+        totalProducts,
+        pricelistRows: totalProducts,
+        uniqueProducts: totalProducts,
+        currentPrices: totalProducts,
       },
     });
   } catch (error) {

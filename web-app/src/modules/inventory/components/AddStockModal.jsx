@@ -1,57 +1,68 @@
 import { useState, useEffect } from 'react';
-import { Camera, Search, Plus, X, Package } from 'lucide-react';
+import { Camera, Search, Plus, Package } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import useDataStore from '../../../store/useDataStore';
-import { useToast } from '../../../components/ui/Toast';
 
 /**
  * Add Stock Modal
  * Replaces the "Add Product" functionality. Staff must scan or enter an existing SKU to add stock.
  */
 const AddStockModal = ({ isOpen, onClose, onSave }) => {
-    const { products } = useDataStore();
-    const { error: showError } = useToast();
+    const { findProduct } = useDataStore();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [showCameraScanner, setShowCameraScanner] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [quantityToAdd, setQuantityToAdd] = useState('');
     const [error, setError] = useState('');
+    const [isSearching, setIsSearching] = useState(false);
 
-    // Reset state when modal opens
     useEffect(() => {
         if (isOpen) {
             setSearchQuery('');
             setSelectedProduct(null);
             setQuantityToAdd('');
             setError('');
+            setIsSearching(false);
         }
     }, [isOpen]);
 
-    // Search for product when query changes
     useEffect(() => {
-        if (!searchQuery.trim()) {
+        const identifier = searchQuery.trim();
+        if (!identifier) {
             setSelectedProduct(null);
             setError('');
+            setIsSearching(false);
             return;
         }
 
-        const found = products.find(p =>
-            p.sku.toLowerCase() === searchQuery.trim().toLowerCase() ||
-            p.id.toString() === searchQuery.trim()
-        );
+        let active = true;
+        setIsSearching(true);
 
-        if (found) {
-            setSelectedProduct(found);
-            setError('');
-        } else {
-            setSelectedProduct(null);
-            setError('Part Number (SKU) not found in Master Catalog.');
-        }
-    }, [searchQuery, products]);
+        void (async () => {
+            const found = await findProduct(identifier);
+            if (!active) {
+                return;
+            }
+
+            if (found) {
+                setSelectedProduct(found);
+                setError('');
+            } else {
+                setSelectedProduct(null);
+                setError('Part Number (SKU) not found in Master Catalog.');
+            }
+
+            setIsSearching(false);
+        })();
+
+        return () => {
+            active = false;
+        };
+    }, [findProduct, searchQuery]);
 
     const handleCameraScan = (barcode) => {
         if (barcode) {
@@ -70,10 +81,9 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
             return;
         }
 
-        // Pass the updated product data to the parent
         const updatedProduct = {
             ...selectedProduct,
-            quantity: selectedProduct.quantity + qty
+            quantity: selectedProduct.quantity + qty,
         };
 
         onSave(updatedProduct);
@@ -93,7 +103,6 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                     Scan a Mitsubishi Genuine Parts label or enter the Part Number (SKU) to receive new stock into inventory.
                 </p>
 
-                {/* SKU Search/Scan Input */}
                 <div>
                     <label className="block text-sm font-semibold text-primary-700 mb-1">
                         Scan or enter Part Number (SKU)
@@ -122,12 +131,13 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                             <Camera className="w-5 h-5 text-primary-600" />
                         </Button>
                     </div>
-                    {error && (
+                    {isSearching ? (
+                        <p className="text-xs text-primary-500 mt-1.5">Searching catalog...</p>
+                    ) : error ? (
                         <p className="text-xs text-accent-danger mt-1.5">{error}</p>
-                    )}
+                    ) : null}
                 </div>
 
-                {/* Product Verification Card */}
                 {selectedProduct && (
                     <div className="bg-primary-50 border border-primary-200 rounded-xl p-4 flex flex-col gap-3">
                         <div className="flex items-start gap-3">
@@ -153,7 +163,6 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                     </div>
                 )}
 
-                {/* Quantity Input */}
                 <div>
                     <Input
                         label="Quantity to Add"
@@ -167,7 +176,6 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                     />
                 </div>
 
-                {/* Actions */}
                 <div className="flex justify-end gap-3 pt-4 border-t border-primary-100">
                     <Button variant="secondary" onClick={onClose} type="button">
                         Cancel
@@ -184,7 +192,6 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                 </div>
             </div>
 
-            {/* Camera Scanner Modal inside this modal */}
             <CameraScannerModal
                 isOpen={showCameraScanner}
                 onClose={() => setShowCameraScanner(false)}

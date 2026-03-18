@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Plus, Grid, List, Package, AlertTriangle, Camera } from 'lucide-react';
 import Button from '../../../components/ui/Button';
@@ -25,6 +25,7 @@ const InventoryList = () => {
         updateProduct,
         fetchProducts,
         hasLoadedProducts,
+        isHydratingProducts,
     } = useDataStore();
     const [catalogSummary, setCatalogSummary] = useState(null);
     const [summaryError, setSummaryError] = useState('');
@@ -34,6 +35,7 @@ const InventoryList = () => {
     const [viewMode, setViewMode] = useState('grid');
     const [showAddModal, setShowAddModal] = useState(false);
     const [showCameraScanner, setShowCameraScanner] = useState(false);
+    const deferredSearchQuery = useDeferredValue(searchQuery);
 
     useEffect(() => {
         if (!hasLoadedProducts && !loading) {
@@ -101,18 +103,21 @@ const InventoryList = () => {
         ];
     }, [storeProducts]);
 
-    const filteredProducts = storeProducts.filter((product) => {
-        const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase())
-            || product.sku.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesCategory = selectedCategory === 'all'
-            || product.category.toLowerCase() === selectedCategory.toLowerCase();
-        const matchesStock = selectedStockFilter === 'all'
-            || (selectedStockFilter === 'out' && product.quantity <= 0)
-            || (selectedStockFilter === 'low' && product.quantity > 0 && product.quantity <= 5)
-            || (selectedStockFilter === 'medium' && product.quantity >= 6 && product.quantity <= 20)
-            || (selectedStockFilter === 'high' && product.quantity > 20);
-        return matchesSearch && matchesCategory && matchesStock;
-    });
+    const filteredProducts = useMemo(() => (
+        storeProducts.filter((product) => {
+            const normalizedQuery = deferredSearchQuery.toLowerCase();
+            const matchesSearch = product.name.toLowerCase().includes(normalizedQuery)
+                || product.sku.toLowerCase().includes(normalizedQuery);
+            const matchesCategory = selectedCategory === 'all'
+                || product.category.toLowerCase() === selectedCategory.toLowerCase();
+            const matchesStock = selectedStockFilter === 'all'
+                || (selectedStockFilter === 'out' && product.quantity <= 0)
+                || (selectedStockFilter === 'low' && product.quantity > 0 && product.quantity <= 5)
+                || (selectedStockFilter === 'medium' && product.quantity >= 6 && product.quantity <= 20)
+                || (selectedStockFilter === 'high' && product.quantity > 20);
+            return matchesSearch && matchesCategory && matchesStock;
+        })
+    ), [deferredSearchQuery, selectedCategory, selectedStockFilter, storeProducts]);
 
     const totalProducts = catalogSummary?.totalProducts ?? storeProducts.length;
     const uniqueProducts = catalogSummary?.uniqueProducts ?? storeProducts.length;
@@ -233,6 +238,10 @@ const InventoryList = () => {
                     </Button>
                 </div>
             </div>
+
+            {isHydratingProducts && !loading && (
+                <p className="text-sm text-primary-500">Loading more catalog pages in the background...</p>
+            )}
 
             {loading ? (
                 <Card className="text-center py-12">
