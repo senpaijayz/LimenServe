@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Minus, Calculator, Printer, User, Phone, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, ShoppingCart, Sparkles } from 'lucide-react';
+import { Search, Plus, Minus, Calculator, Printer, User, Phone, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
@@ -151,7 +151,9 @@ const buildRetrievedPrintableQuote = (quote) => {
 const PublicEstimate = () => {
     const [searchParams] = useSearchParams();
     const packageShelfRef = useRef(null);
+    const [workflowStage, setWorkflowStage] = useState('choice');
     const [mode, setMode] = useState('estimate');
+    const [estimatePhase, setEstimatePhase] = useState('details');
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
     const { vehicle, updateVehicle, clearVehicle, hasVehicle } = usePublicVehicleSelection({ includePlate: true, syncToSearch: true });
@@ -222,8 +224,11 @@ const PublicEstimate = () => {
     useEffect(() => {
         if (mode !== 'estimate') {
             setShowSummaryDrawer(false);
+            return;
         }
-    }, [mode]);
+
+        setShowSummaryDrawer(estimatePhase === 'summary');
+    }, [estimatePhase, mode]);
 
     useEffect(() => {
         if (!showSummaryDrawer || isDesktopDock || mode !== 'estimate') {
@@ -262,6 +267,16 @@ const PublicEstimate = () => {
     const incomingServiceGroup = searchParams.get('serviceGroup') || '';
     const highlightedVehiclePackageKey = incomingPackageKey.startsWith('vehicle-') ? incomingPackageKey : incomingServiceGroup ? `vehicle-${incomingServiceGroup}` : '';
     const vehicleInfo = [vehicle.displayLabel, vehicle.plateNo].filter(Boolean).join(' / ');
+
+    useEffect(() => {
+        if (!highlightedVehiclePackageKey || !hasVehicle) {
+            return;
+        }
+
+        setWorkflowStage('active');
+        setMode('estimate');
+        setEstimatePhase('catalog');
+    }, [hasVehicle, highlightedVehiclePackageKey]);
 
     useEffect(() => {
         if (mode !== 'estimate' || !hasVehicle) {
@@ -454,6 +469,8 @@ const PublicEstimate = () => {
     const totalLineCount = selectedParts.length + selectedServices.length;
     const selectedProductIds = selectedParts.map((part) => part.id);
     const selectedServiceIds = selectedServices.map((service) => service.id);
+    const summaryFocusProduct = focusedProduct || selectedParts[selectedParts.length - 1] || null;
+    const summaryFocusSelection = selectedParts.find((part) => part.id === summaryFocusProduct?.id);
     const draftPrintableQuote = buildDraftPrintableQuote({
         quoteMeta,
         customerName,
@@ -513,6 +530,7 @@ const PublicEstimate = () => {
         setShowSummaryDrawer(false);
         setShowPrintPreview(false);
         setPrintSource('draft');
+        setEstimatePhase('details');
         setQuoteMeta(createQuoteMeta());
     };
 
@@ -522,11 +540,17 @@ const PublicEstimate = () => {
         setCurrentPage(1);
     };
 
-    const handleModeChange = (nextMode) => {
+    const handleModeSelect = (nextMode) => {
+        setWorkflowStage('active');
         setMode(nextMode);
-        if (nextMode !== 'estimate') {
-            setShowSummaryDrawer(false);
-        }
+        setEstimatePhase(nextMode === 'estimate'
+            ? (hasItems ? 'summary' : (hasVehicle || customerName || customerPhone ? 'catalog' : 'details'))
+            : 'details');
+    };
+
+    const goToModeChoice = () => {
+        setWorkflowStage('choice');
+        setShowSummaryDrawer(false);
     };
 
     const contentShiftClass = mode === 'estimate' && showSummaryDrawer && isDesktopDock
@@ -551,12 +575,22 @@ const PublicEstimate = () => {
                             <span className="text-xs font-bold tracking-[0.3em] font-sans text-primary-500 uppercase">Quotations</span>
                         </div>
                         <h1 className="text-5xl md:text-7xl font-display font-extrabold text-primary-950 tracking-tighter leading-[1.1]">
-                            {hasVehicle ? `Estimate for ${vehicle.displayLabel}` : 'Get Estimate'}
+                            {workflowStage === 'choice'
+                                ? 'Get Estimate'
+                                : mode === 'retrieve'
+                                    ? 'Retrieve Quote'
+                                    : hasVehicle
+                                        ? `Estimate for ${vehicle.displayLabel}`
+                                        : 'Build Estimate'}
                         </h1>
                         <p className="mt-4 text-lg text-primary-600 max-w-2xl">
-                            {hasVehicle
-                                ? 'Vehicle-first browsing is active. Build a draft quotation with matched service packages and Good / Better / Best bundle offers for your Mitsubishi.'
-                                : 'Build a draft quotation from the live Mitsubishi catalog or retrieve an active quote and print it instantly.'}
+                            {workflowStage === 'choice'
+                                ? 'Phase 1 only shows the two main actions. Choose Build Estimate or Retrieve Quote first, then move into the next step of the flow.'
+                                : mode === 'retrieve'
+                                    ? 'This flow is dedicated to looking up a saved quote and printing it without rebuilding the cart.'
+                                    : estimatePhase === 'summary'
+                                        ? 'You are now in the review phase, where the quote cart shows line items, recommendations, and smart packages together.'
+                                        : 'This estimate now moves by phase so the screen stays focused while you choose customer details, parts, and services.'}
                         </p>
                     </div>
                 </div>
@@ -566,37 +600,75 @@ const PublicEstimate = () => {
                 <div className="surface mb-8 p-4 md:p-5">
                     <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                         <div className="max-w-2xl">
-                            <p className="text-xs font-bold tracking-[0.28em] uppercase text-primary-400">Public quotation tools</p>
-                            <h2 className="mt-2 text-2xl font-display font-semibold text-primary-950">Choose the flow you need right now</h2>
-                            <p className="mt-2 text-sm text-primary-500">Switch between building a fresh estimate and retrieving a saved quote without losing what you already entered.</p>
+                            <p className="text-xs font-bold tracking-[0.28em] uppercase text-primary-400">{workflowStage === 'choice' ? 'Phase 1' : mode === 'retrieve' ? 'Phase 2' : 'Estimate flow'}</p>
+                            <h2 className="mt-2 text-2xl font-display font-semibold text-primary-950">
+                                {workflowStage === 'choice'
+                                    ? 'Choose the flow you need right now'
+                                    : mode === 'retrieve'
+                                        ? 'Retrieve and print a saved quote'
+                                        : ESTIMATE_PHASES.find((phase) => phase.id === estimatePhase)?.label || 'Estimate flow'}
+                            </h2>
+                            <p className="mt-2 text-sm text-primary-500">
+                                {workflowStage === 'choice'
+                                    ? 'Start with one clear action instead of loading the whole estimation workspace at once.'
+                                    : mode === 'retrieve'
+                                        ? 'This path stays separate from estimate building so the screen only shows the retrieval work.'
+                                        : ESTIMATE_PHASES.find((phase) => phase.id === estimatePhase)?.description}
+                            </p>
                         </div>
-                        <div className="grid w-full gap-2 rounded-[26px] border border-primary-200 bg-white/80 p-2 shadow-sm sm:max-w-[520px] sm:grid-cols-2">
-                            {MODE_OPTIONS.map((option) => {
-                                const Icon = option.icon;
-                                const isActive = mode === option.id;
-                                return (
-                                    <button
-                                        key={option.id}
-                                        type="button"
-                                        onClick={() => handleModeChange(option.id)}
-                                        className={`rounded-[20px] px-4 py-4 text-left transition-all duration-200 ${isActive
-                                            ? 'bg-primary-950 text-white shadow-[0_18px_40px_rgba(15,23,42,0.18)]'
-                                            : 'bg-transparent text-primary-600 hover:bg-primary-50 hover:text-primary-950'
-                                            }`}
-                                    >
-                                        <span className={`flex h-10 w-10 items-center justify-center rounded-2xl ${isActive ? 'bg-white/10 text-white' : 'bg-primary-50 text-accent-primary'}`}>
-                                            <Icon className="h-5 w-5" />
-                                        </span>
-                                        <span className="mt-4 block text-sm font-semibold">{option.label}</span>
-                                        <span className={`mt-1 block text-xs ${isActive ? 'text-white/70' : 'text-primary-500'}`}>{option.description}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
+                        {workflowStage === 'choice' ? (
+                            <div className="grid w-full gap-2 rounded-[26px] border border-primary-200 bg-white/80 p-2 shadow-sm sm:max-w-[520px] sm:grid-cols-2">
+                                {MODE_OPTIONS.map((option) => {
+                                    const Icon = option.icon;
+                                    return (
+                                        <button
+                                            key={option.id}
+                                            type="button"
+                                            onClick={() => handleModeSelect(option.id)}
+                                            className="rounded-[20px] px-4 py-4 text-left text-primary-600 transition-all duration-200 hover:bg-primary-50 hover:text-primary-950"
+                                        >
+                                            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 text-accent-primary">
+                                                <Icon className="h-5 w-5" />
+                                            </span>
+                                            <span className="mt-4 block text-sm font-semibold">{option.label}</span>
+                                            <span className="mt-1 block text-xs text-primary-500">{option.description}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        ) : mode === 'estimate' ? (
+                            <div className="grid w-full gap-2 rounded-[26px] border border-primary-200 bg-white/80 p-2 shadow-sm lg:max-w-[760px] lg:grid-cols-3">
+                                {ESTIMATE_PHASES.map((phase, index) => {
+                                    const isActive = estimatePhase === phase.id;
+                                    const isComplete = index < ESTIMATE_PHASES.findIndex((item) => item.id === estimatePhase);
+                                    return (
+                                        <button
+                                            key={phase.id}
+                                            type="button"
+                                            onClick={() => setEstimatePhase(phase.id)}
+                                            className={`rounded-[20px] px-4 py-4 text-left transition-all duration-200 ${isActive
+                                                ? 'bg-primary-950 text-white shadow-[0_18px_40px_rgba(15,23,42,0.18)]'
+                                                : isComplete
+                                                    ? 'bg-accent-primary/5 text-primary-950'
+                                                    : 'bg-transparent text-primary-600 hover:bg-primary-50 hover:text-primary-950'
+                                                }`}
+                                        >
+                                            <span className={`text-[0.65rem] font-bold uppercase tracking-[0.22em] ${isActive ? 'text-white/70' : 'text-primary-400'}`}>{phase.phase}</span>
+                                            <span className="mt-3 block text-sm font-semibold">{phase.label}</span>
+                                            <span className={`mt-1 block text-xs ${isActive ? 'text-white/70' : 'text-primary-500'}`}>{phase.description}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="flex flex-wrap items-center gap-3">
+                                <PhaseBackButton onClick={goToModeChoice} label="Change Flow" />
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                {mode === 'retrieve' ? (
+                {workflowStage === 'active' && (mode === 'retrieve' ? (
                     <PublicQuoteLookupCard
                         estimateNumber={lookupEstimateNumber}
                         phone={lookupPhone}
@@ -611,6 +683,7 @@ const PublicEstimate = () => {
                 ) : (
                     <div className="grid grid-cols-1 gap-8">
                         <div className="space-y-8">
+                            {estimatePhase === 'details' && (
                             <div className="surface p-6 md:p-7">
                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                     <div>
@@ -661,8 +734,9 @@ const PublicEstimate = () => {
                                     </div>
                                 )}
                             </div>
+                            )}
 
-                            {hasVehicle && (
+                            {estimatePhase === 'catalog' && hasVehicle && (
                                 <div ref={packageShelfRef}>
                                     <VehiclePackageShowcase
                                         vehicle={vehicle}
@@ -681,6 +755,7 @@ const PublicEstimate = () => {
                                 </div>
                             )}
 
+                            {estimatePhase === 'catalog' && (
                             <div className="surface p-6">
                                 <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-end lg:justify-between">
                                     <div className="flex items-start gap-3">
@@ -797,8 +872,9 @@ const PublicEstimate = () => {
                                     </div>
                                 </div>
                             </div>
+                            )}
 
-                            {focusedProduct && (
+                            {estimatePhase === 'catalog' && focusedProduct && (
                                 <ProductPackageSuggestions
                                     product={focusedProduct}
                                     vehicleModelId={vehicle.model || focusedProduct.model || focusedProduct.vehicleModelName || ''}
@@ -816,6 +892,7 @@ const PublicEstimate = () => {
                                 />
                             )}
 
+                            {estimatePhase === 'catalog' && (
                             <div className="surface p-6">
                                 <div className="flex items-start gap-3 mb-6">
                                     <div className="w-10 h-10 rounded-lg bg-accent-primary/5 border border-accent-primary/20 flex items-center justify-center">
@@ -859,58 +936,38 @@ const PublicEstimate = () => {
                                     })}
                                 </div>
                             </div>
+                            )}
+
+                            {estimatePhase === 'details' && (
+                                <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+                                    <PhaseBackButton onClick={goToModeChoice} label="Back to Flow Choice" />
+                                    <Button variant="primary" onClick={() => setEstimatePhase('catalog')}>
+                                        Continue to Parts and Services
+                                    </Button>
+                                </div>
+                            )}
+
+                            {estimatePhase === 'catalog' && (
+                                <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+                                    <PhaseBackButton onClick={() => setEstimatePhase('details')} label="Back to Customer + Vehicle" />
+                                    <Button variant="primary" onClick={() => setEstimatePhase('summary')}>
+                                        Review Quote
+                                    </Button>
+                                </div>
+                            )}
                         </div>
                     </div>
-                )}
+                ))}
             </section>
 
-            {mode === 'estimate' && (
-                <>
-                    <motion.button
-                        type="button"
-                        onClick={() => setShowSummaryDrawer(true)}
-                        className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-30 flex items-center justify-between gap-3 rounded-[28px] border border-primary-200 bg-primary-950 px-4 py-3 text-left text-white shadow-[0_18px_48px_rgba(15,23,42,0.28)] transition hover:bg-primary-900 print:hidden sm:inset-x-auto sm:bottom-6 sm:right-6 sm:w-auto sm:min-w-[280px] sm:px-5"
-                        whileTap={{ scale: 0.98 }}
-                        animate={{ opacity: showSummaryDrawer ? 0 : 1, y: showSummaryDrawer ? 12 : 0, scale: showSummaryDrawer ? 0.96 : 1 }}
-                        aria-label="Open quotation summary cart"
-                    >
-                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
-                            <ShoppingCart className="h-5 w-5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <span className="block text-[0.65rem] font-bold uppercase tracking-[0.24em] text-white/65">
-                                Quote Cart
-                            </span>
-                            <span className="block text-sm font-semibold text-white">
-                                {totalItemCount} item{totalItemCount === 1 ? '' : 's'} - {formatCurrency(total)}
-                            </span>
-                            <span className="block text-xs text-white/60">
-                                {totalLineCount} line{totalLineCount === 1 ? '' : 's'} in summary
-                            </span>
-                        </div>
-                    </motion.button>
-
-                    <AnimatePresence>
-                        {showSummaryDrawer && (
-                            <>
-                                {!isDesktopDock && (
-                                    <motion.button
-                                        type="button"
-                                        className="fixed inset-0 z-40 bg-primary-950/30 print:hidden"
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                        onClick={() => setShowSummaryDrawer(false)}
-                                        aria-label="Close quotation summary"
-                                    />
-                                )}
-                                <motion.aside
-                                    className={summaryPanelClassName}
-                                    initial={{ opacity: 0, x: isDesktopDock ? 28 : 0, y: isDesktopDock ? 0 : 28, scale: isDesktopDock ? 1 : 0.98 }}
-                                    animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, x: isDesktopDock ? 24 : 0, y: isDesktopDock ? 0 : 24, scale: 0.98 }}
-                                    transition={{ duration: 0.22, ease: 'easeOut' }}
-                                >
+            {mode === 'estimate' && estimatePhase === 'summary' && (
+                <motion.aside
+                    className={summaryPanelClassName}
+                    initial={{ opacity: 0, x: isDesktopDock ? 28 : 0, y: isDesktopDock ? 0 : 28, scale: isDesktopDock ? 1 : 0.98 }}
+                    animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: isDesktopDock ? 24 : 0, y: isDesktopDock ? 0 : 24, scale: 0.98 }}
+                    transition={{ duration: 0.22, ease: 'easeOut' }}
+                >
                                     <div className={`border-b border-primary-200 bg-white/90 ${isDesktopDock ? 'px-5 py-5 md:px-6' : 'px-4 py-4 sm:px-5 sm:py-5'}`}>
                                         {!isDesktopDock && <div className="mx-auto mb-4 h-1.5 w-14 rounded-full bg-primary-200" />}
                                         <div className="flex items-start justify-between gap-4">
@@ -923,11 +980,11 @@ const PublicEstimate = () => {
                                             </div>
                                             <button
                                                 type="button"
-                                                onClick={() => setShowSummaryDrawer(false)}
+                                                onClick={() => setEstimatePhase('catalog')}
                                                 className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-primary-200 bg-primary-50 text-primary-500 transition hover:border-primary-300 hover:bg-white hover:text-primary-950"
-                                                aria-label="Close quotation summary"
+                                                aria-label="Back to parts and services"
                                             >
-                                                <X className="h-5 w-5" />
+                                                <ChevronLeft className="h-5 w-5" />
                                             </button>
                                         </div>
 
@@ -1063,6 +1120,24 @@ const PublicEstimate = () => {
                                                 )}
                                             </div>
                                         )}
+
+                                        {summaryFocusProduct && (
+                                            <ProductPackageSuggestions
+                                                product={summaryFocusProduct}
+                                                vehicleModelId={vehicle.model || summaryFocusProduct.model || summaryFocusProduct.vehicleModelName || ''}
+                                                vehicleContext={vehicle}
+                                                anchorQuantity={summaryFocusSelection?.quantity ?? 1}
+                                                onAddProduct={addSuggestedPart}
+                                                onAddService={addSuggestedService}
+                                                onAddBundle={addBundleToEstimate}
+                                                selectedProductIds={selectedProductIds}
+                                                selectedServiceIds={selectedServiceIds}
+                                                title="Recommendations and packages in this cart"
+                                                subtitle="Use the review phase to add the remaining upsell items and labor for the selected product without going back to the long catalog view."
+                                                highlightedPackageKey={incomingPackageKey}
+                                                bundleMode="estimate"
+                                            />
+                                        )}
                                     </div>
 
                                     <div className={`border-t border-primary-200 bg-white/95 px-4 py-4 backdrop-blur ${isDesktopDock ? 'md:px-6 md:py-5' : 'pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:px-5 sm:py-5'}`}>
@@ -1095,10 +1170,6 @@ const PublicEstimate = () => {
                                         </div>
                                     </div>
                                 </motion.aside>
-                            </>
-                        )}
-                    </AnimatePresence>
-                </>
             )}
 
             <Modal
