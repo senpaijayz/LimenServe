@@ -181,7 +181,7 @@ function extractSingle(data) {
 }
 
 async function selectRows(table, queryBuilder) {
-  let query = supabaseAdmin.schema('app').from(table).select('*');
+  let query = supabaseAdmin.from(table).select('*');
 
   if (typeof queryBuilder === 'function') {
     query = queryBuilder(query);
@@ -195,7 +195,7 @@ async function selectRows(table, queryBuilder) {
 }
 
 async function insertRow(table, payload) {
-  const { data, error } = await supabaseAdmin.schema('app').from(table).insert(payload).select('*').single();
+  const { data, error } = await supabaseAdmin.from(table).insert(payload).select('*').single();
   if (error) {
     throw error;
   }
@@ -203,7 +203,7 @@ async function insertRow(table, payload) {
 }
 
 async function updateRow(table, id, payload) {
-  const { data, error } = await supabaseAdmin.schema('app').from(table).update(payload).eq('id', id).select('*').single();
+  const { data, error } = await supabaseAdmin.from(table).update(payload).eq('id', id).select('*').single();
   if (error) {
     throw error;
   }
@@ -211,7 +211,7 @@ async function updateRow(table, id, payload) {
 }
 
 async function deleteRow(table, id) {
-  const { error } = await supabaseAdmin.schema('app').from(table).delete().eq('id', id);
+  const { error } = await supabaseAdmin.from(table).delete().eq('id', id);
   if (error) {
     throw error;
   }
@@ -219,14 +219,14 @@ async function deleteRow(table, id) {
 
 async function getLayoutRow({ layoutId = null, allowDraft = false } = {}) {
   if (layoutId) {
-    const { data, error } = await supabaseAdmin.schema('app').from('layouts').select('*').eq('id', layoutId).single();
+    const { data, error } = await supabaseAdmin.from('layouts').select('*').eq('id', layoutId).single();
     if (error) {
       throw error;
     }
     return data;
   }
 
-  const { data, error } = await supabaseAdmin.schema('app')
+  const { data, error } = await supabaseAdmin
     .from('layouts')
     .select('*')
     .in('status', allowDraft ? ['published', 'draft'] : ['published'])
@@ -243,7 +243,7 @@ async function getLayoutRow({ layoutId = null, allowDraft = false } = {}) {
     return layout;
   }
 
-  const { data: fallbackData, error: fallbackError } = await supabaseAdmin.schema('app')
+  const { data: fallbackData, error: fallbackError } = await supabaseAdmin
     .from('layouts')
     .select('*')
     .order('version_number', { ascending: false })
@@ -839,7 +839,7 @@ export async function publishLayout(layoutId) {
     throw new Error('Layout not found.');
   }
 
-  const { error: archiveError } = await supabaseAdmin.schema('app')
+  const { error: archiveError } = await supabaseAdmin
     .from('layouts')
     .update({ status: 'archived' })
     .eq('store_id', layout.store_id)
@@ -986,7 +986,7 @@ export async function removeShelf(shelfId) {
 }
 
 export async function updateItemMaster(productId, payload) {
-  const { data, error } = await supabaseAdmin.schema('app')
+  const { data, error } = await supabaseAdmin
     .from('items')
     .upsert({
       product_id: productId,
@@ -1043,7 +1043,7 @@ export async function createOrUpdateItemLocation(payload) {
 }
 
 export async function deleteItemLocation(layoutId, itemId) {
-  const { error } = await supabaseAdmin.schema('app')
+  const { error } = await supabaseAdmin
     .from('item_locations')
     .delete()
     .eq('layout_id', layoutId)
