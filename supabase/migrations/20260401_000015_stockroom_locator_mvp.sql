@@ -1,4 +1,5 @@
-create extension if not exists pg_trgm;
+create schema if not exists extensions;
+create extension if not exists pg_trgm with schema extensions;
 
 create table if not exists app.stores (
   id uuid primary key default gen_random_uuid(),
