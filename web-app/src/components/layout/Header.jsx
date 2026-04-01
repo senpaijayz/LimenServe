@@ -31,6 +31,10 @@ const Header = () => {
 
     // Get page title from path
     const getPageTitle = () => {
+        if (location.pathname.startsWith('/stockroom/admin')) {
+            return 'Stockroom Admin';
+        }
+
         const pathMap = {
             '/dashboard': 'Dashboard',
             '/pos': 'Point of Sale',
@@ -38,6 +42,7 @@ const Header = () => {
             '/quotation': 'Cost Estimation & Quotation',
             '/services': 'Service Orders',
             '/stockroom': '3D Stockroom',
+            '/stockroom/admin': 'Stockroom Admin',
             '/reports': 'Reports & Analytics',
             '/users': 'User Management',
         };

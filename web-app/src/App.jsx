@@ -16,6 +16,7 @@ const POSTerminal = lazy(() => import('./modules/pos/pages/POSTerminal'));
 const QuoteBuilder = lazy(() => import('./modules/quotation/pages/QuoteBuilder'));
 const ServiceOrderList = lazy(() => import('./modules/services/pages/ServiceOrderList'));
 const StockroomViewer = lazy(() => import('./modules/stockroom/pages/StockroomViewer'));
+const StockroomAdminPage = lazy(() => import('./modules/stockroom/pages/StockroomAdminPage'));
 const SalesReport = lazy(() => import('./modules/reports/pages/SalesReport'));
 const UserManagement = lazy(() => import('./modules/users/pages/UserManagement'));
 
@@ -51,6 +52,7 @@ function App() {
                     <Route path="/quotation" element={<QuoteBuilder />} />
                     <Route path="/services" element={<ServiceOrderList />} />
                     <Route path="/stockroom" element={<StockroomViewer />} />
+                    <Route path="/stockroom/admin" element={<StockroomAdminPage />} />
                     <Route path="/reports" element={<SalesReport />} />
                     <Route path="/reports/sales" element={<SalesReport />} />
                     <Route path="/users" element={<UserManagement />} />

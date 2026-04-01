@@ -67,6 +67,35 @@ export default defineConfig({
       }
     })
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return undefined;
+          }
+
+          if (id.includes('@react-three/drei')) {
+            return 'r3f-drei';
+          }
+
+          if (id.includes('@react-three/fiber')) {
+            return 'r3f-core';
+          }
+
+          if (id.includes('\\three\\') || id.includes('/three/')) {
+            return 'three-core';
+          }
+
+          if (id.includes('react-dom') || id.includes('react-router-dom') || id.includes('react')) {
+            return 'react-vendor';
+          }
+
+          return undefined;
+        },
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true
