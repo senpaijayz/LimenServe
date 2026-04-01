@@ -1,54 +1,16 @@
-create or replace view public.stores
-with (security_invoker = true) as
-select * from app.stores;
-
-create or replace view public.layouts
-with (security_invoker = true) as
-select * from app.layouts;
-
-create or replace view public.floors
-with (security_invoker = true) as
-select * from app.floors;
-
-create or replace view public.zones
-with (security_invoker = true) as
-select * from app.zones;
-
-create or replace view public.aisles
-with (security_invoker = true) as
-select * from app.aisles;
-
-create or replace view public.shelves
-with (security_invoker = true) as
-select * from app.shelves;
-
-create or replace view public.shelf_levels
-with (security_invoker = true) as
-select * from app.shelf_levels;
-
-create or replace view public.shelf_slots
-with (security_invoker = true) as
-select * from app.shelf_slots;
-
-create or replace view public.items
-with (security_invoker = true) as
-select * from app.items;
-
-create or replace view public.admin_users
-with (security_invoker = true) as
-select * from app.admin_users;
-
-create or replace view public.item_locations
-with (security_invoker = true) as
-select * from app.item_locations;
-
-create or replace view public.products
-with (security_invoker = true) as
-select * from app.products;
-
-create or replace view public.inventory_balances
-with (security_invoker = true) as
-select * from app.inventory_balances;
+alter view public.stores set (security_invoker = true);
+alter view public.layouts set (security_invoker = true);
+alter view public.floors set (security_invoker = true);
+alter view public.zones set (security_invoker = true);
+alter view public.aisles set (security_invoker = true);
+alter view public.shelves set (security_invoker = true);
+alter view public.shelf_levels set (security_invoker = true);
+alter view public.shelf_slots set (security_invoker = true);
+alter view public.items set (security_invoker = true);
+alter view public.admin_users set (security_invoker = true);
+alter view public.item_locations set (security_invoker = true);
+alter view public.products set (security_invoker = true);
+alter view public.inventory_balances set (security_invoker = true);
 
 revoke all on public.stores from authenticated;
 revoke all on public.layouts from authenticated;
