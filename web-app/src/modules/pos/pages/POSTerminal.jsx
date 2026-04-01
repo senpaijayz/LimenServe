@@ -1,8 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, X, Check, Printer, Wrench } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, Check, Printer, Wrench, Camera } from 'lucide-react';
 import Button from '../../../components/ui/Button';
-import Card from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
 import { useCart } from '../../../context/CartContext';
 import { formatCurrency } from '../../../utils/formatters';
@@ -10,9 +8,10 @@ import { useToast } from '../../../components/ui/Toast';
 import useBarcodeScanner from '../../../hooks/useBarcodeScanner';
 import useDataStore from '../../../store/useDataStore';
 import Barcode from 'react-barcode';
-import { Camera } from 'lucide-react';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import AddServiceModal from '../../../components/ui/AddServiceModal';
+import { createPosSale } from '../../../services/posApi';
+import SaleReceiptPreview from '../components/SaleReceiptPreview.jsx';
 
 /**
  * POS Terminal Page
@@ -34,6 +33,8 @@ const POSTerminal = () => {
     const [paymentAmount, setPaymentAmount] = useState('');
     const deferredSearchQuery = useDeferredValue(searchQuery);
     const [lastTransaction, setLastTransaction] = useState(null);
+    const [paymentError, setPaymentError] = useState('');
+    const [processingPayment, setProcessingPayment] = useState(false);
 
     useEffect(() => {
         if (!hasLoadedProducts && !loading) {
@@ -85,23 +86,54 @@ const POSTerminal = () => {
     const change = parseFloat(paymentAmount) - totals.total;
 
     // Handle payment
-    const handlePayment = () => {
-        if (parseFloat(paymentAmount) < totals.total) return;
-        // Store transaction for receipt
-        setLastTransaction({
-            id: `T-${Date.now().toString().slice(-4)}`,
-            customerName: customerName || 'Walk-in Customer',
-            discountPercent: discountPercent,
-            items: [...items],
-            totals: { ...totals },
-            cashReceived: parseFloat(paymentAmount),
-            change: parseFloat(paymentAmount) - totals.total,
-            date: new Date(),
-        });
-        setShowPaymentModal(false);
-        setShowSuccessModal(true);
-        clearCart();
-        setPaymentAmount('');
+    const handlePayment = async () => {
+        if (parseFloat(paymentAmount) < totals.total || processingPayment) return;
+
+        setProcessingPayment(true);
+        setPaymentError('');
+
+        try {
+            const payload = {
+                customerName,
+                paymentMethod: 'cash',
+                cashReceived: parseFloat(paymentAmount),
+                changeDue: change,
+                discountPercent,
+                totals,
+                items: items.map((item) => ({
+                    id: item.id,
+                    productId: item.lineType === 'product' ? (item.productId || item.id) : null,
+                    serviceId: item.lineType === 'service' ? (item.serviceId || null) : null,
+                    lineType: item.lineType || (item.sku === 'SERVICE' ? 'service' : 'product'),
+                    name: item.name,
+                    sku: item.sku,
+                    quantity: item.quantity,
+                    unitPrice: item.price,
+                    lineTotal: item.price * item.quantity,
+                    displayName: item.name,
+                })),
+            };
+
+            const transaction = await createPosSale(payload);
+
+            setLastTransaction({
+                saleId: transaction.saleId,
+                transactionNumber: transaction.transactionNumber,
+                sale: transaction.sale,
+                items: transaction.items ?? [],
+                receipt: transaction.receipt ?? null,
+            });
+
+            setShowPaymentModal(false);
+            setShowSuccessModal(true);
+            clearCart();
+            setPaymentAmount('');
+            success(`Sale ${transaction.transactionNumber} completed`);
+        } catch (error) {
+            setPaymentError(error.message || 'Failed to save the sale.');
+        } finally {
+            setProcessingPayment(false);
+        }
     };
 
     return (
@@ -150,10 +182,8 @@ const POSTerminal = () => {
                     <div className="flex-1 overflow-y-auto">
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                             {filteredProducts.map((product) => (
-                                <motion.button
+                                <button
                                     key={product.id}
-                                    whileHover={{ scale: 1.02 }}
-                                    whileTap={{ scale: 0.98 }}
                                     onClick={() => handleProductClick(product)}
                                     className="pos-item text-left"
                                 >
@@ -178,7 +208,7 @@ const POSTerminal = () => {
                                     <p className="text-lg font-bold text-accent-blue">
                                         {formatCurrency(product.price)}
                                     </p>
-                                </motion.button>
+                                </button>
                             ))}
                         </div>
                     </div>
@@ -317,7 +347,12 @@ const POSTerminal = () => {
             {/* Payment Modal */}
             <Modal
                 isOpen={showPaymentModal}
-                onClose={() => setShowPaymentModal(false)}
+                onClose={() => {
+                    if (!processingPayment) {
+                        setShowPaymentModal(false);
+                        setPaymentError('');
+                    }
+                }}
                 title="Process Payment"
                 size="md"
             >
@@ -371,17 +406,32 @@ const POSTerminal = () => {
                         </div>
                     )}
 
+                    {paymentError && (
+                        <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/10 px-4 py-3 text-sm text-accent-danger">
+                            {paymentError}
+                        </div>
+                    )}
+
                     {/* Actions */}
                     <div className="flex gap-3">
-                        <Button variant="secondary" fullWidth onClick={() => setShowPaymentModal(false)}>
+                        <Button
+                            variant="secondary"
+                            fullWidth
+                            disabled={processingPayment}
+                            onClick={() => {
+                                setShowPaymentModal(false);
+                                setPaymentError('');
+                            }}
+                        >
                             Cancel
                         </Button>
                         <Button
                             variant="success"
                             fullWidth
-                            disabled={!paymentAmount || parseFloat(paymentAmount) < totals.total}
+                            disabled={!paymentAmount || parseFloat(paymentAmount) < totals.total || processingPayment}
                             onClick={handlePayment}
                             leftIcon={<Check className="w-4 h-4" />}
+                            isLoading={processingPayment}
                         >
                             Complete Sale
                         </Button>
@@ -393,123 +443,22 @@ const POSTerminal = () => {
             <Modal
                 isOpen={showSuccessModal}
                 onClose={() => setShowSuccessModal(false)}
-                size="md"
+                size="xl"
                 showCloseButton={false}
             >
                 <div className="text-center py-4">
-                    <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        className="w-16 h-16 rounded-full bg-accent-success/20 flex items-center justify-center mx-auto mb-3"
-                    >
+                    <div className="w-16 h-16 rounded-full bg-accent-success/20 flex items-center justify-center mx-auto mb-3">
                         <Check className="w-8 h-8 text-accent-success" />
-                    </motion.div>
-                    <h3 className="text-xl font-display font-bold text-primary-100 mb-1">
+                    </div>
+                    <h3 className="text-xl font-display font-bold text-primary-950 mb-1">
                         Payment Successful!
                     </h3>
                     <p className="text-primary-400 text-sm mb-4">Transaction completed</p>
                 </div>
 
                 {/* Receipt Preview */}
-                {lastTransaction && (
-                    <div className="receipt-preview" id="pos-receipt" style={{ fontFamily: 'Inter, Arial, sans-serif' }}>
-                        {/* Company Header */}
-                        <div style={{ textAlign: 'center', borderBottom: '2px solid black', paddingBottom: '12px', marginBottom: '12px' }}>
-                            <img src="/LogoLimen.jpg" alt="Limen Logo" style={{ height: '48px', margin: '0 auto 6px', display: 'block', filter: 'grayscale(1) contrast(1.3)' }} />
-                            <h2 style={{ fontSize: '16px', fontWeight: '800', margin: 0, letterSpacing: '-0.5px' }}>LIMEN AUTO PARTS CENTER</h2>
-                            <p style={{ fontSize: '11px', margin: '2px 0 0', color: '#555' }}>1308, 264 Epifanio de los Santos Ave, Pasay City, 1308 Metro Manila</p>
-                            <p style={{ fontSize: '11px', margin: '1px 0 0', color: '#555' }}>Tel: +63 917 123 4567 | TIN: 000-123-456-000</p>
-                        </div>
-
-                        {/* Sold To / Date / Receipt No */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
-                            <div>
-                                <span style={{ fontWeight: '600' }}>Sold to: </span>
-                                <span style={{ borderBottom: '1px solid #aaa', display: 'inline-block', minWidth: '180px', paddingBottom: '1px' }}>
-                                    {lastTransaction.customerName}
-                                </span>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <div><span style={{ fontWeight: '600' }}>Date: </span><span>{lastTransaction.date.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: '2-digit' })}</span></div>
-                                <div><span style={{ fontWeight: '600' }}>Receipt No: </span><span>{lastTransaction.id}</span></div>
-                                <div><span style={{ fontWeight: '600' }}>Sold by: </span><span>Cashier</span></div>
-                            </div>
-                        </div>
-
-                        {/* Title */}
-                        <h3 style={{ textAlign: 'center', fontSize: '20px', fontWeight: '800', margin: '12px 0 14px', letterSpacing: '2px' }}>SALES INVOICE</h3>
-
-                        {/* Items Table */}
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                                <tr>
-                                    <th style={{ background: '#111', color: 'white', padding: '7px 10px', fontSize: '11px', fontWeight: '700', textAlign: 'left', textTransform: 'uppercase' }}>Qty</th>
-                                    <th style={{ background: '#111', color: 'white', padding: '7px 10px', fontSize: '11px', fontWeight: '700', textAlign: 'left', textTransform: 'uppercase' }}>Item</th>
-                                    <th style={{ background: '#111', color: 'white', padding: '7px 10px', fontSize: '11px', fontWeight: '700', textAlign: 'right', textTransform: 'uppercase' }}>Price/Unit</th>
-                                    <th style={{ background: '#111', color: 'white', padding: '7px 10px', fontSize: '11px', fontWeight: '700', textAlign: 'right', textTransform: 'uppercase' }}>Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {lastTransaction.items.map((item) => (
-                                    <tr key={item.id}>
-                                        <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>{item.quantity}</td>
-                                        <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>{item.name}</td>
-                                        <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right' }}>{formatCurrency(item.price)}</td>
-                                        <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(item.price * item.quantity)}</td>
-                                    </tr>
-                                ))}
-                                {/* Empty rows to fill space */}
-                                {lastTransaction.items.length < 8 && Array.from({ length: 8 - lastTransaction.items.length }).map((_, i) => (
-                                    <tr key={`empty-${i}`}>
-                                        <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>&nbsp;</td>
-                                        <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}></td>
-                                        <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}></td>
-                                        <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}></td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-
-                        {/* Totals - Right Aligned */}
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
-                            <div style={{ width: '220px', fontSize: '12px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #ddd' }}>
-                                    <span style={{ fontWeight: '600' }}>Subtotal</span>
-                                    <span>{formatCurrency(lastTransaction.totals.rawSubtotal || lastTransaction.totals.subtotal)}</span>
-                                </div>
-
-                                {lastTransaction.discountPercent > 0 && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #ddd', color: '#d00' }}>
-                                        <span style={{ fontWeight: '600' }}>Discount ({lastTransaction.discountPercent}%)</span>
-                                        <span>-{formatCurrency(lastTransaction.totals.discountAmount)}</span>
-                                    </div>
-                                )}
-
-                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #ddd' }}>
-                                    <span style={{ fontWeight: '600' }}>VAT (12%)</span>
-                                    <span>{formatCurrency(lastTransaction.totals.tax)}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderTop: '2px solid black', marginTop: '4px', fontWeight: '800', fontSize: '14px' }}>
-                                    <span>Total</span>
-                                    <span>{formatCurrency(lastTransaction.totals.total)}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: '12px' }}>
-                                    <span>Cash Received</span>
-                                    <span>{formatCurrency(lastTransaction.cashReceived)}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderTop: '1px solid #ddd', fontWeight: '700' }}>
-                                    <span>Change Due</span>
-                                    <span>{formatCurrency(lastTransaction.change)}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Footer */}
-                        <div style={{ textAlign: 'center', marginTop: '28px', paddingTop: '12px', borderTop: '1px solid #ccc' }}>
-                            <p style={{ fontSize: '10px', color: '#666', fontWeight: '500' }}>Thank you for shopping at Limen Auto Parts Center!</p>
-                            <p style={{ fontSize: '9px', color: '#888', marginTop: '2px' }}>"Your Trusted Partner on the Road"</p>
-                        </div>
-                    </div>
+                {lastTransaction?.receipt && (
+                    <SaleReceiptPreview receipt={lastTransaction.receipt} printId="pos-receipt" />
                 )}
 
                 <div className="flex gap-3 print:hidden">

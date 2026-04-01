@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Download, Filter, RefreshCw, TrendingUp } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, Download, Filter, Receipt, RefreshCw, TrendingUp } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
+import Modal from '../../../components/ui/Modal';
 import SalesChart from '../../dashboard/components/SalesChart';
 import {
     getAnalyticsDashboardSnapshot,
@@ -10,7 +11,10 @@ import {
     getTopSellingItems,
     runFullAnalyticsRefresh,
 } from '../../../services/analyticsApi';
-import { formatCurrency, formatNumber } from '../../../utils/formatters';
+import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
+import { getPosSaleDetail, listPosSales } from '../../../services/posApi';
+import { PAYMENT_LABELS } from '../../../utils/constants';
+import SaleReceiptPreview from '../../pos/components/SaleReceiptPreview.jsx';
 
 const SalesReport = () => {
     const [filters, setFilters] = useState({
@@ -28,8 +32,15 @@ const SalesReport = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
+    const [salesHistory, setSalesHistory] = useState([]);
+    const [historyLoading, setHistoryLoading] = useState(true);
+    const [historyError, setHistoryError] = useState('');
+    const [historySearch, setHistorySearch] = useState('');
+    const [selectedSale, setSelectedSale] = useState(null);
+    const [loadingSaleDetail, setLoadingSaleDetail] = useState(false);
+    const activeSaleRequestRef = useRef(null);
 
-    const loadAnalytics = async () => {
+    const loadAnalytics = useCallback(async () => {
         setLoading(true);
         setError('');
 
@@ -59,11 +70,36 @@ const SalesReport = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [filters.category, filters.endDate, filters.granularity, filters.location, filters.productId, filters.startDate]);
+
+    const loadSalesHistory = useCallback(async () => {
+        setHistoryLoading(true);
+        setHistoryError('');
+
+        try {
+            const { sales } = await listPosSales({
+                startDate: filters.startDate,
+                endDate: filters.endDate,
+                search: historySearch || null,
+                limit: 20,
+                page: 1,
+            });
+
+            setSalesHistory(sales);
+        } catch (loadError) {
+            setHistoryError(loadError.message || 'Unable to load sales history.');
+        } finally {
+            setHistoryLoading(false);
+        }
+    }, [filters.endDate, filters.startDate, historySearch]);
 
     useEffect(() => {
         void loadAnalytics();
-    }, [filters.startDate, filters.endDate, filters.category, filters.productId, filters.location, filters.granularity]);
+    }, [loadAnalytics]);
+
+    useEffect(() => {
+        void loadSalesHistory();
+    }, [loadSalesHistory]);
 
     const handleRefresh = async () => {
         setRefreshing(true);
@@ -72,10 +108,30 @@ const SalesReport = () => {
         try {
             await runFullAnalyticsRefresh('Manual refresh from reports page');
             await loadAnalytics();
+            await loadSalesHistory();
         } catch (refreshError) {
             setError(refreshError.message || 'Unable to refresh analytics.');
         } finally {
             setRefreshing(false);
+        }
+    };
+
+    const handleOpenSale = async (saleId) => {
+        activeSaleRequestRef.current = saleId;
+        setLoadingSaleDetail(true);
+        setSelectedSale(null);
+
+        try {
+            const detail = await getPosSaleDetail(saleId);
+            if (activeSaleRequestRef.current === saleId) {
+                setSelectedSale(detail);
+            }
+        } catch (detailError) {
+            setHistoryError(detailError.message || 'Unable to load the selected receipt.');
+        } finally {
+            if (activeSaleRequestRef.current === saleId) {
+                setLoadingSaleDetail(false);
+            }
         }
     };
 
@@ -203,6 +259,112 @@ const SalesReport = () => {
                     </div>
                 </Card>
             </div>
+
+            <Card
+                title="Sales History"
+                subtitle="Receipt-level history for POS and converted sales."
+                headerAction={(
+                    <div className="w-72">
+                        <input
+                            type="text"
+                            value={historySearch}
+                            onChange={(e) => setHistorySearch(e.target.value)}
+                            placeholder="Search receipt, customer, or cashier"
+                            className="input py-2.5 text-sm"
+                        />
+                    </div>
+                )}
+            >
+                {historyError && (
+                    <div className="mb-4 rounded-xl border border-accent-danger/20 bg-accent-danger/5 px-4 py-3 text-sm text-accent-danger">
+                        {historyError}
+                    </div>
+                )}
+
+                <div className="overflow-x-auto">
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Receipt</th>
+                                <th>Date / Time</th>
+                                <th>Customer</th>
+                                <th>Cashier</th>
+                                <th className="text-right">Items</th>
+                                <th>Payment</th>
+                                <th>Status</th>
+                                <th className="text-right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {salesHistory.map((sale) => (
+                                <tr
+                                    key={sale.sale_id}
+                                    onClick={() => handleOpenSale(sale.sale_id)}
+                                    className="cursor-pointer transition-colors hover:bg-primary-50"
+                                >
+                                    <td>
+                                        <div className="flex flex-col">
+                                            <span className="font-semibold text-primary-950">{sale.transaction_number}</span>
+                                            <span className="text-xs text-primary-500">Business date {sale.business_date}</span>
+                                        </div>
+                                    </td>
+                                    <td>{formatDateTime(sale.created_at)}</td>
+                                    <td>{sale.customer_name}</td>
+                                    <td>{sale.cashier_name}</td>
+                                    <td className="text-right">{formatNumber(sale.item_count)}</td>
+                                    <td>{PAYMENT_LABELS[sale.payment_method] || sale.payment_method}</td>
+                                    <td>
+                                        <span className="inline-flex rounded-full border border-accent-success/20 bg-accent-success/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-accent-success">
+                                            {sale.status}
+                                        </span>
+                                    </td>
+                                    <td className="text-right font-medium text-accent-blue">{formatCurrency(sale.total_amount)}</td>
+                                </tr>
+                            ))}
+                            {!historyLoading && salesHistory.length === 0 && (
+                                <tr>
+                                    <td colSpan="8" className="py-8 text-center text-primary-500">No sales matched the selected filters yet.</td>
+                                </tr>
+                            )}
+                            {historyLoading && (
+                                <tr>
+                                    <td colSpan="8" className="py-8 text-center text-primary-500">Loading sales history...</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
+
+            <Modal
+                isOpen={loadingSaleDetail || Boolean(selectedSale)}
+                onClose={() => {
+                    activeSaleRequestRef.current = null;
+                    setLoadingSaleDetail(false);
+                    setSelectedSale(null);
+                }}
+                title={selectedSale?.sale?.transactionNumber ? `Receipt ${selectedSale.sale.transactionNumber}` : 'Receipt'}
+                size="xl"
+            >
+                {loadingSaleDetail && (
+                    <div className="py-10 text-center text-sm text-primary-500">Loading receipt...</div>
+                )}
+
+                {!loadingSaleDetail && selectedSale?.receipt && (
+                    <div className="space-y-4">
+                        <SaleReceiptPreview receipt={selectedSale.receipt} printId="report-sale-receipt" />
+
+                        <div className="flex justify-end gap-3 print:hidden">
+                            <Button variant="secondary" onClick={() => setSelectedSale(null)}>
+                                Close
+                            </Button>
+                            <Button variant="primary" leftIcon={<Receipt className="h-4 w-4" />} onClick={() => window.print()}>
+                                Print Receipt
+                            </Button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 };

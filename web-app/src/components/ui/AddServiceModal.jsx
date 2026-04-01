@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Wrench } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
@@ -13,13 +13,12 @@ const AddServiceModal = ({ isOpen, onClose, onAddService }) => {
     const [servicePrice, setServicePrice] = useState('');
     const [error, setError] = useState('');
 
-    useEffect(() => {
-        if (isOpen) {
-            setServiceName('');
-            setServicePrice('');
-            setError('');
-        }
-    }, [isOpen]);
+    const handleClose = () => {
+        setServiceName('');
+        setServicePrice('');
+        setError('');
+        onClose();
+    };
 
     const handleSave = () => {
         const price = parseFloat(servicePrice);
@@ -38,12 +37,16 @@ const AddServiceModal = ({ isOpen, onClose, onAddService }) => {
             sku: 'SERVICE',
             name: serviceName.trim(),
             category: 'Service',
+            lineType: 'service',
+            productId: null,
+            serviceId: null,
             price: price,
-            quantity: 999, // Conceptually unlimited stock for services
+            quantity: 999,
+            maxQuantity: 999,
         };
 
         onAddService(serviceItem);
-        onClose();
+        handleClose();
     };
 
     if (!isOpen) return null;
@@ -51,7 +54,7 @@ const AddServiceModal = ({ isOpen, onClose, onAddService }) => {
     return (
         <Modal
             isOpen={isOpen}
-            onClose={onClose}
+            onClose={handleClose}
             title="Add Service / Labor"
             size="sm"
         >
@@ -81,7 +84,7 @@ const AddServiceModal = ({ isOpen, onClose, onAddService }) => {
                 />
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-primary-100">
-                    <Button variant="secondary" onClick={onClose}>
+                    <Button variant="secondary" onClick={handleClose}>
                         Cancel
                     </Button>
                     <Button

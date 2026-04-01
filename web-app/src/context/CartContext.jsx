@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { STORAGE_KEYS } from '../utils/constants';
 
@@ -22,36 +23,36 @@ export function CartProvider({ children }) {
     const [customerName, setCustomerName] = useState('');
 
     // Persist cart to localStorage
-    const persistCart = useCallback((newItems) => {
-        setItems(newItems);
-        localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(newItems));
-    }, []);
-
     /**
      * Add item to cart
      */
     const addItem = useCallback((product, quantity = 1) => {
         setItems(currentItems => {
             const existingIndex = currentItems.findIndex(item => item.id === product.id);
+            const lineType = product.lineType || (product.category === 'Service' ? 'service' : 'product');
+            const normalizedItem = {
+                id: product.id,
+                productId: lineType === 'product' ? (product.productId || product.id) : null,
+                serviceId: lineType === 'service' ? (product.serviceId || null) : null,
+                lineType,
+                name: product.name,
+                sku: product.sku,
+                price: product.price,
+                quantity,
+                maxQuantity: product.maxQuantity ?? product.quantity ?? 999,
+            };
 
             let newItems;
             if (existingIndex >= 0) {
                 // Update quantity if item exists
                 newItems = currentItems.map((item, index) =>
                     index === existingIndex
-                        ? { ...item, quantity: item.quantity + quantity }
+                        ? { ...item, quantity: Math.min(item.quantity + quantity, item.maxQuantity) }
                         : item
                 );
             } else {
                 // Add new item
-                newItems = [...currentItems, {
-                    id: product.id,
-                    name: product.name,
-                    sku: product.sku,
-                    price: product.price,
-                    quantity,
-                    maxQuantity: product.quantity, // Available stock
-                }];
+                newItems = [...currentItems, normalizedItem];
             }
 
             localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(newItems));
