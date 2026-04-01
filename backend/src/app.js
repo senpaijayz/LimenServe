@@ -8,6 +8,7 @@ import catalogRoutes from './routes/catalogRoutes.js';
 import estimateRoutes from './routes/estimateRoutes.js';
 import mechanicsRoutes from './routes/mechanicsRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
+import stockroomRoutes from './routes/stockroomRoutes.js';
 
 const app = express();
 const allowedOriginPatterns = env.frontendUrls;
@@ -70,6 +71,7 @@ app.use('/api/catalog', catalogRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/estimates', estimateRoutes);
 app.use('/api/mechanics', mechanicsRoutes);
+app.use('/api/stockroom', stockroomRoutes);
 
 app.use((error, _req, res, _next) => {
   console.error(error);
