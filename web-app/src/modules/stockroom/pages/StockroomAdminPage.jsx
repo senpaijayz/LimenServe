@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layers3, Map, Package, Save, Settings2, Sparkles, Waypoints } from 'lucide-react';
+import { Grip, Layers3, Map, Package, Save, Settings2, Sparkles, Waypoints } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
@@ -136,6 +136,8 @@ function StockroomAdminPage() {
   });
   const [masterSearch, setMasterSearch] = useState('');
   const [selectedMasterItemId, setSelectedMasterItemId] = useState('');
+  const [editorMode, setEditorMode] = useState('shelf');
+  const [selectedEntityKey, setSelectedEntityKey] = useState('');
   const [masterForm, setMasterForm] = useState({
     partCode: '',
     keywords: '',
@@ -197,9 +199,11 @@ function StockroomAdminPage() {
   const itemShelves = shelves.filter((shelf) => !masterForm.aisleId || shelf.aisleId === masterForm.aisleId);
   const itemLevels = shelfLevels.filter((level) => !masterForm.shelfId || level.shelfId === masterForm.shelfId);
   const itemSlots = shelfSlots.filter((slot) => !masterForm.shelfLevelId || slot.shelfLevelId === masterForm.shelfLevelId);
+  const activeLayoutId = selectedLayoutId || bootstrap?.activeLayout?.id || '';
 
   const handleLayoutSelect = async (layoutId) => {
     const bootstrapData = await selectLayout(layoutId);
+    setSelectedEntityKey('');
     setLayoutForm({
       name: bootstrapData?.activeLayout?.name ?? '',
       staircaseFloor1Anchor: bootstrapData?.activeLayout?.staircaseFloor1Anchor ?? { x: 13.5, y: 8.5 },
@@ -226,7 +230,7 @@ function StockroomAdminPage() {
   const handleLayoutSave = async () => {
     try {
       await saveLayoutMetadata({
-        layoutId: selectedLayoutId || bootstrap?.activeLayout?.id,
+        layoutId: activeLayoutId,
         ...layoutForm,
       });
       success('Layout metadata saved.');
@@ -239,7 +243,7 @@ function StockroomAdminPage() {
     try {
       await saveZone({
         ...zoneForm,
-        layoutId: selectedLayoutId,
+        layoutId: activeLayoutId,
         positionX: Number(zoneForm.positionX),
         positionY: Number(zoneForm.positionY),
         width: Number(zoneForm.width),
@@ -256,7 +260,7 @@ function StockroomAdminPage() {
     try {
       await saveAisle({
         ...aisleForm,
-        layoutId: selectedLayoutId,
+        layoutId: activeLayoutId,
         startX: Number(aisleForm.startX),
         startY: Number(aisleForm.startY),
         endX: Number(aisleForm.endX),
@@ -274,7 +278,7 @@ function StockroomAdminPage() {
     try {
       await saveShelf({
         ...shelfForm,
-        layoutId: selectedLayoutId,
+        layoutId: activeLayoutId,
         positionX: Number(shelfForm.positionX),
         positionY: Number(shelfForm.positionY),
         width: Number(shelfForm.width),
@@ -300,7 +304,7 @@ function StockroomAdminPage() {
         isActive: masterForm.isActive,
       });
       await saveItemLocation(selectedMasterItemId, {
-        layoutId: selectedLayoutId,
+        layoutId: activeLayoutId,
         floorId: masterForm.floorId,
         zoneId: masterForm.zoneId,
         aisleId: masterForm.aisleId,
@@ -309,6 +313,140 @@ function StockroomAdminPage() {
         shelfSlotId: masterForm.shelfSlotId,
       });
       success('Item metadata and placement saved.');
+    } catch (loadError) {
+      toastError(loadError.message);
+    }
+  };
+
+  const handleSceneSelect = (entity) => {
+    setSelectedEntityKey(`${entity.type}:${entity.id}`);
+    setCurrentFloor(entity.floorNumber);
+
+    if (entity.type === 'shelf') {
+      const shelf = shelves.find((entry) => entry.id === entity.id);
+      if (!shelf) {
+        return;
+      }
+
+      setEditorMode('shelf');
+      setShelfForm({
+        id: shelf.id,
+        layoutId: activeLayoutId,
+        floorId: shelf.floorId,
+        zoneId: shelf.zoneId,
+        aisleId: shelf.aisleId,
+        code: shelf.code,
+        name: shelf.name,
+        shelfType: shelf.shelfType,
+        positionX: shelf.positionX,
+        positionY: shelf.positionY,
+        width: shelf.width,
+        depth: shelf.depth,
+        height: shelf.height,
+      });
+    }
+
+    if (entity.type === 'zone') {
+      const zone = zones.find((entry) => entry.id === entity.id);
+      if (!zone) {
+        return;
+      }
+
+      setEditorMode('zone');
+      setZoneForm({
+        id: zone.id,
+        layoutId: activeLayoutId,
+        floorId: zone.floorId,
+        code: zone.code,
+        name: zone.name,
+        positionX: zone.positionX,
+        positionY: zone.positionY,
+        width: zone.width,
+        depth: zone.depth,
+        colorHex: zone.colorHex,
+      });
+    }
+
+    if (entity.type === 'staircase') {
+      setEditorMode('staircase');
+    }
+  };
+
+  const handleSceneCommit = async (entity) => {
+    try {
+      if (entity.type === 'shelf') {
+        const shelf = shelves.find((entry) => entry.id === entity.id);
+        if (!shelf) {
+          return;
+        }
+
+        const payload = {
+          id: shelf.id,
+          layoutId: activeLayoutId,
+          floorId: shelf.floorId,
+          zoneId: shelf.zoneId,
+          aisleId: shelf.aisleId,
+          code: shelf.code,
+          name: shelf.name,
+          shelfType: shelf.shelfType,
+          positionX: entity.positionX,
+          positionY: entity.positionY,
+          rotation: shelf.rotation ?? 0,
+          width: shelf.width,
+          depth: shelf.depth,
+          height: shelf.height,
+          accessSide: shelf.accessSide ?? 'front',
+          metadata: shelf.metadata ?? {},
+        };
+
+        setShelfForm((current) => ({ ...current, ...payload }));
+        await saveShelf(payload);
+        success(`Moved ${shelf.code}.`);
+      }
+
+      if (entity.type === 'zone') {
+        const zone = zones.find((entry) => entry.id === entity.id);
+        if (!zone) {
+          return;
+        }
+
+        const payload = {
+          id: zone.id,
+          layoutId: activeLayoutId,
+          floorId: zone.floorId,
+          code: zone.code,
+          name: zone.name,
+          positionX: entity.positionX,
+          positionY: entity.positionY,
+          width: zone.width,
+          depth: zone.depth,
+          colorHex: zone.colorHex,
+          metadata: zone.metadata ?? {},
+        };
+
+        setZoneForm((current) => ({ ...current, ...payload }));
+        await saveZone(payload);
+        success(`Moved ${zone.code}.`);
+      }
+
+      if (entity.type === 'staircase') {
+        const nextLayoutForm = {
+          ...layoutForm,
+          staircaseFloor1Anchor: entity.floorNumber === 1
+            ? { x: entity.positionX, y: entity.positionY }
+            : layoutForm.staircaseFloor1Anchor,
+          staircaseFloor2Anchor: entity.floorNumber === 2
+            ? { x: entity.positionX, y: entity.positionY }
+            : layoutForm.staircaseFloor2Anchor,
+        };
+
+        setLayoutForm(nextLayoutForm);
+        await saveLayoutMetadata({
+          layoutId: activeLayoutId,
+          ...nextLayoutForm,
+        });
+        success(`Moved staircase anchor on floor ${entity.floorNumber}.`);
+      }
     } catch (loadError) {
       toastError(loadError.message);
     }
@@ -347,7 +485,7 @@ function StockroomAdminPage() {
               variant="success"
               onClick={async () => {
                 try {
-                  await publishSelectedLayout(selectedLayoutId || bootstrap?.activeLayout?.id);
+                  await publishSelectedLayout(activeLayoutId);
                   success('Layout published.');
                 } catch (loadError) {
                   toastError(loadError.message);
@@ -503,12 +641,44 @@ function StockroomAdminPage() {
                 </button>
               ))}
             </div>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              {[
+                { value: 'shelf', label: 'Drag Shelves' },
+                { value: 'zone', label: 'Drag Zones' },
+                { value: 'staircase', label: 'Drag Staircase' },
+              ].map((tool) => (
+                <button
+                  key={tool.value}
+                  onClick={() => setEditorMode(tool.value)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    editorMode === tool.value ? 'bg-accent-blue text-white' : 'bg-primary-100 text-primary-600'
+                  }`}
+                >
+                  {tool.label}
+                </button>
+              ))}
+            </div>
+            <div className="mb-4 flex items-start gap-3 rounded-2xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600">
+              <Grip className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent-blue" />
+              <span>Select a shelf, zone, or staircase inside the scene, then drag it. The new position saves when you release the gizmo.</span>
+            </div>
             <Suspense fallback={<SceneFallback />}>
               <StockroomScene
                 bootstrap={bootstrap}
                 currentFloor={currentFloor}
                 selectedItemDetails={selectedItemDetails}
-                onStairClick={() => setCurrentFloor(currentFloor === 1 ? 2 : 1)}
+                editorMode={editorMode}
+                selectedEntityKey={selectedEntityKey}
+                onEntitySelect={handleSceneSelect}
+                onEntityCommit={(entity) => void handleSceneCommit(entity)}
+                onStairClick={(entity) => {
+                  if (editorMode === 'staircase') {
+                    handleSceneSelect(entity);
+                    return;
+                  }
+
+                  setCurrentFloor(currentFloor === 1 ? 2 : 1);
+                }}
               />
             </Suspense>
           </Card>
