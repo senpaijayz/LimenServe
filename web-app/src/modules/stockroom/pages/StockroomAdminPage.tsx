@@ -2,14 +2,17 @@ import {
   ChevronDown,
   Grid2X2,
   Plus,
+  RotateCcw,
   Save,
   Search,
   Sparkles,
+  UnlockKeyhole,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
 import {
   lazy,
+  type ReactNode,
   Suspense,
   useEffect,
   useMemo,
@@ -36,14 +39,19 @@ import {
 
 const StockroomScene = lazy(() => import('../components/StockroomScene'));
 
-const OBJECT_LIBRARY: Array<{ label: string; kind: SceneMetadataObject['kind']; style?: SceneMetadataObject['style'] }> = [
-  { label: 'Shelf (2-bay)', kind: 'shelf', style: { variant: '2-bay' } },
-  { label: 'Shelf (3-bay)', kind: 'shelf', style: { variant: '3-bay' } },
+const OBJECT_LIBRARY: Array<{
+  label: string;
+  kind: SceneMetadataObject['kind'];
+  style?: SceneMetadataObject['style'];
+}> = [
+  { label: 'Shelf (2-slot)', kind: 'shelf', style: { variant: '2-bay' } },
+  { label: 'Shelf (3-slot)', kind: 'shelf', style: { variant: '3-bay' } },
   { label: 'Wall Segment', kind: 'wall' },
-  { label: 'Door', kind: 'door' },
+  { label: 'Staircase', kind: 'stairs' },
   { label: 'Comfort Room', kind: 'comfort_room' },
   { label: 'Cashier Counter', kind: 'cashier_counter' },
   { label: 'Entrance', kind: 'entrance' },
+  { label: 'Door', kind: 'door' },
 ];
 
 function buildInitialMapping(item: StockroomMasterItem | null) {
@@ -67,6 +75,50 @@ function formatFloorOrdinal(floorNumber: number) {
   return `${floorNumber}th`;
 }
 
+function ToolbarButton({
+  children,
+  active = false,
+  onClick,
+}: {
+  children: ReactNode;
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex h-11 items-center gap-2 rounded-2xl border px-4 text-sm font-semibold transition ${
+        active
+          ? 'border-fuchsia-400/40 bg-gradient-to-r from-rose-500 via-fuchsia-500 to-indigo-500 text-white shadow-[0_14px_34px_rgba(79,70,229,0.28)]'
+          : 'border-white/10 bg-white/5 text-slate-200 hover:border-white/20 hover:bg-white/10'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function StatCard({
+  label,
+  total,
+}: {
+  label: string;
+  total: number;
+}) {
+  return (
+    <div className="rounded-[28px] border border-white/10 bg-slate-900/82 px-5 py-5 text-white shadow-[0_18px_40px_rgba(2,6,23,0.28)]">
+      <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-r from-rose-500 via-fuchsia-500 to-indigo-500 text-sm font-semibold">
+        {total}
+      </div>
+      <h3 className="mt-4 text-2xl font-semibold">
+        {total} {label}
+      </h3>
+      <p className="text-sm text-slate-400">Total</p>
+    </div>
+  );
+}
+
 function StockroomAdminPage() {
   const navigate = useNavigate();
   const { success, error: toastError } = useToast();
@@ -84,13 +136,13 @@ function StockroomAdminPage() {
     viewMode,
     layouts,
     selectedLayoutId,
-  masterItems,
-  masterSearchQuery,
-  selectedMasterItemId,
-  selectedItemDetails,
-  sceneMetadataDraft,
-  entityOverrides,
-  selectedEntityKey,
+    masterItems,
+    masterSearchQuery,
+    selectedMasterItemId,
+    selectedItemDetails,
+    sceneMetadataDraft,
+    entityOverrides,
+    selectedEntityKey,
     adminBusy,
     adminError,
     sceneSaveStatus,
@@ -108,12 +160,12 @@ function StockroomAdminPage() {
     createLayoutDraft,
     publishSelectedLayout,
     resetSceneDraft,
-  saveSceneMetadataNow,
-  addSceneObject,
-  previewEntity,
-  rotateEntity,
-  commitSceneEntity,
-  removeSceneObject,
+    saveSceneMetadataNow,
+    addSceneObject,
+    previewEntity,
+    rotateEntity,
+    commitSceneEntity,
+    removeSceneObject,
     saveMasterPlacement,
     deleteMasterPlacement,
   } = useStockroomStore();
@@ -142,7 +194,7 @@ function StockroomAdminPage() {
   const floorTabs = useMemo(() => buildFloorTabs(bootstrap), [bootstrap]);
   const scene = useMemo(
     () => buildSceneModel(bootstrap, sceneMetadataDraft, entityOverrides),
-    [bootstrap, sceneMetadataDraft, entityOverrides],
+    [bootstrap, entityOverrides, sceneMetadataDraft],
   );
   const selectedEntity = useMemo(
     () => scene.entities.find((entity) => entity.entityKey === selectedEntityKey) ?? null,
@@ -166,7 +218,7 @@ function StockroomAdminPage() {
     return (
       <div className="rounded-[30px] border border-slate-200 bg-white p-8 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
         <h1 className="text-2xl font-semibold text-slate-950">Layout Admin</h1>
-        <p className="mt-3 text-sm text-slate-500">Only administrators can edit the design workspace.</p>
+        <p className="mt-3 text-sm text-slate-500">Only administrators can edit the stockroom design workspace.</p>
         <button
           type="button"
           onClick={() => navigate('/stockroom')}
@@ -184,11 +236,11 @@ function StockroomAdminPage() {
   const shelves = bootstrap?.shelves ?? [];
   const shelfLevels = bootstrap?.shelfLevels ?? [];
   const shelfSlots = bootstrap?.shelfSlots ?? [];
-
   const selectedFloorRecord = floors.find((floor) => floor.floorNumber === currentFloor) ?? floors[0];
   const currentFloorShelves = scene.entitiesByFloor[currentFloor]?.filter((entity) => entity.kind === 'shelf').length ?? 0;
   const currentFloorCounters = scene.entitiesByFloor[currentFloor]?.filter((entity) => entity.kind === 'cashier_counter').length ?? 0;
   const currentFloorStairs = scene.entitiesByFloor[currentFloor]?.filter((entity) => entity.kind === 'stairs').length ?? 0;
+  const currentFloorEntrances = scene.entitiesByFloor[currentFloor]?.filter((entity) => entity.kind === 'entrance' || entity.kind === 'door').length ?? 0;
 
   const mappingZones = zones.filter((zone) => !mappingForm.floorId || zone.floorId === mappingForm.floorId);
   const mappingAisles = aisles.filter((aisle) => !mappingForm.zoneId || aisle.zoneId === mappingForm.zoneId);
@@ -226,7 +278,7 @@ function StockroomAdminPage() {
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,_rgba(8,12,23,1),_rgba(12,19,34,0.96)_52%,_rgba(21,32,56,0.92))] px-6 py-7 text-white shadow-[0_30px_90px_rgba(2,6,23,0.32)]">
+      <section className="overflow-hidden rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,_rgba(7,12,23,1),_rgba(11,18,32,0.97)_52%,_rgba(18,28,50,0.93))] px-6 py-7 text-white shadow-[0_30px_90px_rgba(2,6,23,0.32)]">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-[0.28em] text-slate-400">Design Workspace</p>
@@ -238,39 +290,62 @@ function StockroomAdminPage() {
               <span className="text-slate-500">/</span>{' '}
               <span className="text-emerald-400">DESIGN</span>
             </h1>
-            <p className="mt-3 text-sm text-slate-400">Drag to move, use the inspector to fine tune, and publish only when the draft is ready.</p>
+            <p className="mt-3 text-sm text-slate-400">Drag to move, rotate cleanly, and save only the draft you want to publish.</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             {floorTabs.map((tab) => (
-              <button
+              <ToolbarButton
                 key={tab.value}
-                type="button"
+                active={currentFloor === tab.value}
                 onClick={() => setCurrentFloor(tab.value)}
-                className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
-                  currentFloor === tab.value
-                    ? 'border-fuchsia-400/40 bg-gradient-to-r from-rose-500 via-fuchsia-500 to-indigo-500 text-white shadow-[0_14px_34px_rgba(79,70,229,0.28)]'
-                    : 'border-white/10 bg-white/5 text-slate-200 hover:border-white/20 hover:bg-white/10'
-                }`}
               >
+                <ChevronDown className={`h-4 w-4 ${currentFloor === tab.value ? '' : 'rotate-180'}`} />
                 {tab.label}
-              </button>
+              </ToolbarButton>
             ))}
-            <button
-              type="button"
-              onClick={() => setViewMode(viewMode === '3d' ? '2d' : '3d')}
-              className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/10"
-            >
+            <ToolbarButton onClick={() => setViewMode(viewMode === '3d' ? '2d' : '3d')}>
               <Grid2X2 className="h-4 w-4" />
               {viewMode === '3d' ? '2D View' : '3D View'}
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/stockroom')}
-              className="rounded-2xl border border-fuchsia-400/50 bg-gradient-to-r from-rose-500/90 via-fuchsia-500/90 to-indigo-500/90 px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(79,70,229,0.28)] transition hover:brightness-110"
-            >
+            </ToolbarButton>
+            <ToolbarButton active onClick={() => navigate('/stockroom')}>
+              <UnlockKeyhole className="h-4 w-4" />
               Exit Design
-            </button>
+            </ToolbarButton>
+          </div>
+        </div>
+
+        <div className="mt-5 max-w-xl">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              value={masterSearchQuery}
+              onChange={(event) => setMasterSearchQuery(event.target.value)}
+              placeholder="Search by Part Number (Material Code) or scan barcode..."
+              className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60"
+            />
+
+            {masterSearchQuery.trim() && filteredMasterItems.length > 0 && (!selectedMasterItem || masterSearchQuery !== selectedMasterItem.name) ? (
+              <div className="absolute left-0 top-full z-30 mt-2 max-h-[360px] w-full overflow-y-auto rounded-[24px] border border-white/10 bg-slate-950/96 p-2 shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
+                {filteredMasterItems.slice(0, 8).map((item) => (
+                  <button
+                    key={item.productId}
+                    type="button"
+                    onClick={() => {
+                      selectMasterItem(item.productId);
+                      setMasterSearchQuery(item.name);
+                      void loadItemDetails(item.productId, { focusTargetFloor: true }).catch(() => {
+                        clearSelectedItem();
+                      });
+                    }}
+                    className="w-full rounded-[18px] px-3 py-3 text-left transition hover:bg-white/5"
+                  >
+                    <p className="font-medium text-white">{item.name}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">{item.sku}</p>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -278,38 +353,6 @@ function StockroomAdminPage() {
       <section className="rounded-[30px] border border-white/10 bg-slate-900/85 p-4 shadow-[0_24px_60px_rgba(2,6,23,0.34)] backdrop-blur-xl">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="relative flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <input
-                value={masterSearchQuery}
-                onChange={(event) => setMasterSearchQuery(event.target.value)}
-                placeholder="Search by Part Number (Material Code) or scan barcode..."
-                className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60"
-              />
-
-              {masterSearchQuery.trim() && filteredMasterItems.length > 0 && (!selectedMasterItem || masterSearchQuery !== selectedMasterItem.name) ? (
-                <div className="absolute left-0 top-full z-30 mt-2 max-h-[360px] w-full overflow-y-auto rounded-[24px] border border-white/10 bg-slate-950/96 p-2 shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
-                  {filteredMasterItems.slice(0, 8).map((item) => (
-                    <button
-                      key={item.productId}
-                      type="button"
-                      onClick={() => {
-                        selectMasterItem(item.productId);
-                        setMasterSearchQuery(item.name);
-                        void loadItemDetails(item.productId, { focusTargetFloor: true }).catch(() => {
-                          clearSelectedItem();
-                        });
-                      }}
-                      className="w-full rounded-[18px] px-3 py-3 text-left transition hover:bg-white/5"
-                    >
-                      <p className="font-medium text-white">{item.name}</p>
-                      <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">{item.sku}</p>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
             <div className="relative">
               <button
                 type="button"
@@ -321,7 +364,7 @@ function StockroomAdminPage() {
               </button>
 
               {addMenuOpen ? (
-                <div className="absolute left-0 top-full z-30 mt-2 w-56 rounded-[24px] border border-white/10 bg-slate-950/96 p-2 shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
+                <div className="absolute left-0 top-full z-30 mt-2 w-60 rounded-[24px] border border-white/10 bg-slate-950/96 p-2 shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
                   {OBJECT_LIBRARY.map((object) => (
                     <button
                       key={object.label}
@@ -340,7 +383,16 @@ function StockroomAdminPage() {
               ) : null}
             </div>
 
-            <p className="text-sm text-slate-500">Click an object to select it.</p>
+            <div className="flex min-h-12 items-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm text-slate-400">
+              {selectedEntity ? (
+                <>
+                  <span className="text-slate-500">Selected:</span>
+                  <span className="ml-2 font-semibold text-white">{selectedEntity.label}</span>
+                </>
+              ) : (
+                'Click an object to select it'
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -359,6 +411,7 @@ function StockroomAdminPage() {
                 ))}
               </select>
             </div>
+
             <button
               type="button"
               onClick={() => void saveSceneMetadataNow().then(() => success('Draft saved.')).catch((err: Error) => toastError(err.message))}
@@ -372,12 +425,13 @@ function StockroomAdminPage() {
               onClick={() => void createLayoutDraft(`Layout ${layouts.length + 1}`).then(() => success('Draft created.')).catch((err: Error) => toastError(err.message))}
               className="inline-flex h-12 items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/10"
             >
+              <Plus className="h-4 w-4" />
               Save As
             </button>
             <button
               type="button"
               onClick={() => void publishSelectedLayout().then(() => success('Layout published.')).catch((err: Error) => toastError(err.message))}
-              className="inline-flex h-12 items-center gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
+              className="inline-flex h-12 items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-slate-200 transition hover:border-emerald-400/30 hover:bg-emerald-500/10"
             >
               Publish
             </button>
@@ -386,6 +440,7 @@ function StockroomAdminPage() {
               onClick={resetSceneDraft}
               className="inline-flex h-12 items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/10"
             >
+              <RotateCcw className="h-4 w-4" />
               Reset
             </button>
           </div>
@@ -421,7 +476,7 @@ function StockroomAdminPage() {
           )}
 
           <div className="absolute bottom-5 left-5 rounded-[20px] border border-white/10 bg-slate-950/78 px-4 py-4 text-white shadow-[0_18px_40px_rgba(2,6,23,0.35)] backdrop-blur-xl">
-            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">{selectedFloorRecord?.name || `Floor ${currentFloor}`}</p>
+            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">{selectedFloorRecord?.name || `${formatFloorOrdinal(currentFloor)} Floor`}</p>
             <div className="mt-3 space-y-2 text-sm text-slate-200">
               <div>{currentFloorShelves} Shelves</div>
               <div>{currentFloorCounters} Counters</div>
@@ -465,16 +520,7 @@ function StockroomAdminPage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {adminStats.map((card) => (
-          <div
-            key={card.id}
-            className="rounded-[28px] border border-white/10 bg-slate-900/82 px-5 py-5 text-white shadow-[0_18px_40px_rgba(2,6,23,0.28)]"
-          >
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-r from-fuchsia-500 via-indigo-500 to-blue-500 text-sm font-semibold">
-              {card.total}
-            </div>
-            <h3 className="mt-4 text-2xl font-semibold">{card.total} {card.label}</h3>
-            <p className="text-sm text-slate-400">Total</p>
-          </div>
+          <StatCard key={card.id} label={card.label} total={card.total} />
         ))}
       </div>
 
@@ -596,6 +642,27 @@ function StockroomAdminPage() {
           </div>
         </section>
       ) : null}
+
+      <section className="rounded-[28px] border border-white/10 bg-slate-900/82 px-5 py-5 text-sm text-slate-300 shadow-[0_18px_40px_rgba(2,6,23,0.28)]">
+        <div className="grid gap-4 lg:grid-cols-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">{selectedFloorRecord?.name || 'Current Floor'}</p>
+            <p className="mt-2 text-lg font-semibold text-white">{currentFloorShelves} Shelves</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Counters</p>
+            <p className="mt-2 text-lg font-semibold text-white">{currentFloorCounters}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Entrances</p>
+            <p className="mt-2 text-lg font-semibold text-white">{currentFloorEntrances}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Controls</p>
+            <p className="mt-2 text-lg font-semibold text-white">Drag to move | Scroll to zoom</p>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

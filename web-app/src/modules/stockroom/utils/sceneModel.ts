@@ -18,8 +18,8 @@ export const DEFAULT_SNAP_GRID = 0.25;
 export const ROTATION_STEP_DEGREES = 15;
 
 const DEFAULT_APPEARANCE = {
-  viewerBackground: '#f7f8fc',
-  adminBackground: '#2f5588',
+  viewerBackground: '#f7f5f0',
+  adminBackground: '#315481',
   canvasBorder: 'rgba(148, 163, 184, 0.18)',
   shadowColor: 'rgba(15, 23, 42, 0.16)',
 };
@@ -69,7 +69,7 @@ function buildWallDefaults(floor: StockroomFloor): SceneMetadataObject[] {
       position: { x: centerX, y: 0.12 },
       rotation: 0,
       size: { x: width, y: wallHeight, z: thickness },
-      style: { color: '#090d17', accentColor: '#2b3445' },
+      style: { color: '#0e131d', accentColor: '#232c3d' },
       locked: false,
     },
     {
@@ -80,7 +80,7 @@ function buildWallDefaults(floor: StockroomFloor): SceneMetadataObject[] {
       position: { x: centerX, y: depth - 0.12 },
       rotation: 0,
       size: { x: width, y: wallHeight, z: thickness },
-      style: { color: '#090d17', accentColor: '#2b3445' },
+      style: { color: '#0e131d', accentColor: '#232c3d' },
       locked: false,
     },
     {
@@ -91,7 +91,7 @@ function buildWallDefaults(floor: StockroomFloor): SceneMetadataObject[] {
       position: { x: 0.12, y: centerY },
       rotation: 90,
       size: { x: depth, y: wallHeight, z: thickness },
-      style: { color: '#090d17', accentColor: '#2b3445' },
+      style: { color: '#0e131d', accentColor: '#232c3d' },
       locked: false,
     },
     {
@@ -102,7 +102,7 @@ function buildWallDefaults(floor: StockroomFloor): SceneMetadataObject[] {
       position: { x: width - 0.12, y: centerY },
       rotation: 90,
       size: { x: depth, y: wallHeight, z: thickness },
-      style: { color: '#090d17', accentColor: '#2b3445' },
+      style: { color: '#0e131d', accentColor: '#232c3d' },
       locked: false,
     },
   ];
@@ -126,7 +126,7 @@ function buildDefaultSceneObjects(bootstrap: StockroomBootstrap): SceneMetadataO
       position: normalizeVec2(anchor, { x: floor.width * 0.22, y: floor.depth * 0.2 }),
       rotation: 0,
       size: { x: 2.4, y: 1.3, z: 3.1 },
-      style: { color: '#d8b382', accentColor: '#f6d0a0', glowColor: '#f6d0a0' },
+      style: { color: '#d7b58d', accentColor: '#f6d0a0', glowColor: '#f6d0a0' },
       locked: true,
     });
   });
@@ -141,7 +141,7 @@ function buildDefaultSceneObjects(bootstrap: StockroomBootstrap): SceneMetadataO
         position: { x: firstFloor.width * 0.72, y: Math.max(firstFloor.depth - 0.55, 0.5) },
         rotation: 0,
         size: { x: 2.2, y: 0.12, z: 0.55 },
-        style: { color: '#f43f5e', accentColor: '#fb7185', glowColor: '#fb7185' },
+        style: { color: '#ff3347', accentColor: '#ff7381', glowColor: '#ff7381' },
       },
       {
         id: 'cashier-counter-main',
@@ -151,7 +151,7 @@ function buildDefaultSceneObjects(bootstrap: StockroomBootstrap): SceneMetadataO
         position: { x: firstFloor.width * 0.76, y: firstFloor.depth * 0.74 },
         rotation: 0,
         size: { x: 2.5, y: 1.15, z: 0.95 },
-        style: { color: '#111827', accentColor: '#38bdf8' },
+        style: { color: '#111827', accentColor: '#fb7185' },
       },
       {
         id: 'comfort-room-main',
@@ -161,7 +161,7 @@ function buildDefaultSceneObjects(bootstrap: StockroomBootstrap): SceneMetadataO
         position: { x: firstFloor.width * 0.18, y: firstFloor.depth * 0.54 },
         rotation: 0,
         size: { x: 3.6, y: 2.4, z: 3.2 },
-        style: { color: '#0f172a', accentColor: '#94a3b8' },
+        style: { color: '#111827', accentColor: '#94a3b8' },
       },
       {
         id: 'comfort-room-door',
@@ -171,7 +171,7 @@ function buildDefaultSceneObjects(bootstrap: StockroomBootstrap): SceneMetadataO
         position: { x: firstFloor.width * 0.31, y: firstFloor.depth * 0.66 },
         rotation: 90,
         size: { x: 0.18, y: 2.1, z: 0.95 },
-        style: { color: '#e2e8f0', accentColor: '#38bdf8' },
+        style: { color: '#e6edf7', accentColor: '#7dd3fc' },
       },
     );
   }
@@ -278,26 +278,33 @@ export function buildSceneModel(
     };
   }
 
-  const zoneEntities: SceneEntity[] = bootstrap.zones.map((zone) => ({
-    id: zone.id,
-    entityKey: `zone:${zone.id}`,
-    kind: 'zone_overlay',
-    source: 'canonical',
-    floorNumber: bootstrap.floors.find((floor) => floor.id === zone.floorId)?.floorNumber ?? 1,
-    floorId: zone.floorId,
-    position: { x: zone.positionX + (zone.width / 2), y: zone.positionY + (zone.depth / 2) },
-    rotation: 0,
-    size: { x: zone.width, y: 0.04, z: zone.depth },
-    label: zone.name,
-    style: {
-      zoneColor: zone.colorHex,
-      opacity: 0.42,
-      accentColor: zone.colorHex,
-    },
-    linkedResourceId: zone.id,
-    resourceType: 'zone',
-    locked: false,
-  }));
+  const zoneEntities: SceneEntity[] = bootstrap.zones.map((zone) => {
+    const floor = bootstrap.floors.find((entry) => entry.id === zone.floorId);
+    const zoneCenterX = zone.positionX + zone.width / 2;
+    const floorMidpoint = (floor?.width ?? 18) / 2;
+    const fallbackColor = zoneCenterX <= floorMidpoint ? '#dcc9b3' : '#d5ceec';
+
+    return {
+      id: zone.id,
+      entityKey: `zone:${zone.id}`,
+      kind: 'zone_overlay',
+      source: 'canonical',
+      floorNumber: floor?.floorNumber ?? 1,
+      floorId: zone.floorId,
+      position: { x: zoneCenterX, y: zone.positionY + (zone.depth / 2) },
+      rotation: 0,
+      size: { x: zone.width, y: 0.04, z: zone.depth },
+      label: zone.name,
+      style: {
+        zoneColor: zone.colorHex || fallbackColor,
+        opacity: 0.32,
+        accentColor: zone.colorHex || fallbackColor,
+      },
+      linkedResourceId: zone.id,
+      resourceType: 'zone',
+      locked: false,
+    };
+  });
 
   const shelfEntities: SceneEntity[] = bootstrap.shelves.map((shelf) => ({
     id: shelf.id,
@@ -311,11 +318,11 @@ export function buildSceneModel(
     size: { x: shelf.width, y: shelf.height, z: shelf.depth },
     label: shelf.code || shelf.name,
     style: {
-      color: '#080b13',
-      accentColor: '#60a5fa',
+      color: '#0b1017',
+      accentColor: '#4f5d75',
       variant: (shelf.metadata?.sceneVariant as '2-bay' | '3-bay' | undefined) ?? (shelf.width > 3 ? '3-bay' : '2-bay'),
-      roughness: 0.82,
-      metalness: 0.06,
+      roughness: 0.88,
+      metalness: 0.04,
     },
     linkedResourceId: shelf.id,
     resourceType: 'shelf',
