@@ -157,7 +157,7 @@ const PublicCatalogView = () => {
   };
 
   return (
-    <div className="bg-primary-50 min-h-screen relative font-sans text-primary-900">
+    <div className="public-catalog-page bg-primary-50 min-h-screen relative font-sans text-primary-900">
       <div className="absolute top-0 right-0 w-full h-[60vh] bg-gradient-to-b from-white via-primary-50 to-primary-50 -z-10" />
       <div className="absolute top-[-20%] right-[-10%] w-[70vw] h-[70vw] bg-accent-blue/10 rounded-full blur-[150px] mix-blend-multiply -z-10 pointer-events-none opacity-60" />
       <div className="absolute top-[20%] left-[-10%] w-[40vw] h-[40vw] bg-accent-danger/5 rounded-full blur-[120px] mix-blend-multiply -z-10 pointer-events-none opacity-50" />

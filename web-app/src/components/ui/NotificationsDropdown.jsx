@@ -1,201 +1,146 @@
-import { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, AlertTriangle, Package, CheckCircle, Info, Wrench, X, Check } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Bell, Check, Info, Sparkles, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import useExperienceStore from '../../store/useExperienceStore';
 
-// Mock notifications
-const initialNotifications = [
-    {
-        id: 1,
-        type: 'warning',
-        title: 'Low Stock Alert',
-        message: 'Oil Filter - Montero Sport is running low (5 remaining)',
-        time: new Date(Date.now() - 15 * 60000),
-        read: false,
-    },
-    {
-        id: 2,
-        type: 'success',
-        title: 'Sale Completed',
-        message: 'Transaction #T-1234 completed successfully — ₱3,250.00',
-        time: new Date(Date.now() - 45 * 60000),
-        read: false,
-    },
-    {
-        id: 3,
-        type: 'info',
-        title: 'Service Order Updated',
-        message: 'SVC-001 has been marked as In Progress',
-        time: new Date(Date.now() - 2 * 3600000),
-        read: false,
-    },
-    {
-        id: 4,
-        type: 'warning',
-        title: 'Low Stock Alert',
-        message: 'Brake Pads Front - Mirage stock at 3 units',
-        time: new Date(Date.now() - 4 * 3600000),
-        read: true,
-    },
-    {
-        id: 5,
-        type: 'success',
-        title: 'New Service Order',
-        message: 'SVC-004 created for Ana Reyes — Wheel Alignment',
-        time: new Date(Date.now() - 6 * 3600000),
-        read: true,
-    },
-];
-
-const typeIcons = {
-    warning: AlertTriangle,
-    success: CheckCircle,
-    info: Info,
-    error: AlertTriangle,
+const toneClassMap = {
+    live: 'border-accent-info/20 bg-accent-info/10 text-accent-info',
+    alert: 'border-accent-warning/20 bg-accent-warning/10 text-accent-warning',
+    success: 'border-accent-success/20 bg-accent-success/10 text-accent-success',
+    neutral: 'border-white/10 bg-white/[0.05] text-primary-300',
 };
 
-const typeColors = {
-    warning: 'text-accent-warning bg-accent-warning/15',
-    success: 'text-accent-success bg-accent-success/15',
-    info: 'text-accent-info bg-accent-info/15',
-    error: 'text-accent-danger bg-accent-danger/15',
-};
-
-function formatTimeAgo(date) {
-    const seconds = Math.floor((new Date() - date) / 1000);
-    if (seconds < 60) return 'just now';
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-}
-
-/**
- * NotificationsDropdown
- * Dropdown panel for viewing and managing notifications
- */
 const NotificationsDropdown = () => {
-    const [isOpen, setIsOpen] = useState(false);
-    const [notifications, setNotifications] = useState(initialNotifications);
+    const navigate = useNavigate();
     const dropdownRef = useRef(null);
+    const { activityFeed } = useExperienceStore();
+    const [isOpen, setIsOpen] = useState(false);
+    const [readIds, setReadIds] = useState([]);
+    const [dismissedIds, setDismissedIds] = useState([]);
 
-    const unreadCount = notifications.filter(n => !n.read).length;
-
-    // Close on outside click
     useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
                 setIsOpen(false);
             }
         };
+
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const markAllRead = () => {
-        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    };
+    const notifications = useMemo(
+        () => activityFeed.filter((item) => !dismissedIds.includes(item.id)).slice(0, 8),
+        [activityFeed, dismissedIds],
+    );
 
-    const markRead = (id) => {
-        setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-    };
+    const unreadCount = notifications.filter((item) => !readIds.includes(item.id)).length;
 
-    const removeNotification = (id) => {
-        setNotifications(prev => prev.filter(n => n.id !== id));
+    const markAllRead = () => setReadIds(notifications.map((item) => item.id));
+
+    const openNotification = (item) => {
+        setReadIds((current) => [...new Set([...current, item.id])]);
+        setIsOpen(false);
+        navigate(item.route);
     };
 
     return (
         <div className="relative" ref={dropdownRef}>
-            {/* Bell Button */}
             <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="relative p-2 rounded-lg hover:bg-primary-50 transition-colors border border-transparent hover:border-primary-200"
+                type="button"
+                onClick={() => setIsOpen((current) => !current)}
+                className="relative inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-primary-300 transition hover:border-accent-info/20 hover:text-white"
+                aria-label="Open notifications"
             >
-                <Bell className="w-5 h-5 text-primary-400" />
+                <Bell className="h-5 w-5" />
                 {unreadCount > 0 && (
                     <motion.span
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-accent-blue rounded-full flex items-center justify-center border-2 border-white"
+                        className="absolute right-1.5 top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-info px-1 text-[10px] font-bold text-primary-950"
                     >
-                        <span className="text-[10px] font-bold text-white">{unreadCount}</span>
+                        {unreadCount}
                     </motion.span>
                 )}
             </button>
 
-            {/* Dropdown */}
             <AnimatePresence>
                 {isOpen && (
                     <motion.div
-                        initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                        initial={{ opacity: 0, y: -10, scale: 0.98 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                        transition={{ duration: 0.15 }}
-                        className="absolute right-0 top-full mt-2 w-96 max-h-[480px] overflow-hidden rounded-xl border border-primary-200 bg-white shadow-xl shadow-primary-950/5 z-50"
+                        exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                        transition={{ duration: 0.16 }}
+                        className="absolute right-0 top-full z-50 mt-3 w-[24rem] overflow-hidden rounded-[28px] border border-white/10 bg-primary-950/96 shadow-[0_30px_90px_rgba(2,8,23,0.72)]"
                     >
-                        {/* Header */}
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-primary-100 bg-primary-50">
-                            <div className="flex items-center gap-2">
-                                <h3 className="text-sm font-bold text-primary-950">Notifications</h3>
-                                {unreadCount > 0 && (
-                                    <span className="text-xs bg-accent-blue/10 text-accent-blue px-2 py-0.5 rounded-full font-bold">
-                                        {unreadCount} new
-                                    </span>
-                                )}
+                        <div className="flex items-center justify-between border-b border-white/8 px-5 py-4">
+                            <div>
+                                <p className="text-sm font-semibold text-white">Notifications</p>
+                                <p className="mt-1 text-xs text-primary-500">Operational cues pulled from the latest workspace signals.</p>
                             </div>
                             {unreadCount > 0 && (
                                 <button
+                                    type="button"
                                     onClick={markAllRead}
-                                    className="text-xs font-semibold text-accent-blue hover:underline flex items-center gap-1"
+                                    className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-primary-300"
                                 >
-                                    <Check className="w-3 h-3" /> Mark all read
+                                    <Check className="h-3.5 w-3.5" />
+                                    Read all
                                 </button>
                             )}
                         </div>
 
-                        {/* Notifications List */}
-                        <div className="overflow-y-auto max-h-[380px]">
-                            {notifications.length === 0 ? (
-                                <div className="text-center py-12 px-4">
-                                    <Bell className="w-10 h-10 text-primary-200 mx-auto mb-3" />
-                                    <p className="text-sm font-medium text-primary-400">No notifications</p>
-                                </div>
-                            ) : (
-                                notifications.map((notification) => {
-                                    const Icon = typeIcons[notification.type] || Info;
-                                    const colorClass = typeColors[notification.type] || typeColors.info;
+                        <div className="max-h-[26rem] overflow-y-auto px-3 py-3">
+                            {notifications.length > 0 ? notifications.map((item) => {
+                                const Icon = item.icon || Info;
+                                const isRead = readIds.includes(item.id);
 
-                                    return (
-                                        <div
-                                            key={notification.id}
-                                            className={`flex items-start gap-3 px-4 py-3 border-b border-primary-100 hover:bg-primary-50 cursor-pointer transition-colors ${!notification.read ? 'bg-accent-blue/5' : ''}`}
-                                            onClick={() => markRead(notification.id)}
-                                        >
-                                            <div className={`p-1.5 rounded-lg flex-shrink-0 mt-0.5 ${colorClass}`}>
-                                                <Icon className="w-3.5 h-3.5" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 mb-0.5">
-                                                    <p className={`text-sm font-semibold ${!notification.read ? 'text-primary-950' : 'text-primary-600'}`}>
-                                                        {notification.title}
-                                                    </p>
-                                                    {!notification.read && (
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-accent-blue flex-shrink-0" />
-                                                    )}
-                                                </div>
-                                                <p className="text-xs text-primary-500 line-clamp-2">{notification.message}</p>
-                                                <p className="text-[10px] font-medium text-primary-400 mt-1">{formatTimeAgo(notification.time)}</p>
-                                            </div>
+                                return (
+                                    <div
+                                        key={item.id}
+                                        className={`mb-2 rounded-[24px] border px-4 py-4 transition ${isRead
+                                            ? 'border-white/8 bg-white/[0.03]'
+                                            : 'border-accent-info/16 bg-accent-info/8'
+                                            }`}
+                                    >
+                                        <div className="flex items-start gap-3">
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); removeNotification(notification.id); }}
-                                                className="p-1 rounded hover:bg-primary-100 text-primary-300 hover:text-accent-danger flex-shrink-0 transition-colors"
+                                                type="button"
+                                                onClick={() => openNotification(item)}
+                                                className="flex min-w-0 flex-1 items-start gap-3 text-left"
                                             >
-                                                <X className="w-3 h-3" />
+                                                <span className={`mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl border ${toneClassMap[item.tone] || toneClassMap.neutral}`}>
+                                                    <Icon className="h-4 w-4" />
+                                                </span>
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="flex items-center gap-2">
+                                                        <span className="truncate text-sm font-semibold text-white">{item.title}</span>
+                                                        {!isRead && <Sparkles className="h-3.5 w-3.5 text-accent-info" />}
+                                                    </span>
+                                                    <span className="mt-1 block text-sm text-primary-400">{item.detail}</span>
+                                                    <span className="mt-3 block text-[11px] uppercase tracking-[0.18em] text-primary-500">{item.tag}</span>
+                                                </span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setDismissedIds((current) => [...current, item.id])}
+                                                className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-primary-500 transition hover:bg-white/[0.05] hover:text-white"
+                                                aria-label="Dismiss notification"
+                                            >
+                                                <X className="h-3.5 w-3.5" />
                                             </button>
                                         </div>
-                                    );
-                                })
+                                    </div>
+                                );
+                            }) : (
+                                <div className="flex flex-col items-center justify-center rounded-[24px] border border-dashed border-white/10 bg-white/[0.02] px-6 py-12 text-center">
+                                    <Bell className="h-10 w-10 text-primary-500" />
+                                    <p className="mt-4 text-sm font-semibold text-white">No new signals right now</p>
+                                    <p className="mt-2 text-sm text-primary-400">
+                                        Activity notifications will appear here as stock, sales, and quotation data refresh.
+                                    </p>
+                                </div>
                             )}
                         </div>
                     </motion.div>

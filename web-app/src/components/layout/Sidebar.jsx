@@ -1,23 +1,23 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import { NavLink, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
-    LayoutDashboard,
-    ShoppingCart,
-    Package,
-    FileText,
-    Wrench,
-    Box,
     BarChart3,
-    Users,
+    Box,
     ChevronLeft,
+    LayoutDashboard,
     LogOut,
+    Package,
+    ShoppingCart,
+    Sparkles,
+    Users,
+    Wrench,
+    FileText,
     X,
 } from 'lucide-react';
 import { useAuth } from '../../context/useAuth';
 import { useTheme } from '../../context/ThemeContext';
 import { NAV_ITEMS } from '../../utils/constants';
 
-// Icon mapping
 const iconMap = {
     LayoutDashboard,
     ShoppingCart,
@@ -29,50 +29,46 @@ const iconMap = {
     Users,
 };
 
-/**
- * Sidebar Component
- * Main navigation sidebar with collapsible state
- */
 const Sidebar = () => {
-    const MotionDiv = motion.div;
-    const MotionSpan = motion.span;
     const { user, logout } = useAuth();
     const { sidebarCollapsed, sidebarOpen, toggleSidebar, closeMobileSidebar } = useTheme();
     const location = useLocation();
 
-    // Filter nav items based on user role
-    const filterByRole = (items) => {
-        return items.filter(item => item.roles.includes(user?.role));
-    };
-
+    const filterByRole = (items) => items.filter((item) => item.roles.includes(user?.role));
     const mainNavItems = filterByRole(NAV_ITEMS.main);
     const adminNavItems = filterByRole(NAV_ITEMS.admin);
 
-    // Render navigation item
     const NavItem = ({ item }) => {
         const Icon = iconMap[item.icon];
-        const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+        const isActive = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
 
         return (
             <NavLink
                 to={item.path}
                 onClick={closeMobileSidebar}
-                className={`
-          sidebar-nav-item
-          ${isActive ? 'sidebar-nav-item-active' : ''}
-        `}
+                className={`sidebar-nav-item ${isActive ? 'sidebar-nav-item-active' : ''}`}
             >
-                {Icon && <Icon className="w-5 h-5 flex-shrink-0" />}
-                <AnimatePresence>
+                {Icon && <Icon className="h-5 w-5 shrink-0" />}
+                <AnimatePresence initial={false}>
                     {!sidebarCollapsed && (
-                        <MotionSpan
+                        <motion.div
                             initial={{ opacity: 0, width: 0 }}
                             animate={{ opacity: 1, width: 'auto' }}
                             exit={{ opacity: 0, width: 0 }}
-                            className="whitespace-nowrap overflow-hidden"
+                            className="min-w-0 overflow-hidden"
                         >
-                            {item.label}
-                        </MotionSpan>
+                            <p className="truncate text-sm font-semibold">{item.label}</p>
+                            <p className="truncate text-xs text-primary-500">
+                                {item.path === '/dashboard' && 'Pulse, trends, and operational health'}
+                                {item.path === '/inventory' && 'Depth, movement, and replenishment'}
+                                {item.path === '/pos' && 'Fast checkout and sales flow'}
+                                {item.path === '/quotation' && 'Drafts, revisions, and conversions'}
+                                {item.path === '/services' && 'Active service workload'}
+                                {item.path === '/stockroom' && '3D locator and shelf mapping'}
+                                {item.path === '/reports' && 'Forecast and performance views'}
+                                {item.path === '/users' && 'Access and role management'}
+                            </p>
+                        </motion.div>
                     )}
                 </AnimatePresence>
             </NavLink>
@@ -81,124 +77,127 @@ const Sidebar = () => {
 
     return (
         <>
-            {/* Mobile Overlay */}
             <AnimatePresence>
                 {sidebarOpen && (
-                    <MotionDiv
+                    <motion.button
+                        type="button"
+                        aria-label="Close sidebar"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={closeMobileSidebar}
-                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden"
+                        className="fixed inset-0 z-30 bg-black/65 backdrop-blur-sm lg:hidden"
                     />
                 )}
             </AnimatePresence>
 
-            {/* Sidebar */}
-            <aside
-                className={`
-          sidebar
-          ${sidebarCollapsed ? 'sidebar-collapsed' : ''}
-          ${sidebarOpen ? 'sidebar-open translate-x-0' : ''}
-        `}
-            >
-                {/* Logo */}
-                <div className="sidebar-logo pb-6 border-b border-primary-200">
-                    <img src="/LogoLimen.jpg" alt="Limen Logo" className="w-10 h-10 object-contain rounded-lg bg-white p-1 flex-shrink-0 border border-primary-200" />
-                    <AnimatePresence>
+            <aside className={`sidebar ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${sidebarOpen ? 'sidebar-open' : ''}`}>
+                <div className="sidebar-logo">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-[20px] border border-accent-info/20 bg-white/[0.05] shadow-[0_12px_40px_rgba(79,223,255,0.14)]">
+                        <img src="/LogoLimen.jpg" alt="Limen logo" className="h-9 w-9 rounded-xl object-contain" />
+                    </div>
+
+                    <AnimatePresence initial={false}>
                         {!sidebarCollapsed && (
-                            <MotionDiv
+                            <motion.div
                                 initial={{ opacity: 0, width: 0 }}
                                 animate={{ opacity: 1, width: 'auto' }}
                                 exit={{ opacity: 0, width: 0 }}
                                 className="overflow-hidden"
                             >
-                                <h1 className="font-display font-bold text-lg text-primary-950 whitespace-nowrap">
-                                    LimenServe
-                                </h1>
-                                <p className="text-xs text-primary-500 whitespace-nowrap">Auto Parts MIS</p>
-                            </MotionDiv>
+                                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-primary-500">LIMEN</p>
+                                <h1 className="mt-1 text-xl font-semibold text-white">Operations cockpit</h1>
+                            </motion.div>
                         )}
                     </AnimatePresence>
 
-                    {/* Mobile close button */}
                     <button
                         onClick={closeMobileSidebar}
-                        className="lg:hidden ml-auto p-1 rounded hover:bg-primary-100"
+                        className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-primary-300 lg:hidden"
+                        aria-label="Close sidebar"
                     >
-                        <X className="w-5 h-5 text-primary-500" />
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                {/* Navigation */}
-                <nav className="sidebar-nav">
-                    {/* Main Navigation */}
-                    <div className="mb-6">
+                <div className="px-4 pt-4">
+                    <AnimatePresence initial={false}>
                         {!sidebarCollapsed && (
-                            <p className="sidebar-section-title">Main Menu</p>
+                            <motion.div
+                                initial={{ opacity: 0, y: -8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -8 }}
+                                className="rounded-[26px] border border-white/8 bg-gradient-to-br from-accent-info/12 to-accent-blue/10 p-4"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/12 bg-white/[0.06] text-accent-info">
+                                        <Sparkles className="h-4 w-4" />
+                                    </span>
+                                    <div>
+                                        <p className="text-sm font-semibold text-white">Premium control layer</p>
+                                        <p className="text-xs leading-relaxed text-primary-400">
+                                            Faster navigation, richer signals, and cleaner workflow handoffs.
+                                        </p>
+                                    </div>
+                                </div>
+                            </motion.div>
                         )}
-                        {mainNavItems.map((item) => (
-                            <NavItem key={item.path} item={item} />
-                        ))}
+                    </AnimatePresence>
+                </div>
+
+                <nav className="sidebar-nav">
+                    <div className="mb-5">
+                        {!sidebarCollapsed && <p className="sidebar-section-title">Core workflow</p>}
+                        {mainNavItems.map((item) => <NavItem key={item.path} item={item} />)}
                     </div>
 
-                    {/* Admin Navigation */}
                     {adminNavItems.length > 0 && (
-                        <div className="mb-6">
-                            {!sidebarCollapsed && (
-                                <p className="sidebar-section-title">Administration</p>
-                            )}
-                            {adminNavItems.map((item) => (
-                                <NavItem key={item.path} item={item} />
-                            ))}
+                        <div>
+                            {!sidebarCollapsed && <p className="sidebar-section-title">Admin controls</p>}
+                            {adminNavItems.map((item) => <NavItem key={item.path} item={item} />)}
                         </div>
                     )}
                 </nav>
 
-                {/* Bottom Section */}
-                <div className="mt-auto border-t border-primary-200 p-4">
-                    {/* User Info */}
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 rounded-full bg-accent-danger/10 flex items-center justify-center flex-shrink-0 border border-accent-danger/20">
-                            <span className="text-accent-danger font-bold text-sm">
-                                {user?.firstName?.[0]}{user?.lastName?.[0]}
-                            </span>
-                        </div>
-                        <AnimatePresence>
+                <div className="mt-auto border-t border-white/8 px-4 py-4">
+                    <div className="mb-4 flex items-center gap-3 rounded-[24px] border border-white/8 bg-white/[0.03] p-3">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-accent-info/20 bg-accent-info/10 text-sm font-bold text-accent-info">
+                            {user?.firstName?.[0]}{user?.lastName?.[0]}
+                        </span>
+
+                        <AnimatePresence initial={false}>
                             {!sidebarCollapsed && (
-                                <MotionDiv
+                                <motion.div
                                     initial={{ opacity: 0, width: 0 }}
                                     animate={{ opacity: 1, width: 'auto' }}
                                     exit={{ opacity: 0, width: 0 }}
-                                    className="overflow-hidden"
+                                    className="min-w-0 overflow-hidden"
                                 >
-                                    <p className="text-sm font-semibold text-primary-950 whitespace-nowrap">
+                                    <p className="truncate text-sm font-semibold text-white">
                                         {user?.firstName} {user?.lastName}
                                     </p>
-                                    <p className="text-xs text-primary-500 capitalize whitespace-nowrap">
-                                        {user?.role?.replace('_', ' ')}
+                                    <p className="truncate text-[11px] uppercase tracking-[0.18em] text-primary-500">
+                                        {String(user?.role || 'staff').replace('_', ' ')}
                                     </p>
-                                </MotionDiv>
+                                </motion.div>
                             )}
                         </AnimatePresence>
                     </div>
 
-                    {/* Collapse Toggle (Desktop) */}
                     <button
                         onClick={toggleSidebar}
-                        className="hidden lg:flex items-center gap-3 w-full px-3 py-2 rounded-lg text-primary-500 hover:bg-primary-100 hover:text-primary-900 transition-colors"
+                        className="hidden w-full items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3 text-sm font-semibold text-primary-300 transition hover:border-accent-info/20 hover:text-white lg:flex"
                     >
-                        <ChevronLeft className={`w-5 h-5 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} />
-                        {!sidebarCollapsed && <span className="text-sm font-medium">Collapse</span>}
+                        <ChevronLeft className={`h-4 w-4 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} />
+                        {!sidebarCollapsed && <span>Collapse navigation</span>}
                     </button>
 
-                    {/* Logout Button */}
                     <button
                         onClick={logout}
-                        className="flex items-center gap-3 w-full px-3 py-2 mt-2 rounded-lg text-accent-danger hover:bg-accent-danger/10 transition-colors"
+                        className="mt-2 flex w-full items-center gap-3 rounded-2xl border border-accent-danger/15 bg-accent-danger/8 px-3 py-3 text-sm font-semibold text-accent-danger transition hover:bg-accent-danger/12"
                     >
-                        <LogOut className="w-5 h-5" />
-                        {!sidebarCollapsed && <span className="text-sm">Logout</span>}
+                        <LogOut className="h-4 w-4" />
+                        {!sidebarCollapsed && <span>Sign out</span>}
                     </button>
                 </div>
             </aside>

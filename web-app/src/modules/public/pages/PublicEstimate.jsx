@@ -562,7 +562,7 @@ const PublicEstimate = () => {
         : 'fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] min-h-0 flex-col overflow-hidden rounded-t-[32px] border border-primary-200 border-b-0 bg-primary-50 shadow-[0_32px_90px_rgba(15,23,42,0.28)] print:hidden';
 
     return (
-        <div className="bg-primary-50 min-h-screen relative font-sans text-primary-900 pb-28 print:bg-white print:p-0 print:m-0 print:min-h-0 print:block">
+        <div className="public-estimate-page bg-primary-50 min-h-screen relative font-sans text-primary-900 pb-28 print:bg-white print:p-0 print:m-0 print:min-h-0 print:block">
             <div className="fixed inset-0 bg-gradient-to-b from-white via-primary-50 to-primary-50 -z-10 print:hidden" />
             <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-accent-blue/10 rounded-full blur-[150px] mix-blend-multiply pointer-events-none -z-10 opacity-60 print:hidden" />
             <div className="absolute top-[30%] right-[-10%] w-[40vw] h-[40vw] bg-accent-danger/5 rounded-full blur-[120px] mix-blend-multiply pointer-events-none -z-10 opacity-50 print:hidden" />

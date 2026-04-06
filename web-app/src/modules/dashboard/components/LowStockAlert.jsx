@@ -1,73 +1,66 @@
-import { Link } from 'react-router-dom';
 import { AlertTriangle, ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import Card from '../../../components/ui/Card';
 import { StockBadge } from '../../../components/ui/Badge';
 import useDataStore from '../../../store/useDataStore';
 
-/**
- * Low Stock Alert Component
- * Displays items with critically low stock levels
- */
 const LowStockAlert = () => {
     const { products: storeProducts } = useDataStore();
 
-    // Get actual low-stock items from the pricelist data
     const lowStockItems = storeProducts
-        .filter(p => p.quantity <= 5)
-        .map(p => ({
-            id: p.id,
-            name: p.name,
-            sku: p.sku,
-            quantity: p.quantity,
-            threshold: 10,
+        .filter((product) => Number(product.quantity ?? 0) <= 5)
+        .map((product) => ({
+            id: product.id,
+            name: product.name,
+            sku: product.sku,
+            quantity: Number(product.quantity ?? 0),
         }));
 
     return (
         <Card
-            title="Low Stock Alert"
-            subtitle={`${lowStockItems.length} items need attention`}
-            headerAction={
-                <Link to="/inventory?filter=low-stock" className="text-accent-blue text-sm hover:underline">
-                    View All
-                </Link>
-            }
+            title="Low stock watchlist"
+            subtitle={`${lowStockItems.length} mapped items need attention`}
+            headerAction={<Link to="/inventory?filter=low-stock" className="text-sm text-accent-info hover:text-white">Open queue</Link>}
             className="h-full"
         >
             <div className="space-y-3">
                 {lowStockItems.slice(0, 5).map((item) => (
                     <div
                         key={item.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-primary-50 border border-primary-100 hover:border-accent-blue hover:shadow-sm transition-all group"
+                        className="flex items-center justify-between gap-3 rounded-[24px] border border-white/8 bg-white/[0.03] px-4 py-4"
                     >
-                        <div className="flex items-center gap-3 min-w-0">
-                            <div className="p-2 rounded-lg bg-red-50">
-                                <AlertTriangle className="w-4 h-4 text-accent-danger" />
-                            </div>
+                        <div className="flex min-w-0 items-center gap-3">
+                            <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-accent-warning/20 bg-accent-warning/10 text-accent-warning">
+                                <AlertTriangle className="h-4 w-4" />
+                            </span>
                             <div className="min-w-0">
-                                <p className="text-sm font-semibold text-primary-950 truncate">
-                                    {item.name}
-                                </p>
-                                <p className="text-xs text-primary-500 font-mono tracking-wider">{item.sku}</p>
+                                <p className="truncate text-sm font-semibold text-white">{item.name}</p>
+                                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary-500">{item.sku}</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                            <div className="text-right">
-                                <p className="text-sm font-bold text-primary-950">{item.quantity}</p>
-                                <p className="text-xs text-primary-500 uppercase tracking-widest">left</p>
+                        <div className="text-right">
+                            <p className="text-lg font-semibold text-white">{item.quantity}</p>
+                            <div className="mt-2 flex justify-end">
+                                <StockBadge quantity={item.quantity} />
                             </div>
-                            <StockBadge quantity={item.quantity} />
                         </div>
                     </div>
                 ))}
+
+                {lowStockItems.length === 0 && (
+                    <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.02] px-5 py-8 text-center text-sm text-primary-400">
+                        No critical stock alerts at the moment.
+                    </div>
+                )}
             </div>
 
             {lowStockItems.length > 5 && (
                 <Link
                     to="/inventory?filter=low-stock"
-                    className="mt-4 flex items-center justify-center gap-1 p-2 rounded-lg text-sm text-accent-blue font-medium hover:bg-primary-50 transition-colors"
+                    className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-accent-info hover:text-white"
                 >
-                    <span>View {lowStockItems.length - 5} more items</span>
-                    <ChevronRight className="w-4 h-4" />
+                    View {lowStockItems.length - 5} more items
+                    <ChevronRight className="h-4 w-4" />
                 </Link>
             )}
         </Card>

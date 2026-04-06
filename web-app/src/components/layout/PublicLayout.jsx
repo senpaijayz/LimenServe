@@ -1,11 +1,19 @@
-import { Outlet, Navigate, Link, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ChevronRight, Clock, MapPin, Menu, Phone, X } from 'lucide-react';
+import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
-import { Phone, MapPin, Clock, Menu, X, ChevronRight } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import GlobalSearch from '../ui/GlobalSearch';
+
+const navLinks = [
+    { path: '/', label: 'Home' },
+    { path: '/catalog', label: 'Catalog' },
+    { path: '/estimate', label: 'Estimate' },
+    { path: '/service-orders', label: 'Service Orders' },
+    { path: '/about', label: 'About' },
+];
 
 const PublicLayout = () => {
-    const MotionDiv = motion.div;
     const { isAuthenticated } = useAuth();
     const location = useLocation();
     const [scrolled, setScrolled] = useState(false);
@@ -21,175 +29,145 @@ const PublicLayout = () => {
         return <Navigate to="/dashboard" replace />;
     }
 
-    const navLinks = [
-        { path: '/', label: 'Home' },
-        { path: '/about', label: 'About' },
-        { path: '/catalog', label: 'Genuine Parts' },
-        { path: '/estimate', label: 'Get Estimate' },
-        { path: '/service-orders', label: 'Service Orders' }
-    ];
-
     return (
-        <div className="min-h-screen flex flex-col bg-primary-50 font-sans text-primary-900 overflow-x-hidden print:block print:min-h-0 print:bg-white">
-            {/* Header */}
-            <header
-                className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 border-b print:hidden ${scrolled ? 'bg-white/90 backdrop-blur-xl border-primary-200 py-3 shadow-sm' : 'bg-transparent border-transparent py-5'
-                    }`}
+        <div className="min-h-screen overflow-x-hidden bg-primary-950 text-primary-100 print:block print:min-h-0 print:bg-white">
+            <div className="pointer-events-none fixed inset-0">
+                <div className="absolute left-[-10%] top-[-16%] h-[32rem] w-[32rem] rounded-full bg-accent-info/14 blur-[140px]" />
+                <div className="absolute right-[-10%] top-[12%] h-[24rem] w-[24rem] rounded-full bg-accent-blue/16 blur-[120px]" />
+            </div>
+
+            <header className={`fixed left-0 right-0 top-0 z-50 border-b transition-all duration-300 print:hidden ${scrolled
+                ? 'border-white/8 bg-primary-950/78 py-3 backdrop-blur-2xl'
+                : 'border-transparent bg-transparent py-5'
+                }`}
             >
-                <div className="max-w-[1600px] mx-auto px-4 md:px-8 xl:px-12">
-                    <div className="flex items-center justify-between">
+                <div className="mx-auto flex max-w-[1700px] items-center justify-between px-4 md:px-8 xl:px-12">
+                    <Link to="/" className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-[20px] border border-accent-info/20 bg-white/[0.05] shadow-[0_14px_40px_rgba(79,223,255,0.14)]">
+                            <img src="/LogoLimen.jpg" alt="Limen logo" className="h-9 w-9 rounded-xl object-contain" />
+                        </div>
+                        <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary-500">LIMEN</p>
+                            <p className="text-lg font-semibold text-white">Genuine Mitsubishi parts</p>
+                        </div>
+                    </Link>
 
-                        {/* Logo */}
-                        <Link to="/" className="flex items-center gap-3 z-50 group">
-                            <img src="/LogoLimen.jpg" alt="Limen Logo" className="w-10 h-10 object-contain rounded-lg bg-white p-1 group-hover:scale-105 transition-transform shadow-lg shadow-black/20" />
-                            <div className="flex flex-col">
-                                <span className="font-display font-bold text-2xl tracking-tight text-primary-950 leading-none group-hover:text-accent-primary transition-colors">
-                                    Limen
-                                </span>
-                                <span className="text-[10px] font-sans font-bold text-primary-500 tracking-widest uppercase mt-1">
-                                    Auto Parts Center
-                                </span>
-                            </div>
-                        </Link>
-
-                        {/* Desktop Nav */}
-                        <nav className="hidden md:flex items-center gap-8">
-                            {navLinks.map(link => (
+                    <nav className="hidden items-center gap-2 lg:flex">
+                        {navLinks.map((link) => {
+                            const isActive = location.pathname === link.path;
+                            return (
                                 <Link
                                     key={link.path}
                                     to={link.path}
-                                    className={`text-sm font-medium transition-colors relative py-2 ${location.pathname === link.path ? 'text-accent-primary' : 'text-primary-600 hover:text-primary-950'
+                                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${isActive
+                                        ? 'bg-white/[0.08] text-white'
+                                        : 'text-primary-300 hover:bg-white/[0.05] hover:text-white'
                                         }`}
                                 >
                                     {link.label}
-                                    {location.pathname === link.path && (
-                                        <MotionDiv
-                                            layoutId="activeNav"
-                                            className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-primary"
-                                        />
-                                    )}
                                 </Link>
-                            ))}
+                            );
+                        })}
+                    </nav>
 
-                            <div className="h-6 w-px bg-primary-300 mx-2" />
-
-                            <Link to="/login" className="btn btn-secondary text-xs px-5 py-2">
-                                Staff Portal
-                            </Link>
-                        </nav>
-
-                        {/* Mobile Toggle */}
-                        <button
-                            className="md:hidden p-2 text-primary-600 hover:text-primary-950 z-50"
-                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                        >
-                            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-                        </button>
+                    <div className="hidden items-center gap-3 lg:flex">
+                        <GlobalSearch />
+                        <Link to="/login" className="btn btn-secondary">
+                            Staff portal
+                        </Link>
                     </div>
+
+                    <button
+                        type="button"
+                        onClick={() => setMobileMenuOpen((current) => !current)}
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-primary-100 lg:hidden"
+                        aria-label="Toggle menu"
+                    >
+                        {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                    </button>
                 </div>
             </header>
 
-            {/* Mobile Menu Overlay */}
             <AnimatePresence>
                 {mobileMenuOpen && (
-                    <MotionDiv
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        className="fixed inset-0 z-40 bg-white pt-24 px-4 pb-8 flex flex-col shadow-2xl"
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-40 bg-primary-950/92 px-4 pb-8 pt-24 backdrop-blur-2xl lg:hidden"
                     >
-                        <div className="flex flex-col gap-4 text-2xl font-display font-medium">
-                            {navLinks.map(link => (
-                                <Link
-                                    key={link.path}
-                                    to={link.path}
-                                    onClick={() => setMobileMenuOpen(false)}
-                                    className={`py-4 border-b border-primary-200 flex justify-between items-center ${location.pathname === link.path ? 'text-accent-primary font-bold' : 'text-primary-600'
-                                        }`}
-                                >
-                                    {link.label}
-                                    <ChevronRight className="w-6 h-6 opacity-30" />
+                        <div className="mx-auto flex h-full max-w-xl flex-col">
+                            <div className="space-y-2">
+                                {navLinks.map((link) => (
+                                    <Link
+                                        key={link.path}
+                                        to={link.path}
+                                        onClick={() => setMobileMenuOpen(false)}
+                                        className={`flex items-center justify-between rounded-[24px] border px-5 py-4 text-base font-semibold transition ${location.pathname === link.path
+                                            ? 'border-accent-info/20 bg-accent-info/10 text-white'
+                                            : 'border-white/8 bg-white/[0.03] text-primary-200'
+                                            }`}
+                                    >
+                                        <span>{link.label}</span>
+                                        <ChevronRight className="h-5 w-5 text-primary-500" />
+                                    </Link>
+                                ))}
+                            </div>
+
+                            <div className="mt-5">
+                                <GlobalSearch compact />
+                            </div>
+
+                            <div className="mt-auto">
+                                <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="btn btn-primary w-full">
+                                    Open staff portal
                                 </Link>
-                            ))}
+                            </div>
                         </div>
-                        <div className="mt-auto">
-                            <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="btn btn-primary w-full text-lg py-4">
-                                Staff Portal Access
-                            </Link>
-                        </div>
-                    </MotionDiv>
+                    </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Main Content Area */}
-            <main className="flex-1 w-full relative">
+            <main className="relative z-10 flex-1">
                 <Outlet />
             </main>
 
-            {/* Footer */}
-            <footer className="bg-white pt-20 pb-10 border-t border-primary-200 overflow-hidden relative print:hidden">
-                <div className="absolute top-0 right-0 w-1/3 h-px bg-gradient-to-l from-accent-primary to-transparent" />
-                <div className="max-w-[1600px] mx-auto px-4 md:px-8 xl:px-12 relative z-10 text-primary-600">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-16">
+            <footer className="relative z-10 border-t border-white/8 bg-primary-950/84 px-4 py-14 backdrop-blur-2xl print:hidden md:px-8 xl:px-12">
+                <div className="mx-auto grid max-w-[1700px] gap-10 lg:grid-cols-[1.2fr_0.8fr_0.8fr]">
+                    <div>
+                        <div className="data-pill">Visit the showroom</div>
+                        <h2 className="mt-5 text-3xl font-semibold text-white">A sharper customer journey from search to quote.</h2>
+                        <p className="mt-4 max-w-xl text-sm leading-relaxed text-primary-400">
+                            LIMEN connects genuine parts browsing, vehicle-fitment guidance, and quotation support into one calmer buying flow.
+                        </p>
+                    </div>
 
-                        {/* Brand Column */}
-                        <div className="lg:col-span-1">
-                            <Link to="/" className="flex items-center gap-3 mb-6">
-                                <img src="/LogoLimen.jpg" alt="Limen Logo" className="w-10 h-10 object-contain rounded-lg bg-white p-1 shadow-sm border border-primary-200" />
-                                <span className="font-display font-bold text-2xl text-primary-950">Limen</span>
-                            </Link>
-                            <p className="text-primary-500 text-sm leading-relaxed mb-6 font-sans">
-                                The premier destination for authentic Mitsubishi parts and automotive excellence in Metro Manila.
-                            </p>
-                        </div>
-
-                        {/* Navigation */}
-                        <div>
-                            <h4 className="font-display font-semibold tracking-wide text-primary-950 mb-6">Explore</h4>
-                            <ul className="space-y-4">
-                                {navLinks.map(link => (
-                                    <li key={link.path}>
-                                        <Link to={link.path} className="text-primary-500 hover:text-accent-primary text-sm transition-colors">
-                                            {link.label}
-                                        </Link>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-
-                        {/* Contact Info */}
-                        <div className="lg:col-span-2">
-                            <h4 className="font-display font-semibold tracking-wide text-primary-950 mb-6">Visit Us</h4>
-                            <div className="grid sm:grid-cols-2 gap-8 text-sm">
-                                <div className="space-y-4">
-                                    <div className="flex items-start gap-3 text-primary-600">
-                                        <MapPin className="w-5 h-5 text-accent-primary shrink-0" />
-                                        <span>1308, 264 Epifanio de los Santos Ave<br />Pasay City, 1308 Metro Manila<br />Philippines</span>
-                                    </div>
-                                    <div className="flex items-center gap-3 text-primary-600">
-                                        <Phone className="w-5 h-5 text-accent-primary shrink-0" />
-                                        <span>+63 917 123 4567</span>
-                                    </div>
-                                </div>
-                                <div className="space-y-4">
-                                    <div className="flex items-start gap-3 text-primary-600 bg-primary-50 p-4 rounded-xl border border-primary-200">
-                                        <Clock className="w-5 h-5 text-accent-primary shrink-0" />
-                                        <div>
-                                            <p className="font-medium text-primary-950 mb-1">Business Hours</p>
-                                            <p>Mon - Sat: 8:00 AM - 6:00 PM</p>
-                                            <p>Sun: 8:00 AM - 12:00 PM</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                    <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary-500">Explore</p>
+                        <div className="mt-5 space-y-3">
+                            {navLinks.map((link) => (
+                                <Link key={link.path} to={link.path} className="block text-sm text-primary-300 hover:text-white">
+                                    {link.label}
+                                </Link>
+                            ))}
                         </div>
                     </div>
 
-                    <div className="pt-8 border-t border-primary-200 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs font-sans text-primary-500">
-                        <p>© {new Date().getFullYear()} Limen Auto Parts Center. All rights reserved.</p>
-                        <div className="flex gap-4">
-                            <span className="hover:text-primary-950 cursor-pointer transition-colors">Privacy Policy</span>
-                            <span className="hover:text-primary-950 cursor-pointer transition-colors">Terms of Service</span>
+                    <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary-500">Store details</p>
+                        <div className="mt-5 space-y-4 text-sm text-primary-300">
+                            <div className="flex items-start gap-3">
+                                <MapPin className="mt-0.5 h-4 w-4 text-accent-info" />
+                                <span>1308, 264 Epifanio de los Santos Ave, Pasay City, Metro Manila</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <Phone className="h-4 w-4 text-accent-info" />
+                                <span>+63 917 123 4567</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <Clock className="h-4 w-4 text-accent-info" />
+                                <span>Mon-Sat 8:00 AM to 6:00 PM</span>
+                            </div>
                         </div>
                     </div>
                 </div>

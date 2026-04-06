@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
+    AlertTriangle,
+    ArrowRight,
     DollarSign,
     Package,
     RefreshCw,
-    AlertTriangle,
     Sparkles,
     TrendingUp,
+    Wrench,
 } from 'lucide-react';
 import Card, { KPICard } from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
@@ -13,22 +16,24 @@ import SalesChart from '../components/SalesChart';
 import LowStockAlert from '../components/LowStockAlert';
 import RecentTransactions from '../components/RecentTransactions';
 import { useAuth } from '../../../context/useAuth';
+import useExperienceStore from '../../../store/useExperienceStore';
 import { formatCurrency, formatNumber } from '../../../utils/formatters';
 import { getAnalyticsDashboardSnapshot, runFullAnalyticsRefresh } from '../../../services/analyticsApi';
 
 const AdminDashboard = () => {
     const { user } = useAuth();
+    const { activityFeed } = useExperienceStore();
     const [snapshot, setSnapshot] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
 
-    const getGreeting = () => {
+    const greeting = useMemo(() => {
         const hour = new Date().getHours();
         if (hour < 12) return 'Good morning';
-        if (hour < 17) return 'Good afternoon';
+        if (hour < 18) return 'Good afternoon';
         return 'Good evening';
-    };
+    }, []);
 
     const loadSnapshot = async () => {
         setLoading(true);
@@ -56,7 +61,7 @@ const AdminDashboard = () => {
         setError('');
 
         try {
-            await runFullAnalyticsRefresh('Manual refresh from dashboard');
+            await runFullAnalyticsRefresh('Manual refresh from premium dashboard');
             await loadSnapshot();
         } catch (refreshError) {
             setError(refreshError.message || 'Unable to refresh analytics.');
@@ -78,49 +83,50 @@ const AdminDashboard = () => {
     const forecastedProductCount = topProductForecasts.reduce((sum, item) => sum + Number(item.predicted_quantity || 0), 0);
     const topSellingLeader = topSellingItems[0];
     const peakLeader = peakPeriods[0];
+    const leadingService = topServiceForecasts[0];
 
     return (
         <div className="space-y-6">
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800 p-6 text-white sm:p-8">
-                <div className="absolute top-0 right-0 h-72 w-72 -translate-y-1/2 translate-x-1/3 rounded-full bg-accent-danger/10 blur-[100px]" />
-                <div className="absolute bottom-0 left-0 h-48 w-48 translate-y-1/2 -translate-x-1/4 rounded-full bg-accent-blue/10 blur-[80px]" />
-                <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                        <p className="mb-1 text-sm font-medium text-primary-400">
-                            {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                        </p>
-                        <h1 className="text-2xl font-display font-bold tracking-tight text-white sm:text-3xl">
-                            {getGreeting()}, {user?.firstName || 'there'}!
+            <section className="shell-panel relative overflow-hidden px-6 py-7 sm:px-8">
+                <div className="absolute right-[-6rem] top-[-6rem] h-64 w-64 rounded-full bg-accent-info/16 blur-[110px]" />
+                <div className="absolute bottom-[-9rem] left-[-4rem] h-72 w-72 rounded-full bg-accent-blue/18 blur-[120px]" />
+
+                <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+                    <div className="max-w-3xl">
+                        <div className="data-pill">Operations overview</div>
+                        <h1 className="mt-5 text-3xl font-semibold sm:text-[2.7rem]">
+                            <span className="text-gradient-cyan">{greeting}, {user?.firstName || 'team'}.</span>
                         </h1>
-                        <p className="mt-1 text-sm text-primary-300">
-                            Track demand, top-selling items, and upsell signals from the warehouse and quotation pipeline.
+                        <p className="mt-4 max-w-2xl text-base leading-relaxed text-primary-300">
+                            Revenue signals, stock pressure, and workshop momentum are layered here so the next operational decision is always visible.
                         </p>
-                        {latestRefresh?.endedAt && (
-                            <p className="mt-3 text-xs text-primary-400">
-                                Last analytics refresh: {new Date(latestRefresh.endedAt).toLocaleString()}
-                            </p>
-                        )}
+                        <div className="mt-5 flex flex-wrap gap-3">
+                            <span className="badge badge-info">Live cues {activityFeed.length}</span>
+                            <span className="badge badge-neutral">
+                                Last refresh {latestRefresh?.endedAt ? new Date(latestRefresh.endedAt).toLocaleString() : 'pending'}
+                            </span>
+                        </div>
                     </div>
 
                     <div className="flex flex-wrap gap-3">
                         <Button
                             variant="secondary"
-                            className="border-white/10 bg-white/10 text-white hover:bg-white/20"
-                            leftIcon={<RefreshCw className="w-4 h-4" />}
+                            leftIcon={<RefreshCw className="h-4 w-4" />}
                             isLoading={refreshing}
                             onClick={handleAnalyticsRefresh}
                         >
-                            Refresh Analytics
+                            Refresh analytics
                         </Button>
-                        <a href="/reports" className="inline-flex items-center gap-2 rounded-lg bg-accent-danger px-5 py-2.5 text-sm font-medium text-white shadow-lg shadow-accent-danger/20 transition-all hover:bg-accent-danger/90">
-                            <TrendingUp className="h-4 w-4" /> Open Reports
-                        </a>
+                        <Link to="/reports" className="btn btn-primary">
+                            Open reports
+                            <ArrowRight className="h-4 w-4" />
+                        </Link>
                     </div>
                 </div>
-            </div>
+            </section>
 
             {error && (
-                <Card className="border border-accent-danger/20 bg-accent-danger/5" padding="sm">
+                <Card className="border border-accent-danger/20 bg-accent-danger/10" padding="sm">
                     <div className="flex items-start gap-3 text-sm text-accent-danger">
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                         <div>
@@ -131,74 +137,143 @@ const AdminDashboard = () => {
                 </Card>
             )}
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <KPICard title="Predicted Revenue" value={loading ? 'Loading...' : formatCurrency(predictedRevenue)} icon={<DollarSign className="w-6 h-6" />} trend="up" trendValue={`${topProductForecasts.length} top products`} accentColor="border-accent-blue" iconBg="bg-blue-50 text-accent-blue" />
-                <KPICard title="Forecasted Units" value={loading ? 'Loading...' : formatNumber(forecastedProductCount)} icon={<Package className="w-6 h-6" />} trend="up" trendValue="Next month demand" accentColor="border-indigo-500" iconBg="bg-indigo-50 text-indigo-600" />
-                <KPICard title="Top Selling Items" value={loading ? 'Loading...' : formatNumber(topSellingItems.length)} icon={<TrendingUp className="w-6 h-6" />} trend="up" trendValue={topSellingLeader?.product_name || 'No item leader yet'} accentColor="border-emerald-500" iconBg="bg-emerald-50 text-emerald-600" />
-                <KPICard title="Upsell Opportunities" value={loading ? 'Loading...' : formatNumber(topUpsellOpportunities.length)} icon={<Sparkles className="w-6 h-6" />} trend="up" trendValue="Curated and mined rules" accentColor="border-amber-500" iconBg="bg-amber-50 text-amber-600" />
-            </div>
+            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <KPICard
+                    title="Predicted revenue"
+                    value={loading ? 'Loading...' : formatCurrency(predictedRevenue)}
+                    icon={<DollarSign className="h-6 w-6" />}
+                    trend="up"
+                    trendValue={`${topProductForecasts.length} forecasted products`}
+                />
+                <KPICard
+                    title="Forecasted units"
+                    value={loading ? 'Loading...' : formatNumber(forecastedProductCount)}
+                    icon={<Package className="h-6 w-6" />}
+                    trend="up"
+                    trendValue="Next month demand"
+                />
+                <KPICard
+                    title="Upsell signals"
+                    value={loading ? 'Loading...' : formatNumber(topUpsellOpportunities.length)}
+                    icon={<Sparkles className="h-6 w-6" />}
+                    trend="up"
+                    trendValue="Curated recommendations"
+                />
+                <KPICard
+                    title="At-risk stock lines"
+                    value={loading ? 'Loading...' : formatNumber(predictedLowStockRisk.length)}
+                    icon={<TrendingUp className="h-6 w-6" />}
+                    trend={predictedLowStockRisk.length > 0 ? 'neutral' : 'up'}
+                    trendValue={predictedLowStockRisk.length > 0 ? 'Reorder review needed' : 'Healthy stock posture'}
+                />
+            </section>
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                <div className="lg:col-span-2">
-                    <SalesChart data={itemTrend} title="Item Sales Trend" subtitle="Monthly product-level sales trend for the last six months" />
-                </div>
+            <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
+                <SalesChart
+                    data={itemTrend}
+                    title="Revenue and unit momentum"
+                    subtitle="Six months of item sales trend across the monitored catalog"
+                />
 
-                <div>
-                    <Card title="Item Highlights" subtitle="Which products are moving fastest right now">
-                        <div className="space-y-5">
-                            <div>
-                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary-400">Top Seller In Range</p>
-                                <p className="mt-1 font-semibold text-primary-950">{topSellingLeader?.product_name || 'No item data yet'}</p>
-                                {topSellingLeader && (
-                                    <p className="text-sm text-primary-500">{formatNumber(topSellingLeader.quantity)} units · {formatCurrency(topSellingLeader.revenue)}</p>
-                                )}
-                            </div>
-                            <div>
-                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary-400">Peak Demand Month</p>
-                                <p className="mt-1 font-semibold text-primary-950">{peakLeader?.product_name || 'No peak data yet'}</p>
-                                {peakLeader && (
-                                    <p className="text-sm text-primary-500">Best month: {new Date(peakLeader.peak_month).toLocaleDateString('en-PH', { year: 'numeric', month: 'long' })}</p>
-                                )}
-                            </div>
-                            <div>
-                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary-400">Top Service Forecast</p>
-                                <p className="mt-1 font-semibold text-primary-950">{topServiceForecasts[0]?.service_name || 'No service forecast data yet'}</p>
-                                {topServiceForecasts[0] && (
-                                    <p className="text-sm text-primary-500">{formatNumber(topServiceForecasts[0].predicted_quantity)} projected jobs next month</p>
-                                )}
-                            </div>
+                <Card title="Decision surface" subtitle="High-signal cues to act on next">
+                    <div className="space-y-4">
+                        <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+                            <p className="text-[11px] uppercase tracking-[0.2em] text-primary-500">Top seller in range</p>
+                            <p className="mt-3 text-lg font-semibold text-white">{topSellingLeader?.product_name || 'No item data yet'}</p>
+                            {topSellingLeader && (
+                                <p className="mt-2 text-sm text-primary-400">
+                                    {formatNumber(topSellingLeader.quantity)} units for {formatCurrency(topSellingLeader.revenue)}
+                                </p>
+                            )}
                         </div>
-                    </Card>
-                </div>
-            </div>
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                <div className="lg:col-span-2">
-                    <Card title="Top-Selling Items" subtitle="Best-performing products in the selected dashboard range">
+                        <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+                            <p className="text-[11px] uppercase tracking-[0.2em] text-primary-500">Peak demand month</p>
+                            <p className="mt-3 text-lg font-semibold text-white">{peakLeader?.product_name || 'No peak data yet'}</p>
+                            {peakLeader && (
+                                <p className="mt-2 text-sm text-primary-400">
+                                    Peak in {new Date(peakLeader.peak_month).toLocaleDateString('en-PH', { year: 'numeric', month: 'long' })}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+                            <p className="text-[11px] uppercase tracking-[0.2em] text-primary-500">Leading service forecast</p>
+                            <p className="mt-3 text-lg font-semibold text-white">{leadingService?.service_name || 'No service forecast data yet'}</p>
+                            {leadingService && (
+                                <p className="mt-2 text-sm text-primary-400">
+                                    {formatNumber(leadingService.predicted_quantity)} projected jobs next month
+                                </p>
+                            )}
+                        </div>
+
+                        <Link to="/quotation" className="btn btn-secondary w-full justify-between">
+                            Open quotation workspace
+                            <ArrowRight className="h-4 w-4" />
+                        </Link>
+                    </div>
+                </Card>
+            </section>
+
+            <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.9fr)]">
+                <Card title="Top-selling items" subtitle="Best-performing products in the active dashboard range">
+                    <div className="space-y-3">
+                        {topSellingItems.slice(0, 6).map((item) => (
+                            <div
+                                key={item.product_id}
+                                className="flex items-center justify-between gap-4 rounded-[24px] border border-white/8 bg-white/[0.03] px-4 py-4"
+                            >
+                                <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold text-white">{item.product_name}</p>
+                                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary-500">{item.sku}</p>
+                                    <p className="mt-2 text-sm text-primary-400">{item.category}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm font-semibold text-accent-info">{formatNumber(item.quantity)} units</p>
+                                    <p className="mt-1 text-sm text-primary-300">{formatCurrency(item.revenue)}</p>
+                                </div>
+                            </div>
+                        ))}
+
+                        {!loading && topSellingItems.length === 0 && (
+                            <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.02] px-5 py-8 text-sm text-primary-400">
+                                No item-level sales analytics have been produced yet.
+                            </div>
+                        )}
+                    </div>
+                </Card>
+
+                <div className="space-y-6">
+                    <LowStockAlert />
+
+                    <Card title="Service outlook" subtitle="Forecast-backed workshop attention points">
                         <div className="space-y-3">
-                            {topSellingItems.slice(0, 6).map((item) => (
-                                <div key={item.product_id} className="rounded-xl border border-primary-200 bg-white p-4 flex items-center justify-between gap-4">
-                                    <div>
-                                        <p className="font-semibold text-primary-950">{item.product_name}</p>
-                                        <p className="text-xs font-mono text-primary-500">{item.sku}</p>
-                                        <p className="text-xs text-primary-400 mt-1">{item.category}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-sm font-bold text-accent-blue">{formatNumber(item.quantity)} units</p>
-                                        <p className="text-xs text-primary-500">{formatCurrency(item.revenue)}</p>
+                            {topServiceForecasts.slice(0, 3).map((service) => (
+                                <div key={service.service_name} className="rounded-[24px] border border-white/8 bg-white/[0.03] px-4 py-4">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div className="flex min-w-0 items-center gap-3">
+                                            <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-accent-info/20 bg-accent-info/10 text-accent-info">
+                                                <Wrench className="h-4 w-4" />
+                                            </span>
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-semibold text-white">{service.service_name}</p>
+                                                <p className="mt-1 text-sm text-primary-400">Projected maintenance workload</p>
+                                            </div>
+                                        </div>
+                                        <span className="badge badge-info">{formatNumber(service.predicted_quantity)} jobs</span>
                                     </div>
                                 </div>
                             ))}
-                            {!loading && topSellingItems.length === 0 && (
-                                <p className="text-sm text-primary-500">No item-level sales analytics have been produced yet.</p>
+
+                            {topServiceForecasts.length === 0 && (
+                                <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.02] px-5 py-8 text-sm text-primary-400">
+                                    No service forecast data is available yet.
+                                </div>
                             )}
                         </div>
                     </Card>
                 </div>
-                <div>
-                    <LowStockAlert />
-                </div>
-            </div>
+            </section>
 
             <RecentTransactions />
         </div>
