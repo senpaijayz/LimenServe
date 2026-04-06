@@ -122,7 +122,7 @@ const useStockroomStore = create<StockroomStore>((set, get) => ({
   loadingBootstrap: false,
   bootstrapError: '',
   currentFloor: 1,
-  viewMode: '3d',
+  viewMode: '2d',
   searchQuery: '',
   searchResults: [],
   searching: false,

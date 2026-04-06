@@ -11,10 +11,13 @@ export interface SceneThemePalette {
   floorEdge: string;
   grid: string;
   wall: string;
+  wallMuted: string;
   shelf: string;
   shelfSecondary: string;
   shelfAccent: string;
   door: string;
+  label: string;
+  zoneLabel: string;
   routeCore: string;
   routeGlow: string;
   routeHalo: string;
@@ -24,16 +27,19 @@ export interface SceneThemePalette {
 }
 
 export const VIEWER_SCENE_THEME: SceneThemePalette = {
-  background: '#f7f5f0',
-  floorSurface: '#edf1f4',
-  floorUnderlay: '#d9e0e8',
-  floorEdge: '#cfd7e1',
-  grid: '#d2dae4',
-  wall: '#11161f',
-  shelf: '#0b1017',
-  shelfSecondary: '#202736',
-  shelfAccent: '#4f5d75',
+  background: '#f4efe7',
+  floorSurface: '#eef2f5',
+  floorUnderlay: '#dbe2e8',
+  floorEdge: '#c8d1db',
+  grid: '#cfd8e3',
+  wall: '#1a2430',
+  wallMuted: '#7f8fa4',
+  shelf: '#16212d',
+  shelfSecondary: '#edf3f8',
+  shelfAccent: '#5e7086',
   door: '#e6edf7',
+  label: '#112031',
+  zoneLabel: '#334155',
   routeCore: '#33d6ff',
   routeGlow: '#67e8f9',
   routeHalo: '#a5f3fc',
@@ -49,10 +55,13 @@ export const ADMIN_SCENE_THEME: SceneThemePalette = {
   floorEdge: '#516279',
   grid: '#55657e',
   wall: '#0c121b',
+  wallMuted: '#475569',
   shelf: '#0b0f18',
   shelfSecondary: '#232b3b',
   shelfAccent: '#5d6c86',
   door: '#d7e3f1',
+  label: '#e2e8f0',
+  zoneLabel: '#e2e8f0',
   routeCore: '#2dd4ff',
   routeGlow: '#74efff',
   routeHalo: '#bbfbff',
@@ -236,11 +245,22 @@ function ZoneOverlay({ entity, selected }: { entity: SceneEntity; selected: bool
         <meshStandardMaterial
           color={zoneColor}
           transparent
-          opacity={selected ? 0.48 : entity.style.opacity ?? 0.3}
+          opacity={selected ? 0.42 : entity.style.opacity ?? 0.24}
           roughness={0.85}
           metalness={0.02}
         />
       </mesh>
+      <Text
+        position={[0, 0.02, 0]}
+        rotation-x={-Math.PI / 2}
+        fontSize={0.34}
+        color="#475569"
+        anchorX="center"
+        anchorY="middle"
+        maxWidth={entity.size.x * 0.7}
+      >
+        {entity.label}
+      </Text>
     </group>
   );
 }
@@ -273,7 +293,7 @@ function ShelfBody({
         <boxGeometry args={[entity.size.x, entity.size.y, entity.size.z]} />
         <meshStandardMaterial
           color={entity.style.color || palette.shelf}
-          emissive={target ? palette.targetGlow : palette.shelfSecondary}
+          emissive={target ? palette.targetGlow : palette.shelfAccent}
           emissiveIntensity={emissiveIntensity}
           roughness={0.88}
           metalness={0.08}
@@ -282,7 +302,7 @@ function ShelfBody({
 
       <mesh position={[0, entity.size.y * 0.47, 0]} castShadow>
         <boxGeometry args={[entity.size.x * 0.96, 0.08, entity.size.z * 0.94]} />
-        <meshStandardMaterial color={palette.shelfSecondary} roughness={0.76} />
+        <meshStandardMaterial color={palette.shelfSecondary} roughness={0.48} metalness={0.06} />
       </mesh>
 
       <mesh position={[0, -entity.size.y * 0.47, 0]} receiveShadow>
@@ -301,7 +321,7 @@ function ShelfBody({
       })}
 
       {showLabel ? (
-        <Text position={[0, entity.size.y / 2 + 0.24, 0]} fontSize={0.18} color="#e2e8f0" anchorX="center" anchorY="middle">
+        <Text position={[0, entity.size.y / 2 + 0.22, 0]} fontSize={0.18} color={target ? '#991b1b' : palette.label} anchorX="center" anchorY="middle">
           {entity.label}
         </Text>
       ) : null}
@@ -316,6 +336,8 @@ function BlockObject({
   emissive,
   labelColor = '#f8fafc',
   showLabel = false,
+  opacity = 1,
+  heightScale = 1,
 }: {
   entity: SceneEntity;
   selected: boolean;
@@ -323,28 +345,33 @@ function BlockObject({
   emissive?: string;
   labelColor?: string;
   showLabel?: boolean;
+  opacity?: number;
+  heightScale?: number;
 }) {
   const groupRef = useRef<Group | null>(null);
   useSmoothScale(groupRef, selected);
+  const scaledHeight = entity.size.y * heightScale;
 
   return (
     <group
       ref={groupRef}
-      position={[entity.position.x, entity.size.y / 2, entity.position.y]}
+      position={[entity.position.x, scaledHeight / 2, entity.position.y]}
       rotation-y={(-entity.rotation * Math.PI) / 180}
     >
       <mesh castShadow receiveShadow>
-        <boxGeometry args={[entity.size.x, entity.size.y, entity.size.z]} />
+        <boxGeometry args={[entity.size.x, scaledHeight, entity.size.z]} />
         <meshStandardMaterial
           color={entity.style.color || color}
           emissive={selected ? emissive || '#38bdf8' : '#000000'}
           emissiveIntensity={selected ? 0.14 : 0}
           roughness={0.9}
           metalness={0.06}
+          transparent={opacity < 1}
+          opacity={opacity}
         />
       </mesh>
       {showLabel ? (
-        <Text position={[0, entity.size.y / 2 + 0.2, 0]} fontSize={0.16} color={labelColor} anchorX="center" anchorY="middle">
+        <Text position={[0, scaledHeight / 2 + 0.2, 0]} fontSize={0.16} color={labelColor} anchorX="center" anchorY="middle">
           {entity.label}
         </Text>
       ) : null}
@@ -455,16 +482,31 @@ export function SceneEntityMesh({
   palette: SceneThemePalette;
   onActivate?: () => void;
 }) {
+  const isViewer = !editable;
+  const isWall = entity.kind === 'wall';
+  const wallLabel = entity.label.toLowerCase();
+  const shouldCutAway = isViewer && isWall && (wallLabel.includes('south') || wallLabel.includes('east'));
+  const shouldGhost = isViewer && isWall && !shouldCutAway;
+  const showLabels = editable || entity.kind === 'shelf';
+
   return (
     <>
       {entity.kind === 'zone_overlay' ? <ZoneOverlay entity={entity} selected={selected} /> : null}
       {entity.kind === 'shelf' ? (
-        <ShelfBody entity={entity} selected={selected} target={targetShelf} palette={palette} showLabel={editable} />
+        <ShelfBody entity={entity} selected={selected} target={targetShelf} palette={palette} showLabel={showLabels} />
       ) : null}
-      {entity.kind === 'wall' ? <BlockObject entity={entity} selected={selected} color={palette.wall} /> : null}
+      {entity.kind === 'wall' ? (
+        <BlockObject
+          entity={entity}
+          selected={selected}
+          color={shouldCutAway ? palette.wallMuted : palette.wall}
+          opacity={shouldCutAway ? 0.18 : shouldGhost ? 0.62 : 1}
+          heightScale={shouldCutAway ? 0.32 : shouldGhost ? 0.74 : 1}
+        />
+      ) : null}
       {entity.kind === 'door' ? <BlockObject entity={entity} selected={selected} color={palette.door} emissive="#7dd3fc" /> : null}
-      {entity.kind === 'comfort_room' ? <BlockObject entity={entity} selected={selected} color="#111827" showLabel={editable} /> : null}
-      {entity.kind === 'cashier_counter' ? <BlockObject entity={entity} selected={selected} color="#161d28" emissive="#fb7185" showLabel={editable} /> : null}
+      {entity.kind === 'comfort_room' ? <BlockObject entity={entity} selected={selected} color="#111827" labelColor={palette.label} showLabel={showLabels} /> : null}
+      {entity.kind === 'cashier_counter' ? <BlockObject entity={entity} selected={selected} color="#161d28" emissive="#fb7185" labelColor={palette.label} showLabel={showLabels} /> : null}
       {entity.kind === 'entrance' ? <Entrance entity={entity} selected={selected} palette={palette} /> : null}
       {entity.kind === 'stairs' ? <Staircase entity={entity} selected={selected} onActivate={onActivate} /> : null}
       {selected ? <SelectionMarker entity={entity} /> : null}

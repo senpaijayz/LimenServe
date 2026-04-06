@@ -90,7 +90,7 @@ function ToolbarButton({
       onClick={onClick}
       className={`inline-flex h-11 items-center gap-2 rounded-2xl border px-4 text-sm font-semibold transition ${
         active
-          ? 'border-fuchsia-400/40 bg-gradient-to-r from-rose-500 via-fuchsia-500 to-indigo-500 text-white shadow-[0_14px_34px_rgba(79,70,229,0.28)]'
+          ? 'border-sky-400/30 bg-sky-500 text-white shadow-[0_14px_34px_rgba(14,165,233,0.24)]'
           : 'border-white/10 bg-white/5 text-slate-200 hover:border-white/20 hover:bg-white/10'
       }`}
     >
@@ -108,7 +108,7 @@ function StatCard({
 }) {
   return (
     <div className="rounded-[28px] border border-white/10 bg-slate-900/82 px-5 py-5 text-white shadow-[0_18px_40px_rgba(2,6,23,0.28)]">
-      <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-r from-rose-500 via-fuchsia-500 to-indigo-500 text-sm font-semibold">
+      <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-500 text-sm font-semibold">
         {total}
       </div>
       <h3 className="mt-4 text-2xl font-semibold">
@@ -278,17 +278,17 @@ function StockroomAdminPage() {
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,_rgba(7,12,23,1),_rgba(11,18,32,0.97)_52%,_rgba(18,28,50,0.93))] px-6 py-7 text-white shadow-[0_30px_90px_rgba(2,6,23,0.32)]">
+      <section className="overflow-hidden rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,_rgba(8,12,22,1),_rgba(13,18,28,0.98)_52%,_rgba(20,28,40,0.95))] px-6 py-7 text-white shadow-[0_30px_90px_rgba(2,6,23,0.32)]">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-[0.28em] text-slate-400">Design Workspace</p>
             <h1 className="mt-2 text-4xl font-semibold tracking-tight">
-              <span className="bg-gradient-to-r from-rose-400 via-fuchsia-400 to-violet-400 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-sky-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent">
                 {formatFloorOrdinal(selectedFloorRecord?.floorNumber ?? 1)} Floor
               </span>{' '}
               <span className="text-white">- Parts Mapping</span>{' '}
               <span className="text-slate-500">/</span>{' '}
-              <span className="text-emerald-400">DESIGN</span>
+              <span className="text-sky-300">DESIGN</span>
             </h1>
             <p className="mt-3 text-sm text-slate-400">Drag to move, rotate cleanly, and save only the draft you want to publish.</p>
           </div>
@@ -357,7 +357,7 @@ function StockroomAdminPage() {
               <button
                 type="button"
                 onClick={() => setAddMenuOpen((current) => !current)}
-                className="inline-flex h-12 items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-500 px-4 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(59,130,246,0.28)] transition hover:brightness-110"
+                className="inline-flex h-12 items-center gap-2 rounded-2xl bg-sky-500 px-4 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(14,165,233,0.22)] transition hover:bg-sky-400"
               >
                 <Plus className="h-4 w-4" />
                 Add Object
@@ -415,7 +415,7 @@ function StockroomAdminPage() {
             <button
               type="button"
               onClick={() => void saveSceneMetadataNow().then(() => success('Draft saved.')).catch((err: Error) => toastError(err.message))}
-              className="inline-flex h-12 items-center gap-2 rounded-2xl bg-blue-500 px-4 text-sm font-semibold text-white transition hover:bg-blue-400"
+              className="inline-flex h-12 items-center gap-2 rounded-2xl bg-sky-500 px-4 text-sm font-semibold text-white transition hover:bg-sky-400"
             >
               <Save className="h-4 w-4" />
               Save
@@ -451,8 +451,8 @@ function StockroomAdminPage() {
       {sceneSaveStatus === 'saved' ? <p className="text-sm text-cyan-300">Draft saved.</p> : null}
       {bootstrapError ? <p className="text-sm text-rose-400">{bootstrapError}</p> : null}
 
-      <section className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[#315481] p-3 shadow-[0_24px_60px_rgba(2,6,23,0.36)]">
-        <div className="relative h-[540px] overflow-hidden rounded-[24px] border border-white/8 bg-[#315481]">
+      <section className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[#304d73] p-3 shadow-[0_24px_60px_rgba(2,6,23,0.36)]">
+        <div className="relative h-[540px] overflow-hidden rounded-[24px] border border-white/8 bg-[#304d73]">
           {loadingBootstrap ? (
             <StockroomCanvasFallback tone="dark" />
           ) : (

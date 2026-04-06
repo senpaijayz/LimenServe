@@ -22,6 +22,7 @@ import {
   TargetBeacon,
   VIEWER_SCENE_THEME,
 } from './StockroomScenePrimitives';
+import StockroomPlanView from './StockroomPlanView';
 
 export interface StockroomSceneHandle {
   zoomIn: () => void;
@@ -101,7 +102,7 @@ function SceneViewport({
     const isFlat = viewMode === '2d';
     const offset = isFlat
       ? [0, Math.max(floorWidth, floorDepth) * 1.5, 0.001]
-      : [Math.max(floorWidth * 0.66, 11), Math.max(floorWidth, floorDepth) * 1.18, Math.max(floorDepth * 0.82, 12)];
+      : [Math.max(floorWidth * 0.52, 9), Math.max(floorWidth, floorDepth) * 1.38, Math.max(floorDepth * 0.58, 10)];
 
     controlsRef.current.setLookAt(
       focusTarget.x + offset[0],
@@ -183,8 +184,8 @@ function SceneViewport({
     <>
       <color attach="background" args={[palette.background]} />
       <fog attach="fog" args={[palette.background, 16, 34]} />
-      <ambientLight intensity={theme === 'admin' ? 0.9 : 1.15} />
-      <hemisphereLight args={['#ffffff', '#cbd5e1', theme === 'admin' ? 0.7 : 0.9]} />
+      <ambientLight intensity={theme === 'admin' ? 0.92 : 1.22} />
+      <hemisphereLight args={['#ffffff', '#dbe4ec', theme === 'admin' ? 0.7 : 1]} />
       <directionalLight
         position={[floorWidth * 0.65, Math.max(floorWidth, floorDepth) * 1.25, floorDepth * 0.5]}
         intensity={theme === 'admin' ? 1.45 : 1.18}
@@ -250,8 +251,8 @@ function SceneViewport({
       <CameraControls
         ref={controlsRef}
         makeDefault
-        minPolarAngle={viewMode === '2d' ? 0 : 0.28}
-        maxPolarAngle={viewMode === '2d' ? 0.01 : 1.18}
+        minPolarAngle={viewMode === '2d' ? 0 : 0.18}
+        maxPolarAngle={viewMode === '2d' ? 0.01 : 0.92}
         minDistance={4}
         maxDistance={44}
         truckSpeed={theme === 'admin' ? 3.8 : 2.4}
@@ -264,20 +265,52 @@ function SceneViewport({
 
 const StockroomScene = forwardRef<StockroomSceneHandle, StockroomSceneProps>(function StockroomScene(props, ref) {
   const controlsRef = useRef<CameraControls | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
   const palette = props.theme === 'admin' ? ADMIN_SCENE_THEME : VIEWER_SCENE_THEME;
 
   useImperativeHandle(ref, () => ({
-    zoomIn: () => controlsRef.current?.dolly(-4, true),
-    zoomOut: () => controlsRef.current?.dolly(4, true),
-    resetCamera: () => controlsRef.current?.reset(true),
-  }), []);
+    zoomIn: () => {
+      if (props.viewMode === '2d') {
+        setZoomLevel((current) => Math.min(current + 0.2, 2.6));
+        return;
+      }
+      controlsRef.current?.dolly(-4, true);
+    },
+    zoomOut: () => {
+      if (props.viewMode === '2d') {
+        setZoomLevel((current) => Math.max(current - 0.2, 0.8));
+        return;
+      }
+      controlsRef.current?.dolly(4, true);
+    },
+    resetCamera: () => {
+      if (props.viewMode === '2d') {
+        setZoomLevel(1);
+        return;
+      }
+      controlsRef.current?.reset(true);
+    },
+  }), [props.viewMode]);
+
+  useEffect(() => {
+    setZoomLevel(1);
+  }, [props.currentFloor, props.viewMode]);
+
+  if (props.viewMode === '2d') {
+    return (
+      <StockroomPlanView
+        {...props}
+        zoomLevel={zoomLevel}
+      />
+    );
+  }
 
   return (
     <div className="h-full min-h-[420px] w-full overflow-hidden rounded-[28px]">
       <Canvas
         shadows
         dpr={[1, 1.7]}
-        camera={{ position: [18, 18, 18], fov: 32 }}
+        camera={{ position: [16, 22, 14], fov: 28 }}
         gl={{ antialias: true }}
         onPointerMissed={() => props.onEntitySelect?.(null)}
         style={{ background: palette.background }}
