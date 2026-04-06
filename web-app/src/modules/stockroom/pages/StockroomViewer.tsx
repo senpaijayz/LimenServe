@@ -1,11 +1,13 @@
 import {
   ArrowRight,
   Compass,
+  DoorOpen,
+  Grid2x2,
   Layers3,
   MapPinned,
+  Route,
   Search,
   Sparkles,
-  Grid2x2,
   Warehouse,
 } from 'lucide-react';
 import {
@@ -15,9 +17,11 @@ import {
   useEffect,
   useMemo,
   useRef,
+  type ReactNode,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
+import useStockroomStore from '../../../store/useStockroomStore';
 import StockroomCanvasFallback from '../components/StockroomCanvasFallback';
 import type { SceneEntity } from '../types';
 import { buildSceneModel } from '../utils/sceneModel';
@@ -27,11 +31,24 @@ import {
   formatMatchLabel,
   summarizeRoute,
 } from '../utils/stockroomSelectors';
-import useStockroomStore from '../../../store/useStockroomStore';
 
 const StockroomScene = lazy(() => import('../components/StockroomScene'));
 
-function MetricChip({
+function Surface({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,16,30,0.92),rgba(5,12,24,0.82))] shadow-[0_24px_60px_rgba(2,6,23,0.34)] backdrop-blur-2xl ${className}`}>
+      {children}
+    </section>
+  );
+}
+
+function StatChip({
   label,
   value,
 }: {
@@ -39,27 +56,56 @@ function MetricChip({
   value: number;
 }) {
   return (
-    <div className="rounded-full border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-slate-950">{value}</p>
+    <div className="rounded-[24px] border border-white/10 bg-white/5 px-5 py-4 backdrop-blur-xl">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">{label}</p>
+      <p className="mt-2 text-3xl font-semibold tracking-tight text-white">{value}</p>
     </div>
   );
 }
 
-function PanelTitle({
+function ModeButton({
+  active,
+  onClick,
+  children,
+}: {
+  active?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition ${
+        active
+          ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-[0_14px_34px_rgba(14,165,233,0.24)]'
+          : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function GuidanceCard({
   eyebrow,
   title,
   body,
+  icon,
 }: {
   eyebrow: string;
   title: string;
   body: string;
+  icon: ReactNode;
 }) {
   return (
-    <div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-slate-400">{eyebrow}</p>
-      <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{title}</h2>
-      <p className="mt-2 text-sm text-slate-500">{body}</p>
+    <div className="rounded-[26px] border border-white/10 bg-white/5 p-5">
+      <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400/25 to-blue-500/25 text-cyan-200">
+        {icon}
+      </div>
+      <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.26em] text-slate-500">{eyebrow}</p>
+      <h3 className="mt-2 text-lg font-semibold text-white">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-400">{body}</p>
     </div>
   );
 }
@@ -95,6 +141,7 @@ function StockroomViewer() {
     if (hasInitialized.current) {
       return;
     }
+
     hasInitialized.current = true;
     void loadBootstrap();
   }, [loadBootstrap]);
@@ -114,281 +161,265 @@ function StockroomViewer() {
     () => buildSceneModel(bootstrap, sceneMetadataDraft, entityOverrides),
     [bootstrap, entityOverrides, sceneMetadataDraft],
   );
-
   const selectedShelfKey = selectedItemDetails ? `shelf:${selectedItemDetails.targetShelfId}` : null;
 
   const handleEntitySelect = (entity: SceneEntity | null) => {
-    if (!entity) {
+    if (!entity || entity.kind !== 'stairs') {
       return;
     }
 
-    if (entity.kind === 'stairs') {
-      startTransition(() => {
-        setCurrentFloor(entity.floorNumber === 1 ? 2 : 1);
-      });
-    }
+    startTransition(() => {
+      setCurrentFloor(entity.floorNumber === 1 ? 2 : 1);
+    });
   };
 
   return (
-    <div className="space-y-6 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(243,239,231,0.92)_52%,_rgba(234,228,219,0.9))]">
-      <section className="rounded-[34px] border border-slate-200/80 bg-white/90 px-6 py-6 shadow-[0_22px_60px_rgba(15,23,42,0.08)] backdrop-blur">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
-          <div className="max-w-3xl space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-950 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white">
-              <Warehouse className="h-3.5 w-3.5" />
-              Internal Locator
-            </div>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-[2.55rem] sm:leading-tight">
-              A clearer 3D locator built for real stockroom visibility.
-            </h1>
-            <p className="max-w-2xl text-sm text-slate-600 sm:text-base">
-              Search any mapped part, switch floors instantly, and follow the route to the exact shelf, level, and slot without losing visibility of the room.
-            </p>
-          </div>
+    <div className="relative overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_top_left,_rgba(61,223,255,0.12),_transparent_26%),radial-gradient(circle_at_top_right,_rgba(59,130,246,0.16),_transparent_22%),linear-gradient(180deg,#030712_0%,#040915_52%,#07111f_100%)] p-1">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-24 top-0 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="absolute right-0 top-24 h-80 w-80 rounded-full bg-blue-500/10 blur-3xl" />
+      </div>
 
-          <div className="flex flex-wrap gap-3">
-            <MetricChip label="Floors" value={stats.floors} />
-            <MetricChip label="Shelves" value={stats.shelves} />
-            <MetricChip label="Mapped Items" value={stats.mappedItems} />
-          </div>
-        </div>
-      </section>
-
-      <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-        <aside className="space-y-5">
-          <section className="rounded-[30px] border border-slate-200/80 bg-white/95 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
-            <div className="flex items-start justify-between gap-4">
-              <PanelTitle
-                eyebrow="Find A Part"
-                title="Search mapped inventory"
-                body="Search by item name, SKU, part code, or keyword and jump to the exact location."
-              />
-              {isAdmin ? (
-                <button
-                  type="button"
-                  onClick={() => navigate('/stockroom/admin')}
-                  className="rounded-full border border-slate-200 bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-900"
-                >
-                  Layout Admin
-                </button>
-              ) : null}
-            </div>
-
-            <div className="mt-5 rounded-[22px] border border-[#e6e0d6] bg-[#f5f1ea] p-3">
-              <div className="flex items-center gap-3 rounded-[18px] border border-white bg-white px-4 py-3 shadow-sm">
-                <Search className="h-4 w-4 text-slate-400" />
-                <input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search by name, SKU, or part code..."
-                  className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                />
-                {searching ? <Sparkles className="h-4 w-4 animate-pulse text-sky-500" /> : null}
+      <div className="relative space-y-6">
+        <Surface className="overflow-hidden px-6 py-7">
+          <div className="flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
+            <div className="max-w-4xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.32em] text-cyan-200">
+                <Warehouse className="h-3.5 w-3.5" />
+                Stockroom Navigator
               </div>
-              {searchError ? <p className="mt-2 text-sm text-rose-500">{searchError}</p> : null}
+              <h1 className="mt-5 max-w-4xl text-4xl font-semibold tracking-tight text-white sm:text-[3.15rem] sm:leading-[1.02]">
+                Premium wayfinding for a mapped retail floor.
+              </h1>
+              <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
+                Search any stocked part, jump to the right floor, and inspect the exact shelf, level, and slot inside a cinematic cutaway store model.
+              </p>
             </div>
 
-            <div className="mt-4 space-y-3">
-              {searchResults.length === 0 ? (
-                <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                  Start typing to search the live mapped stockroom inventory.
+            <div className="grid gap-3 sm:grid-cols-3">
+              <StatChip label="Floors" value={stats.floors} />
+              <StatChip label="Shelves" value={stats.shelves} />
+              <StatChip label="Mapped Items" value={stats.mappedItems} />
+            </div>
+          </div>
+        </Surface>
+
+        <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
+          <div className="space-y-5">
+            <Surface className="p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">Inventory Search</p>
+                  <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">Locate a mapped part</h2>
+                  <p className="mt-3 text-sm leading-6 text-slate-400">
+                    Search by item name, SKU, part code, or keyword and move directly to the stored location.
+                  </p>
+                </div>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/stockroom/admin')}
+                    className="rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(14,165,233,0.26)] transition hover:brightness-110"
+                  >
+                    Layout Admin
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="mt-5 rounded-[24px] border border-white/10 bg-white/5 p-3">
+                <div className="flex items-center gap-3 rounded-[18px] border border-white/10 bg-slate-950/35 px-4 py-3">
+                  <Search className="h-4 w-4 text-slate-500" />
+                  <input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search by item name, SKU, or part code..."
+                    className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
+                  />
+                  {searching ? <Sparkles className="h-4 w-4 animate-pulse text-cyan-300" /> : null}
+                </div>
+                {searchError ? <p className="mt-3 text-sm text-rose-400">{searchError}</p> : null}
+              </div>
+
+              <div className="panel-scroll mt-4 max-h-[400px] space-y-3 overflow-y-auto pr-1">
+                {searchResults.length === 0 ? (
+                  <div className="rounded-[24px] border border-dashed border-white/10 bg-slate-950/20 px-4 py-6 text-center text-sm text-slate-500">
+                    Start typing to query the mapped stockroom inventory.
+                  </div>
+                ) : (
+                  searchResults.slice(0, 9).map((result) => (
+                    <button
+                      key={result.productId}
+                      type="button"
+                      onClick={() => void loadItemDetails(result.productId, { focusTargetFloor: true })}
+                      className="w-full rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-left transition hover:border-cyan-400/30 hover:bg-white/8"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-base font-semibold text-white">{result.name}</p>
+                          <p className="mt-1 text-[11px] uppercase tracking-[0.24em] text-slate-500">{result.sku}</p>
+                          <p className="mt-2 text-sm text-slate-400">
+                            Floor {result.floor.floorNumber} | {result.zone.code} | {result.shelf.code}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-slate-950/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
+                          {formatMatchLabel(result)}
+                        </span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </Surface>
+
+            <Surface className="p-5">
+              <div className="flex items-center gap-2 text-cyan-300">
+                <Compass className="h-4 w-4" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">Route Guidance</p>
+              </div>
+
+              {loadingItemDetails ? (
+                <div className="mt-4 rounded-[22px] border border-white/10 bg-white/5 px-4 py-6 text-sm text-slate-400">
+                  Building route guidance...
+                </div>
+              ) : selectedItemDetails ? (
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <h3 className="text-2xl font-semibold text-white">{selectedItemDetails.item.name}</h3>
+                    <p className="mt-2 text-sm text-slate-400">{selectedItemDetails.item.sku} | {summarizeRoute(selectedItemDetails)}</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-[20px] border border-white/10 bg-white/5 px-4 py-3">
+                      <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Current Floor</p>
+                      <p className="mt-2 text-lg font-semibold text-white">Floor {selectedItemDetails.currentFloor}</p>
+                    </div>
+                    <div className="rounded-[20px] border border-white/10 bg-white/5 px-4 py-3">
+                      <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Target Floor</p>
+                      <p className="mt-2 text-lg font-semibold text-white">Floor {selectedItemDetails.targetFloor}</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-white/10 bg-slate-950/30 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Step-by-Step</p>
+                    <div className="mt-3 space-y-3">
+                      {selectedItemDetails.steps.map((step) => (
+                        <div key={step} className="flex items-start gap-3 text-sm text-slate-300">
+                          <ArrowRight className="mt-0.5 h-4 w-4 text-cyan-300" />
+                          <span>{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ) : (
-                searchResults.slice(0, 8).map((result) => (
-                  <button
-                    key={result.productId}
-                    type="button"
-                    onClick={() => void loadItemDetails(result.productId, { focusTargetFloor: true })}
-                    className="w-full rounded-[22px] border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <p className="text-base font-semibold text-slate-950">{result.name}</p>
-                        <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">{result.sku}</p>
-                        <p className="text-sm text-slate-500">
-                          Floor {result.floor.floorNumber} | {result.zone.code} | {result.shelf.code}
-                        </p>
-                      </div>
-                      <div className="rounded-full bg-slate-950 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
-                        {formatMatchLabel(result)}
-                      </div>
-                    </div>
-                  </button>
-                ))
+                <div className="mt-4 rounded-[22px] border border-dashed border-white/10 bg-slate-950/20 px-4 py-6 text-center text-sm text-slate-500">
+                  Select a result to light the route and highlight the destination slot.
+                </div>
               )}
-            </div>
-          </section>
 
-          <section className="rounded-[30px] border border-slate-200/80 bg-white/95 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
-            <PanelTitle
-              eyebrow="Active Route"
-              title={selectedItemDetails ? selectedItemDetails.item.name : 'No item selected'}
-              body={selectedItemDetails ? summarizeRoute(selectedItemDetails) : 'Pick a search result to render the route and highlight the destination.'}
-            />
+              {itemDetailsError ? <p className="mt-3 text-sm text-rose-400">{itemDetailsError}</p> : null}
+            </Surface>
+          </div>
 
-            {loadingItemDetails ? (
-              <div className="mt-4 rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                Loading route guidance...
-              </div>
-            ) : selectedItemDetails ? (
-              <div className="mt-4 space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-[20px] border border-slate-200 bg-[#f5f1ea] px-4 py-3">
-                    <p className="text-[10px] uppercase tracking-[0.22em] text-slate-400">Current Floor</p>
-                    <p className="mt-2 text-lg font-semibold text-slate-950">Floor {selectedItemDetails.currentFloor}</p>
-                  </div>
-                  <div className="rounded-[20px] border border-slate-200 bg-[#f5f1ea] px-4 py-3">
-                    <p className="text-[10px] uppercase tracking-[0.22em] text-slate-400">Target Floor</p>
-                    <p className="mt-2 text-lg font-semibold text-slate-950">Floor {selectedItemDetails.targetFloor}</p>
-                  </div>
-                </div>
-
-                <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                  <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Route Steps</p>
-                  <div className="mt-3 space-y-2">
-                    {selectedItemDetails.steps.map((step) => (
-                      <div key={step} className="flex items-start gap-3 text-sm text-slate-600">
-                        <ArrowRight className="mt-0.5 h-4 w-4 text-sky-500" />
-                        <span>{step}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-[22px] border border-slate-200 bg-slate-950 px-4 py-4 text-white">
-                  <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Visual Legend</p>
-                  <div className="mt-3 space-y-2 text-sm text-slate-200">
-                    <div className="flex items-center gap-3">
-                      <span className="h-3 w-3 rounded-full bg-cyan-400" />
-                      Route path
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="h-3 w-3 rounded-full bg-rose-500" />
-                      Exact target slot
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="h-3 w-3 rounded-full bg-[#dcc9b3]" />
-                      Zone overlay
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 rounded-[22px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                Search and select an item to guide the user to the correct shelf.
-              </div>
-            )}
-
-            {itemDetailsError ? <p className="mt-3 text-sm text-rose-500">{itemDetailsError}</p> : null}
-          </section>
-        </aside>
-
-        <section className="space-y-4">
-          <div className="rounded-[30px] border border-slate-200/80 bg-white/95 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-wrap gap-2">
-                {floorTabs.map((tab) => (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    onClick={() => setCurrentFloor(tab.value)}
-                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                      currentFloor === tab.value
-                        ? 'bg-slate-950 text-white shadow-[0_12px_26px_rgba(15,23,42,0.16)]'
-                        : 'border border-slate-200 bg-[#f5f1ea] text-slate-600 hover:bg-white'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setViewMode(viewMode === '2d' ? '3d' : '2d')}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                    viewMode === '2d'
-                      ? 'border border-slate-200 bg-[#f5f1ea] text-slate-600 hover:bg-white'
-                      : 'bg-slate-950 text-white shadow-[0_12px_26px_rgba(15,23,42,0.16)]'
-                  }`}
-                >
-                  <span className="inline-flex items-center gap-2">
+          <div className="space-y-5">
+            <Surface className="p-4">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <div className="flex flex-wrap gap-2">
+                  {floorTabs.map((tab) => (
+                    <ModeButton
+                      key={tab.value}
+                      active={currentFloor === tab.value}
+                      onClick={() => setCurrentFloor(tab.value)}
+                    >
+                      {tab.label}
+                    </ModeButton>
+                  ))}
+                  <ModeButton onClick={() => setViewMode(viewMode === '2d' ? '3d' : '2d')}>
                     <Grid2x2 className="h-4 w-4" />
                     {viewMode === '2d' ? '3D View' : '2D View'}
-                  </span>
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-[#f5f1ea] px-4 py-2 text-sm text-slate-600">
-                <Compass className="h-4 w-4 text-sky-500" />
-                <span>Use the staircase in-scene or switch floors here.</span>
-              </div>
-            </div>
-          </div>
-
-          {loadingBootstrap ? (
-            <StockroomCanvasFallback tone="light" />
-          ) : bootstrapError ? (
-            <div className="flex min-h-[680px] items-center justify-center rounded-[32px] border border-slate-200 bg-white text-center shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
-              <div className="space-y-3 px-6">
-                <MapPinned className="mx-auto h-10 w-10 text-rose-500" />
-                <p className="text-xl font-semibold text-slate-950">Stockroom unavailable</p>
-                <p className="text-sm text-slate-500">{bootstrapError}</p>
-              </div>
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-[32px] border border-[#dfd8cc] bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-              <div className="flex items-center justify-between rounded-[24px] border border-[#ece4d9] bg-[#f5f1ea] px-4 py-3">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">Scene Mode</p>
-                  <p className="mt-1 text-sm font-medium text-slate-700">Cutaway locator view for better interior visibility</p>
+                  </ModeButton>
                 </div>
-                <div className="hidden items-center gap-3 text-sm text-slate-600 sm:flex">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-8 rounded-full bg-[#dcc9b3]" />
-                    Left zone
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-8 rounded-full bg-[#d5ceec]" />
-                    Right zone
-                  </div>
+
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+                  <Compass className="h-4 w-4 text-cyan-300" />
+                  Drag to orbit. Scroll to zoom. Click stairs to change floors.
                 </div>
               </div>
+            </Surface>
 
-              <div className="mt-4 h-[690px] rounded-[28px] border border-[#ece4d9] bg-[linear-gradient(180deg,#fffdfa_0%,#f1ece4_100%)] p-3">
-                <Suspense fallback={<StockroomCanvasFallback tone="light" />}>
-                  <StockroomScene
-                    bootstrap={bootstrap}
-                    scene={scene}
-                    currentFloor={currentFloor}
-                    selectedItemDetails={selectedItemDetails}
-                    selectedEntityKey={selectedShelfKey}
-                    onEntitySelect={handleEntitySelect}
-                    onFloorSwitch={setCurrentFloor}
-                    theme="viewer"
-                    viewMode={viewMode}
-                  />
-                </Suspense>
-              </div>
-            </div>
-          )}
+            {loadingBootstrap ? (
+              <StockroomCanvasFallback tone="dark" />
+            ) : bootstrapError ? (
+              <Surface className="flex min-h-[720px] items-center justify-center text-center">
+                <div className="space-y-3 px-6">
+                  <MapPinned className="mx-auto h-10 w-10 text-rose-400" />
+                  <p className="text-xl font-semibold text-white">Stockroom unavailable</p>
+                  <p className="text-sm text-slate-400">{bootstrapError}</p>
+                </div>
+              </Surface>
+            ) : (
+              <Surface className="overflow-hidden p-4">
+                <div className="flex items-center justify-between rounded-[24px] border border-white/10 bg-white/5 px-4 py-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">Scene Mode</p>
+                    <p className="mt-1 text-sm font-medium text-slate-200">
+                      {viewMode === '2d'
+                        ? 'Precision floor plan with editable placement geometry'
+                        : 'Cinematic store cutaway with reflective flooring and premium fixtures'}
+                    </p>
+                  </div>
+                  <div className="hidden items-center gap-3 text-sm text-slate-300 sm:flex">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2.5 w-8 rounded-full bg-[#22c7df]" />
+                      Zone A
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="h-2.5 w-8 rounded-full bg-[#4f8dff]" />
+                      Zone B
+                    </div>
+                  </div>
+                </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-[26px] border border-slate-200 bg-white px-5 py-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-              <Layers3 className="h-5 w-5 text-sky-500" />
-              <h3 className="mt-4 text-lg font-semibold text-slate-950">Open Interior View</h3>
-              <p className="mt-2 text-sm text-slate-500">Exterior walls are softened in locator mode so users can actually read the room layout.</p>
-            </div>
-            <div className="rounded-[26px] border border-slate-200 bg-white px-5 py-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-              <Compass className="h-5 w-5 text-sky-500" />
-              <h3 className="mt-4 text-lg font-semibold text-slate-950">Route-First Guidance</h3>
-              <p className="mt-2 text-sm text-slate-500">The path is elevated, smoothed, and always readable above the floor plate.</p>
-            </div>
-            <div className="rounded-[26px] border border-slate-200 bg-white px-5 py-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-              <Warehouse className="h-5 w-5 text-sky-500" />
-              <h3 className="mt-4 text-lg font-semibold text-slate-950">Shelf-Led Layout</h3>
-              <p className="mt-2 text-sm text-slate-500">Shelves, zones, and the destination marker now dominate the visual hierarchy instead of decorative UI.</p>
+                <div className="mt-4 h-[720px] rounded-[30px] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(61,223,255,0.12),_transparent_26%),linear-gradient(180deg,#071122_0%,#040915_100%)] p-3">
+                  <Suspense fallback={<StockroomCanvasFallback tone="dark" />}>
+                    <StockroomScene
+                      bootstrap={bootstrap}
+                      scene={scene}
+                      currentFloor={currentFloor}
+                      selectedItemDetails={selectedItemDetails}
+                      selectedEntityKey={selectedShelfKey}
+                      onEntitySelect={handleEntitySelect}
+                      onFloorSwitch={setCurrentFloor}
+                      theme="viewer"
+                      viewMode={viewMode}
+                    />
+                  </Suspense>
+                </div>
+              </Surface>
+            )}
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <GuidanceCard
+                eyebrow="Cutaway Interior"
+                title="See inside the room"
+                body="Front and side architecture stays readable while the interior remains fully visible for picking and navigation."
+                icon={<Layers3 className="h-5 w-5" />}
+              />
+              <GuidanceCard
+                eyebrow="Retail Fixtures"
+                title="Shelf-rich store model"
+                body="Metal-and-wood shelving, stocked product blocks, glass entries, service desk, and staircase geometry read like a real interior."
+                icon={<DoorOpen className="h-5 w-5" />}
+              />
+              <GuidanceCard
+                eyebrow="Guided Flow"
+                title="Route to exact slot"
+                body="The viewer highlights the live path, target shelf, level, and slot so staff can move with less guesswork."
+                icon={<Route className="h-5 w-5" />}
+              />
             </div>
           </div>
-        </section>
+        </div>
       </div>
     </div>
   );

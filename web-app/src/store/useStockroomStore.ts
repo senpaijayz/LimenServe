@@ -117,12 +117,19 @@ function setAdminFailure(set: (partial: Partial<StockroomStore>) => void, messag
   set({ adminBusy: false, adminError: message });
 }
 
+function clearMetadataSaveTimer() {
+  if (metadataSaveTimer) {
+    window.clearTimeout(metadataSaveTimer);
+    metadataSaveTimer = null;
+  }
+}
+
 const useStockroomStore = create<StockroomStore>((set, get) => ({
   bootstrap: null,
   loadingBootstrap: false,
   bootstrapError: '',
   currentFloor: 1,
-  viewMode: '2d',
+  viewMode: '3d',
   searchQuery: '',
   searchResults: [],
   searching: false,
@@ -148,7 +155,14 @@ const useStockroomStore = create<StockroomStore>((set, get) => ({
   adminBusy: false,
   adminError: '',
 
-  setCurrentFloor: (currentFloor) => set({ currentFloor }),
+  setCurrentFloor: (currentFloor) => set((state) => {
+    const availableFloors = state.bootstrap?.floors.map((floor) => floor.floorNumber) ?? [];
+    const resolvedFloor = availableFloors.includes(currentFloor)
+      ? currentFloor
+      : (availableFloors[0] ?? currentFloor);
+
+    return { currentFloor: resolvedFloor };
+  }),
   setViewMode: (viewMode) => set({ viewMode }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setMasterSearchQuery: (masterSearchQuery) => set({ masterSearchQuery }),
@@ -166,7 +180,8 @@ const useStockroomStore = create<StockroomStore>((set, get) => ({
 
     try {
       const bootstrap = await getStockroomBootstrap(layoutId);
-      const nextFloor = preserveFloor
+      const availableFloors = bootstrap?.floors?.map((floor) => floor.floorNumber) ?? [];
+      const nextFloor = preserveFloor && availableFloors.includes(get().currentFloor)
         ? get().currentFloor
         : Number(bootstrap?.floors?.[0]?.floorNumber ?? 1);
       const sceneMetadataDraft = extractSceneMetadata(bootstrap.activeLayout, bootstrap);
@@ -344,10 +359,7 @@ const useStockroomStore = create<StockroomStore>((set, get) => ({
       return;
     }
 
-    if (metadataSaveTimer) {
-      window.clearTimeout(metadataSaveTimer);
-      metadataSaveTimer = null;
-    }
+    clearMetadataSaveTimer();
 
     set({ sceneSaveStatus: 'saving', sceneSaveError: '' });
 
@@ -368,9 +380,7 @@ const useStockroomStore = create<StockroomStore>((set, get) => ({
   },
 
   scheduleSceneMetadataSave() {
-    if (metadataSaveTimer) {
-      window.clearTimeout(metadataSaveTimer);
-    }
+    clearMetadataSaveTimer();
 
     metadataSaveTimer = window.setTimeout(() => {
       void get().saveSceneMetadataNow();
