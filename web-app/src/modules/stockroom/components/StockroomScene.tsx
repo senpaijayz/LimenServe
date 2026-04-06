@@ -63,7 +63,11 @@ function getFocusPosition(
   floorWidth: number,
   floorDepth: number,
 ) {
-  if (selectedItemDetails?.targetFloor === selectedItemDetails.currentFloor && selectedItemDetails.targetSlot) {
+  if (
+    selectedItemDetails
+    && selectedItemDetails.targetFloor === selectedItemDetails.currentFloor
+    && selectedItemDetails.targetSlot
+  ) {
     return {
       x: selectedItemDetails.targetSlot.x,
       y: selectedItemDetails.targetSlot.y,
