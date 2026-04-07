@@ -5,10 +5,11 @@ import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-d
 import { useAuth } from '../../context/useAuth';
 
 const primaryNav = [
-    { label: 'Shop by Category', to: '/catalog' },
-    { label: 'Brands', to: '/catalog' },
-    { label: 'Vehicle', to: '/estimate' },
+    { label: 'Home', to: '/' },
     { label: 'About', to: '/about' },
+    { label: 'Genuine Parts', to: '/catalog' },
+    { label: 'Get Estimate', to: '/estimate' },
+    { label: 'Service Orders', to: '/service-orders' },
 ];
 
 const PublicLayout = () => {
@@ -121,12 +122,9 @@ const PublicLayout = () => {
                                 </button>
                             </div>
 
-                            <Link to="/estimate" className="btn btn-secondary px-4 py-2 text-xs">
-                                Request Quote
+                            <Link to="/login" className="btn btn-primary px-4 py-2 text-xs">
+                                Staff Portal
                             </Link>
-                            <a href="tel:+639171234567" className="btn btn-primary px-4 py-2 text-xs">
-                                Call Store
-                            </a>
                         </div>
 
                         <button
@@ -185,6 +183,9 @@ const PublicLayout = () => {
                                 <a href="#footer-contact" onClick={() => setMobileMenuOpen(false)} className="block px-5 py-4 text-base font-semibold text-primary-900">
                                     Contact
                                 </a>
+                                <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block border-t border-primary-200 px-5 py-4 text-base font-semibold text-accent-primary">
+                                    Staff Portal
+                                </Link>
                             </div>
                         </div>
                     </motion.div>
