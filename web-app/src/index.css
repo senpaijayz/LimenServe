@@ -1,61 +1,54 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --primary-50: #f3f8ff;
-  --primary-100: #d8e5ff;
-  --primary-200: #9cb6db;
-  --primary-300: #6c87aa;
-  --primary-400: #8fa2c2;
-  --primary-500: #637595;
-  --primary-600: #44526c;
-  --primary-700: #22304a;
-  --primary-800: #141d33;
-  --primary-900: #0b1220;
-  --primary-950: #060b14;
-
-  --accent-primary: #5cf2da;
-  --accent-secondary: #1de6ff;
-  --accent-blue: #2f6bff;
-  --accent-blue-dark: #2157dc;
-  --accent-info: #4fdfff;
-  --accent-danger: #ff5f7a;
-  --accent-success: #44d6a8;
-  --accent-warning: #ffb547;
-
-  --glass-border: rgba(143, 162, 194, 0.18);
-  --glass-surface: rgba(11, 18, 32, 0.72);
-  --glass-strong: rgba(7, 13, 24, 0.9);
-  --shell-gutter: clamp(1rem, 2vw, 1.75rem);
-  --panel-shadow: 0 24px 70px rgba(2, 8, 23, 0.46);
-}
-
-@layer base {
-  * {
-    @apply border-primary-200;
-  }
-
-  html {
-    color-scheme: dark;
-    scroll-behavior: smooth;
+@media print {
+  @page {
+    margin: 1cm;
   }
 
   body {
-    @apply bg-primary-950 text-primary-100 font-sans antialiased selection:bg-accent-blue selection:text-white;
-    -webkit-font-smoothing: antialiased;
-    background-image:
-      radial-gradient(circle at top left, rgba(92, 242, 218, 0.1), transparent 28%),
-      radial-gradient(circle at 80% 18%, rgba(47, 107, 255, 0.16), transparent 24%),
-      linear-gradient(180deg, #09111d 0%, #060b14 42%, #030711 100%);
-    background-attachment: fixed;
-    overflow-x: hidden;
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
+}
 
-  a {
-    @apply transition-colors;
+/* ========================================
+   LIMEN MODERN AUTOMOTIVE UI
+   Clean, Futuristic, Dynamic Shield Inspired
+======================================== */
+
+:root {
+  --primary-950: #111827;
+  --primary-900: #1f2937;
+  --primary-800: #334155;
+  --primary-700: #475569;
+  --primary-600: #64748b;
+  --primary-500: #94a3b8;
+  --primary-400: #cbd5e1;
+  --primary-300: #e2e8f0;
+  --primary-200: #e5e7eb;
+  --primary-100: #f8f9fa;
+
+  --accent-primary: #1E3A8A;
+  --accent-secondary: #0F172A;
+
+  /* Structural */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+}
+
+@layer base {
+  body {
+    @apply bg-primary-100 text-primary-900 antialiased font-sans selection:bg-accent-blue selection:text-white;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
 
   h1,
@@ -64,185 +57,91 @@
   h4,
   h5,
   h6 {
-    @apply font-display tracking-tight text-white;
-  }
-
-  kbd {
-    font-family: 'Sora', sans-serif;
+    @apply font-display tracking-tight text-primary-950;
   }
 }
 
+/* ========================================
+   UTILITY COMPONENTS
+======================================== */
+
 @layer components {
+
+  /* Buttons */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-all duration-300 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50;
-  }
-
-  .btn-sm {
-    @apply px-4 py-2 text-xs;
-  }
-
-  .btn-lg {
-    @apply px-6 py-3.5 text-base;
-  }
-
-  .btn-icon {
-    @apply h-11 w-11 rounded-2xl p-0;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-sans text-sm font-semibold transition-all duration-300 active:scale-95 disabled:pointer-events-none disabled:opacity-50;
   }
 
   .btn-primary {
-    background:
-      linear-gradient(135deg, rgba(92, 242, 218, 0.28), rgba(47, 107, 255, 0.26)),
-      rgba(7, 13, 24, 0.92);
-    border-color: rgba(255, 255, 255, 0.1);
-    @apply border text-white shadow-[0_18px_40px_rgba(47,107,255,0.22)] hover:-translate-y-0.5 hover:shadow-[0_22px_50px_rgba(79,223,255,0.24)];
+    @apply btn bg-accent-primary text-white shadow-sm hover:-translate-y-0.5 hover:bg-accent-blueDark hover:shadow-[0_14px_28px_rgba(30,58,138,0.18)];
   }
 
   .btn-secondary {
-    background: rgba(11, 18, 32, 0.62);
-    border-color: rgba(255, 255, 255, 0.1);
-    @apply border text-primary-100 backdrop-blur-xl hover:-translate-y-0.5 hover:bg-primary-900;
+    @apply btn border border-primary-300 bg-white text-primary-900 hover:border-primary-400 hover:bg-primary-100;
   }
 
   .btn-outline {
-    border-color: rgba(156, 182, 219, 0.2);
-    @apply border bg-transparent text-primary-100;
+    @apply btn border border-primary-300 bg-transparent text-primary-700 hover:border-accent-primary hover:bg-primary-100 hover:text-accent-primary;
   }
 
   .btn-ghost {
-    @apply border border-transparent bg-transparent text-primary-300 hover:text-white;
+    @apply btn bg-transparent text-primary-600 hover:bg-primary-100 hover:text-primary-950;
   }
 
-  .btn-success {
-    border-color: rgba(68, 214, 168, 0.25);
-    background-color: rgba(68, 214, 168, 0.15);
-    @apply border text-accent-success;
-  }
-
-  .btn-warning {
-    border-color: rgba(255, 181, 71, 0.25);
-    background-color: rgba(255, 181, 71, 0.15);
-    @apply border text-accent-warning;
-  }
-
-  .btn-danger {
-    border-color: rgba(255, 95, 122, 0.25);
-    background-color: rgba(255, 95, 122, 0.15);
-    @apply border text-accent-danger;
-  }
-
+  /* Inputs */
   .input {
-    border-color: rgba(255, 255, 255, 0.1);
-    background-color: rgba(255, 255, 255, 0.04);
-    @apply w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder:text-primary-400 shadow-none outline-none transition-all duration-200 focus:ring-2;
+    @apply w-full rounded-xl border border-primary-300 bg-white px-4 py-3 font-sans text-primary-900 placeholder-primary-500 shadow-sm transition-colors focus:border-accent-primary focus:outline-none focus:ring-2 focus:ring-blue-100;
   }
 
+  /* Surface Cards */
   .surface {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03)),
-      var(--glass-surface);
-    border: 1px solid var(--glass-border);
-    box-shadow: var(--panel-shadow);
-    @apply rounded-[28px] backdrop-blur-2xl;
+    @apply overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-[0_20px_50px_rgba(15,23,42,0.06)] transition-all duration-300 hover:border-primary-300 hover:shadow-[0_24px_60px_rgba(15,23,42,0.08)];
   }
 
-  .badge {
-    @apply inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em];
+  /* Dynamic Shield Aesthetic (Angled Elements) */
+  .dynamic-shield {
+    clip-path: polygon(15% 0, 100% 0, 100% 100%, 0 100%, 0 15%);
   }
 
-  .badge-success {
-    border-color: rgba(68, 214, 168, 0.25);
-    background-color: rgba(68, 214, 168, 0.1);
-    @apply text-accent-success;
-  }
-
-  .badge-warning {
-    border-color: rgba(255, 181, 71, 0.25);
-    background-color: rgba(255, 181, 71, 0.1);
-    @apply text-accent-warning;
-  }
-
-  .badge-danger {
-    border-color: rgba(255, 95, 122, 0.25);
-    background-color: rgba(255, 95, 122, 0.1);
-    @apply text-accent-danger;
-  }
-
-  .badge-info {
-    border-color: rgba(79, 223, 255, 0.25);
-    background-color: rgba(79, 223, 255, 0.1);
-    @apply text-accent-info;
-  }
-
-  .badge-neutral {
-    border-color: rgba(156, 182, 219, 0.2);
-    background-color: rgba(255, 255, 255, 0.05);
-    @apply text-primary-300;
-  }
-
-  .table {
-    @apply min-w-full border-separate border-spacing-y-2;
-  }
-
-  .table thead th {
-    @apply px-4 pb-2 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-primary-400;
-  }
-
-  .table tbody tr {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
-      rgba(11, 18, 32, 0.62);
-    border-color: rgba(255, 255, 255, 0.08);
-    @apply overflow-hidden rounded-2xl border;
-  }
-
-  .table tbody td {
-    border-color: rgba(255, 255, 255, 0.08);
-    @apply border-y px-4 py-3 text-sm text-primary-200 first:rounded-l-2xl first:border-l last:rounded-r-2xl last:border-r;
-  }
-
+  /* Modals */
   .modal-overlay {
-    background-color: rgba(0, 0, 0, 0.7);
-    @apply fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-xl;
+    @apply fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm overflow-y-auto;
   }
 
   .modal {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
-      var(--glass-strong);
-    border-color: rgba(255, 255, 255, 0.1);
-    @apply relative my-auto w-full overflow-hidden rounded-[32px] border shadow-[0_30px_90px_rgba(2,8,23,0.6)];
+    @apply relative w-full bg-white border border-primary-200 rounded-xl shadow-2xl overflow-hidden my-auto;
   }
 
   .modal-header {
-    border-color: rgba(255, 255, 255, 0.08);
-    @apply flex items-center justify-between border-b px-6 py-5;
+    @apply flex items-center justify-between p-4 border-b border-primary-200;
   }
 
   .modal-title {
-    @apply text-xl font-semibold text-white;
+    @apply text-xl font-display font-bold text-primary-950;
   }
 
   .modal-body {
-    @apply p-6;
+    @apply p-4;
   }
 
   .modal-footer {
-    border-color: rgba(255, 255, 255, 0.08);
-    background-color: rgba(255, 255, 255, 0.03);
-    @apply flex items-center justify-end gap-3 border-t px-6 py-5;
+    @apply flex items-center justify-end gap-3 p-4 border-t border-primary-200 bg-primary-50;
   }
+}
 
+/* ========================================
+   DASHBOARD LAYOUT STRUCTURE
+======================================== */
+
+@layer components {
+
+  /* Layout Shell */
   .sidebar {
-    width: 18.5rem;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-      rgba(6, 11, 20, 0.94);
-    border-color: rgba(255, 255, 255, 0.08);
-    @apply fixed inset-y-0 left-0 z-40 flex -translate-x-full flex-col border-r shadow-[0_28px_80px_rgba(2,8,23,0.55)] backdrop-blur-2xl transition-transform duration-300 lg:translate-x-0;
+    @apply fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-primary-200 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 lg:fixed lg:flex-shrink-0 flex flex-col;
   }
 
   .sidebar-collapsed {
-    width: 6rem;
+    @apply lg:w-20;
   }
 
   .sidebar-open {
@@ -250,146 +149,80 @@
   }
 
   .sidebar-logo {
-    border-color: rgba(255, 255, 255, 0.08);
-    @apply flex h-20 items-center gap-3 border-b px-5;
+    @apply flex items-center h-16 px-4 gap-3 bg-white border-b border-primary-200;
   }
 
   .sidebar-nav {
-    @apply flex-1 overflow-y-auto px-4 py-5;
+    @apply flex-1 px-3 py-4 overflow-y-auto bg-white;
   }
 
   .sidebar-section-title {
-    @apply mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-primary-500;
+    @apply px-3 mb-2 text-[11px] font-bold text-primary-400 uppercase tracking-widest;
   }
 
   .sidebar-nav-item {
-    @apply mb-1 flex items-center gap-3 rounded-2xl px-3 py-3 text-primary-300 transition-all duration-200 hover:text-white;
+    @apply flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg text-primary-600 hover:text-primary-950 hover:bg-primary-50 transition-all duration-200;
   }
 
   .sidebar-nav-item-active {
-    background:
-      linear-gradient(135deg, rgba(92, 242, 218, 0.16), rgba(47, 107, 255, 0.1)),
-      rgba(255, 255, 255, 0.04);
-    border-color: rgba(79, 223, 255, 0.2);
-    @apply border text-white shadow-[0_18px_40px_rgba(79,223,255,0.12)];
+    @apply bg-blue-50 text-accent-primary font-semibold shadow-[inset_3px_0_0_0_#1E3A8A];
   }
 
   .main-content {
-    @apply min-h-screen min-w-0 flex-1 pt-24 transition-all duration-300 lg:pl-[18.5rem];
+    @apply flex-1 flex flex-col min-w-0 min-h-screen pt-16 lg:pl-64 transition-all duration-300;
   }
 
   .main-content-collapsed {
-    @apply lg:pl-24;
+    @apply lg:pl-20;
   }
 
   .header {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
-      rgba(6, 11, 20, 0.72);
-    border-color: rgba(255, 255, 255, 0.08);
-    @apply fixed right-0 top-0 z-30 flex h-20 w-full items-center justify-between border-b px-4 backdrop-blur-2xl transition-all duration-300 lg:w-[calc(100%-18.5rem)] lg:px-8;
+    @apply fixed top-0 right-0 z-30 flex h-16 w-full items-center justify-between px-4 lg:px-8 bg-white/80 backdrop-blur-md border-b border-primary-200 transition-all duration-300 lg:w-[calc(100%-16rem)];
   }
 
   .header-collapsed {
-    @apply lg:w-[calc(100%-6rem)];
-  }
-
-  .shell-panel {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
-      rgba(7, 13, 24, 0.78);
-    border-color: rgba(255, 255, 255, 0.08);
-    @apply rounded-[30px] border backdrop-blur-2xl;
-  }
-
-  .data-pill {
-    border-color: rgba(255, 255, 255, 0.1);
-    background-color: rgba(255, 255, 255, 0.04);
-    @apply inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-300;
-  }
-
-  .ambient-grid {
-    background-image:
-      linear-gradient(rgba(156, 182, 219, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(156, 182, 219, 0.05) 1px, transparent 1px);
-    background-size: 72px 72px;
-  }
-
-  .text-gradient-cyan {
-    background: linear-gradient(135deg, #ffffff 0%, #b8f9ff 45%, #60f1de 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    @apply lg:w-[calc(100%-5rem)];
   }
 }
 
+/* ========================================
+   ANIMATIONS & SCROLLBAR
+======================================== */
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(6, 11, 20, 0.65);
+  background: var(--primary-100);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(143, 162, 194, 0.3);
-  border-radius: 999px;
+  background: var(--primary-300);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(143, 162, 194, 0.48);
+  background: var(--primary-400);
 }
 
-.public-estimate-page .bg-white,
-.public-estimate-page .bg-white\/80,
-.public-estimate-page .bg-white\/90,
-.public-estimate-page .bg-primary-50,
-.public-estimate-page .bg-primary-50\/60,
-.public-catalog-page .bg-white,
-.public-catalog-page .bg-white\/50,
-.public-catalog-page .bg-white\/90,
-.public-catalog-page .bg-primary-50 {
-  background: rgba(255, 255, 255, 0.04) !important;
+/* Decorative grid pattern for modern feel */
+.bg-grid-pattern {
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+  background-size: 60px 60px;
 }
 
-.public-estimate-page .border-primary-200,
-.public-estimate-page .border-primary-100,
-.public-catalog-page .border-primary-200,
-.public-catalog-page .border-primary-100 {
-  border-color: rgba(255, 255, 255, 0.08) !important;
-}
-
-.public-estimate-page .text-primary-950,
-.public-estimate-page .text-primary-900,
-.public-catalog-page .text-primary-950,
-.public-catalog-page .text-primary-900 {
-  color: #ffffff !important;
-}
-
-.public-estimate-page .text-primary-700,
-.public-estimate-page .text-primary-600,
-.public-estimate-page .text-primary-500,
-.public-estimate-page .text-primary-400,
-.public-catalog-page .text-primary-700,
-.public-catalog-page .text-primary-600,
-.public-catalog-page .text-primary-500,
-.public-catalog-page .text-primary-400 {
-  color: #8fa2c2 !important;
-}
-
-.public-estimate-page .shadow-sm,
-.public-estimate-page .shadow-\[0_32px_90px_rgba\(15\,23\,42\,0\.18\)\],
-.public-catalog-page .shadow-sm {
-  box-shadow: 0 24px 70px rgba(2, 8, 23, 0.35) !important;
-}
-
+/* Print Overrides — Full-page Automotive Receipt Format */
 @media print {
   @page {
     size: auto;
     margin: 12mm 15mm;
   }
 
+  /* Reset body */
   body {
     background: white !important;
     color: black !important;
@@ -400,15 +233,18 @@
     font-size: 12px !important;
   }
 
+  /* Hide the React app root — the receipt modal is portaled outside #root */
   #root {
     display: none !important;
   }
 
+  /* But allow the portal container (modal) to display */
   .modal-overlay {
     display: flex !important;
     position: static !important;
     background: none !important;
     backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
     padding: 0 !important;
     overflow: visible !important;
     z-index: auto !important;
@@ -428,6 +264,7 @@
     opacity: 1 !important;
   }
 
+  /* Hide modal header, footer, and buttons during print */
   .modal-header,
   .modal-footer,
   .print\:hidden {
@@ -439,6 +276,7 @@
     overflow: visible !important;
   }
 
+  /* Full-page receipt preview */
   .receipt-preview {
     display: block !important;
     visibility: visible !important;
@@ -457,5 +295,59 @@
   .receipt-preview * {
     visibility: visible !important;
     color: black !important;
+  }
+
+  /* Hide success animation and non-receipt modal content */
+  .modal-body>div:not(:has(.receipt-preview)):not(.receipt-preview) {
+    display: none !important;
+  }
+
+  /* Keep flex layouts working */
+  .receipt-preview .flex {
+    display: flex !important;
+  }
+
+  .receipt-preview .justify-between {
+    justify-content: space-between !important;
+  }
+
+  .receipt-preview img {
+    max-height: 50px !important;
+    filter: grayscale(1) contrast(1.5) !important;
+  }
+
+  /* Automotive receipt table styles */
+  .receipt-preview table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .receipt-preview table th {
+    background: black !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    padding: 6px 10px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    text-align: left !important;
+    text-transform: uppercase !important;
+  }
+
+  .receipt-preview table td {
+    padding: 6px 10px !important;
+    border-bottom: 1px solid #e0e0e0 !important;
+    font-size: 12px !important;
+    vertical-align: top !important;
+  }
+
+  .receipt-preview table th:last-child,
+  .receipt-preview table td:last-child {
+    text-align: right !important;
+  }
+
+  .receipt-preview table th:nth-child(3),
+  .receipt-preview table td:nth-child(3) {
+    text-align: right !important;
   }
 }

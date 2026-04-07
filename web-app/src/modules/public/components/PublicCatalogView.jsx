@@ -157,8 +157,8 @@ const PublicCatalogView = () => {
   };
 
   return (
-    <div className="public-catalog-page bg-primary-50 min-h-screen relative font-sans text-primary-900">
-      <div className="absolute top-0 right-0 w-full h-[60vh] bg-gradient-to-b from-white via-primary-50 to-primary-50 -z-10" />
+    <div className="bg-primary-50 min-h-screen relative font-sans text-primary-900">
+      <div className="absolute top-0 right-0 h-[60vh] w-full bg-gradient-to-b from-white via-primary-50 to-primary-50 -z-10" />
       <div className="absolute top-[-20%] right-[-10%] w-[70vw] h-[70vw] bg-accent-blue/10 rounded-full blur-[150px] mix-blend-multiply -z-10 pointer-events-none opacity-60" />
       <div className="absolute top-[20%] left-[-10%] w-[40vw] h-[40vw] bg-accent-danger/5 rounded-full blur-[120px] mix-blend-multiply -z-10 pointer-events-none opacity-50" />
 
@@ -170,15 +170,15 @@ const PublicCatalogView = () => {
             <div className="max-w-3xl">
               <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-3 mb-6">
                 <span className="w-8 h-1 bg-accent-blue" />
-                <span className="uppercase tracking-[0.3em] text-primary-600 text-xs font-bold font-sans">Master Inventory</span>
+                <span className="text-xs font-bold uppercase tracking-[0.3em] text-primary-600 font-sans">Parts Catalog</span>
               </motion.div>
               <motion.h1 initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="text-5xl md:text-7xl font-display font-extrabold text-primary-950 tracking-tighter leading-[1.1]">
-                {hasVehicle ? `For your ${vehicle.displayLabel}` : 'Genuine Mitsubishi Components'}
+                {hasVehicle ? `Parts for your ${vehicle.displayLabel}` : 'Trusted auto parts for Mitsubishi and more'}
               </motion.h1>
               <p className="mt-5 max-w-2xl text-base leading-relaxed text-primary-600">
                 {hasVehicle
-                  ? 'Compatible parts, visual service packages, and smart bundles are now tuned to your selected Mitsubishi vehicle.'
-                  : 'Choose your Mitsubishi first to unlock compatible packages, smarter fitment copy, and more relevant parts browsing.'}
+                  ? 'Compatible parts, service packages, and bundle suggestions are now tuned to your selected vehicle.'
+                  : 'Search by part name, part number, or vehicle details to browse a cleaner, customer-ready parts catalog.'}
               </p>
             </div>
 
@@ -189,7 +189,7 @@ const PublicCatalogView = () => {
                   <Search className="w-5 h-5 text-primary-400 ml-3" />
                   <input
                     type="text"
-                    placeholder={hasVehicle ? `Search parts for ${vehicle.model}...` : 'Search part name, SKU, or model...'}
+                    placeholder={hasVehicle ? `Search parts for ${vehicle.model}...` : 'Search by part name, part number, or vehicle...'}
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     className="w-full bg-transparent border-none text-primary-900 focus:ring-0 placeholder-primary-400 px-3 py-3 outline-none"
@@ -208,8 +208,8 @@ const PublicCatalogView = () => {
             vehicle={vehicle}
             onChange={updateVehicle}
             onClear={clearVehicle}
-            title="Choose your Mitsubishi before you browse"
-            subtitle="Filter catalog results by model first, then unlock matched service packages and higher-converting smart bundle copy."
+            title="Choose your vehicle before you browse"
+            subtitle="Filter catalog results by model first, then unlock matched service packages and more useful bundle suggestions."
           />
 
           {hasVehicle && (
@@ -222,7 +222,7 @@ const PublicCatalogView = () => {
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.26em] text-accent-blue/70">Vehicle context active</p>
                     <h2 className="mt-2 text-2xl font-display font-semibold text-primary-950">Compatible packages for {vehicle.displayLabel}</h2>
-                    <p className="mt-2 text-sm text-primary-500">Recommended service cards and clicked-product bundles will now speak directly to this selected Mitsubishi vehicle.</p>
+                    <p className="mt-2 text-sm text-primary-500">Recommended service cards and clicked-product bundles now align with the vehicle you selected.</p>
                   </div>
                 </div>
                 <div className="rounded-2xl border border-primary-200 bg-white/90 px-4 py-3 text-sm text-primary-500">
@@ -276,7 +276,7 @@ const PublicCatalogView = () => {
             <div className="text-sm text-primary-600">
               <span>
                 Showing <strong className="text-primary-950">{rangeStart}-{rangeEnd}</strong> of{' '}
-                <strong className="text-primary-950">{totalCount}</strong> components
+                <strong className="text-primary-950">{totalCount}</strong> parts
               </span>
               <p className="mt-1 text-xs uppercase tracking-[0.22em] text-primary-400">
                 Page {pagination.page} of {totalPages}
@@ -304,7 +304,7 @@ const PublicCatalogView = () => {
           {loading ? (
             <div className="w-full bg-white border border-primary-200 p-24 text-center flex flex-col items-center justify-center rounded-2xl shadow-sm">
               <div className="spinner mx-auto mb-4" />
-              <h3 className="text-xl font-display font-medium text-primary-950">Loading Catalog Data...</h3>
+              <h3 className="text-xl font-display font-medium text-primary-950">Loading catalog data...</h3>
             </div>
           ) : error ? (
             <div className="w-full bg-white border border-accent-danger/20 p-24 text-center flex flex-col items-center justify-center rounded-2xl shadow-sm">
@@ -317,7 +317,7 @@ const PublicCatalogView = () => {
             <div className="w-full bg-white border border-primary-200 p-24 text-center flex flex-col items-center justify-center rounded-2xl shadow-sm">
               <LayoutGrid className="w-20 h-20 text-primary-300 mb-8" />
               <h3 className="text-3xl font-display font-bold text-primary-950 mb-3">No components matched</h3>
-              <p className="text-primary-600 mb-8 max-w-md font-sans text-lg">Adjust your parameters or expand the category selection to view more items.</p>
+              <p className="text-primary-600 mb-8 max-w-md font-sans text-lg">Adjust your filters or try a broader search to view more items.</p>
               <button onClick={resetFilters} className="btn btn-outline text-accent-primary hover:bg-accent-primary/5 hover:border-accent-primary">Reset Filters</button>
             </div>
           ) : (
@@ -375,7 +375,7 @@ const PublicCatalogView = () => {
 
               <div className="mt-10 flex flex-col gap-4 rounded-2xl border border-primary-200 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-primary-600">
-                  <span className="font-semibold text-primary-950">{totalCount}</span> total genuine parts available
+                  <span className="font-semibold text-primary-950">{totalCount}</span> total parts available
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">

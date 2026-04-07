@@ -1,23 +1,23 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronRight, Clock, MapPin, Menu, Phone, X } from 'lucide-react';
-import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { CarFront, Clock, MapPin, Menu, Phone, Search, ShieldCheck, X } from 'lucide-react';
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
-import GlobalSearch from '../ui/GlobalSearch';
 
-const navLinks = [
-    { path: '/', label: 'Home' },
-    { path: '/catalog', label: 'Catalog' },
-    { path: '/estimate', label: 'Estimate' },
-    { path: '/service-orders', label: 'Service Orders' },
-    { path: '/about', label: 'About' },
+const primaryNav = [
+    { label: 'Shop by Category', to: '/catalog' },
+    { label: 'Brands', to: '/catalog' },
+    { label: 'Vehicle', to: '/estimate' },
+    { label: 'About', to: '/about' },
 ];
 
 const PublicLayout = () => {
     const { isAuthenticated } = useAuth();
     const location = useLocation();
+    const navigate = useNavigate();
     const [scrolled, setScrolled] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [headerQuery, setHeaderQuery] = useState('');
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -29,145 +29,246 @@ const PublicLayout = () => {
         return <Navigate to="/dashboard" replace />;
     }
 
+    const submitHeaderSearch = () => {
+        const query = headerQuery.trim();
+        navigate(query ? `/catalog?q=${encodeURIComponent(query)}` : '/catalog');
+        setMobileMenuOpen(false);
+    };
+
+    const isNavItemActive = (to) => {
+        if (to === '/catalog') {
+            return location.pathname.startsWith('/catalog');
+        }
+        return location.pathname === to;
+    };
+
     return (
-        <div className="min-h-screen overflow-x-hidden bg-primary-950 text-primary-100 print:block print:min-h-0 print:bg-white">
-            <div className="pointer-events-none fixed inset-0">
-                <div className="absolute left-[-10%] top-[-16%] h-[32rem] w-[32rem] rounded-full bg-accent-info/14 blur-[140px]" />
-                <div className="absolute right-[-10%] top-[12%] h-[24rem] w-[24rem] rounded-full bg-accent-blue/16 blur-[120px]" />
+        <div className="min-h-screen overflow-x-hidden bg-white font-sans text-primary-900 print:block print:min-h-0 print:bg-white">
+            <div className="border-b border-primary-200 bg-primary-950 text-white print:hidden">
+                <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-2 text-xs md:px-8 xl:px-12">
+                    <div className="flex items-center gap-4">
+                        <span className="inline-flex items-center gap-2">
+                            <ShieldCheck className="h-3.5 w-3.5 text-red-400" />
+                            Genuine and aftermarket parts from a real Pasay City store
+                        </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4 text-white/80">
+                        <span className="inline-flex items-center gap-2">
+                            <Phone className="h-3.5 w-3.5 text-red-400" />
+                            +63 917 123 4567
+                        </span>
+                        <span className="hidden items-center gap-2 sm:inline-flex">
+                            <Clock className="h-3.5 w-3.5 text-red-400" />
+                            Mon-Sat 8:00 AM-6:00 PM
+                        </span>
+                    </div>
+                </div>
             </div>
 
-            <header className={`fixed left-0 right-0 top-0 z-50 border-b transition-all duration-300 print:hidden ${scrolled
-                ? 'border-white/8 bg-primary-950/78 py-3 backdrop-blur-2xl'
-                : 'border-transparent bg-transparent py-5'
+            <header
+                className={`sticky top-0 z-50 border-b print:hidden transition-all duration-300 ${
+                    scrolled ? 'border-primary-200 bg-white/95 shadow-sm backdrop-blur-xl' : 'border-primary-200 bg-white'
                 }`}
             >
-                <div className="mx-auto flex max-w-[1700px] items-center justify-between px-4 md:px-8 xl:px-12">
-                    <Link to="/" className="flex items-center gap-3">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-[20px] border border-accent-info/20 bg-white/[0.05] shadow-[0_14px_40px_rgba(79,223,255,0.14)]">
-                            <img src="/LogoLimen.jpg" alt="Limen logo" className="h-9 w-9 rounded-xl object-contain" />
-                        </div>
-                        <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary-500">LIMEN</p>
-                            <p className="text-lg font-semibold text-white">Genuine Mitsubishi parts</p>
-                        </div>
-                    </Link>
-
-                    <nav className="hidden items-center gap-2 lg:flex">
-                        {navLinks.map((link) => {
-                            const isActive = location.pathname === link.path;
-                            return (
-                                <Link
-                                    key={link.path}
-                                    to={link.path}
-                                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${isActive
-                                        ? 'bg-white/[0.08] text-white'
-                                        : 'text-primary-300 hover:bg-white/[0.05] hover:text-white'
-                                        }`}
-                                >
-                                    {link.label}
-                                </Link>
-                            );
-                        })}
-                    </nav>
-
-                    <div className="hidden items-center gap-3 lg:flex">
-                        <GlobalSearch />
-                        <Link to="/login" className="btn btn-secondary">
-                            Staff portal
+                <div className="mx-auto max-w-[1600px] px-4 md:px-8 xl:px-12">
+                    <div className="flex items-center justify-between gap-4 py-4">
+                        <Link to="/" className="flex items-center gap-3">
+                            <img src="/LogoLimen.jpg" alt="Limen logo" className="h-11 w-11 rounded-lg border border-primary-200 bg-white p-1 shadow-sm" />
+                            <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent-primary">Limen</p>
+                                <h1 className="text-xl font-bold text-primary-950">Genuine Auto Parts</h1>
+                            </div>
                         </Link>
-                    </div>
 
-                    <button
-                        type="button"
-                        onClick={() => setMobileMenuOpen((current) => !current)}
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-primary-100 lg:hidden"
-                        aria-label="Toggle menu"
-                    >
-                        {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-                    </button>
+                        <div className="hidden flex-1 items-center justify-end gap-6 xl:flex">
+                            <nav className="flex items-center gap-5">
+                                {primaryNav.map((item) => (
+                                    <Link
+                                        key={item.label}
+                                        to={item.to}
+                                        className={`text-sm font-medium transition-colors ${
+                                            isNavItemActive(item.to) ? 'text-accent-primary' : 'text-primary-600 hover:text-primary-950'
+                                        }`}
+                                    >
+                                        {item.label}
+                                    </Link>
+                                ))}
+                                <a href="#footer-contact" className="text-sm font-medium text-primary-600 transition-colors hover:text-primary-950">
+                                    Contact
+                                </a>
+                            </nav>
+
+                            <div className="flex w-full max-w-[430px] items-center overflow-hidden rounded-xl border border-primary-300 bg-primary-100 shadow-sm">
+                                <Search className="ml-4 h-4 w-4 text-primary-500" />
+                                <input
+                                    type="text"
+                                    value={headerQuery}
+                                    onChange={(event) => setHeaderQuery(event.target.value)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                            submitHeaderSearch();
+                                        }
+                                    }}
+                                    placeholder="Search by part name, vehicle, or part number"
+                                    className="w-full bg-transparent px-3 py-3 text-sm text-primary-900 outline-none placeholder:text-primary-500"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={submitHeaderSearch}
+                                    className="mr-2 rounded-lg bg-accent-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-blueDark"
+                                >
+                                    Search
+                                </button>
+                            </div>
+
+                            <Link to="/estimate" className="btn btn-secondary px-4 py-2 text-xs">
+                                Request Quote
+                            </Link>
+                            <a href="tel:+639171234567" className="btn btn-primary px-4 py-2 text-xs">
+                                Call Store
+                            </a>
+                        </div>
+
+                        <button
+                            type="button"
+                            className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary-300 text-primary-700 xl:hidden"
+                            onClick={() => setMobileMenuOpen((current) => !current)}
+                            aria-label="Toggle menu"
+                        >
+                            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                        </button>
+                    </div>
                 </div>
             </header>
 
             <AnimatePresence>
                 {mobileMenuOpen && (
                     <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-40 bg-primary-950/92 px-4 pb-8 pt-24 backdrop-blur-2xl lg:hidden"
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        className="fixed inset-0 z-40 overflow-y-auto bg-white px-4 pb-8 pt-24 shadow-2xl xl:hidden"
                     >
-                        <div className="mx-auto flex h-full max-w-xl flex-col">
-                            <div className="space-y-2">
-                                {navLinks.map((link) => (
+                        <div className="mx-auto max-w-xl space-y-4">
+                            <div className="rounded-2xl border border-primary-200 bg-primary-100 p-3">
+                                <div className="flex items-center rounded-xl border border-primary-300 bg-white">
+                                    <Search className="ml-4 h-4 w-4 text-primary-500" />
+                                    <input
+                                        type="text"
+                                        value={headerQuery}
+                                        onChange={(event) => setHeaderQuery(event.target.value)}
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Enter') {
+                                                submitHeaderSearch();
+                                            }
+                                        }}
+                                        placeholder="Search by part name, vehicle, or part number"
+                                        className="w-full bg-transparent px-3 py-3 text-sm text-primary-900 outline-none placeholder:text-primary-500"
+                                    />
+                                </div>
+                                <button type="button" onClick={submitHeaderSearch} className="btn btn-primary mt-3 w-full">
+                                    Search Catalog
+                                </button>
+                            </div>
+
+                            <div className="rounded-2xl border border-primary-200 bg-white">
+                                {primaryNav.map((item) => (
                                     <Link
-                                        key={link.path}
-                                        to={link.path}
+                                        key={item.label}
+                                        to={item.to}
                                         onClick={() => setMobileMenuOpen(false)}
-                                        className={`flex items-center justify-between rounded-[24px] border px-5 py-4 text-base font-semibold transition ${location.pathname === link.path
-                                            ? 'border-accent-info/20 bg-accent-info/10 text-white'
-                                            : 'border-white/8 bg-white/[0.03] text-primary-200'
-                                            }`}
+                                        className="block border-b border-primary-200 px-5 py-4 text-base font-semibold text-primary-900 last:border-b-0"
                                     >
-                                        <span>{link.label}</span>
-                                        <ChevronRight className="h-5 w-5 text-primary-500" />
+                                        {item.label}
                                     </Link>
                                 ))}
-                            </div>
-
-                            <div className="mt-5">
-                                <GlobalSearch compact />
-                            </div>
-
-                            <div className="mt-auto">
-                                <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="btn btn-primary w-full">
-                                    Open staff portal
-                                </Link>
+                                <a href="#footer-contact" onClick={() => setMobileMenuOpen(false)} className="block px-5 py-4 text-base font-semibold text-primary-900">
+                                    Contact
+                                </a>
                             </div>
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            <main className="relative z-10 flex-1">
+            <main className="flex-1">
+                <section className="border-b border-primary-200 bg-primary-100/90 print:hidden">
+                    <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-3 px-4 py-3 text-xs text-primary-600 md:px-8 xl:px-12">
+                        <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-3 py-1.5 font-semibold text-primary-700">
+                            <ShieldCheck className="h-3.5 w-3.5 text-accent-primary" />
+                            Genuine Parts
+                        </span>
+                        <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-3 py-1.5 font-semibold text-primary-700">
+                            <CarFront className="h-3.5 w-3.5 text-accent-danger" />
+                            Mitsubishi Specialists
+                        </span>
+                        <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-3 py-1.5 font-semibold text-primary-700">
+                            <Clock className="h-3.5 w-3.5 text-accent-primary" />
+                            Fast quotation support
+                        </span>
+                    </div>
+                </section>
                 <Outlet />
             </main>
 
-            <footer className="relative z-10 border-t border-white/8 bg-primary-950/84 px-4 py-14 backdrop-blur-2xl print:hidden md:px-8 xl:px-12">
-                <div className="mx-auto grid max-w-[1700px] gap-10 lg:grid-cols-[1.2fr_0.8fr_0.8fr]">
-                    <div>
-                        <div className="data-pill">Visit the showroom</div>
-                        <h2 className="mt-5 text-3xl font-semibold text-white">A sharper customer journey from search to quote.</h2>
-                        <p className="mt-4 max-w-xl text-sm leading-relaxed text-primary-400">
-                            LIMEN connects genuine parts browsing, vehicle-fitment guidance, and quotation support into one calmer buying flow.
-                        </p>
-                    </div>
+            <footer id="footer-contact" className="border-t border-primary-200 bg-primary-100 pt-16 print:hidden">
+                <div className="mx-auto max-w-[1600px] px-4 md:px-8 xl:px-12">
+                    <div className="grid gap-12 pb-12 md:grid-cols-2 lg:grid-cols-4">
+                        <div className="lg:col-span-1">
+                            <div className="flex items-center gap-3">
+                                <img src="/LogoLimen.jpg" alt="Limen logo" className="h-11 w-11 rounded-lg border border-primary-200 bg-white p-1 shadow-sm" />
+                                <div>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent-primary">Limen</p>
+                                    <p className="text-lg font-bold text-primary-950">Genuine Auto Parts</p>
+                                </div>
+                            </div>
+                            <p className="mt-5 text-sm leading-relaxed text-primary-600">
+                                Genuine and aftermarket auto parts for Mitsubishi and other popular vehicle lines, backed by real in-store support in Pasay City.
+                            </p>
+                        </div>
 
-                    <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary-500">Explore</p>
-                        <div className="mt-5 space-y-3">
-                            {navLinks.map((link) => (
-                                <Link key={link.path} to={link.path} className="block text-sm text-primary-300 hover:text-white">
-                                    {link.label}
-                                </Link>
-                            ))}
+                        <div>
+                            <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-primary-500">Shop</h4>
+                            <div className="mt-5 space-y-3 text-sm text-primary-600">
+                                <Link to="/catalog" className="block hover:text-accent-primary">Shop by Category</Link>
+                                <Link to="/catalog" className="block hover:text-accent-primary">Brands</Link>
+                                <Link to="/estimate" className="block hover:text-accent-primary">Vehicle Search</Link>
+                                <Link to="/service-orders" className="block hover:text-accent-primary">Service Orders</Link>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-primary-500">Company</h4>
+                            <div className="mt-5 space-y-3 text-sm text-primary-600">
+                                <Link to="/about" className="block hover:text-accent-primary">About Limen</Link>
+                                <Link to="/estimate" className="block hover:text-accent-primary">Get a Quote</Link>
+                                <Link to="/login" className="block hover:text-accent-primary">Staff Portal</Link>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-primary-500">Contact</h4>
+                            <div className="mt-5 space-y-4 text-sm text-primary-600">
+                                <div className="flex items-start gap-3">
+                                    <MapPin className="mt-0.5 h-4 w-4 text-accent-danger" />
+                                    <span>1308, 264 Epifanio de los Santos Ave, Pasay City, Metro Manila</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <Phone className="h-4 w-4 text-accent-danger" />
+                                    <span>+63 917 123 4567</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <Clock className="h-4 w-4 text-accent-danger" />
+                                    <span>Mon-Sat: 8:00 AM-6:00 PM</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary-500">Store details</p>
-                        <div className="mt-5 space-y-4 text-sm text-primary-300">
-                            <div className="flex items-start gap-3">
-                                <MapPin className="mt-0.5 h-4 w-4 text-accent-info" />
-                                <span>1308, 264 Epifanio de los Santos Ave, Pasay City, Metro Manila</span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <Phone className="h-4 w-4 text-accent-info" />
-                                <span>+63 917 123 4567</span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <Clock className="h-4 w-4 text-accent-info" />
-                                <span>Mon-Sat 8:00 AM to 6:00 PM</span>
-                            </div>
+                    <div className="flex flex-col gap-3 border-t border-primary-200 py-6 text-xs text-primary-500 sm:flex-row sm:items-center sm:justify-between">
+                        <p>(c) {new Date().getFullYear()} Limen Auto Parts Center. All rights reserved.</p>
+                        <div className="flex gap-4">
+                            <span>Trusted local auto parts seller in Pasay City</span>
                         </div>
                     </div>
                 </div>

@@ -1,56 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Activity, Menu, Wifi, WifiOff } from 'lucide-react';
+import { Menu, Wifi, WifiOff } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/useAuth';
 import NotificationsDropdown from '../ui/NotificationsDropdown';
-import GlobalSearch from '../ui/GlobalSearch';
 
-const pageMeta = {
-    '/dashboard': {
-        title: 'Operations overview',
-        subtitle: 'Revenue, stock pressure, and service movement in one live workspace.',
-    },
-    '/pos': {
-        title: 'Point of sale',
-        subtitle: 'Process checkout with cleaner focus and faster access to next actions.',
-    },
-    '/inventory': {
-        title: 'Inventory control',
-        subtitle: 'Monitor parts depth, stock alerts, and replenishment decisions.',
-    },
-    '/quotation': {
-        title: 'Quotation workflow',
-        subtitle: 'Build, revise, and convert estimates without breaking context.',
-    },
-    '/services': {
-        title: 'Service queue',
-        subtitle: 'Track intake, approvals, and workshop status from one queue.',
-    },
-    '/stockroom': {
-        title: '3D stockroom viewer',
-        subtitle: 'Navigate the cinematic store model and locate mapped parts visually.',
-    },
-    '/stockroom/admin': {
-        title: 'Stockroom admin',
-        subtitle: 'Adjust mapped locations, floors, and 3D plan placement.',
-    },
-    '/reports': {
-        title: 'Reports and analytics',
-        subtitle: 'Inspect sales patterns, forecast signals, and performance summaries.',
-    },
-    '/users': {
-        title: 'Team access',
-        subtitle: 'Manage roles, permissions, and staff presence across the operation.',
-    },
-};
-
+/**
+ * Header Component
+ * Top navigation bar with search, notifications, and offline indicator
+ */
 const Header = () => {
     const { sidebarCollapsed, toggleMobileSidebar } = useTheme();
     const { user } = useAuth();
     const location = useLocation();
     const [isOnline, setIsOnline] = useState(navigator.onLine);
 
+    // Monitor online status
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
         const handleOffline = () => setIsOnline(false);
@@ -64,80 +29,81 @@ const Header = () => {
         };
     }, []);
 
-    const pageInfo = useMemo(() => {
+    // Get page title from path
+    const getPageTitle = () => {
         if (location.pathname.startsWith('/stockroom/admin')) {
-            return pageMeta['/stockroom/admin'];
+            return 'Stockroom Admin';
         }
 
-        const basePath = `/${location.pathname.split('/')[1]}`;
-        return pageMeta[basePath] || {
-            title: 'LIMEN workspace',
-            subtitle: 'Operate the showroom, quotations, and fulfillment workflows with less friction.',
+        const pathMap = {
+            '/dashboard': 'Dashboard',
+            '/pos': 'Point of Sale',
+            '/inventory': 'Inventory Management',
+            '/quotation': 'Cost Estimation & Quotation',
+            '/services': 'Service Orders',
+            '/stockroom': 'Internal Locator',
+            '/stockroom/admin': 'Parts Mapping Design',
+            '/reports': 'Reports & Analytics',
+            '/users': 'User Management',
         };
-    }, [location.pathname]);
 
-    const greeting = useMemo(() => {
-        const hour = new Date().getHours();
-        if (hour < 12) return 'Good morning';
-        if (hour < 18) return 'Good afternoon';
-        return 'Good evening';
-    }, []);
+        const basePath = '/' + location.pathname.split('/')[1];
+        return pathMap[basePath] || 'LimenServe';
+    };
 
     return (
         <header className={`header ${sidebarCollapsed ? 'header-collapsed' : ''}`}>
-            <div className="flex items-center gap-3">
+            {/* Left Section */}
+            <div className="flex items-center gap-4">
+                {/* Mobile Menu Toggle */}
                 <button
                     onClick={toggleMobileSidebar}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-primary-200 transition hover:border-accent-info/25 hover:text-white lg:hidden"
-                    aria-label="Open sidebar"
+                    className="lg:hidden p-2 rounded-lg hover:bg-primary-50 transition-colors border border-primary-200"
                 >
-                    <Menu className="h-5 w-5" />
+                    <Menu className="w-5 h-5 text-primary-700" />
                 </button>
 
-                <div className="hidden min-w-0 sm:block">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary-500">
-                        {greeting}, {user?.firstName || 'team'}
-                    </p>
-                    <h1 className="mt-1 truncate text-lg font-semibold text-white lg:text-[1.35rem]">
-                        {pageInfo.title}
+                {/* Page Title & Date */}
+                <div className="hidden sm:flex items-center gap-3">
+                    <h1 className="text-xl font-display font-bold text-primary-950">
+                        {getPageTitle()}
                     </h1>
-                    <p className="mt-1 hidden text-sm text-primary-400 xl:block">
-                        {pageInfo.subtitle}
-                    </p>
+                    <span className="w-px h-5 bg-primary-200" />
+                    <span className="text-sm text-primary-500 font-medium">
+                        {new Date().toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </span>
                 </div>
             </div>
 
+            {/* Right Section */}
             <div className="flex items-center gap-3">
-                <div className="hidden lg:block">
-                    <GlobalSearch />
+
+                {/* Online/Offline Indicator */}
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${isOnline
+                    ? 'bg-accent-success/20 text-accent-success'
+                    : 'bg-accent-danger/20 text-accent-danger'
+                    }`}>
+                    {isOnline ? (
+                        <>
+                            <Wifi className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Online</span>
+                        </>
+                    ) : (
+                        <>
+                            <WifiOff className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Offline</span>
+                        </>
+                    )}
                 </div>
 
-                <div className={`hidden items-center gap-2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] md:flex ${isOnline
-                    ? 'border-accent-success/20 bg-accent-success/10 text-accent-success'
-                    : 'border-accent-danger/20 bg-accent-danger/10 text-accent-danger'
-                    }`}
-                >
-                    {isOnline ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-                    <span>{isOnline ? 'Connected' : 'Offline'}</span>
-                </div>
-
-                <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary-300 xl:flex">
-                    <Activity className="h-3.5 w-3.5 text-accent-info" />
-                    <span>{new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', weekday: 'short' })}</span>
-                </div>
-
+                {/* Notifications */}
                 <NotificationsDropdown />
 
-                <div className="flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-2">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-full border border-accent-info/20 bg-accent-info/10 text-sm font-bold text-accent-info">
+                {/* User Avatar (Mobile) */}
+                <div className="lg:hidden w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center border border-primary-200">
+                    <span className="text-primary-700 text-sm font-bold">
                         {user?.firstName?.[0]}{user?.lastName?.[0]}
                     </span>
-                    <div className="hidden pr-2 lg:block">
-                        <p className="text-sm font-semibold text-white">{user?.firstName} {user?.lastName}</p>
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-primary-500">
-                            {String(user?.role || 'staff').replace('_', ' ')}
-                        </p>
-                    </div>
                 </div>
             </div>
         </header>

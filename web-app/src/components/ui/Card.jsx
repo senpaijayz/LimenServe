@@ -1,5 +1,14 @@
 import { motion } from 'framer-motion';
 
+/**
+ * Card Component
+ * A glassmorphic card container
+ * 
+ * @example
+ * <Card title="Statistics" subtitle="Last 7 days">
+ *   <p>Card content here</p>
+ * </Card>
+ */
 const Card = ({
     children,
     title,
@@ -11,6 +20,7 @@ const Card = ({
     padding = 'default',
     ...props
 }) => {
+    // Padding classes
     const paddings = {
         none: '',
         sm: 'p-4',
@@ -18,35 +28,40 @@ const Card = ({
         lg: 'p-8',
     };
 
-    const cardClasses = [
-        'surface',
-        paddings[padding],
-        hoverable ? 'transition-all duration-300 hover:-translate-y-1 hover:border-accent-info/18' : '',
-        className,
-    ].join(' ').trim();
+    const cardClasses = `
+    surface rounded-xl border border-primary-200 shadow-sm bg-white
+    ${paddings[padding]}
+    ${hoverable ? 'transition-all duration-300 hover:border-primary-300 hover:shadow-md cursor-pointer' : ''}
+    ${className}
+  `.trim().replace(/\s+/g, ' ');
 
     return (
         <motion.div
             className={cardClasses}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.28 }}
+            transition={{ duration: 0.3 }}
             {...props}
         >
+            {/* Header */}
             {(title || headerAction) && (
-                <div className="mb-5 flex items-start justify-between gap-4 border-b border-white/8 pb-4">
+                <div className="flex items-center justify-between mb-4 pb-4 border-b border-primary-200">
                     <div>
-                        {title && <h3 className="text-lg font-semibold text-white">{title}</h3>}
-                        {subtitle && <p className="mt-1 text-sm text-primary-400">{subtitle}</p>}
+                        {title && <h3 className="text-lg font-semibold font-display text-primary-950">{title}</h3>}
+                        {subtitle && <p className="text-sm text-primary-500 mt-0.5">{subtitle}</p>}
                     </div>
                     {headerAction && <div>{headerAction}</div>}
                 </div>
             )}
 
-            <div>{children}</div>
+            {/* Body */}
+            <div className="card-content">
+                {children}
+            </div>
 
+            {/* Footer */}
             {footer && (
-                <div className="mt-5 border-t border-white/8 pt-4">
+                <div className="mt-4 pt-4 border-t border-primary-200">
                     {footer}
                 </div>
             )}
@@ -54,36 +69,40 @@ const Card = ({
     );
 };
 
+/**
+ * KPI Card Component
+ * A specialized card for displaying key metrics
+ */
 export const KPICard = ({
     title,
     value,
     icon,
     trend,
     trendValue,
+    accentColor = 'border-accent-blue',
+    iconBg = 'bg-blue-50 text-accent-blue',
     className = '',
 }) => {
-    const trendTone = trend === 'up' ? 'text-accent-success' : 'text-accent-warning';
-    const trendArrow = trend === 'up' ? '↑' : '→';
+    const isPositive = trend === 'up';
 
     return (
-        <Card className={`overflow-hidden ${className}`} padding="default">
-            <div className="flex items-start justify-between gap-4">
+        <Card className={`kpi-card group border-l-4 ${accentColor} ${className}`} padding="default">
+            <div className="flex items-start justify-between">
                 <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary-500">{title}</p>
-                    <p className="mt-4 text-3xl font-semibold text-white lg:text-[2.5rem]">{value}</p>
+                    <p className="text-sm text-primary-500 font-medium tracking-wide uppercase">{title}</p>
+                    <p className="text-2xl lg:text-3xl font-bold font-display text-primary-950 mt-1">
+                        {value}
+                    </p>
                     {trendValue && (
-                        <div className={`mt-4 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] ${trend === 'up'
-                            ? 'border-accent-success/20 bg-accent-success/10 text-accent-success'
-                            : 'border-accent-warning/20 bg-accent-warning/10 text-accent-warning'
-                            }`}
-                        >
-                            <span>{trendArrow}</span>
-                            <span className={trendTone}>{trendValue}</span>
+                        <div className={`flex items-center gap-1 mt-2 text-sm font-medium tracking-wide ${isPositive ? 'text-accent-success' : 'text-accent-danger'}`}>
+                            <span>{isPositive ? '↑' : '↓'}</span>
+                            <span>{trendValue}</span>
+                            <span className="text-primary-400 font-normal">vs last period</span>
                         </div>
                     )}
                 </div>
                 {icon && (
-                    <div className="flex h-14 w-14 items-center justify-center rounded-[22px] border border-accent-info/18 bg-accent-info/10 text-accent-info">
+                    <div className={`p-3 rounded-xl border border-primary-100 ${iconBg}`}>
                         {icon}
                     </div>
                 )}
