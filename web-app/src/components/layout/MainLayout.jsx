@@ -9,10 +9,10 @@ import Header from './Header';
  * Authenticated layout with sidebar and header
  */
 const MainLayout = () => {
-    const { isAuthenticated, isLoading } = useAuth();
+    const { isAuthenticated, isLoadingAuth } = useAuth();
     const { sidebarCollapsed } = useTheme();
 
-    if (isLoading) {
+    if (isLoadingAuth) {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">

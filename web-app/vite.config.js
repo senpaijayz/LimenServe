@@ -68,23 +68,50 @@ export default defineConfig({
     })
   ],
   build: {
+    modulePreload: {
+      resolveDependencies(_filename, deps, context) {
+        if (context.hostType !== 'html') {
+          return deps;
+        }
+
+        return deps.filter((dep) => {
+          const normalizedDep = dep.toLowerCase();
+
+          return ![
+            'stockroom',
+            'r3f',
+            'three-core',
+            'scanner',
+            'analytics-charts',
+          ].some((pattern) => normalizedDep.includes(pattern));
+        });
+      },
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (!id.includes('node_modules')) {
-            return undefined;
-          }
-
           if (id.includes('@react-three/drei')) {
-            return 'r3f-drei';
+            return 'stockroom-r3f-drei';
           }
 
           if (id.includes('@react-three/fiber')) {
-            return 'r3f-core';
+            return 'stockroom-r3f-core';
           }
 
           if (id.includes('\\three\\') || id.includes('/three/')) {
-            return 'three-core';
+            return 'stockroom-three-core';
+          }
+
+          if (id.includes('recharts')) {
+            return 'analytics-charts';
+          }
+
+          if (id.includes('html5-qrcode')) {
+            return 'scanner';
+          }
+
+          if (!id.includes('node_modules')) {
+            return undefined;
           }
 
           if (id.includes('react-dom') || id.includes('react-router-dom') || id.includes('react')) {

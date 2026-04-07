@@ -1,37 +1,82 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
+    Box,
     DollarSign,
+    AlertTriangle,
+    FileText,
     Package,
     RefreshCw,
-    AlertTriangle,
     Sparkles,
     TrendingUp,
+    Wrench,
 } from 'lucide-react';
 import Card, { KPICard } from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
-import SalesChart from '../components/SalesChart';
-import LowStockAlert from '../components/LowStockAlert';
-import RecentTransactions from '../components/RecentTransactions';
 import { useAuth } from '../../../context/useAuth';
 import { formatCurrency, formatNumber } from '../../../utils/formatters';
 import { getAnalyticsDashboardSnapshot, runFullAnalyticsRefresh } from '../../../services/analyticsApi';
 
+const SalesChart = lazy(() => import('../components/SalesChart'));
+const LowStockAlert = lazy(() => import('../components/LowStockAlert'));
+const RecentTransactions = lazy(() => import('../components/RecentTransactions'));
+
+const quickActions = [
+    {
+        title: 'Continue Quotation',
+        description: 'Open the quote builder and price the next customer request.',
+        to: '/quotation',
+        icon: FileText,
+    },
+    {
+        title: 'Open Inventory',
+        description: 'Check live parts quantities and low-stock attention items.',
+        to: '/inventory',
+        icon: Package,
+    },
+    {
+        title: 'Service Orders',
+        description: 'Review active jobs, intake, and service status updates.',
+        to: '/services',
+        icon: Wrench,
+    },
+    {
+        title: 'Open Stockroom',
+        description: 'Jump to the locator and warehouse visualization flow.',
+        to: '/stockroom',
+        icon: Box,
+    },
+];
+
+function DashboardPanelFallback({ title }) {
+    return (
+        <div className="rounded-2xl border border-primary-200 bg-white p-6 shadow-sm">
+            <div className="h-4 w-32 animate-pulse rounded-full bg-primary-200" />
+            <div className="mt-6 h-48 animate-pulse rounded-2xl bg-primary-100" />
+            <p className="mt-4 text-sm text-primary-500">{title}</p>
+        </div>
+    );
+}
+
+function getGreeting() {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+}
+
 const AdminDashboard = () => {
-    const { user } = useAuth();
+    const { user, isProfileReady, profileWarning } = useAuth();
     const [snapshot, setSnapshot] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
 
-    const getGreeting = () => {
-        const hour = new Date().getHours();
-        if (hour < 12) return 'Good morning';
-        if (hour < 17) return 'Good afternoon';
-        return 'Good evening';
-    };
+    const loadSnapshot = async ({ preserveCurrent = false } = {}) => {
+        if (!preserveCurrent) {
+            setLoading(true);
+        }
 
-    const loadSnapshot = async () => {
-        setLoading(true);
         setError('');
 
         try {
@@ -48,7 +93,29 @@ const AdminDashboard = () => {
     };
 
     useEffect(() => {
-        void loadSnapshot();
+        let cancelled = false;
+
+        const scheduleLoad = () => {
+            if (cancelled) {
+                return;
+            }
+
+            void loadSnapshot();
+        };
+
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+            const idleId = window.requestIdleCallback(scheduleLoad, { timeout: 700 });
+            return () => {
+                cancelled = true;
+                window.cancelIdleCallback(idleId);
+            };
+        }
+
+        const timer = window.setTimeout(scheduleLoad, 0);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
     }, []);
 
     const handleAnalyticsRefresh = async () => {
@@ -57,7 +124,7 @@ const AdminDashboard = () => {
 
         try {
             await runFullAnalyticsRefresh('Manual refresh from dashboard');
-            await loadSnapshot();
+            await loadSnapshot({ preserveCurrent: true });
         } catch (refreshError) {
             setError(refreshError.message || 'Unable to refresh analytics.');
         } finally {
@@ -69,7 +136,6 @@ const AdminDashboard = () => {
     const topProductForecasts = snapshot?.topProductForecasts || [];
     const topServiceForecasts = snapshot?.topServiceForecasts || [];
     const topUpsellOpportunities = snapshot?.topUpsellOpportunities || [];
-    const predictedLowStockRisk = snapshot?.predictedLowStockRisk || [];
     const topSellingItems = snapshot?.topSellingItems || [];
     const itemTrend = snapshot?.itemTrend || [];
     const peakPeriods = snapshot?.peakPeriods || [];
@@ -90,14 +156,19 @@ const AdminDashboard = () => {
                             {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                         </p>
                         <h1 className="text-2xl font-display font-bold tracking-tight text-white sm:text-3xl">
-                            {getGreeting()}, {user?.firstName || 'there'}!
+                            {getGreeting()}, {user?.firstName || user?.email || 'team'}!
                         </h1>
                         <p className="mt-1 text-sm text-primary-300">
-                            Track demand, top-selling items, and upsell signals from the warehouse and quotation pipeline.
+                            Open the next staff task immediately, then let analytics and summaries load in behind the shell.
                         </p>
                         {latestRefresh?.endedAt && (
                             <p className="mt-3 text-xs text-primary-400">
                                 Last analytics refresh: {new Date(latestRefresh.endedAt).toLocaleString()}
+                            </p>
+                        )}
+                        {!isProfileReady && (
+                            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-primary-300">
+                                Syncing staff profile in the background
                             </p>
                         )}
                     </div>
@@ -112,12 +183,24 @@ const AdminDashboard = () => {
                         >
                             Refresh Analytics
                         </Button>
-                        <a href="/reports" className="inline-flex items-center gap-2 rounded-lg bg-accent-danger px-5 py-2.5 text-sm font-medium text-white shadow-lg shadow-accent-danger/20 transition-all hover:bg-accent-danger/90">
+                        <Link to="/reports" className="inline-flex items-center gap-2 rounded-lg bg-accent-danger px-5 py-2.5 text-sm font-medium text-white shadow-lg shadow-accent-danger/20 transition-all hover:bg-accent-danger/90">
                             <TrendingUp className="h-4 w-4" /> Open Reports
-                        </a>
+                        </Link>
                     </div>
                 </div>
             </div>
+
+            {profileWarning && (
+                <Card className="border border-amber-200 bg-amber-50" padding="sm">
+                    <div className="flex items-start gap-3 text-sm text-amber-700">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                            <p className="font-semibold">Profile sync warning</p>
+                            <p>{profileWarning}</p>
+                        </div>
+                    </div>
+                </Card>
+            )}
 
             {error && (
                 <Card className="border border-accent-danger/20 bg-accent-danger/5" padding="sm">
@@ -131,6 +214,28 @@ const AdminDashboard = () => {
                 </Card>
             )}
 
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {quickActions.map((action) => {
+                    const Icon = action.icon;
+                    return (
+                        <Link
+                            key={action.title}
+                            to={action.to}
+                            className="group rounded-2xl border border-primary-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-primary-300 hover:shadow-lg"
+                        >
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-50 text-accent-primary">
+                                <Icon className="h-5 w-5" />
+                            </div>
+                            <h2 className="mt-5 text-lg font-semibold text-primary-950">{action.title}</h2>
+                            <p className="mt-2 text-sm leading-relaxed text-primary-500">{action.description}</p>
+                            <p className="mt-4 text-sm font-semibold text-accent-blue transition group-hover:text-accent-blueDark">
+                                Open now
+                            </p>
+                        </Link>
+                    );
+                })}
+            </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <KPICard title="Predicted Revenue" value={loading ? 'Loading...' : formatCurrency(predictedRevenue)} icon={<DollarSign className="w-6 h-6" />} trend="up" trendValue={`${topProductForecasts.length} top products`} accentColor="border-accent-blue" iconBg="bg-blue-50 text-accent-blue" />
                 <KPICard title="Forecasted Units" value={loading ? 'Loading...' : formatNumber(forecastedProductCount)} icon={<Package className="w-6 h-6" />} trend="up" trendValue="Next month demand" accentColor="border-indigo-500" iconBg="bg-indigo-50 text-indigo-600" />
@@ -140,7 +245,9 @@ const AdminDashboard = () => {
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                 <div className="lg:col-span-2">
-                    <SalesChart data={itemTrend} title="Item Sales Trend" subtitle="Monthly product-level sales trend for the last six months" />
+                    <Suspense fallback={<DashboardPanelFallback title="Loading sales trend" />}>
+                        <SalesChart data={itemTrend} title="Item Sales Trend" subtitle="Monthly product-level sales trend for the last six months" />
+                    </Suspense>
                 </div>
 
                 <div>
@@ -150,7 +257,7 @@ const AdminDashboard = () => {
                                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary-400">Top Seller In Range</p>
                                 <p className="mt-1 font-semibold text-primary-950">{topSellingLeader?.product_name || 'No item data yet'}</p>
                                 {topSellingLeader && (
-                                    <p className="text-sm text-primary-500">{formatNumber(topSellingLeader.quantity)} units · {formatCurrency(topSellingLeader.revenue)}</p>
+                                    <p className="text-sm text-primary-500">{formatNumber(topSellingLeader.quantity)} units - {formatCurrency(topSellingLeader.revenue)}</p>
                                 )}
                             </div>
                             <div>
@@ -174,33 +281,16 @@ const AdminDashboard = () => {
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                 <div className="lg:col-span-2">
-                    <Card title="Top-Selling Items" subtitle="Best-performing products in the selected dashboard range">
-                        <div className="space-y-3">
-                            {topSellingItems.slice(0, 6).map((item) => (
-                                <div key={item.product_id} className="rounded-xl border border-primary-200 bg-white p-4 flex items-center justify-between gap-4">
-                                    <div>
-                                        <p className="font-semibold text-primary-950">{item.product_name}</p>
-                                        <p className="text-xs font-mono text-primary-500">{item.sku}</p>
-                                        <p className="text-xs text-primary-400 mt-1">{item.category}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-sm font-bold text-accent-blue">{formatNumber(item.quantity)} units</p>
-                                        <p className="text-xs text-primary-500">{formatCurrency(item.revenue)}</p>
-                                    </div>
-                                </div>
-                            ))}
-                            {!loading && topSellingItems.length === 0 && (
-                                <p className="text-sm text-primary-500">No item-level sales analytics have been produced yet.</p>
-                            )}
-                        </div>
-                    </Card>
+                    <Suspense fallback={<DashboardPanelFallback title="Loading recent transactions" />}>
+                        <RecentTransactions />
+                    </Suspense>
                 </div>
                 <div>
-                    <LowStockAlert />
+                    <Suspense fallback={<DashboardPanelFallback title="Loading stock alerts" />}>
+                        <LowStockAlert />
+                    </Suspense>
                 </div>
             </div>
-
-            <RecentTransactions />
         </div>
     );
 };

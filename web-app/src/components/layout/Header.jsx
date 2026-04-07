@@ -11,7 +11,7 @@ import NotificationsDropdown from '../ui/NotificationsDropdown';
  */
 const Header = () => {
     const { sidebarCollapsed, toggleMobileSidebar } = useTheme();
-    const { user } = useAuth();
+    const { user, isProfileReady, profileWarning } = useAuth();
     const location = useLocation();
     const [isOnline, setIsOnline] = useState(navigator.onLine);
 
@@ -77,6 +77,17 @@ const Header = () => {
 
             {/* Right Section */}
             <div className="flex items-center gap-3">
+                {!isProfileReady && (
+                    <div className="hidden rounded-full border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-500 md:inline-flex">
+                        Syncing profile...
+                    </div>
+                )}
+
+                {profileWarning && (
+                    <div className="hidden max-w-[240px] rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 lg:inline-flex">
+                        {profileWarning}
+                    </div>
+                )}
 
                 {/* Online/Offline Indicator */}
                 <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${isOnline

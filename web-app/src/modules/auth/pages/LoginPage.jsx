@@ -16,8 +16,8 @@ import Input from '../../../components/ui/Input';
 const LoginPage = () => {
     const MotionDiv = motion.div;
     const navigate = useNavigate();
-    const { login, error: authError, isAuthenticated, isLoading: isAuthLoading } = useAuth();
-    const [isLoading, setIsLoading] = useState(false);
+    const { login, error: authError, isAuthenticated, isLoadingAuth } = useAuth();
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const {
         register,
@@ -32,15 +32,15 @@ const LoginPage = () => {
     });
 
     useEffect(() => {
-        if (!isAuthLoading && isAuthenticated) {
+        if (!isLoadingAuth && isAuthenticated) {
             navigate('/dashboard', { replace: true });
         }
-    }, [isAuthenticated, isAuthLoading, navigate]);
+    }, [isAuthenticated, isLoadingAuth, navigate]);
 
     const onSubmit = async (data) => {
-        setIsLoading(true);
+        setIsSubmitting(true);
         const result = await login(data.email, data.password);
-        setIsLoading(false);
+        setIsSubmitting(false);
 
         if (result.success) {
             navigate('/dashboard', { replace: true });
@@ -127,7 +127,7 @@ const LoginPage = () => {
                             type="submit"
                             variant="primary"
                             fullWidth
-                            isLoading={isLoading}
+                            isLoading={isSubmitting}
                             leftIcon={<LogIn className="w-4 h-4" />}
                         >
                             Sign In
