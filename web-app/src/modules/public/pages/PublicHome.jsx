@@ -16,11 +16,11 @@ import {
     Truck,
     Wrench,
 } from 'lucide-react';
-import storefrontImage from '../../../assets/homepage/limen-storefront-optimized.jpg';
-import monteroImage from '../../../assets/homepage/montero-optimized.jpg';
-import tritonImage from '../../../assets/homepage/triton-optimized.jpg';
-import xforceImage from '../../../assets/homepage/xforce-optimized.jpg';
-import destinatorImage from '../../../assets/homepage/destinator-optimized.jpg';
+import storefrontImage from '../../../assets/homepage/limen-storefront-real.jpg';
+import monteroImage from '../../../assets/homepage/montero-real.jpg';
+import tritonImage from '../../../assets/homepage/triton-real.jpg';
+import xforceImage from '../../../assets/homepage/xforce-real.jpg';
+import xpanderImage from '../../../assets/homepage/xpander-real.jpg';
 
 const categoryCards = [
     { title: 'Engine Parts', description: 'Filters, timing components, gaskets, and cooling parts.', icon: Cog, query: 'engine' },
@@ -38,6 +38,8 @@ const featuredParts = [
         price: 'PHP 1,245',
         image: monteroImage,
         catalogQuery: 'Montero Sport Oil Filter',
+        vehicle: 'Montero Sport',
+        note: 'Best for PMS and daily service visits',
     },
     {
         name: 'Triton Front Brake Pads',
@@ -45,6 +47,8 @@ const featuredParts = [
         price: 'PHP 3,980',
         image: tritonImage,
         catalogQuery: 'Triton Front Brake Pads',
+        vehicle: 'Triton',
+        note: 'Fast-moving pickup wear-item replacement',
     },
     {
         name: 'Xforce Air Filter',
@@ -52,13 +56,17 @@ const featuredParts = [
         price: 'PHP 1,760',
         image: xforceImage,
         catalogQuery: 'Xforce Air Filter',
+        vehicle: 'Xforce',
+        note: 'Clean intake maintenance for newer compact SUVs',
     },
     {
-        name: 'Destinator Maintenance Kit',
-        partNo: 'KIT-DST-001',
-        price: 'PHP 5,950',
-        image: destinatorImage,
-        catalogQuery: 'Destinator Maintenance Kit',
+        name: 'Xpander Cabin Filter Set',
+        partNo: '7803A167',
+        price: 'PHP 2,140',
+        image: xpanderImage,
+        catalogQuery: 'Xpander Cabin Filter Set',
+        vehicle: 'Xpander',
+        note: 'Popular MPV maintenance item for family-use vehicles',
     },
 ];
 
@@ -86,6 +94,8 @@ const quickStats = [
     { value: 'Real', label: 'Store-based customer support' },
 ];
 
+const supportedVehicles = ['Montero Sport', 'Triton', 'Xforce', 'Xpander', 'Mirage', 'L300'];
+
 const PublicHome = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const navigate = useNavigate();
@@ -97,7 +107,8 @@ const PublicHome = () => {
 
     return (
         <div className="bg-white text-primary-900">
-            <section className="border-b border-primary-200 bg-gradient-to-b from-white via-primary-100 to-white px-4 pb-16 pt-12 md:px-8 xl:px-12">
+            <section className="relative overflow-hidden border-b border-primary-200 bg-[radial-gradient(circle_at_top_left,_rgba(30,58,138,0.08),_transparent_32%),radial-gradient(circle_at_top_right,_rgba(220,38,38,0.10),_transparent_28%),linear-gradient(to_bottom,_#ffffff,_#f8fafc_42%,_#ffffff)] px-4 pb-16 pt-12 md:px-8 xl:px-12">
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[linear-gradient(90deg,rgba(30,58,138,0.04),transparent_24%,rgba(220,38,38,0.05))]" />
                 <div className="mx-auto grid max-w-[1600px] items-stretch gap-10 xl:grid-cols-[1.02fr_0.98fr]">
                     <motion.div
                         initial={{ opacity: 0, y: 24 }}
@@ -131,6 +142,17 @@ const PublicHome = () => {
                                 <CarFront className="h-4 w-4 text-accent-primary" />
                                 Search by Vehicle
                             </span>
+                        </div>
+
+                        <div className="mt-6 flex flex-wrap gap-2">
+                            {supportedVehicles.map((vehicle) => (
+                                <span
+                                    key={vehicle}
+                                    className="rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm"
+                                >
+                                    {vehicle}
+                                </span>
+                            ))}
                         </div>
 
                         <div className="mt-8 rounded-2xl border border-primary-200 bg-white p-3 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
@@ -175,8 +197,17 @@ const PublicHome = () => {
                         className="grid gap-5"
                     >
                         <div className="overflow-hidden rounded-[2rem] border border-primary-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
-                            <img src={storefrontImage} alt="Limen Auto Parts storefront" className="h-[320px] w-full object-cover md:h-[430px]" />
-                            <div className="grid gap-4 border-t border-primary-200 px-6 py-6 sm:grid-cols-3">
+                            <div className="relative">
+                                <img src={storefrontImage} alt="Limen Auto Parts storefront" className="h-[320px] w-full object-cover md:h-[430px]" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-900/10 to-transparent" />
+                                <div className="absolute bottom-0 left-0 right-0 px-6 pb-6">
+                                    <div className="max-w-xl rounded-3xl border border-white/20 bg-slate-950/70 p-5 text-white shadow-2xl backdrop-blur-sm">
+                                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/65">Pasay City flagship store</p>
+                                        <p className="mt-3 text-2xl font-bold leading-tight">Real counter service, fitment checks, and faster quote turnaround for walk-in and online inquiries.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="grid gap-4 border-t border-primary-200 bg-slate-50 px-6 py-6 sm:grid-cols-3">
                                 <div>
                                     <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-500">Store</p>
                                     <p className="mt-2 text-lg font-semibold text-primary-950">Real local support</p>
@@ -192,7 +223,7 @@ const PublicHome = () => {
                             </div>
                         </div>
 
-                        <div className="rounded-[2rem] border border-primary-200 bg-primary-950 px-6 py-6 text-white shadow-[0_24px_50px_rgba(15,23,42,0.12)]">
+                        <div className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,_#0f172a,_#172554_55%,_#1e3a8a)] px-6 py-6 text-white shadow-[0_24px_50px_rgba(15,23,42,0.12)]">
                             <div className="flex flex-wrap items-center justify-between gap-4">
                                 <div>
                                     <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/60">Why customers buy here</p>
@@ -255,14 +286,15 @@ const PublicHome = () => {
                 </div>
             </section>
 
-            <section className="bg-primary-100 px-4 py-16 md:px-8 xl:px-12">
+            <section className="relative overflow-hidden bg-[linear-gradient(to_bottom,_#f8fafc,_#eef2ff_40%,_#ffffff)] px-4 py-16 md:px-8 xl:px-12">
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-[radial-gradient(circle_at_center,_rgba(30,58,138,0.10),_transparent_58%)]" />
                 <div className="mx-auto max-w-[1600px]">
                     <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                         <div className="max-w-2xl">
                             <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-danger">Best Sellers</p>
-                            <h2 className="mt-2 text-4xl font-bold text-primary-950">Featured parts with clear part numbers and pricing</h2>
+                            <h2 className="mt-2 text-4xl font-bold text-primary-950">Featured parts anchored to real Mitsubishi vehicle lines</h2>
                             <p className="mt-3 text-base leading-relaxed text-primary-600">
-                                Show customers what sells most, keep the part number visible, and give them a fast path to quote or catalog lookup.
+                                The lineup now uses your actual vehicle photos and keeps the cards cleaner, more trustworthy, and easier to scan before a quote request.
                             </p>
                         </div>
                     </div>
@@ -275,14 +307,25 @@ const PublicHome = () => {
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true, margin: '-80px' }}
                                 transition={{ duration: 0.35, delay: index * 0.05 }}
-                                className="overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.06)]"
+                                className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.06)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_26px_60px_rgba(15,23,42,0.10)]"
                             >
-                                <div className="flex h-[240px] items-center justify-center border-b border-primary-200 bg-white p-6">
-                                    <img src={part.image} alt={part.name} className="h-full w-full object-contain" />
+                                <div className="border-b border-slate-200 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(226,232,240,0.9)_55%,_rgba(203,213,225,0.85))] px-5 pb-6 pt-5">
+                                    <div className="mb-4 flex items-center justify-between">
+                                        <span className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white">
+                                            {part.vehicle}
+                                        </span>
+                                        <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-[11px] font-semibold text-red-700">
+                                            Best Seller
+                                        </span>
+                                    </div>
+                                    <div className="flex h-[220px] items-center justify-center overflow-hidden rounded-3xl bg-[linear-gradient(135deg,_rgba(255,255,255,0.96),_rgba(241,245,249,0.92)_55%,_rgba(226,232,240,0.88))] p-4 shadow-inner">
+                                        <img src={part.image} alt={part.name} className="h-full w-full object-contain drop-shadow-[0_24px_30px_rgba(15,23,42,0.18)]" />
+                                    </div>
                                 </div>
                                 <div className="p-6">
                                     <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-500">Part No. {part.partNo}</p>
                                     <h3 className="mt-3 text-xl font-bold text-primary-950">{part.name}</h3>
+                                    <p className="mt-3 text-sm leading-relaxed text-primary-600">{part.note}</p>
                                     <p className="mt-4 text-2xl font-bold text-accent-primary">{part.price}</p>
                                     <div className="mt-6 flex gap-3">
                                         <Link to={`/catalog?q=${encodeURIComponent(part.catalogQuery)}`} className="btn btn-primary flex-1 px-4 py-3">
@@ -330,7 +373,7 @@ const PublicHome = () => {
                         <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-danger">Customer confidence</p>
                         <h3 className="mt-3 text-3xl font-bold text-primary-950">"Fast responses, correct fitment help, and a better quote process."</h3>
                         <p className="mt-5 text-base leading-relaxed text-primary-600">
-                            Customers shopping for vehicle parts need clarity first. This redesign uses a stronger white theme, higher contrast text, sharper calls to action, and more obvious trust signals.
+                            Customers shopping for vehicle parts need clarity first. The homepage now uses your actual store and vehicle images, stronger white surfaces, higher-contrast text, and clearer calls to action without the clutter.
                         </p>
 
                         <div className="mt-8 grid gap-4 border-t border-primary-200 pt-6 sm:grid-cols-3">
