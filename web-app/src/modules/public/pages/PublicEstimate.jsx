@@ -37,6 +37,27 @@ const MODE_OPTIONS = [
     },
 ];
 
+const ESTIMATE_PHASES = [
+    {
+        id: 'details',
+        phase: 'Phase 1',
+        label: 'Customer and Vehicle',
+        description: 'Capture the customer details and vehicle context before browsing the pricelist.',
+    },
+    {
+        id: 'catalog',
+        phase: 'Phase 2',
+        label: 'Parts and Services',
+        description: 'Add parts, labor, and vehicle-matched bundles into the draft quote.',
+    },
+    {
+        id: 'summary',
+        phase: 'Phase 3',
+        label: 'Review and Print',
+        description: 'Review the cart totals, recommendations, and printable quotation preview.',
+    },
+];
+
 const DESKTOP_DOCK_QUERY = '(min-width: 768px)';
 
 const createQuoteMeta = () => ({
@@ -147,6 +168,17 @@ const buildRetrievedPrintableQuote = (quote) => {
         })),
     };
 };
+
+const PhaseBackButton = ({ onClick, label }) => (
+    <button
+        type="button"
+        onClick={onClick}
+        className="inline-flex items-center gap-2 rounded-xl border border-primary-200 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-950"
+    >
+        <ChevronLeft className="h-4 w-4" />
+        {label}
+    </button>
+);
 
 const PublicEstimate = () => {
     const [searchParams] = useSearchParams();
