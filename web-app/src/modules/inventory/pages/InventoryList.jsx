@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, Grid, List, Package, AlertTriangle, Camera } from 'lucide-react';
+import { Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { StockBadge } from '../../../components/ui/Badge';
@@ -9,24 +9,35 @@ import ProductCard from '../components/ProductCard';
 import AddStockModal from '../components/AddStockModal';
 import { formatCurrency, formatNumber } from '../../../utils/formatters';
 import { useToast } from '../../../components/ui/Toast';
-import useDataStore from '../../../store/useDataStore';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
 import { getCatalogSummary } from '../../../services/catalogApi';
+import useProductCatalog from '../../../hooks/useProductCatalog';
+
+const PAGE_SIZE = 12;
+
+function formatCatalogProduct(product) {
+    return {
+        id: product.id,
+        sku: product.sku,
+        name: product.name,
+        model: product.model,
+        category: product.category,
+        price: Number(product.price ?? 0),
+        stock: Number(product.stock ?? 0),
+        quantity: Number(product.stock ?? 0),
+        status: product.status ?? 'in_stock',
+        uom: product.uom ?? 'PC',
+        brand: product.brand ?? 'Mitsubishi',
+        cost: Math.round(Number(product.price ?? 0) * 0.55),
+        location: product.location ?? { floor: '-', section: '-', shelf: '-' },
+    };
+}
 
 const InventoryList = () => {
     const { success } = useToast();
     const { isAdmin } = useAuth();
-    const {
-        products: storeProducts,
-        loading,
-        error,
-        updateProduct,
-        fetchProducts,
-        hasLoadedProducts,
-        isHydratingProducts,
-    } = useDataStore();
     const [catalogSummary, setCatalogSummary] = useState(null);
     const [summaryError, setSummaryError] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
@@ -35,13 +46,28 @@ const InventoryList = () => {
     const [viewMode, setViewMode] = useState('grid');
     const [showAddModal, setShowAddModal] = useState(false);
     const [showCameraScanner, setShowCameraScanner] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [refreshKey, setRefreshKey] = useState(0);
+    const [productOverrides, setProductOverrides] = useState({});
     const deferredSearchQuery = useDeferredValue(searchQuery);
+    const {
+        products,
+        categories: catalogCategories,
+        pagination,
+        loading,
+        error: catalogError,
+    } = useProductCatalog({
+        page: currentPage,
+        pageSize: PAGE_SIZE,
+        searchQuery,
+        selectedCategory,
+        sortBy: 'name-asc',
+        refreshKey,
+    });
 
     useEffect(() => {
-        if (!hasLoadedProducts && !loading) {
-            void fetchProducts();
-        }
-    }, [fetchProducts, hasLoadedProducts, loading]);
+        setCurrentPage(1);
+    }, [deferredSearchQuery, selectedCategory, selectedStockFilter]);
 
     useEffect(() => {
         let active = true;
@@ -65,34 +91,23 @@ const InventoryList = () => {
         };
     }, []);
 
-    const categoryCounts = useMemo(() => (
-        storeProducts.reduce((map, product) => {
-            const key = product.category?.toLowerCase();
-            if (!key) {
-                return map;
-            }
+    const visibleProducts = useMemo(() => (
+        products.map((product) => productOverrides[product.id] ?? formatCatalogProduct(product))
+    ), [productOverrides, products]);
 
-            map.set(key, (map.get(key) ?? 0) + 1);
-            return map;
-        }, new Map())
-    ), [storeProducts]);
-
-    const categories = useMemo(() => ([
-        { value: 'all', label: `All Categories (${storeProducts.length})` },
-        ...Array.from(categoryCounts.entries())
-            .sort((a, b) => a[0].localeCompare(b[0]))
-            .map(([value, count]) => ({
-                value,
-                label: `${storeProducts.find((product) => product.category?.toLowerCase() === value)?.category || value} (${count})`,
-            })),
-    ]), [categoryCounts, storeProducts]);
+    const categories = useMemo(() => (
+        catalogCategories.map((category) => ({
+            value: category.value,
+            label: `${category.label} (${formatNumber(category.count ?? 0)})`,
+        }))
+    ), [catalogCategories]);
 
     const stockFilters = useMemo(() => {
-        const allCount = storeProducts.length;
-        const outOfStockCount = storeProducts.filter((product) => product.quantity <= 0).length;
-        const lowStockOnlyCount = storeProducts.filter((product) => product.quantity > 0 && product.quantity <= 5).length;
-        const mediumStockCount = storeProducts.filter((product) => product.quantity >= 6 && product.quantity <= 20).length;
-        const highStockCount = storeProducts.filter((product) => product.quantity > 20).length;
+        const allCount = visibleProducts.length;
+        const outOfStockCount = visibleProducts.filter((product) => product.quantity <= 0).length;
+        const lowStockOnlyCount = visibleProducts.filter((product) => product.quantity > 0 && product.quantity <= 5).length;
+        const mediumStockCount = visibleProducts.filter((product) => product.quantity >= 6 && product.quantity <= 20).length;
+        const highStockCount = visibleProducts.filter((product) => product.quantity > 20).length;
 
         return [
             { value: 'all', label: `All Stock Levels (${allCount})` },
@@ -101,29 +116,28 @@ const InventoryList = () => {
             { value: 'medium', label: `Medium Stock (6-20 qty) (${mediumStockCount})` },
             { value: 'high', label: `High Stock (21+ qty) (${highStockCount})` },
         ];
-    }, [storeProducts]);
+    }, [visibleProducts]);
 
     const filteredProducts = useMemo(() => (
-        storeProducts.filter((product) => {
-            const normalizedQuery = deferredSearchQuery.toLowerCase();
-            const matchesSearch = product.name.toLowerCase().includes(normalizedQuery)
-                || product.sku.toLowerCase().includes(normalizedQuery);
-            const matchesCategory = selectedCategory === 'all'
-                || product.category.toLowerCase() === selectedCategory.toLowerCase();
+        visibleProducts.filter((product) => {
             const matchesStock = selectedStockFilter === 'all'
                 || (selectedStockFilter === 'out' && product.quantity <= 0)
                 || (selectedStockFilter === 'low' && product.quantity > 0 && product.quantity <= 5)
                 || (selectedStockFilter === 'medium' && product.quantity >= 6 && product.quantity <= 20)
                 || (selectedStockFilter === 'high' && product.quantity > 20);
-            return matchesSearch && matchesCategory && matchesStock;
+            return matchesStock;
         })
-    ), [deferredSearchQuery, selectedCategory, selectedStockFilter, storeProducts]);
+    ), [selectedStockFilter, visibleProducts]);
 
-    const totalProducts = catalogSummary?.totalProducts ?? storeProducts.length;
-    const uniqueProducts = catalogSummary?.uniqueProducts ?? storeProducts.length;
-    const currentPrices = catalogSummary?.currentPrices ?? storeProducts.length;
-    const lowStockCount = storeProducts.filter((product) => product.quantity <= 5).length;
-    const totalValue = storeProducts.reduce((sum, product) => sum + (product.price * product.quantity), 0);
+    const totalProducts = catalogSummary?.totalProducts ?? pagination.totalCount ?? visibleProducts.length;
+    const uniqueProducts = catalogSummary?.uniqueProducts ?? pagination.totalCount ?? visibleProducts.length;
+    const currentPrices = catalogSummary?.currentPrices ?? pagination.totalCount ?? visibleProducts.length;
+    const lowStockCount = filteredProducts.filter((product) => product.quantity <= 5).length;
+    const totalValue = filteredProducts.reduce((sum, product) => sum + (product.price * product.quantity), 0);
+    const canGoPrev = (pagination.page ?? currentPage) > 1;
+    const canGoNext = (pagination.page ?? currentPage) < (pagination.totalPages ?? 1);
+    const rangeStart = pagination.totalCount === 0 ? 0 : (((pagination.page ?? currentPage) - 1) * (pagination.pageSize ?? PAGE_SIZE)) + 1;
+    const rangeEnd = pagination.totalCount === 0 ? 0 : Math.min((pagination.page ?? currentPage) * (pagination.pageSize ?? PAGE_SIZE), pagination.totalCount ?? 0);
 
     return (
         <div className="space-y-6">
@@ -145,7 +159,7 @@ const InventoryList = () => {
                     </div>
                     <div>
                         <p className="text-2xl font-bold font-display text-primary-950">{lowStockCount}</p>
-                        <p className="text-sm text-primary-600">Low Stock Items</p>
+                        <p className="text-sm text-primary-600">Visible Low Stock</p>
                         <p className="text-xs text-primary-500">{formatNumber(currentPrices)} current price rows active</p>
                     </div>
                 </Card>
@@ -156,7 +170,7 @@ const InventoryList = () => {
                     </div>
                     <div>
                         <p className="text-2xl font-bold font-display text-primary-950">{formatCurrency(totalValue)}</p>
-                        <p className="text-sm text-primary-600">Total Inventory Value</p>
+                        <p className="text-sm text-primary-600">Visible Inventory Value</p>
                         {summaryError && <p className="text-xs text-accent-danger">{summaryError}</p>}
                     </div>
                 </Card>
@@ -203,7 +217,7 @@ const InventoryList = () => {
                 <div className="flex items-center gap-2 flex-wrap">
                     {isAdmin && (
                         <PriceListManager onUpdated={async () => {
-                            await fetchProducts({ force: true });
+                            setRefreshKey((value) => value + 1);
                             try {
                                 const summary = await getCatalogSummary();
                                 setCatalogSummary(summary);
@@ -239,21 +253,17 @@ const InventoryList = () => {
                 </div>
             </div>
 
-            {isHydratingProducts && !loading && (
-                <p className="text-sm text-primary-500">Loading more catalog pages in the background...</p>
-            )}
-
             {loading ? (
                 <Card className="text-center py-12">
                     <Package className="w-12 h-12 text-primary-400 mx-auto mb-4 animate-pulse" />
                     <h3 className="text-lg font-semibold text-primary-300 mb-2">Connecting to Supabase...</h3>
                     <p className="text-primary-500">Fetching live inventory data</p>
                 </Card>
-            ) : error ? (
+            ) : catalogError ? (
                 <Card className="text-center py-12">
                     <AlertTriangle className="w-12 h-12 text-accent-danger mx-auto mb-4" />
                     <h3 className="text-lg font-bold text-primary-900 mb-2">Database catalog unavailable</h3>
-                    <p className="text-primary-500 font-medium">{error}</p>
+                    <p className="text-primary-500 font-medium">{catalogError}</p>
                 </Card>
             ) : filteredProducts.length === 0 ? (
                 <Card className="text-center py-12">
@@ -306,11 +316,45 @@ const InventoryList = () => {
                 </Card>
             )}
 
+            {!loading && !catalogError && pagination.totalPages > 1 && (
+                <Card padding="sm">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm text-primary-600">
+                            Showing <span className="font-semibold text-primary-950">{rangeStart}-{rangeEnd}</span> of <span className="font-semibold text-primary-950">{formatNumber(pagination.totalCount ?? 0)}</span> products
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="secondary"
+                                onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+                                disabled={!canGoPrev}
+                                leftIcon={<ChevronLeft className="h-4 w-4" />}
+                            >
+                                Previous
+                            </Button>
+                            <span className="min-w-[108px] text-center text-sm font-semibold text-primary-700">
+                                Page {pagination.page ?? currentPage} of {pagination.totalPages ?? 1}
+                            </span>
+                            <Button
+                                variant="secondary"
+                                onClick={() => setCurrentPage((page) => Math.min(page + 1, pagination.totalPages ?? page))}
+                                disabled={!canGoNext}
+                                rightIcon={<ChevronRight className="h-4 w-4" />}
+                            >
+                                Next
+                            </Button>
+                        </div>
+                    </div>
+                </Card>
+            )}
+
             <AddStockModal
                 isOpen={showAddModal}
                 onClose={() => setShowAddModal(false)}
                 onSave={(updatedProduct) => {
-                    updateProduct(updatedProduct.id, updatedProduct);
+                    setProductOverrides((current) => ({
+                        ...current,
+                        [updatedProduct.id]: updatedProduct,
+                    }));
                     success(`Added stock! ${updatedProduct.name} now has ${updatedProduct.quantity} units.`);
                     setShowAddModal(false);
                 }}

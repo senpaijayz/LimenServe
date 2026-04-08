@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, Check, Printer, Wrench, Camera } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, Check, Printer, Wrench, Camera, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import { useCart } from '../../../context/CartContext';
@@ -12,6 +12,27 @@ import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import AddServiceModal from '../../../components/ui/AddServiceModal';
 import { createPosSale } from '../../../services/posApi';
 import SaleReceiptPreview from '../components/SaleReceiptPreview.jsx';
+import useProductCatalog from '../../../hooks/useProductCatalog';
+
+const PAGE_SIZE = 14;
+
+function formatCatalogProduct(product) {
+    return {
+        id: product.id,
+        sku: product.sku,
+        name: product.name,
+        model: product.model,
+        category: product.category,
+        price: Number(product.price ?? 0),
+        stock: Number(product.stock ?? 0),
+        quantity: Number(product.stock ?? 0),
+        status: product.status ?? 'in_stock',
+        uom: product.uom ?? 'PC',
+        brand: product.brand ?? 'Mitsubishi',
+        cost: Math.round(Number(product.price ?? 0) * 0.55),
+        location: product.location ?? { floor: '-', section: '-', shelf: '-' },
+    };
+}
 
 /**
  * POS Terminal Page
@@ -24,8 +45,9 @@ const POSTerminal = () => {
     } = useCart();
 
     const { success } = useToast();
-    const { products: storeProducts, loading, fetchProducts, hasLoadedProducts, isHydratingProducts, findProduct } = useDataStore();
+    const { findProduct } = useDataStore();
     const [searchQuery, setSearchQuery] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showServiceModal, setShowServiceModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -35,20 +57,27 @@ const POSTerminal = () => {
     const [lastTransaction, setLastTransaction] = useState(null);
     const [paymentError, setPaymentError] = useState('');
     const [processingPayment, setProcessingPayment] = useState(false);
+    const {
+        products,
+        pagination,
+        loading,
+        error,
+    } = useProductCatalog({
+        page: currentPage,
+        pageSize: PAGE_SIZE,
+        searchQuery,
+        selectedCategory: 'all',
+        sortBy: 'name-asc',
+    });
 
     useEffect(() => {
-        if (!hasLoadedProducts && !loading) {
-            void fetchProducts();
-        }
-    }, [fetchProducts, hasLoadedProducts, loading]);
+        setCurrentPage(1);
+    }, [deferredSearchQuery]);
 
     // Filter products
-    const filteredProducts = useMemo(() => (
-        storeProducts.filter((product) => (
-            product.name.toLowerCase().includes(deferredSearchQuery.toLowerCase())
-            || product.sku.toLowerCase().includes(deferredSearchQuery.toLowerCase())
-        ))
-    ), [deferredSearchQuery, storeProducts]);
+    const visibleProducts = useMemo(() => (
+        products.map(formatCatalogProduct)
+    ), [products]);
 
     // Handle product click
     const handleProductClick = (product) => {
@@ -66,7 +95,7 @@ const POSTerminal = () => {
         if (!barcode) return;
 
         const normalizedBarcode = String(barcode).trim().toLowerCase();
-        const localProduct = storeProducts.find((product) => product.sku.toLowerCase() === normalizedBarcode || String(product.id) === String(barcode));
+        const localProduct = visibleProducts.find((product) => product.sku.toLowerCase() === normalizedBarcode || String(product.id) === String(barcode));
         const product = localProduct || await findProduct(barcode);
 
         if (product) {
@@ -84,6 +113,10 @@ const POSTerminal = () => {
 
     // Calculate change
     const change = parseFloat(paymentAmount) - totals.total;
+    const canGoPrev = (pagination.page ?? currentPage) > 1;
+    const canGoNext = (pagination.page ?? currentPage) < (pagination.totalPages ?? 1);
+    const rangeStart = pagination.totalCount === 0 ? 0 : (((pagination.page ?? currentPage) - 1) * (pagination.pageSize ?? PAGE_SIZE)) + 1;
+    const rangeEnd = pagination.totalCount === 0 ? 0 : Math.min((pagination.page ?? currentPage) * (pagination.pageSize ?? PAGE_SIZE), pagination.totalCount ?? 0);
 
     // Handle payment
     const handlePayment = async () => {
@@ -172,16 +205,22 @@ const POSTerminal = () => {
                 </div>
 
                 {/* Products Grid */}
-                {isHydratingProducts && !loading && (
-                    <p className="mb-3 text-sm text-primary-500">Loading more catalog pages in the background...</p>
-                )}
-
                 {loading ? (
                     <div className="flex-1 flex items-center justify-center text-primary-400">Loading catalog...</div>
+                ) : error ? (
+                    <div className="flex-1 rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-800">
+                        <div className="flex items-start gap-3">
+                            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                            <div>
+                                <p className="font-semibold">Product catalog temporarily unavailable</p>
+                                <p className="mt-1 text-sm">{error}</p>
+                            </div>
+                        </div>
+                    </div>
                 ) : (
-                    <div className="flex-1 overflow-y-auto">
+                    <div className="flex flex-1 flex-col">
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                            {filteredProducts.map((product) => (
+                            {visibleProducts.map((product) => (
                                 <button
                                     key={product.id}
                                     onClick={() => handleProductClick(product)}
@@ -210,6 +249,34 @@ const POSTerminal = () => {
                                     </p>
                                 </button>
                             ))}
+                        </div>
+                        <div className="mt-4 rounded-xl border border-primary-200 bg-white px-4 py-3 shadow-sm">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-sm text-primary-600">
+                                    Showing <span className="font-semibold text-primary-950">{rangeStart}-{rangeEnd}</span> of <span className="font-semibold text-primary-950">{pagination.totalCount ?? 0}</span> products
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="secondary"
+                                        onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+                                        disabled={!canGoPrev}
+                                        leftIcon={<ChevronLeft className="h-4 w-4" />}
+                                    >
+                                        Previous
+                                    </Button>
+                                    <span className="min-w-[108px] text-center text-sm font-semibold text-primary-700">
+                                        Page {pagination.page ?? currentPage} of {pagination.totalPages ?? 1}
+                                    </span>
+                                    <Button
+                                        variant="secondary"
+                                        onClick={() => setCurrentPage((page) => Math.min(page + 1, pagination.totalPages ?? page))}
+                                        disabled={!canGoNext}
+                                        rightIcon={<ChevronRight className="h-4 w-4" />}
+                                    >
+                                        Next
+                                    </Button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}

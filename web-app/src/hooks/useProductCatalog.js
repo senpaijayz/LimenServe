@@ -9,6 +9,7 @@ const useProductCatalog = ({
   sortBy = 'name-asc',
   vehicleModel = '',
   vehicleYear = '',
+  refreshKey = 0,
 } = {}) => {
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [products, setProducts] = useState([]);
@@ -63,7 +64,7 @@ const useProductCatalog = ({
     return () => {
       active = false;
     };
-  }, [page, pageSize, deferredSearchQuery, selectedCategory, sortBy, vehicleModel, vehicleYear]);
+  }, [page, pageSize, deferredSearchQuery, selectedCategory, sortBy, vehicleModel, vehicleYear, refreshKey]);
 
   return {
     products,
