@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { AlertTriangle } from 'lucide-react';
 import Card from '../../../components/ui/Card';
 import { formatCurrency, formatRelativeTime } from '../../../utils/formatters';
 import { listPosSales } from '../../../services/posApi';
@@ -11,6 +12,7 @@ import { listPosSales } from '../../../services/posApi';
 const RecentTransactions = () => {
     const [recentTransactions, setRecentTransactions] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
     useEffect(() => {
         const loadRecentTransactions = async () => {
@@ -21,8 +23,10 @@ const RecentTransactions = () => {
                 });
 
                 setRecentTransactions(sales);
+                setError('');
             } catch (error) {
-                console.error('Failed to load recent transactions:', error);
+                setRecentTransactions([]);
+                setError(error.message || 'Unable to load recent transactions right now.');
             } finally {
                 setLoading(false);
             }
@@ -54,6 +58,19 @@ const RecentTransactions = () => {
                         </tr>
                     </thead>
                     <tbody>
+                        {error && !loading && (
+                            <tr>
+                                <td colSpan="6" className="px-4 py-8">
+                                    <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left text-sm text-amber-800">
+                                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                        <div>
+                                            <p className="font-semibold">Transactions temporarily unavailable</p>
+                                            <p className="mt-1">{error}</p>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        )}
                         {loading && (
                             <tr>
                                 <td colSpan="6" className="py-8 text-center text-primary-500">
@@ -61,7 +78,7 @@ const RecentTransactions = () => {
                                 </td>
                             </tr>
                         )}
-                        {recentTransactions.map((txn) => (
+                        {!error && recentTransactions.map((txn) => (
                             <tr key={txn.sale_id} className="cursor-pointer hover:bg-primary-50 transition-colors">
                                 <td className="py-3 px-4 border-b border-primary-100">
                                     <span className="font-mono text-sm text-primary-500">{txn.transaction_number}</span>
@@ -79,7 +96,7 @@ const RecentTransactions = () => {
                                 </td>
                             </tr>
                         ))}
-                        {!loading && recentTransactions.length === 0 && (
+                        {!loading && !error && recentTransactions.length === 0 && (
                             <tr>
                                 <td colSpan="6" className="py-8 text-center text-primary-500">
                                     No recent sales found.
