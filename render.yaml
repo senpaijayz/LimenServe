@@ -11,7 +11,7 @@ services:
       - key: NODE_VERSION
         value: 22
       - key: FRONTEND_URLS
-        sync: false
+        value: https://limen-serve.vercel.app,https://limen-serve*.vercel.app,http://localhost:5173,http://127.0.0.1:5173
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
