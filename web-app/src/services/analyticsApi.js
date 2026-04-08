@@ -1,5 +1,9 @@
 import apiClient, { extractApiError } from './apiClient';
 
+function isNetworkFailure(error) {
+  return !error?.response;
+}
+
 export async function runFullAnalyticsRefresh(notes = null) {
   try {
     const { data } = await apiClient.post('/analytics/refresh', { notes });
@@ -24,6 +28,12 @@ export async function getProductRecommendationPackages(productId, vehicleModelId
       recommendations: data.recommendations ?? [],
     };
   } catch (error) {
+    if (isNetworkFailure(error)) {
+      return {
+        packages: [],
+        recommendations: [],
+      };
+    }
     extractApiError(error, 'Failed to load recommendation packages.');
   }
 }
