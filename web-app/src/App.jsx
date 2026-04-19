@@ -14,8 +14,7 @@ const InventoryList = lazy(() => import('./modules/inventory/pages/InventoryList
 const POSTerminal = lazy(() => import('./modules/pos/pages/POSTerminal'));
 const QuoteBuilder = lazy(() => import('./modules/quotation/pages/QuoteBuilder'));
 const ServiceOrderList = lazy(() => import('./modules/services/pages/ServiceOrderList'));
-const StockroomViewer = lazy(() => import('./modules/stockroom/pages/StockroomViewer'));
-const StockroomAdminPage = lazy(() => import('./modules/stockroom/pages/StockroomAdminPage'));
+const StockroomV2 = lazy(() => import('./modules/stockroom/pages/StockroomV2'));
 const SalesReport = lazy(() => import('./modules/reports/pages/SalesReport'));
 const UserManagement = lazy(() => import('./modules/users/pages/UserManagement'));
 
@@ -79,8 +78,7 @@ function App() {
                   <Route path="/pos" element={renderRoute(POSTerminal, <WorkspaceRouteFallback title="Loading point of sale" />)} />
                   <Route path="/quotation" element={renderRoute(QuoteBuilder, <WorkspaceRouteFallback title="Loading quotation builder" />)} />
                   <Route path="/services" element={renderRoute(ServiceOrderList, <WorkspaceRouteFallback title="Loading service orders" />)} />
-                  <Route path="/stockroom" element={renderRoute(StockroomViewer, <WorkspaceRouteFallback title="Loading stockroom viewer" />)} />
-                  <Route path="/stockroom/admin" element={renderRoute(StockroomAdminPage, <WorkspaceRouteFallback title="Loading stockroom admin" />)} />
+                  <Route path="/stockroom" element={renderRoute(StockroomV2, <WorkspaceRouteFallback title="Loading 3D Stockroom V2" />)} />
                   <Route path="/reports" element={renderRoute(SalesReport, <WorkspaceRouteFallback title="Loading reports" />)} />
                   <Route path="/reports/sales" element={renderRoute(SalesReport, <WorkspaceRouteFallback title="Loading reports" />)} />
                   <Route path="/users" element={renderRoute(UserManagement, <WorkspaceRouteFallback title="Loading user management" />)} />
