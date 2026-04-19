@@ -1,5 +1,5 @@
 import React from 'react';
-import { Environment, Sparkles, Text } from '@react-three/drei';
+import { Environment, Text } from '@react-three/drei';
 
 export default function WarehouseEnvironment() {
     const aisleNames = [
@@ -14,27 +14,27 @@ export default function WarehouseEnvironment() {
     return (
         <group>
             {/* Primary Ambient & Directional Lighting */}
-            <ambientLight intensity={0.4} color="#ffffff" />
+            <ambientLight intensity={1.2} color="#ffffff" />
             <directionalLight
                 castShadow
-                position={[20, 30, 10]}
-                intensity={1.5}
-                color="#fff5e6"
-                shadow-mapSize={[2048, 2048]}
+                position={[20, 40, -10]}
+                intensity={1.2}
+                color="#ffffff"
+                shadow-mapSize={[1024, 1024]}
             >
                 <orthographicCamera attach="shadow-camera" args={[-30, 30, 30, -30, 0.1, 50]} />
             </directionalLight>
 
             {/* Concrete Floor with Industrial Finish */}
-            <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+            <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
                 <planeGeometry args={[100, 100]} />
                 <meshStandardMaterial
-                    color="#11151c"
-                    roughness={0.8}
-                    metalness={0.2}
+                    color="#1e293b"
+                    roughness={0.4}
+                    metalness={0.1}
                 />
-                {/* Subtle grid lines over the floor */}
-                <gridHelper args={[100, 100, '#1e293b', '#0f172a']} rotation={[Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} />
+                {/* Clean white grid over the floor */}
+                <gridHelper args={[100, 100, '#e2e8f0', '#334155']} rotation={[Math.PI / 2, 0, 0]} position={[0, 0.05, 0]} />
             </mesh>
 
             {/* Ceiling hanging signs */}
@@ -68,20 +68,14 @@ export default function WarehouseEnvironment() {
                 </group>
             ))}
 
-            {/* Atmospheric Dust Particles */}
-            <Sparkles count={500} scale={40} size={2} speed={0.4} opacity={0.1} color="#f97316" />
-
             {/* Distant warehouse walls framing */}
-            <mesh position={[0, 5, -20]} receiveShadow>
+            <mesh position={[0, 10, -25]} receiveShadow>
                 <planeGeometry args={[100, 20]} />
                 <meshStandardMaterial color="#0b1120" roughness={0.9} />
             </mesh>
 
-            {/* Rim Lights from back */}
-            <rectAreaLight width={50} height={10} intensity={2} color="#3b82f6" position={[0, 5, -19.5]} rotation={[0, 0, 0]} />
-
-            {/* Basic HDRI reflection */}
-            <Environment preset="city" environmentIntensity={0.2} />
+            {/* Basic HDRI reflection for slick metals */}
+            <Environment preset="apartment" environmentIntensity={0.6} />
         </group>
     );
 }

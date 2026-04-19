@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { EffectComposer, Bloom, Vignette, Noise } from '@react-three/postprocessing';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import WarehouseEnvironment from './WarehouseEnvironment';
 import ShelvingSystem from './ShelvingSystem';
 import ProductsLayer from './ProductsLayer';
