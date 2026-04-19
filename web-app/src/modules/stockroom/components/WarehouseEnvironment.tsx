@@ -48,7 +48,6 @@ export default function WarehouseEnvironment() {
                     <Text
                         position={[0, 0, 0.06]}
                         fontSize={0.4}
-                        font="/fonts/Inter-Bold.woff"
                         color="#f97316"
                         outlineWidth={0.01}
                         outlineColor="#f97316"
