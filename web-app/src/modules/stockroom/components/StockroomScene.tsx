@@ -1,5 +1,6 @@
 import { OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing';
 import {
   forwardRef,
   useCallback,
@@ -505,6 +506,15 @@ const StockroomScene = forwardRef<StockroomSceneHandle, StockroomSceneProps>(fun
           cameraRef={cameraRef}
           cameraResetKey={cameraResetKey}
         />
+        <EffectComposer disableNormalPass>
+          <Bloom
+            luminanceThreshold={0.65}
+            mipmapBlur
+            intensity={0.8}
+            levels={6}
+          />
+          <Vignette eskil={false} offset={0.3} darkness={0.6} />
+        </EffectComposer>
       </Canvas>
     </div>
   );

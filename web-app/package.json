@@ -14,6 +14,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
+    "@react-three/postprocessing": "^3.0.4",
     "@supabase/supabase-js": "^2.98.0",
     "axios": "^1.13.4",
     "framer-motion": "^12.34.3",

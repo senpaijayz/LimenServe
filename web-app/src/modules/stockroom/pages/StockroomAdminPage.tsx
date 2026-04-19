@@ -45,15 +45,15 @@ const OBJECT_LIBRARY: Array<{
   kind: SceneMetadataObject['kind'];
   style?: SceneMetadataObject['style'];
 }> = [
-  { label: 'Shelf / 2-bay', kind: 'shelf', style: { variant: '2-bay' } },
-  { label: 'Shelf / 3-bay', kind: 'shelf', style: { variant: '3-bay' } },
-  { label: 'Wall Segment', kind: 'wall' },
-  { label: 'Staircase', kind: 'stairs' },
-  { label: 'Comfort Room', kind: 'comfort_room' },
-  { label: 'Service Counter', kind: 'cashier_counter' },
-  { label: 'Entrance Marker', kind: 'entrance' },
-  { label: 'Glass Door', kind: 'door' },
-];
+    { label: 'Shelf / 2-bay', kind: 'shelf', style: { variant: '2-bay' } },
+    { label: 'Shelf / 3-bay', kind: 'shelf', style: { variant: '3-bay' } },
+    { label: 'Wall Segment', kind: 'wall' },
+    { label: 'Staircase', kind: 'stairs' },
+    { label: 'Comfort Room', kind: 'comfort_room' },
+    { label: 'Service Counter', kind: 'cashier_counter' },
+    { label: 'Entrance Marker', kind: 'entrance' },
+    { label: 'Glass Door', kind: 'door' },
+  ];
 
 function buildInitialMapping(item: StockroomMasterItem | null) {
   return {
@@ -84,7 +84,7 @@ function Surface({
   className?: string;
 }) {
   return (
-    <section className={`rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,16,30,0.94),rgba(5,12,24,0.84))] shadow-[0_24px_60px_rgba(2,6,23,0.34)] backdrop-blur-2xl ${className}`}>
+    <section className={`rounded-[30px] border border-white/5 bg-[linear-gradient(180deg,rgba(15,23,42,0.94),rgba(2,6,23,0.84))] shadow-[0_24px_60px_rgba(0,0,0,0.4)] backdrop-blur-2xl ${className}`}>
       {children}
     </section>
   );
@@ -103,11 +103,10 @@ function ActionButton({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
-        active
-          ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-[0_14px_34px_rgba(14,165,233,0.26)]'
+      className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${active
+          ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-[0_14px_34px_rgba(249,115,22,0.26)]'
           : 'border border-white/10 bg-white/5 text-slate-200 hover:border-white/20 hover:bg-white/10'
-      }`}
+        }`}
     >
       {children}
     </button>
@@ -255,7 +254,7 @@ function StockroomAdminPage() {
         <button
           type="button"
           onClick={() => navigate('/stockroom')}
-          className="mt-6 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white"
+          className="mt-6 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 text-sm font-semibold text-white shadow-lg"
         >
           Back To Locator
         </button>
@@ -310,10 +309,10 @@ function StockroomAdminPage() {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_top_left,_rgba(61,223,255,0.12),_transparent_26%),radial-gradient(circle_at_top_right,_rgba(59,130,246,0.16),_transparent_22%),linear-gradient(180deg,#030712_0%,#040915_52%,#07111f_100%)] p-1">
+    <div className="relative overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.12),_transparent_26%),radial-gradient(circle_at_top_right,_rgba(245,158,11,0.16),_transparent_22%),linear-gradient(180deg,#020617_0%,#0f172a_52%,#1e293b_100%)] p-1">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -left-24 top-0 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
-        <div className="absolute right-0 top-24 h-80 w-80 rounded-full bg-blue-500/10 blur-3xl" />
+        <div className="absolute -left-24 top-0 h-72 w-72 rounded-full bg-orange-500/10 blur-3xl" />
+        <div className="absolute right-0 top-24 h-80 w-80 rounded-full bg-amber-500/10 blur-3xl" />
       </div>
 
       <div className="relative space-y-6">
@@ -322,7 +321,7 @@ function StockroomAdminPage() {
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.32em] text-slate-500">Design Workspace</p>
               <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-[3rem]">
-                <span className="bg-gradient-to-r from-cyan-300 via-blue-300 to-sky-400 bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-500 bg-clip-text text-transparent">
                   {formatFloorOrdinal(selectedFloorRecord?.floorNumber ?? 1)} Floor
                 </span>{' '}
                 <span className="text-white">Mapping Studio</span>
@@ -368,7 +367,7 @@ function StockroomAdminPage() {
                 <button
                   type="button"
                   onClick={() => setAddMenuOpen((current) => !current)}
-                  className="rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(14,165,233,0.26)] transition hover:brightness-110"
+                  className="rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(249,115,22,0.26)] transition hover:brightness-110"
                 >
                   <span className="inline-flex items-center gap-2">
                     <Plus className="h-4 w-4" />
@@ -387,7 +386,7 @@ function StockroomAdminPage() {
                         setAddMenuOpen(false);
                         void addSceneObject(object.kind, { floorNumber: currentFloor, style: object.style });
                       }}
-                      className="flex items-center justify-between rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-slate-200 transition hover:border-cyan-400/30 hover:bg-white/10"
+                      className="flex items-center justify-between rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-slate-200 transition hover:border-orange-400/30 hover:bg-white/10"
                     >
                       <span>{object.label}</span>
                       <Plus className="h-4 w-4 text-slate-500" />
@@ -444,7 +443,7 @@ function StockroomAdminPage() {
                   value={masterSearchQuery}
                   onChange={(event) => setMasterSearchQuery(event.target.value)}
                   placeholder="Search by part number or scan barcode..."
-                  className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60"
+                  className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-orange-400/60"
                 />
 
                 {masterSearchQuery.trim() && filteredMasterItems.length > 0 && (!selectedMasterItem || masterSearchQuery !== selectedMasterItem.name) ? (
@@ -472,7 +471,7 @@ function StockroomAdminPage() {
 
               {selectedMasterItem ? (
                 <div className="mt-5 rounded-[24px] border border-white/10 bg-white/5 p-4">
-                  <div className="flex items-center gap-2 text-cyan-300">
+                  <div className="flex items-center gap-2 text-orange-300">
                     <Sparkles className="h-4 w-4" />
                     <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">Selected Master Item</p>
                   </div>
@@ -493,7 +492,7 @@ function StockroomAdminPage() {
           </div>
           <div className="space-y-5">
             {adminError ? <p className="text-sm text-rose-400">{adminError}</p> : null}
-            {sceneSaveStatus === 'saved' ? <p className="text-sm text-cyan-300">Draft saved.</p> : null}
+            {sceneSaveStatus === 'saved' ? <p className="text-sm text-orange-300">Draft saved.</p> : null}
             {bootstrapError ? <p className="text-sm text-rose-400">{bootstrapError}</p> : null}
 
             <Surface className="overflow-hidden p-4">
@@ -501,7 +500,7 @@ function StockroomAdminPage() {
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">Workspace Surface</p>
                   <p className="mt-1 text-sm text-slate-300">
-                    Drag to orbit. Scroll to zoom. Press <span className="font-semibold text-cyan-300">R</span> to rotate the selected object.
+                    Drag to orbit. Scroll to zoom. Press <span className="font-semibold text-orange-400">R</span> to rotate the selected object.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -518,7 +517,7 @@ function StockroomAdminPage() {
                 </div>
               </div>
 
-              <div className="relative mt-4 h-[620px] overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(61,223,255,0.12),_transparent_26%),linear-gradient(180deg,#071122_0%,#040915_100%)]">
+              <div className="relative mt-4 h-[620px] overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(249,115,22,0.12),_transparent_26%),linear-gradient(180deg,#020617_0%,#0a0f1a_100%)]">
                 {loadingBootstrap ? (
                   <StockroomCanvasFallback tone="dark" />
                 ) : bootstrapError ? (
@@ -589,7 +588,7 @@ function StockroomAdminPage() {
                 <p className="mt-1 text-sm text-slate-400">{selectedMasterItem.sku}</p>
               </div>
               <div className="flex items-center gap-2 text-sm text-slate-400">
-                <Sparkles className="h-4 w-4 text-cyan-300" />
+                <Sparkles className="h-4 w-4 text-orange-400" />
                 Save precise metadata and storage placement.
               </div>
             </div>

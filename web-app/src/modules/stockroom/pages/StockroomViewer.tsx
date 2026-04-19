@@ -42,7 +42,7 @@ function Surface({
   className?: string;
 }) {
   return (
-    <section className={`rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,16,30,0.92),rgba(5,12,24,0.82))] shadow-[0_24px_60px_rgba(2,6,23,0.34)] backdrop-blur-2xl ${className}`}>
+    <section className={`rounded-[24px] border border-white/5 bg-[linear-gradient(180deg,rgba(15,23,42,0.92),rgba(2,6,23,0.88))] shadow-[0_24px_60px_rgba(0,0,0,0.4)] backdrop-blur-2xl ${className}`}>
       {children}
     </section>
   );
@@ -76,11 +76,10 @@ function ModeButton({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition ${
-        active
-          ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-[0_14px_34px_rgba(14,165,233,0.24)]'
-          : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
-      }`}
+      className={`inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition ${active
+          ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-[0_14px_34px_rgba(249,115,22,0.24)]'
+          : 'border border-white/5 bg-white/5 text-slate-300 hover:bg-white/10'
+        }`}
     >
       {children}
     </button>
@@ -100,7 +99,7 @@ function GuidanceCard({
 }) {
   return (
     <div className="rounded-[26px] border border-white/10 bg-white/5 p-5">
-      <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400/25 to-blue-500/25 text-cyan-200">
+      <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500/25 to-amber-500/25 text-orange-400">
         {icon}
       </div>
       <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.26em] text-slate-500">{eyebrow}</p>
@@ -174,25 +173,25 @@ function StockroomViewer() {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_top_left,_rgba(61,223,255,0.12),_transparent_26%),radial-gradient(circle_at_top_right,_rgba(59,130,246,0.16),_transparent_22%),linear-gradient(180deg,#030712_0%,#040915_52%,#07111f_100%)] p-1">
+    <div className="relative overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.12),_transparent_26%),radial-gradient(circle_at_top_right,_rgba(245,158,11,0.16),_transparent_22%),linear-gradient(180deg,#020617_0%,#0f172a_52%,#1e293b_100%)] p-1">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -left-24 top-0 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
-        <div className="absolute right-0 top-24 h-80 w-80 rounded-full bg-blue-500/10 blur-3xl" />
+        <div className="absolute -left-24 top-0 h-72 w-72 rounded-full bg-orange-500/10 blur-3xl" />
+        <div className="absolute right-0 top-24 h-80 w-80 rounded-full bg-amber-500/10 blur-3xl" />
       </div>
 
       <div className="relative space-y-6">
         <Surface className="overflow-hidden px-6 py-7">
           <div className="flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-4xl">
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.32em] text-cyan-200">
+              <div className="inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.32em] text-orange-400">
                 <Warehouse className="h-3.5 w-3.5" />
-                Stockroom Navigator
+                VIEW MODE - Staff
               </div>
               <h1 className="mt-5 max-w-4xl text-4xl font-semibold tracking-tight text-white sm:text-[3.15rem] sm:leading-[1.02]">
-                Premium wayfinding for a mapped retail floor.
+                <span className="text-orange-500">LIMEN</span> | Genuine Auto Parts
               </h1>
-              <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
-                Search any stocked part, jump to the right floor, and inspect the exact shelf, level, and slot inside a cinematic cutaway store model.
+              <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-400">
+                Instantly locate any product inside the digital 3D stockroom twin.
               </p>
             </div>
 
@@ -219,9 +218,9 @@ function StockroomViewer() {
                   <button
                     type="button"
                     onClick={() => navigate('/stockroom/admin')}
-                    className="rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(14,165,233,0.26)] transition hover:brightness-110"
+                    className="rounded-full bg-gradient-to-r from-slate-600 to-slate-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(71,85,105,0.26)] transition hover:brightness-110"
                   >
-                    Layout Admin
+                    Admin Edit Mode
                   </button>
                 ) : null}
               </div>
@@ -235,7 +234,7 @@ function StockroomViewer() {
                     placeholder="Search by item name, SKU, or part code..."
                     className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
                   />
-                  {searching ? <Sparkles className="h-4 w-4 animate-pulse text-cyan-300" /> : null}
+                  {searching ? <Sparkles className="h-4 w-4 animate-pulse text-orange-400" /> : null}
                 </div>
                 {searchError ? <p className="mt-3 text-sm text-rose-400">{searchError}</p> : null}
               </div>
@@ -261,7 +260,7 @@ function StockroomViewer() {
                             Floor {result.floor.floorNumber} | {result.zone.code} | {result.shelf.code}
                           </p>
                         </div>
-                        <span className="rounded-full bg-slate-950/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
+                        <span className="rounded-full bg-slate-950/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-orange-300">
                           {formatMatchLabel(result)}
                         </span>
                       </div>
@@ -272,7 +271,7 @@ function StockroomViewer() {
             </Surface>
 
             <Surface className="p-5">
-              <div className="flex items-center gap-2 text-cyan-300">
+              <div className="flex items-center gap-2 text-orange-400">
                 <Compass className="h-4 w-4" />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">Route Guidance</p>
               </div>
@@ -304,7 +303,7 @@ function StockroomViewer() {
                     <div className="mt-3 space-y-3">
                       {selectedItemDetails.steps.map((step) => (
                         <div key={step} className="flex items-start gap-3 text-sm text-slate-300">
-                          <ArrowRight className="mt-0.5 h-4 w-4 text-cyan-300" />
+                          <ArrowRight className="mt-0.5 h-4 w-4 text-orange-400" />
                           <span>{step}</span>
                         </div>
                       ))}
@@ -341,7 +340,7 @@ function StockroomViewer() {
                 </div>
 
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
-                  <Compass className="h-4 w-4 text-cyan-300" />
+                  <Compass className="h-4 w-4 text-orange-400" />
                   Drag to orbit. Scroll to zoom. Click stairs to change floors.
                 </div>
               </div>
@@ -380,7 +379,7 @@ function StockroomViewer() {
                   </div>
                 </div>
 
-                <div className="mt-4 h-[720px] rounded-[30px] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(61,223,255,0.12),_transparent_26%),linear-gradient(180deg,#071122_0%,#040915_100%)] p-3">
+                <div className="mt-4 h-[720px] rounded-[30px] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(249,115,22,0.12),_transparent_26%),linear-gradient(180deg,#020617_0%,#0a0f1a_100%)] p-3">
                   <Suspense fallback={<StockroomCanvasFallback tone="dark" />}>
                     <StockroomScene
                       bootstrap={bootstrap}
