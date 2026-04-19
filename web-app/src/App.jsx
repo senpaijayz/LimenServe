@@ -17,6 +17,7 @@ const ServiceOrderList = lazy(() => import('./modules/services/pages/ServiceOrde
 const StockroomV2 = lazy(() => import('./modules/stockroom/pages/StockroomV2'));
 const SalesReport = lazy(() => import('./modules/reports/pages/SalesReport'));
 const UserManagement = lazy(() => import('./modules/users/pages/UserManagement'));
+const PartsMapping = lazy(() => import('./modules/parts-mapping/PartsMapping'));
 
 const PublicHome = lazy(() => import('./modules/public/pages/PublicHome'));
 const PublicCatalog = lazy(() => import('./modules/public/pages/PublicCatalog'));
@@ -79,6 +80,7 @@ function App() {
                   <Route path="/quotation" element={renderRoute(QuoteBuilder, <WorkspaceRouteFallback title="Loading quotation builder" />)} />
                   <Route path="/services" element={renderRoute(ServiceOrderList, <WorkspaceRouteFallback title="Loading service orders" />)} />
                   <Route path="/stockroom" element={renderRoute(StockroomV2, <WorkspaceRouteFallback title="Loading 3D Stockroom V2" />)} />
+                  <Route path="/parts-mapping" element={renderRoute(PartsMapping, <WorkspaceRouteFallback title="Loading Parts Mapping" />)} />
                   <Route path="/reports" element={renderRoute(SalesReport, <WorkspaceRouteFallback title="Loading reports" />)} />
                   <Route path="/reports/sales" element={renderRoute(SalesReport, <WorkspaceRouteFallback title="Loading reports" />)} />
                   <Route path="/users" element={renderRoute(UserManagement, <WorkspaceRouteFallback title="Loading user management" />)} />
