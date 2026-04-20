@@ -319,7 +319,7 @@ const PublicHome = () => {
                                         </span>
                                     </div>
                                     <div className="flex h-[220px] items-center justify-center overflow-hidden rounded-3xl bg-[linear-gradient(135deg,_rgba(255,255,255,0.96),_rgba(241,245,249,0.92)_55%,_rgba(226,232,240,0.88))] p-4 shadow-inner">
-                                        <img src={part.image} alt={part.name} className="h-full w-full object-contain drop-shadow-[0_24px_30px_rgba(15,23,42,0.18)]" />
+                                        <img src={part.image} alt={part.name} className="h-full w-full object-contain mix-blend-multiply drop-shadow-[0_24px_30px_rgba(15,23,42,0.18)]" />
                                     </div>
                                 </div>
                                 <div className="p-6">
@@ -401,7 +401,7 @@ const PublicHome = () => {
                 <div className="mx-auto flex max-w-[1600px] flex-col gap-6 rounded-[2rem] bg-primary-950 px-6 py-10 text-white md:flex-row md:items-center md:justify-between md:px-10">
                     <div className="max-w-3xl">
                         <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/60">Ready to order</p>
-                        <h2 className="mt-3 text-4xl font-bold">Search parts now or move straight into a quote request.</h2>
+                        <h2 className="mt-3 text-4xl font-bold text-white">Search parts now or move straight into a quote request.</h2>
                         <p className="mt-4 text-base leading-relaxed text-white/80">
                             Keep the buying path short: browse by category, search by part or vehicle, then open a quotation request once the customer is ready.
                         </p>
