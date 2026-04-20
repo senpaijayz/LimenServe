@@ -13,8 +13,8 @@ export default function StockroomSceneV2() {
             camera={{ position: [0, 10, 25], fov: 45 }}
             gl={{ antialias: false, powerPreference: "high-performance" }}
         >
-            <color attach="background" args={['#05080f']} />
-            <fog attach="fog" args={['#05080f', 15, 60]} />
+            <color attach="background" args={['#0f172a']} />
+            <fog attach="fog" args={['#0f172a', 15, 60]} />
 
             <Suspense fallback={null}>
                 {/* Lights, Floors, Walls, Atmosphere */}
@@ -31,15 +31,12 @@ export default function StockroomSceneV2() {
             <StockroomCameraControls />
 
             {/* Cinematic Post-Processing */}
-            <EffectComposer disableNormalPass multisampling={4}>
+            <EffectComposer disableNormalPass multisampling={0}>
                 <Bloom
-                    luminanceThreshold={1.2}
+                    luminanceThreshold={1.5}
                     luminanceSmoothing={0.9}
-                    intensity={1.5}
-                    mipmapBlur
+                    intensity={0.8}
                 />
-                <Vignette eskil={false} offset={0.1} darkness={1.1} />
-                <Noise opacity={0.03} />
             </EffectComposer>
         </Canvas>
     );
