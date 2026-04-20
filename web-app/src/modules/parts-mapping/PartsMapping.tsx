@@ -154,7 +154,7 @@ export default function PartsMapping() {
     const stats = store.stats();
 
     return (
-        <div className="stockroom-viewer animate-fade-in pb-10">
+        <div className="stockroom-viewer animate-fade-in pb-10 bg-[#0a0f1a] text-white min-h-[calc(100vh-100px)] p-6 rounded-2xl border border-slate-800/50 shadow-2xl">
             <header className="page-header">
                 <div className="flex justify-between items-center flex-wrap gap-4">
                     <div>
@@ -354,7 +354,7 @@ export default function PartsMapping() {
             )}
 
             {/* CANVAS CONTAINER */}
-            <div className="card" style={{ height: 600, padding: 0, overflow: 'hidden', position: 'relative' }}>
+            <div className="card shadow-inner" style={{ height: 600, padding: 0, overflow: 'hidden', position: 'relative', background: '#070b14', border: '1px solid #1e293b' }}>
 
                 {/* Floor Transition Overlay */}
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, #1e293b, #0f172a)', zIndex: store.isTransitioning ? 100 : -1, opacity: store.isTransitioning ? 1 : 0, transition: 'opacity 0.3s ease-in-out', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
@@ -404,7 +404,7 @@ export default function PartsMapping() {
                     { icon: '🚪', title: 'Entrances', count: stats.entrances },
                     { icon: '🏢', title: 'Floors', count: stats.floors }
                 ].map((item, i) => (
-                    <div key={i} className="card scale-100 hover:scale-[1.02] transition-transform">
+                    <div key={i} className="card scale-100 hover:scale-[1.02] transition-transform bg-[#0f172a] border-slate-800">
                         <div className="flex items-center gap-4">
                             <div className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl shadow-glow-primary" style={{ background: 'var(--gradient-primary)' }}>
                                 {item.icon}

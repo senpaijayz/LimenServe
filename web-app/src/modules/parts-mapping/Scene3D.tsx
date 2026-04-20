@@ -37,10 +37,10 @@ export default function Scene3D() {
 
     return (
         <>
-            <ambientLight intensity={0.9} />
-            <directionalLight position={[10, 25, 15]} intensity={1.3} castShadow />
-            <directionalLight position={[-10, 20, -10]} intensity={0.5} />
-            <pointLight position={[0, 15, 0]} intensity={1} distance={50} />
+            <ambientLight intensity={0.4} />
+            <directionalLight position={[10, 25, 15]} intensity={0.9} castShadow />
+            <directionalLight position={[-10, 20, -10]} intensity={0.3} />
+            <pointLight position={[0, 15, 0]} intensity={0.5} distance={50} />
 
             {/* Current Floor Objects */}
             {layout.objects
