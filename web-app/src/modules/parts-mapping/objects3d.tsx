@@ -529,7 +529,7 @@ export const Wall = (p: ObjProps) => {
     const s = p.size || [10, 3, 0.3];
     return (
         <Wrap {...p}>
-            <mesh position={[0, s[1] / 2, 0]}><boxGeometry args={s as [number, number, number]} /><meshStandardMaterial color="#0a0f1a" /></mesh>
+            <mesh position={[0, s[1] / 2, 0]}><boxGeometry args={s as [number, number, number]} /><meshStandardMaterial color="#0f172a" /></mesh>
             {p.editMode && <Text position={[0, s[1] + 0.3, 0]} fontSize={0.2} color="#fff" anchorX="center">{p.label}</Text>}
         </Wrap>
     );
@@ -550,7 +550,7 @@ export const FloorObj = (p: ObjProps & { floor?: number; isVisible?: boolean }) 
     const floor = p.floor || 1;
     return (
         <Wrap {...p} label={`Floor ${floor}`}>
-            <mesh position={[0, -s[1] / 2 - 0.01, 0]}><boxGeometry args={s as [number, number, number]} /><meshStandardMaterial color={p.color || (floor === 1 ? '#111827' : '#0f172a')} /></mesh>
+            <mesh position={[0, -s[1] / 2 - 0.01, 0]}><boxGeometry args={s as [number, number, number]} /><meshStandardMaterial color={p.color || (floor === 1 ? '#1e293b' : '#334155')} /></mesh>
             {p.editMode && <gridHelper args={[Math.max(s[0], s[2]), Math.max(s[0], s[2]), '#000000', '#000000']} position={[0, s[1] + 0.01, 0]} />}
         </Wrap>
     );

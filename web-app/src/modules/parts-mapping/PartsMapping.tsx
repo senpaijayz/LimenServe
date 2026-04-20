@@ -28,12 +28,12 @@ function SearchBar({ onPartSelect, disabled }: { onPartSelect: (part: any) => vo
 
     return (
         <div style={{ position: 'relative', width: '100%', maxWidth: 400 }}>
-            <div className="form-input-icon">
-                <Search className="icon" size={18} />
+            <div className="relative flex items-center w-full">
+                <Search className="absolute left-3 text-slate-400" size={18} />
                 <input
                     type="text"
-                    className="search-input form-input"
-                    placeholder="Search parts to locate..."
+                    className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl pl-10 pr-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all shadow-inner"
+                    placeholder="Search by part number, material code, or scan..."
                     value={query}
                     onChange={e => setQuery(e.target.value)}
                     disabled={disabled}
@@ -158,14 +158,14 @@ export default function PartsMapping() {
             <header className="page-header">
                 <div className="flex justify-between items-center flex-wrap gap-4">
                     <div>
-                        <h1 className="page-title">
-                            <span className="text-gradient" style={{ backgroundImage: 'linear-gradient(135deg, #DC2626 0%, #f97316 100%)' }}>
+                        <h1 className="text-3xl font-bold tracking-tight mb-1">
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500">
                                 {store.currentFloor === 1 ? '1st' : '2nd'} Floor
-                            </span> - Parts Mapping
+                            </span> <span className="text-white">- Parts Mapping</span>
                             {store.editMode && <span style={{ color: '#DC2626', marginLeft: 10, fontSize: 16 }}>✏️ DESIGN MODE</span>}
                         </h1>
-                        <p className="page-subtitle">
-                            {store.editMode ? 'Drag to move, use controls to edit layout' : 'Interactive 3D digital twin - Locate inventory instantly'}
+                        <p className="text-slate-400 text-sm font-medium">
+                            {store.editMode ? 'Drag to move, use controls to edit layout' : 'Interactive 3D digital twin • Locate inventory instantly'}
                         </p>
                         <div style={{ marginTop: 16 }}>
                             <SearchBar onPartSelect={handlePartSearch} disabled={store.editMode} />
