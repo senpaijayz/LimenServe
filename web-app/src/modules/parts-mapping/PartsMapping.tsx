@@ -210,7 +210,7 @@ export default function PartsMapping() {
                                 <Target size={24} color="white" />
                             </div>
                             <div>
-                                <h3 className="font-bold text-lg">Navigating to: {store.highlightedPart.material || 'Selected Part'}</h3>
+                                <h3 className="font-bold text-lg text-white">Navigating to: {store.highlightedPart.material || 'Selected Part'}</h3>
                                 <p className="text-gray-400">
                                     {store.highlightedPart.description} • Location: <strong className="text-white">{store.highlightedPart.location_code || 'Unknown'}</strong>
                                 </p>
@@ -410,8 +410,8 @@ export default function PartsMapping() {
                                 {item.icon}
                             </div>
                             <div>
-                                <h4 className="font-bold text-2xl">{item.count}</h4>
-                                <p className="text-gray-400 text-sm uppercase font-semibold">{item.title}</p>
+                                <h4 className="font-bold text-3xl text-white tracking-tight">{item.count}</h4>
+                                <p className="text-slate-400 text-sm uppercase font-bold tracking-wider mt-1">{item.title}</p>
                             </div>
                         </div>
                     </div>
@@ -422,7 +422,7 @@ export default function PartsMapping() {
             {saveAsModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[99999] flex items-center justify-center">
                     <div className="bg-gray-800 border border-gray-700 p-6 rounded-2xl w-full max-w-md shadow-2xl">
-                        <h3 className="text-xl font-bold mb-4">Save Layout As...</h3>
+                        <h3 className="text-xl font-bold mb-4 text-white">Save Layout As...</h3>
                         <div className="form-group mb-6">
                             <label className="form-label">Layout Name</label>
                             <input
