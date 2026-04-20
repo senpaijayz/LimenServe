@@ -7,6 +7,7 @@ import authRoutes from './routes/authRoutes.js';
 import catalogRoutes from './routes/catalogRoutes.js';
 import estimateRoutes from './routes/estimateRoutes.js';
 import mechanicsRoutes from './routes/mechanicsRoutes.js';
+import partsMappingRoutes from './routes/partsMappingRoutes.js';
 import posRoutes from './routes/posRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
 import stockroomRoutes from './routes/stockroomRoutes.js';
@@ -73,6 +74,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/pos', posRoutes);
 app.use('/api/estimates', estimateRoutes);
 app.use('/api/mechanics', mechanicsRoutes);
+app.use('/api/parts-mapping', partsMappingRoutes);
 app.use('/api/stockroom', stockroomRoutes);
 
 app.use((error, _req, res, _next) => {

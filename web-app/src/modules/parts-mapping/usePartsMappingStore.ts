@@ -1,5 +1,11 @@
 import { create } from 'zustand';
-import { supabase } from '../../services/supabase';
+import {
+    createPartsMappingLayout,
+    deletePartsMappingLayout,
+    getPartsMappingLayouts,
+    setPriorityPartsMappingLayout,
+    updatePartsMappingLayout,
+} from '../../services/partsMappingApi';
 
 // ─── Types ───────────────────────────────────────────────────
 export interface LayoutObject {
@@ -171,9 +177,7 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
     initialize: async () => {
         set({ isLoading: true });
         try {
-            const { data, error } = await supabase.from('pm_layouts').select('*').order('created_at', { ascending: false });
-            if (error || !data) throw error;
-            const layouts = data as SavedLayout[];
+            const layouts = await getPartsMappingLayouts() as SavedLayout[];
             set({ savedLayouts: layouts });
 
             // Try last-used from localStorage
@@ -221,23 +225,56 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
         localStorage.setItem('stockroomLayoutV2', data);
         try {
             if (currentLayoutId) {
-                await supabase.from('pm_layouts').update({ layout_data: data, updated_at: new Date().toISOString() }).eq('id', currentLayoutId);
-                set({ savedLayouts: savedLayouts.map(l => l.id === currentLayoutId ? { ...l, layout_data: data } : l) });
+                const updatedLayout = await updatePartsMappingLayout(currentLayoutId, {
+                    layoutData: data,
+                }) as SavedLayout;
+
+                set({
+                    savedLayouts: savedLayouts.map(l => l.id === currentLayoutId ? updatedLayout : l),
+                    currentLayoutName: updatedLayout.name,
+                });
+                return;
             }
-        } catch (e) { console.error('Save failed', e); }
+
+            const fallbackName = currentLayoutName && !['Loading...', 'Default', 'Unsaved', 'Local'].includes(currentLayoutName)
+                ? currentLayoutName
+                : `Layout ${new Date().toLocaleString()}`;
+
+            const insertedLayout = await createPartsMappingLayout({
+                name: fallbackName,
+                description: `Created ${new Date().toLocaleDateString()}`,
+                layoutData: data,
+                isDefault: savedLayouts.length === 0,
+            }) as SavedLayout;
+
+            set({
+                savedLayouts: [insertedLayout, ...savedLayouts],
+                currentLayoutId: insertedLayout.id,
+                currentLayoutName: insertedLayout.name,
+            });
+            localStorage.setItem('lastUsedLayoutId', String(insertedLayout.id));
+        } catch (e) { console.error('Save failed', e); throw e; }
     },
 
     saveLayoutAs: async (name) => {
         const { layout, savedLayouts } = get();
         const data = JSON.stringify(layout);
         try {
-            const { data: result, error } = await supabase.from('pm_layouts').insert({
-                name, description: `Created ${new Date().toLocaleDateString()}`, layout_data: data, is_default: savedLayouts.length === 0,
-            }).select().single();
-            if (error) throw error;
-            set({ savedLayouts: [result, ...savedLayouts], currentLayoutId: result.id, currentLayoutName: name });
+            const trimmedName = name.trim();
+            if (!trimmedName) {
+                throw new Error('Layout name is required.');
+            }
+
+            const result = await createPartsMappingLayout({
+                name: trimmedName,
+                description: `Created ${new Date().toLocaleDateString()}`,
+                layoutData: data,
+                isDefault: savedLayouts.length === 0,
+            }) as SavedLayout;
+            set({ savedLayouts: [result, ...savedLayouts], currentLayoutId: result.id, currentLayoutName: result.name });
+            localStorage.setItem('stockroomLayoutV2', data);
             localStorage.setItem('lastUsedLayoutId', String(result.id));
-        } catch (e) { console.error('Save As failed', e); }
+        } catch (e) { console.error('Save As failed', e); throw e; }
     },
 
     loadLayout: (l) => {
@@ -249,22 +286,24 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
 
     deleteLayout: async (id) => {
         try {
-            await supabase.from('pm_layouts').delete().eq('id', id);
+            await deletePartsMappingLayout(id);
             set(s => ({
                 savedLayouts: s.savedLayouts.filter(l => l.id !== id),
                 currentLayoutId: s.currentLayoutId === id ? null : s.currentLayoutId,
                 currentLayoutName: s.currentLayoutId === id ? 'Unsaved' : s.currentLayoutName,
             }));
-        } catch (e) { console.error('Delete failed', e); }
+            if (get().currentLayoutId === null) {
+                localStorage.removeItem('lastUsedLayoutId');
+            }
+        } catch (e) { console.error('Delete failed', e); throw e; }
     },
 
     setPriorityLayout: async (id) => {
         try {
-            // Unset all defaults
-            await supabase.from('pm_layouts').update({ is_default: false }).eq('is_default', true);
-            await supabase.from('pm_layouts').update({ is_default: true }).eq('id', id);
+            await setPriorityPartsMappingLayout(id);
+
             set(s => ({ savedLayouts: s.savedLayouts.map(l => ({ ...l, is_default: l.id === id })) }));
-        } catch (e) { console.error('Set priority failed', e); }
+        } catch (e) { console.error('Set priority failed', e); throw e; }
     },
 
     resetLayout: () => {

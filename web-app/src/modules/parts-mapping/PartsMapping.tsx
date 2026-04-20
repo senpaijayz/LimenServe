@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import useDataStore from '../../store/useDataStore';
 import api from '../../services/api';
+import { useToast } from '../../components/ui/Toast';
 
 // Note: Reusing the existing global search component from useDataStore to integrate perfectly with the rest of the app.
 function SearchBar({ onPartSelect, disabled }: { onPartSelect: (part: any) => void; disabled?: boolean }) {
@@ -65,6 +66,7 @@ function SearchBar({ onPartSelect, disabled }: { onPartSelect: (part: any) => vo
 
 export default function PartsMapping() {
     const store = usePartsMappingStore();
+    const { success, error: showError } = useToast();
     const selectedItem = null;
     const clearSelection = () => { };
     const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -152,6 +154,47 @@ export default function PartsMapping() {
     }, [layoutMenuOpen]);
 
     const stats = store.stats();
+
+    const handleSaveLayout = async () => {
+        try {
+            await store.saveLayout();
+            success('Layout saved to database.');
+        } catch (err) {
+            showError(err instanceof Error ? err.message : 'Failed to save layout.');
+        }
+    };
+
+    const handleSaveLayoutAs = async () => {
+        const trimmedName = saveName.trim();
+        if (!trimmedName) return;
+
+        try {
+            await store.saveLayoutAs(trimmedName);
+            setSaveAsModal(false);
+            setSaveName('');
+            success(`Saved layout "${trimmedName}".`);
+        } catch (err) {
+            showError(err instanceof Error ? err.message : 'Failed to save layout.');
+        }
+    };
+
+    const handleDeleteLayout = async (layoutId: number, layoutName: string) => {
+        try {
+            await store.deleteLayout(layoutId);
+            success(`Deleted "${layoutName}".`);
+        } catch (err) {
+            showError(err instanceof Error ? err.message : 'Failed to delete layout.');
+        }
+    };
+
+    const handleSetPriorityLayout = async (layoutId: number, layoutName: string) => {
+        try {
+            await store.setPriorityLayout(layoutId);
+            success(`"${layoutName}" is now the priority layout.`);
+        } catch (err) {
+            showError(err instanceof Error ? err.message : 'Failed to set priority layout.');
+        }
+    };
 
     return (
         <div className="stockroom-viewer animate-fade-in pb-10 bg-[#0a0f1a] text-white min-h-[calc(100vh-100px)] p-6 rounded-2xl border border-slate-800/50 shadow-2xl">
@@ -335,8 +378,8 @@ export default function PartsMapping() {
                                                     </div>
 
                                                     <div className="flex gap-1">
-                                                        <button className="p-1.5 hover:bg-gray-600 rounded text-gray-400 hover:text-primary transition" onClick={() => store.setPriorityLayout(l.id)} title="Set Priority"><Star size={14} fill={l.is_default ? '#DC2626' : 'none'} color={l.is_default ? '#DC2626' : 'currentColor'} /></button>
-                                                        <button className="p-1.5 hover:bg-gray-600 rounded text-gray-400 hover:text-error transition" onClick={() => { if (!l.is_default && confirm(`Delete ${l.name}?`)) store.deleteLayout(l.id); }} title="Delete" disabled={l.is_default} style={{ opacity: l.is_default ? 0.3 : 1 }}><Trash2 size={14} /></button>
+                                                        <button className="p-1.5 hover:bg-gray-600 rounded text-gray-400 hover:text-primary transition" onClick={() => handleSetPriorityLayout(l.id, l.name)} title="Set Priority"><Star size={14} fill={l.is_default ? '#DC2626' : 'none'} color={l.is_default ? '#DC2626' : 'currentColor'} /></button>
+                                                        <button className="p-1.5 hover:bg-gray-600 rounded text-gray-400 hover:text-error transition" onClick={() => { if (!l.is_default && confirm(`Delete ${l.name}?`)) { void handleDeleteLayout(l.id, l.name); } }} title="Delete" disabled={l.is_default} style={{ opacity: l.is_default ? 0.3 : 1 }}><Trash2 size={14} /></button>
                                                     </div>
                                                 </div>
                                             ))
@@ -345,7 +388,7 @@ export default function PartsMapping() {
                                 )}
                             </div>
 
-                            <button className="btn btn-secondary" onClick={store.saveLayout}><Save size={18} /> Save</button>
+                            <button className="btn btn-secondary" onClick={() => { void handleSaveLayout(); }}><Save size={18} /> Save</button>
                             <button className="btn btn-outline" onClick={() => setSaveAsModal(true)}><Plus size={18} /> Save As</button>
                             <button className="btn btn-outline" onClick={() => { if (confirm('Reset layout?')) store.resetLayout(); }} title="Reset to Empty"><Home size={18} /></button>
                         </div>
@@ -432,7 +475,7 @@ export default function PartsMapping() {
                                 value={saveName}
                                 onChange={e => setSaveName(e.target.value)}
                                 autoFocus
-                                onKeyDown={e => { if (e.key === 'Enter' && saveName) { store.saveLayoutAs(saveName); setSaveAsModal(false); setSaveName(''); } }}
+                                onKeyDown={e => { if (e.key === 'Enter' && saveName.trim()) { void handleSaveLayoutAs(); } }}
                             />
                         </div>
                         <div className="flex justify-end gap-3">
@@ -440,7 +483,7 @@ export default function PartsMapping() {
                             <button
                                 className="btn btn-primary"
                                 disabled={!saveName.trim()}
-                                onClick={() => { store.saveLayoutAs(saveName); setSaveAsModal(false); setSaveName(''); }}
+                                onClick={() => { void handleSaveLayoutAs(); }}
                             >
                                 Save Layout
                             </button>
