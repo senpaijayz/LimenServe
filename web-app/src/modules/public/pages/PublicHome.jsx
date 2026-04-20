@@ -17,10 +17,10 @@ import {
     Wrench,
 } from 'lucide-react';
 import storefrontImage from '../../../assets/homepage/limen-storefront-real.jpg';
-import monteroImage from '../../../assets/homepage/montero-real.jpg';
-import tritonImage from '../../../assets/homepage/triton-real.jpg';
-import xforceImage from '../../../assets/homepage/xforce-real.jpg';
-import xpanderImage from '../../../assets/homepage/xpander-real.jpg';
+import monteroImage from '../../../assets/homepage/montero-trimmed.png';
+import tritonImage from '../../../assets/homepage/triton-trimmed.png';
+import xforceImage from '../../../assets/homepage/xforce-trimmed.png';
+import xpanderImage from '../../../assets/homepage/xpander-trimmed.png';
 
 const categoryCards = [
     { title: 'Engine Parts', description: 'Filters, timing components, gaskets, and cooling parts.', icon: Cog, query: 'engine' },
@@ -319,7 +319,7 @@ const PublicHome = () => {
                                         </span>
                                     </div>
                                     <div className="flex h-[220px] items-center justify-center overflow-hidden rounded-3xl bg-[linear-gradient(135deg,_rgba(255,255,255,0.96),_rgba(241,245,249,0.92)_55%,_rgba(226,232,240,0.88))] p-4 shadow-inner">
-                                        <img src={part.image} alt={part.name} className="h-full w-full object-contain mix-blend-multiply drop-shadow-[0_24px_30px_rgba(15,23,42,0.18)]" />
+                                        <img src={part.image} alt={part.name} className="h-full w-full object-contain drop-shadow-[0_24px_30px_rgba(15,23,42,0.18)]" />
                                     </div>
                                 </div>
                                 <div className="p-6">
