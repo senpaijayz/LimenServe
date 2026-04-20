@@ -1,15 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-    Box,
     DollarSign,
     AlertTriangle,
-    FileText,
     Package,
     RefreshCw,
     Sparkles,
     TrendingUp,
-    Wrench,
 } from 'lucide-react';
 import Card, { KPICard } from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
@@ -20,33 +17,6 @@ import { getAnalyticsDashboardSnapshot, runFullAnalyticsRefresh } from '../../..
 const SalesChart = lazy(() => import('../components/SalesChart'));
 const LowStockAlert = lazy(() => import('../components/LowStockAlert'));
 const RecentTransactions = lazy(() => import('../components/RecentTransactions'));
-
-const quickActions = [
-    {
-        title: 'Continue Quotation',
-        description: 'Open the quote builder and price the next customer request.',
-        to: '/quotation',
-        icon: FileText,
-    },
-    {
-        title: 'Open Inventory',
-        description: 'Check live parts quantities and low-stock attention items.',
-        to: '/inventory',
-        icon: Package,
-    },
-    {
-        title: 'Service Orders',
-        description: 'Review active jobs, intake, and service status updates.',
-        to: '/services',
-        icon: Wrench,
-    },
-    {
-        title: 'Open Stockroom',
-        description: 'Jump to the locator and warehouse visualization flow.',
-        to: '/stockroom',
-        icon: Box,
-    },
-];
 
 function DashboardPanelFallback({ title }) {
     return (
@@ -213,28 +183,6 @@ const AdminDashboard = () => {
                     </div>
                 </Card>
             )}
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {quickActions.map((action) => {
-                    const Icon = action.icon;
-                    return (
-                        <Link
-                            key={action.title}
-                            to={action.to}
-                            className="group rounded-2xl border border-primary-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-primary-300 hover:shadow-lg"
-                        >
-                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-50 text-accent-primary">
-                                <Icon className="h-5 w-5" />
-                            </div>
-                            <h2 className="mt-5 text-lg font-semibold text-primary-950">{action.title}</h2>
-                            <p className="mt-2 text-sm leading-relaxed text-primary-500">{action.description}</p>
-                            <p className="mt-4 text-sm font-semibold text-accent-blue transition group-hover:text-accent-blueDark">
-                                Open now
-                            </p>
-                        </Link>
-                    );
-                })}
-            </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <KPICard title="Predicted Revenue" value={loading ? 'Loading...' : formatCurrency(predictedRevenue)} icon={<DollarSign className="w-6 h-6" />} trend="up" trendValue={`${topProductForecasts.length} top products`} accentColor="border-accent-blue" iconBg="bg-blue-50 text-accent-blue" />
