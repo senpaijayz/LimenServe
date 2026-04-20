@@ -1,33 +1,16 @@
-import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Menu, Wifi, WifiOff } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/useAuth';
-import NotificationsDropdown from '../ui/NotificationsDropdown';
 
 /**
  * Header Component
- * Top navigation bar with search, notifications, and offline indicator
+ * Top navigation bar with page context and staff status messaging
  */
 const Header = () => {
     const { sidebarCollapsed, toggleMobileSidebar } = useTheme();
     const { user, isProfileReady, profileWarning } = useAuth();
     const location = useLocation();
-    const [isOnline, setIsOnline] = useState(navigator.onLine);
-
-    // Monitor online status
-    useEffect(() => {
-        const handleOnline = () => setIsOnline(true);
-        const handleOffline = () => setIsOnline(false);
-
-        window.addEventListener('online', handleOnline);
-        window.addEventListener('offline', handleOffline);
-
-        return () => {
-            window.removeEventListener('online', handleOnline);
-            window.removeEventListener('offline', handleOffline);
-        };
-    }, []);
 
     // Get page title from path
     const getPageTitle = () => {
@@ -88,27 +71,6 @@ const Header = () => {
                         {profileWarning}
                     </div>
                 )}
-
-                {/* Online/Offline Indicator */}
-                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${isOnline
-                    ? 'bg-accent-success/20 text-accent-success'
-                    : 'bg-accent-danger/20 text-accent-danger'
-                    }`}>
-                    {isOnline ? (
-                        <>
-                            <Wifi className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Online</span>
-                        </>
-                    ) : (
-                        <>
-                            <WifiOff className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Offline</span>
-                        </>
-                    )}
-                </div>
-
-                {/* Notifications */}
-                <NotificationsDropdown />
 
                 {/* User Avatar (Mobile) */}
                 <div className="lg:hidden w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center border border-primary-200">
