@@ -1,230 +1,453 @@
-import React, { useEffect, useState } from 'react';
-import { usePartsMappingStore, ObjectType } from './usePartsMappingStore';
-import { OBJECT_TYPE_INFO } from './objects3d';
+import React, { useEffect, useState, useRef } from 'react';
+import { Canvas } from '@react-three/fiber';
+import { usePartsMappingStore, OBJECT_TYPES } from './usePartsMappingStore';
 import Scene3D from './Scene3D';
 import {
-    Search, Plus, Save, RotateCcw, Download, Pencil, Grid3X3,
-    ZoomIn, ZoomOut, ChevronDown, Trash2, X, Layers, Box, MonitorSmartphone, DoorOpen
+    ChevronUp, ChevronDown, Eye, Grid3X3, Move, Plus, Search,
+    RotateCcw, RotateCw, Lock, Unlock, Type, Trash2, Database,
+    FolderOpen, Check, X, Star, Edit2, Save, Target, Home, ZoomIn, ZoomOut
 } from 'lucide-react';
+import useDataStore from '../../store/useDataStore';
+import api from '../../services/api';
 
-export default function PartsMapping() {
-    const {
-        initialize, isLoading, floors, currentFloorId, setFloor,
-        isDesignMode, toggleDesignMode, is2DView, toggle2DView,
-        searchQuery, setSearchQuery, highlightObject,
-        selectedObjectId, selectObject, removeObject, updateObjectLabel,
-        addObject, saveLayout, resetLayout, currentFloor, stats,
-    } = usePartsMappingStore();
+// Note: Reusing the existing global search component from useDataStore to integrate perfectly with the rest of the app.
+function SearchBar({ onPartSelect, disabled }: { onPartSelect: (part: any) => void; disabled?: boolean }) {
+    const [query, setQuery] = useState('');
+    const [results, setResults] = useState<any[]>([]);
+    const { products: inventory } = useDataStore();
 
-    const [addMenuOpen, setAddMenuOpen] = useState(false);
-    const floorData = currentFloor();
-    const st = stats();
-    const selectedObj = floorData.objects.find(o => o.id === selectedObjectId);
-
-    useEffect(() => { initialize(); }, [initialize]);
-
-    const handleSearch = (q: string) => {
-        setSearchQuery(q);
-        if (q.length < 2) { highlightObject(null); return; }
-        const lq = q.toLowerCase();
-        const match = floorData.objects.find(o => o.label.toLowerCase().includes(lq));
-        highlightObject(match?.id || null);
-    };
-
-    if (isLoading) {
-        return (
-            <div className="flex h-screen items-center justify-center bg-[#0f172a]">
-                <div className="text-center">
-                    <Box className="w-12 h-12 text-orange-500 animate-pulse mx-auto mb-4" />
-                    <p className="text-slate-400 text-sm tracking-widest uppercase">Loading Parts Map...</p>
-                </div>
-            </div>
-        );
-    }
+    useEffect(() => {
+        if (!query) { setResults([]); return; }
+        const q = query.toLowerCase();
+        setResults(inventory.filter((p: any) =>
+            p.material?.toLowerCase().includes(q) ||
+            p.materialDescription?.toLowerCase().includes(q) ||
+            p.location_code?.toLowerCase().includes(q)
+        ).slice(0, 10)); // Limit to 10
+    }, [query, inventory]);
 
     return (
-        <div className="flex flex-col h-screen bg-[#0f172a] text-white overflow-hidden select-none">
-
-            {/* ─── TOP BAR ─────────────────────────────────────── */}
-            <div className="flex-none px-6 py-3 flex items-center justify-between border-b border-white/5 bg-[#0f172a]/90 backdrop-blur-sm z-20">
-                <div>
-                    <h1 className="text-xl font-bold">
-                        <span className="text-orange-500 italic">{floorData.name}</span>
-                        <span className="text-white"> - Parts Mapping</span>
-                        {isDesignMode && (
-                            <span className="ml-3 inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-orange-500/20 text-orange-400 text-xs font-bold tracking-wider">
-                                <Pencil className="w-3 h-3" /> DESIGN
-                            </span>
-                        )}
-                    </h1>
-                    <p className="text-slate-500 text-xs mt-0.5">
-                        {isDesignMode ? 'Drag to move, use controls to edit' : 'Interactive 3D map - Find parts instantly'}
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    {floors.map(f => (
-                        <button
-                            key={f.id}
-                            onClick={() => setFloor(f.id)}
-                            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${f.id === currentFloorId
-                                    ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30'
-                                    : 'bg-white/5 text-slate-400 hover:bg-white/10'
-                                }`}
-                        >
-                            {f.name}
-                        </button>
-                    ))}
-                    <button
-                        onClick={toggle2DView}
-                        className={`ml-2 px-4 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-all ${is2DView ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-white/5 text-slate-400 hover:bg-white/10'
-                            }`}
-                    >
-                        <Grid3X3 className="w-4 h-4" /> 2D View
-                    </button>
-                    <button
-                        onClick={toggleDesignMode}
-                        className={`px-4 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-all ${isDesignMode
-                                ? 'bg-red-500/90 text-white hover:bg-red-600'
-                                : 'bg-white/5 text-slate-400 hover:bg-white/10'
-                            }`}
-                    >
-                        <Pencil className="w-4 h-4" /> {isDesignMode ? 'Exit Design' : 'Design Mode'}
-                    </button>
-                </div>
+        <div style={{ position: 'relative', width: '100%', maxWidth: 400 }}>
+            <div className="form-input-icon">
+                <Search className="icon" size={18} />
+                <input
+                    type="text"
+                    className="search-input form-input"
+                    placeholder="Search parts to locate..."
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    disabled={disabled}
+                />
             </div>
-
-            {/* ─── SEARCH BAR ───────────────────────────────────── */}
-            <div className="flex-none px-6 py-2 z-10">
-                <div className="relative max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                    <input
-                        type="text"
-                        placeholder="Search by Part Number (Material Code) or scan barcode..."
-                        value={searchQuery}
-                        onChange={e => handleSearch(e.target.value)}
-                        className="w-full h-10 bg-[#1e293b] border border-white/10 rounded-lg pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/30"
-                    />
-                </div>
-            </div>
-
-            {/* ─── DESIGN TOOLBAR (only in design mode) ─────────── */}
-            {isDesignMode && (
-                <div className="flex-none px-6 py-2 flex items-center gap-3 border-b border-white/5 z-10">
-                    <div className="relative">
-                        <button
-                            onClick={() => setAddMenuOpen(!addMenuOpen)}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors"
+            {results.length > 0 && query && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1e293b', border: '1px solid #374151', borderRadius: 8, marginTop: 4, zIndex: 9999, overflow: 'hidden' }}>
+                    {results.map(p => (
+                        <div key={p.id} style={{ padding: '10px 12px', borderBottom: '1px solid #334155', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}
+                            onClick={() => { onPartSelect(p); setQuery(''); setResults([]); }}
+                            onMouseOver={e => (e.currentTarget.style.background = '#334155')}
+                            onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
                         >
-                            <Plus className="w-4 h-4" /> Add Object <ChevronDown className="w-3 h-3" />
-                        </button>
-                        {addMenuOpen && (
-                            <div className="absolute top-full left-0 mt-1 w-48 bg-[#1e293b] border border-white/10 rounded-xl shadow-2xl py-1 z-50">
-                                {Object.entries(OBJECT_TYPE_INFO).map(([key, info]) => (
-                                    <button
-                                        key={key}
-                                        onClick={() => { addObject(key as ObjectType); setAddMenuOpen(false); }}
-                                        className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-white/5 flex items-center gap-2"
-                                    >
-                                        <span>{info.icon}</span> {info.label}
-                                    </button>
-                                ))}
+                            <div>
+                                <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{p.material}</div>
+                                <div style={{ color: '#94a3b8', fontSize: 11 }}>{p.materialDescription}</div>
                             </div>
-                        )}
+                            <div style={{ textAlign: 'right' }}>
+                                <div style={{ color: '#DC2626', fontSize: 12, fontWeight: 600 }}>{p.location_code || 'Unassigned'}</div>
+                                <div style={{ color: '#10b981', fontSize: 11 }}>Stock: {p.stock}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+export default function PartsMapping() {
+    const store = usePartsMappingStore();
+    const selectedItem = null;
+    const clearSelection = () => { };
+    const [addMenuOpen, setAddMenuOpen] = useState(false);
+    const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
+    const [saveAsModal, setSaveAsModal] = useState(false);
+    const [saveName, setSaveName] = useState('');
+    const [labelInput, setLabelInput] = useState('');
+    const [renamingId, setRenamingId] = useState<number | null>(null);
+    const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+    const layoutMenuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        store.initialize();
+    }, []);
+
+    const selectedObj = store.layout.objects.find(o => o.id === store.selectedId);
+    useEffect(() => {
+        if (selectedObj) setLabelInput(selectedObj.label || '');
+    }, [selectedObj]);
+
+    useEffect(() => {
+        if (selectedItem) {
+            store.setHighlightedPart({
+                ...selectedItem,
+                position: { x: 0, y: 1.5, z: 0 }, // Temp until handleSearch calculates actual pos
+                floor: 1,
+                description: selectedItem.materialDescription,
+            });
+            handlePartSearch(selectedItem);
+        } else {
+            store.setHighlightedPart(null);
+            store.setPathPoints([]);
+        }
+    }, [selectedItem, store.layout.objects]);
+
+    const handlePartSearch = (part: any) => {
+        const loc = part.location || part;
+        const code = part.location_code || `${loc.aisle}-${loc.shelf}`;
+        if (!code) return; // No location
+
+        // Parse Aisle-Shelf
+        const [aisle, shelf] = code.split('-');
+        if (!aisle || !shelf) return;
+
+        const shelfObj = store.layout.objects.find(o =>
+            (o.type === 'shelf' || o.type === 'shelf2') &&
+            o.aisle === aisle &&
+            o.shelfNum === parseInt(shelf)
+        );
+
+        if (shelfObj) {
+            store.setHighlightedPart({
+                ...part,
+                position: { x: shelfObj.x, y: 1.5, z: shelfObj.z },
+                floor: shelfObj.floor,
+                description: part.materialDescription,
+                location_code: code
+            });
+            if (store.currentFloor !== shelfObj.floor) {
+                store.setFloor(shelfObj.floor);
+            }
+
+            // Calculate path (from nearest entrance to shelf)
+            import('./objects3d').then(({ findPath }) => {
+                const ent = store.layout.objects.find(o => o.type === 'entrance' || o.type === 'counter') || { x: 0, z: 0 };
+                const path = findPath(
+                    new window.THREE.Vector3(ent.x, 0.5, ent.z),
+                    new window.THREE.Vector3(shelfObj.x, 0.5, shelfObj.z),
+                    store.layout.objects,
+                    store.currentFloor
+                );
+                store.setPathPoints(path);
+            });
+        }
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (layoutMenuRef.current && !layoutMenuRef.current.contains(e.target as Node)) {
+                setLayoutMenuOpen(false);
+            }
+        };
+        if (layoutMenuOpen) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [layoutMenuOpen]);
+
+    const stats = store.stats();
+
+    return (
+        <div className="stockroom-viewer animate-fade-in pb-10">
+            <header className="page-header">
+                <div className="flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h1 className="page-title">
+                            <span className="text-gradient" style={{ backgroundImage: 'linear-gradient(135deg, #DC2626 0%, #f97316 100%)' }}>
+                                {store.currentFloor === 1 ? '1st' : '2nd'} Floor
+                            </span> - Parts Mapping
+                            {store.editMode && <span style={{ color: '#DC2626', marginLeft: 10, fontSize: 16 }}>✏️ DESIGN MODE</span>}
+                        </h1>
+                        <p className="page-subtitle">
+                            {store.editMode ? 'Drag to move, use controls to edit layout' : 'Interactive 3D digital twin - Locate inventory instantly'}
+                        </p>
+                        <div style={{ marginTop: 16 }}>
+                            <SearchBar onPartSelect={handlePartSearch} disabled={store.editMode} />
+                        </div>
                     </div>
-                    <span className="text-sm text-slate-500 ml-2">
-                        {selectedObj ? `Selected: ${selectedObj.label}` : 'Click an object to select it'}
-                    </span>
-                    <div className="ml-auto flex items-center gap-2">
-                        <button onClick={saveLayout} className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
-                            <Save className="w-4 h-4" /> Save
+                    <div className="flex gap-2 flex-wrap">
+                        <div className="btn-group flex gap-0" style={{ borderRadius: 8, overflow: 'hidden' }}>
+                            <button
+                                className={`btn ${store.currentFloor === 1 ? 'btn-primary' : 'btn-outline'}`}
+                                onClick={() => store.setFloor(1)}
+                                style={{ borderRadius: '8px 0 0 8px', borderRight: 'none' }}
+                                disabled={store.isTransitioning}
+                            >
+                                <ChevronDown size={16} /> F1
+                            </button>
+                            <button
+                                className={`btn ${store.currentFloor === 2 ? 'btn-primary' : 'btn-outline'}`}
+                                onClick={() => store.setFloor(2)}
+                                style={{ borderRadius: '0 8px 8px 0' }}
+                                disabled={store.isTransitioning}
+                            >
+                                <ChevronUp size={16} /> F2
+                            </button>
+                        </div>
+                        <button className={`btn ${store.viewMode === '2d' ? 'btn-secondary' : 'btn-outline'}`} onClick={store.toggleViewMode}>
+                            {store.viewMode === '2d' ? <Eye size={18} /> : <Grid3X3 size={18} />}
+                            {store.viewMode === '2d' ? '3D View' : '2D View'}
                         </button>
-                        <button onClick={resetLayout} className="flex items-center gap-1.5 px-4 py-2 bg-white/5 text-slate-400 rounded-lg text-sm hover:bg-white/10">
-                            <RotateCcw className="w-4 h-4" /> Reset
+                        <button className={`btn ${store.editMode ? 'btn-primary' : 'btn-outline'}`} onClick={store.toggleDesignMode}>
+                            <Move size={18} /> {store.editMode ? 'Exit Design' : 'Design Mode'}
                         </button>
+                    </div>
+                </div>
+            </header>
+
+            {/* Navigation Target Banner */}
+            {store.highlightedPart && !store.editMode && (
+                <div className="card shadow-glow-primary mb-4" style={{ borderColor: '#DC2626' }}>
+                    <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-4">
+                            <div style={{ width: 48, height: 48, borderRadius: 12, background: 'var(--gradient-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Target size={24} color="white" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg">Navigating to: {store.highlightedPart.material || 'Selected Part'}</h3>
+                                <p className="text-gray-400">
+                                    {store.highlightedPart.description} • Location: <strong className="text-white">{store.highlightedPart.location_code || 'Unknown'}</strong>
+                                </p>
+                            </div>
+                        </div>
+                        <button className="btn btn-ghost btn-icon" onClick={() => { clearSelection(); store.setHighlightedPart(null); store.setPathPoints([]); }}><X size={20} /></button>
                     </div>
                 </div>
             )}
 
-            {/* ─── MAIN CONTENT ────────────────────────────────── */}
-            <div className="flex-1 relative min-h-0">
-                {/* 3D Canvas */}
-                <Scene3D />
+            {/* DESIGN TOOLBAR */}
+            {store.editMode && (
+                <div className="card mb-4" style={{ position: 'relative', zIndex: 100 }}>
+                    <div className="flex gap-4 flex-wrap items-center">
 
-                {/* Left floor info */}
-                <div className="absolute left-4 bottom-4 z-10">
-                    <div className="bg-[#111827]/80 backdrop-blur-md border border-white/5 rounded-xl px-4 py-3 min-w-[130px]">
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">{floorData.name}</p>
-                        <div className="space-y-1 text-xs">
-                            <p className="text-slate-300">📦 <strong>{floorData.objects.filter(o => o.type.startsWith('shelf')).length}</strong> Shelves</p>
-                            <p className="text-slate-300">🖥️ <strong>{floorData.objects.filter(o => o.type === 'counter').length}</strong> Counters</p>
-                            <p className="text-slate-300">🪜 <strong>{floorData.objects.filter(o => o.type === 'stairs').length}</strong> Stairs</p>
+                        {/* Add Dropdown */}
+                        <div style={{ position: 'relative' }}>
+                            <button className="btn btn-secondary" onClick={() => setAddMenuOpen(!addMenuOpen)}>
+                                <Plus size={18} /> Add
+                            </button>
+                            {addMenuOpen && (
+                                <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 9999, background: '#1e293b', border: '1px solid #374151', borderRadius: 8, marginTop: 4, width: 220, maxHeight: 400, overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+                                    {Object.entries(OBJECT_TYPES).map(([k, v]) => (
+                                        <button key={k} onClick={() => { store.addObject(k); setAddMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-700 flex items-center gap-3">
+                                            <span className="text-lg">{v.icon}</span> {v.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="w-px h-6 bg-gray-600 mx-1" />
+
+                        {/* Selected Object Controls */}
+                        {selectedObj ? (
+                            <div className="flex items-center gap-2">
+                                <span className="text-gray-400 text-sm mr-2">Selected: <strong className="text-white">{selectedObj.label}</strong></span>
+                                <button className="btn btn-outline btn-sm" onClick={() => store.rotateSelected(-Math.PI / 4)} title="Rotate Left"><RotateCcw size={16} /></button>
+                                <button className="btn btn-outline btn-sm" onClick={() => store.rotateSelected(Math.PI / 4)} title="Rotate Right"><RotateCw size={16} /></button>
+                                <button className={`btn btn-sm ${selectedObj.locked ? 'btn-primary' : 'btn-outline'}`} onClick={() => store.toggleLock(selectedObj.id)} title="Lock Object">
+                                    {selectedObj.locked ? <Lock size={16} /> : <Unlock size={16} />}
+                                </button>
+                                <input
+                                    type="text"
+                                    className="form-input py-1 px-3 text-sm w-32"
+                                    value={labelInput}
+                                    onChange={e => setLabelInput(e.target.value)}
+                                    onBlur={() => store.updateLabel(selectedObj.id, labelInput)}
+                                    onKeyDown={e => e.key === 'Enter' && store.updateLabel(selectedObj.id, labelInput)}
+                                    placeholder="Label"
+                                />
+                                <button className="btn btn-outline btn-sm" onClick={() => store.updateLabel(selectedObj.id, labelInput)}><Type size={16} /></button>
+
+                                {/* Size Controls */}
+                                {['wall', 'floor', 'shelf2'].includes(selectedObj.type) && (
+                                    <div className="flex items-center gap-2 ml-2 pl-4 border-l border-gray-600">
+                                        <span className="text-xs text-gray-400">Size (W x H x D):</span>
+                                        {['width', 'height', 'depth'].map((dim, i) => (
+                                            <input
+                                                key={dim}
+                                                type="number"
+                                                className="form-input py-1 px-2 text-xs w-16"
+                                                value={selectedObj.size?.[i] || 0}
+                                                onChange={e => store.updateObjectSize(selectedObj.id, dim as any, parseFloat(e.target.value) || 0.1)}
+                                                step={dim === 'height' ? 0.5 : 1}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Shelf Aisle/Number Controls */}
+                                {(selectedObj.type === 'shelf' || selectedObj.type === 'shelf2') && (
+                                    <div className="flex items-center gap-2 ml-2 pl-4 border-l border-gray-600">
+                                        <span className="text-xs text-primary font-bold">Location Code:</span>
+                                        <input
+                                            type="text"
+                                            className="form-input py-1 px-2 text-xs w-10 text-center font-bold text-primary uppercase border-primary/50 bg-primary/10"
+                                            value={selectedObj.aisle || ''}
+                                            onChange={e => store.updateObjectField(selectedObj.id, 'aisle', e.target.value.toUpperCase())}
+                                            placeholder="A"
+                                            maxLength={1}
+                                        />
+                                        <span className="text-white">-</span>
+                                        <input
+                                            type="number"
+                                            className="form-input py-1 px-2 text-xs w-12 text-center font-bold text-primary border-primary/50 bg-primary/10"
+                                            value={selectedObj.shelfNum || ''}
+                                            onChange={e => store.updateObjectField(selectedObj.id, 'shelfNum', parseInt(e.target.value) || '')}
+                                            placeholder="1"
+                                        />
+                                    </div>
+                                )}
+
+                                <button className="btn btn-outline btn-sm text-error border-error/50 hover:bg-error hover:text-white ml-2" onClick={store.deleteSelected}><Trash2 size={16} /></button>
+                            </div>
+                        ) : (
+                            <span className="text-gray-400 text-sm">Click an object on the floor to select it</span>
+                        )}
+
+                        <div className="flex-1" />
+
+                        {/* Layout Manager */}
+                        <div className="flex items-center gap-3">
+                            <span className="text-gray-400 text-sm flex items-center gap-2">
+                                <Database size={14} /> {store.currentLayoutName}
+                            </span>
+
+                            <div ref={layoutMenuRef} style={{ position: 'relative' }}>
+                                <button className="btn btn-outline" onClick={() => setLayoutMenuOpen(!layoutMenuOpen)}>
+                                    <FolderOpen size={18} /> Load {layoutMenuOpen ? '▲' : '▼'}
+                                </button>
+                                {layoutMenuOpen && (
+                                    <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, background: '#1e293b', border: '1px solid #374151', borderRadius: 8, marginTop: 4, width: 320, maxHeight: 300, overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+                                        {store.savedLayouts.length === 0 ? (
+                                            <div className="p-4 text-center text-gray-400">No layouts found</div>
+                                        ) : (
+                                            store.savedLayouts.map(l => (
+                                                <div key={l.id} className="p-3 border-b border-gray-700/50 hover:bg-gray-700 transition flex items-center justify-between" style={{ borderLeft: l.is_default ? '3px solid #DC2626' : '3px solid transparent', background: store.currentLayoutId === l.id ? '#334155' : 'transparent' }}>
+                                                    <div className="flex-1 cursor-pointer overflow-hidden" onClick={() => { store.loadLayout(l); setLayoutMenuOpen(false); }}>
+                                                        <div className="text-white text-sm font-bold flex items-center gap-2">{l.name} {l.is_default && <span className="text-xs text-primary bg-primary/20 px-2 py-0.5 rounded">PRIORITY</span>}</div>
+                                                        <div className="text-gray-400 text-xs truncate mt-1">{l.description}</div>
+                                                    </div>
+
+                                                    <div className="flex gap-1">
+                                                        <button className="p-1.5 hover:bg-gray-600 rounded text-gray-400 hover:text-primary transition" onClick={() => store.setPriorityLayout(l.id)} title="Set Priority"><Star size={14} fill={l.is_default ? '#DC2626' : 'none'} color={l.is_default ? '#DC2626' : 'currentColor'} /></button>
+                                                        <button className="p-1.5 hover:bg-gray-600 rounded text-gray-400 hover:text-error transition" onClick={() => { if (!l.is_default && confirm(`Delete ${l.name}?`)) store.deleteLayout(l.id); }} title="Delete" disabled={l.is_default} style={{ opacity: l.is_default ? 0.3 : 1 }}><Trash2 size={14} /></button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            <button className="btn btn-secondary" onClick={store.saveLayout}><Save size={18} /> Save</button>
+                            <button className="btn btn-outline" onClick={() => setSaveAsModal(true)}><Plus size={18} /> Save As</button>
+                            <button className="btn btn-outline" onClick={() => { if (confirm('Reset layout?')) store.resetLayout(); }} title="Reset to Empty"><Home size={18} /></button>
                         </div>
                     </div>
                 </div>
+            )}
 
-                {/* Right hint */}
-                <div className="absolute right-4 bottom-4 z-10">
-                    <p className="text-[11px] text-slate-500 bg-[#111827]/80 backdrop-blur-md border border-white/5 rounded-lg px-3 py-2">
-                        🖱 Drag to rotate • Scroll to zoom
-                    </p>
+            {/* CANVAS CONTAINER */}
+            <div className="card" style={{ height: 600, padding: 0, overflow: 'hidden', position: 'relative' }}>
+
+                {/* Floor Transition Overlay */}
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, #1e293b, #0f172a)', zIndex: store.isTransitioning ? 100 : -1, opacity: store.isTransitioning ? 1 : 0, transition: 'opacity 0.3s ease-in-out', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                    <div className="text-center text-white">
+                        <div className="text-5xl mb-4 text-primary">{store.currentFloor === 1 ? <ChevronDown size={64} className="mx-auto" /> : <ChevronUp size={64} className="mx-auto" />}</div>
+                        <div className="text-2xl font-bold">Switching to {store.currentFloor === 1 ? '1st' : '2nd'} Floor...</div>
+                    </div>
                 </div>
 
-                {/* Selected object panel (design mode) */}
-                {isDesignMode && selectedObj && (
-                    <div className="absolute right-4 top-4 w-64 bg-[#111827]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-20 p-4">
-                        <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-sm font-bold text-white">Properties</h3>
-                            <button onClick={() => selectObject(null)} className="p-1 rounded hover:bg-white/10"><X className="w-4 h-4 text-slate-400" /></button>
-                        </div>
-                        <div className="space-y-3">
-                            <div>
-                                <label className="text-[10px] text-slate-500 uppercase tracking-widest">Label</label>
-                                <input
-                                    value={selectedObj.label}
-                                    onChange={e => updateObjectLabel(selectedObj.id, e.target.value)}
-                                    className="w-full mt-1 h-8 bg-[#0f172a] border border-white/10 rounded-lg px-3 text-sm text-white focus:outline-none focus:border-orange-500/50"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[10px] text-slate-500 uppercase tracking-widest">Type</label>
-                                <p className="text-sm text-slate-300 mt-1">{OBJECT_TYPE_INFO[selectedObj.type]?.label || selectedObj.type}</p>
-                            </div>
-                            <div>
-                                <label className="text-[10px] text-slate-500 uppercase tracking-widest">Position</label>
-                                <p className="text-xs text-slate-400 mt-1 font-mono">
-                                    X: {selectedObj.position[0].toFixed(1)} &nbsp; Y: {selectedObj.position[1].toFixed(1)} &nbsp; Z: {selectedObj.position[2].toFixed(1)}
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => removeObject(selectedObj.id)}
-                                className="w-full flex items-center justify-center gap-1.5 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm hover:bg-red-500/30 mt-2"
-                            >
-                                <Trash2 className="w-4 h-4" /> Delete Object
-                            </button>
+                <Canvas camera={{ position: store.viewMode === '2d' ? [0, 40, 0.1] : [0, 20, 25], fov: 50 }}>
+                    {!store.isLoading && <Scene3D />}
+                </Canvas>
+
+                {/* HUD Elements */}
+                {store.isLoading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80 z-50">
+                        <div className="text-white text-lg font-bold flex items-center gap-3">
+                            <div className="w-6 h-6 border-4 border-primary border-t-transparent rounded-full animate-spin" /> Loading Warehouse Digital Twin...
                         </div>
                     </div>
                 )}
+
+                <div className="absolute bottom-4 left-4 bg-gray-900/90 p-4 rounded-xl border border-gray-700 backdrop-blur">
+                    <div className="text-xs font-bold text-gray-400 mb-2">{store.currentFloor === 1 ? '1ST FLOOR' : '2ND FLOOR'}</div>
+                    <div className="text-sm flex flex-col gap-1 text-white">
+                        <span>📦 {store.layout.objects.filter(o => o.floor === store.currentFloor && o.type.includes('shelf')).length} Shelves</span>
+                        <span>💳 {store.layout.objects.filter(o => o.floor === store.currentFloor && o.type === 'counter').length} Counters</span>
+                        <span>🚪 {store.layout.objects.filter(o => o.floor === store.currentFloor && o.type === 'room').length} Rooms</span>
+                    </div>
+                </div>
+
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2">
+                    <button className="w-10 h-10 rounded-lg bg-gray-900/90 border border-gray-700 text-white flex items-center justify-center hover:bg-gray-800 focus:outline-none" onClick={() => document.querySelector('canvas')?.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }))}><ZoomIn size={20} /></button>
+                    <button className="w-10 h-10 rounded-lg bg-gray-900/90 border border-gray-700 text-white flex items-center justify-center hover:bg-gray-800 focus:outline-none" onClick={() => document.querySelector('canvas')?.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, bubbles: true }))}><ZoomOut size={20} /></button>
+                </div>
+
+                <div className="absolute bottom-4 right-4 bg-gray-900/80 px-4 py-2 rounded-lg text-sm text-gray-300">
+                    {store.viewMode === '2d' ? '🔍 2D View • Drag to pan' : '🖱️ Drag to rotate • Scroll to zoom'}
+                </div>
             </div>
 
-            {/* ─── BOTTOM STAT CARDS ─────────────────────────────── */}
-            <div className="flex-none px-6 py-3 grid grid-cols-4 gap-3 bg-[#0a0f1a] border-t border-white/5 z-10">
+            {/* STAT CARDS */}
+            <div className="grid grid-cols-4 gap-6 mt-6">
                 {[
-                    { label: 'Shelves', value: st.shelves, icon: <Box className="w-5 h-5" />, color: 'from-orange-500 to-rose-500' },
-                    { label: 'Counters', value: st.counters, icon: <MonitorSmartphone className="w-5 h-5" />, color: 'from-blue-500 to-cyan-500' },
-                    { label: 'Entrances', value: st.entrances, icon: <DoorOpen className="w-5 h-5" />, color: 'from-amber-500 to-orange-500' },
-                    { label: 'Floors', value: st.floors, icon: <Layers className="w-5 h-5" />, color: 'from-violet-500 to-indigo-500' },
-                ].map(card => (
-                    <div key={card.label} className="bg-[#111827] border border-white/5 rounded-xl px-4 py-3 flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${card.color} flex items-center justify-center text-white shadow-lg`}>
-                            {card.icon}
-                        </div>
-                        <div>
-                            <p className="text-lg font-bold text-white">{card.value} <span className="text-sm font-normal text-slate-400">{card.label}</span></p>
-                            <p className="text-[10px] text-slate-500">Total</p>
+                    { icon: '📦', title: 'Shelves', count: stats.shelves },
+                    { icon: '💳', title: 'Counters', count: stats.counters },
+                    { icon: '🚪', title: 'Entrances', count: stats.entrances },
+                    { icon: '🏢', title: 'Floors', count: stats.floors }
+                ].map((item, i) => (
+                    <div key={i} className="card scale-100 hover:scale-[1.02] transition-transform">
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl shadow-glow-primary" style={{ background: 'var(--gradient-primary)' }}>
+                                {item.icon}
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-2xl">{item.count}</h4>
+                                <p className="text-gray-400 text-sm uppercase font-semibold">{item.title}</p>
+                            </div>
                         </div>
                     </div>
                 ))}
             </div>
+
+            {/* Save As Modal */}
+            {saveAsModal && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[99999] flex items-center justify-center">
+                    <div className="bg-gray-800 border border-gray-700 p-6 rounded-2xl w-full max-w-md shadow-2xl">
+                        <h3 className="text-xl font-bold mb-4">Save Layout As...</h3>
+                        <div className="form-group mb-6">
+                            <label className="form-label">Layout Name</label>
+                            <input
+                                type="text"
+                                className="form-input w-full"
+                                placeholder="e.g. Optimized Store Layout"
+                                value={saveName}
+                                onChange={e => setSaveName(e.target.value)}
+                                autoFocus
+                                onKeyDown={e => { if (e.key === 'Enter' && saveName) { store.saveLayoutAs(saveName); setSaveAsModal(false); setSaveName(''); } }}
+                            />
+                        </div>
+                        <div className="flex justify-end gap-3">
+                            <button className="btn btn-outline" onClick={() => setSaveAsModal(false)}>Cancel</button>
+                            <button
+                                className="btn btn-primary"
+                                disabled={!saveName.trim()}
+                                onClick={() => { store.saveLayoutAs(saveName); setSaveAsModal(false); setSaveName(''); }}
+                            >
+                                Save Layout
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

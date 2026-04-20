@@ -1,210 +1,341 @@
 import { create } from 'zustand';
 import { supabase } from '../../services/supabase';
 
-// ─── Object Types ────────────────────────────────────────────
-export type ObjectType =
-    | 'shelf4' | 'shelf2' | 'counter' | 'stairs' | 'entrance'
-    | 'wall' | 'floor' | 'parking' | 'room' | 'label';
-
-export interface FloorObject {
+// ─── Types ───────────────────────────────────────────────────
+export interface LayoutObject {
     id: string;
-    type: ObjectType;
-    position: [number, number, number];
+    type: string;
+    x: number;
+    z: number;
     rotation: number;
-    size?: [number, number, number];
+    floor: number;
     label: string;
-    locked?: boolean;
+    size?: [number, number, number];
     color?: string;
+    locked?: boolean;
+    aisle?: string;
+    shelfNum?: number;
 }
 
-export interface FloorData {
+export interface SavedLayout {
     id: number;
     name: string;
-    objects: FloorObject[];
+    description?: string;
+    layout_data: string;
+    is_default?: boolean;
+    created_at?: string;
 }
 
-// ─── Default Layouts (fallback if Supabase is empty) ─────────
-const DEFAULT_FLOORS: FloorData[] = [
-    {
-        id: 1, name: '1st Floor',
-        objects: [
-            { id: 'wall-back', type: 'wall', position: [0, 1.5, -8], rotation: 0, size: [18, 3, 0.3], label: 'Back Wall', locked: true },
-            { id: 'wall-left', type: 'wall', position: [-9, 1.5, 0], rotation: 90, size: [16, 3, 0.3], label: 'Left Wall', locked: true },
-            { id: 'wall-right', type: 'wall', position: [9, 1.5, 0], rotation: 90, size: [16, 3, 0.3], label: 'Right Wall', locked: true },
-            { id: 'wall-front-l', type: 'wall', position: [-5, 1.5, 8], rotation: 0, size: [8, 3, 0.3], label: 'Front Wall L', locked: true },
-            { id: 'wall-front-r', type: 'wall', position: [5, 1.5, 8], rotation: 0, size: [8, 3, 0.3], label: 'Front Wall R', locked: true },
-            { id: 'main-floor', type: 'floor', position: [0, -0.01, 0], rotation: 0, size: [18, 0.2, 16], label: 'Main Floor', color: '#1e293b' },
-            { id: 'shelf-a1', type: 'shelf4', position: [3, 0, -5], rotation: 0, label: 'A1' },
-            { id: 'shelf-a2', type: 'shelf4', position: [5, 0, -5], rotation: 0, label: 'A2' },
-            { id: 'shelf-a3', type: 'shelf4', position: [7, 0, -5], rotation: 0, label: 'A3' },
-            { id: 'shelf-b1', type: 'shelf2', position: [7, 0, 0], rotation: 90, label: 'B1' },
-            { id: 'counter-1', type: 'counter', position: [-2, 0, 3], rotation: 0, label: 'Sales Counter' },
-            { id: 'stairs-1', type: 'stairs', position: [-6, 0, -5], rotation: 0, label: 'Stairs' },
-            { id: 'entrance-1', type: 'entrance', position: [0, 0, 8], rotation: 0, label: 'Main Entrance' },
-            { id: 'parking-1', type: 'parking', position: [-6, 0, 5], rotation: 0, label: 'Parking' },
-        ],
-    },
-    {
-        id: 2, name: '2nd Floor',
-        objects: [
-            { id: 'f2-wall-back', type: 'wall', position: [0, 1.5, -8], rotation: 0, size: [18, 3, 0.3], label: 'Back Wall', locked: true },
-            { id: 'f2-wall-left', type: 'wall', position: [-9, 1.5, 0], rotation: 90, size: [16, 3, 0.3], label: 'Left Wall', locked: true },
-            { id: 'f2-wall-right', type: 'wall', position: [9, 1.5, 0], rotation: 90, size: [16, 3, 0.3], label: 'Right Wall', locked: true },
-            { id: 'f2-wall-front', type: 'wall', position: [0, 1.5, 8], rotation: 0, size: [18, 3, 0.3], label: 'Front Wall', locked: true },
-            { id: 'f2-floor', type: 'floor', position: [0, -0.01, 0], rotation: 0, size: [18, 0.2, 16], label: '2nd Floor', color: '#1e293b' },
-            { id: 'f2-stairs', type: 'stairs', position: [-6, 0, -5], rotation: 0, label: 'Stairs' },
-        ],
-    },
-];
+export interface HighlightedPart {
+    position: { x: number; y: number; z: number };
+    floor: number;
+    description?: string;
+    location_code?: string;
+    stock?: number;
+    isVirtual?: boolean;
+    [key: string]: any;
+}
 
-let nextId = 100;
+// ─── Object Type Registry ────────────────────────────────────
+export const OBJECT_TYPES: Record<string, { label: string; icon: string }> = {
+    shelf: { label: '4-Layer Shelf', icon: '📦' },
+    shelf2: { label: '2-Layer Shelf', icon: '📦' },
+    table: { label: 'Display Table', icon: '🪑' },
+    stand: { label: 'Display Stand', icon: '🎪' },
+    signage: { label: 'Signage', icon: '🪧' },
+    counter: { label: 'Counter', icon: '💳' },
+    stairs: { label: 'Stairs', icon: '🪜' },
+    room: { label: 'Room', icon: '🚪' },
+    entrance: { label: 'Entrance', icon: '🚶' },
+    parking: { label: 'Parking', icon: '🅿️' },
+    wall: { label: 'Wall', icon: '🧱' },
+    label: { label: 'Label', icon: '🏷️' },
+    floor: { label: 'Floor', icon: '⬛' },
+};
 
-// ─── Store ────────────────────────────────────────────────────
+// ─── Default Layout ──────────────────────────────────────────
+const getDefaultLayout = (): { objects: LayoutObject[] } => ({
+    objects: [
+        // Floor 1 base
+        { id: 'floor-1-main', type: 'floor', x: 0, z: 0, rotation: 0, floor: 1, label: 'Main Floor', size: [24, 0.2, 24] },
+        // Floor 2 base (L-shape)
+        { id: 'floor-2-right', type: 'floor', x: 3, z: 0, rotation: 0, floor: 2, label: 'Upper Floor Main', size: [18, 0.2, 24] },
+        { id: 'floor-2-left', type: 'floor', x: -9, z: 3, rotation: 0, floor: 2, label: 'Upper Floor Side', size: [6, 0.2, 18] },
+        // Stairs
+        { id: 'stairs-1', type: 'stairs', x: -6, z: -6, rotation: 0, floor: 1, label: 'Stairs' },
+        { id: 'stairs-2', type: 'stairs', x: -6, z: -6, rotation: Math.PI, floor: 2, label: 'Stairs Down' },
+        // Rooms
+        { id: 'room-cr', type: 'room', x: -3, z: -6, rotation: 0, floor: 1, label: 'CR' },
+        { id: 'room-2-storage', type: 'room', x: -3, z: -6, rotation: 0, floor: 2, label: 'Storage' },
+        // Parking
+        { id: 'parking-1', type: 'parking', x: -6, z: 4, rotation: 0, floor: 1, label: 'Parking' },
+        // Counter
+        { id: 'counter-1', type: 'counter', x: 5, z: 4, rotation: 0, floor: 1, label: 'Cashier' },
+        // Entrances
+        { id: 'entrance-1', type: 'entrance', x: 2, z: 8, rotation: 0, floor: 1, label: 'Entrance' },
+        { id: 'entrance-2', type: 'entrance', x: 5, z: 8, rotation: 0, floor: 1, label: 'Entrance 2' },
+        // Floor 1 Walls
+        { id: 'wall-1-back', type: 'wall', x: 0, z: -9, rotation: 0, floor: 1, label: 'Back Wall', size: [18, 3, 0.3] },
+        { id: 'wall-1-left', type: 'wall', x: -9, z: -1, rotation: Math.PI / 2, floor: 1, label: 'Left Wall', size: [16, 3, 0.3] },
+        { id: 'wall-1-right', type: 'wall', x: 9, z: -1, rotation: Math.PI / 2, floor: 1, label: 'Right Wall', size: [16, 3, 0.3] },
+        { id: 'wall-1-front-r', type: 'wall', x: 6, z: 7, rotation: 0, floor: 1, label: 'Front Wall R', size: [6, 3, 0.3] },
+        // Floor 2 Walls
+        { id: 'wall-2-back', type: 'wall', x: 0, z: -9, rotation: 0, floor: 2, label: 'Back Wall', size: [18, 3, 0.3] },
+        { id: 'wall-2-left', type: 'wall', x: -9, z: -1, rotation: Math.PI / 2, floor: 2, label: 'Left Wall', size: [16, 3, 0.3] },
+        { id: 'wall-2-right', type: 'wall', x: 9, z: -1, rotation: Math.PI / 2, floor: 2, label: 'Right Wall', size: [16, 3, 0.3] },
+        { id: 'wall-2-front', type: 'wall', x: 0, z: 7, rotation: 0, floor: 2, label: 'Front Wall', size: [18, 3, 0.3] },
+        // Shelves: Aisle A
+        { id: 'shelf-a1', type: 'shelf', x: -5, z: -4, rotation: 0, floor: 1, label: 'A-1', aisle: 'A', shelfNum: 1 },
+        { id: 'shelf-a2', type: 'shelf', x: -5, z: -1, rotation: 0, floor: 1, label: 'A-2', aisle: 'A', shelfNum: 2 },
+        { id: 'shelf-a3', type: 'shelf', x: -5, z: 2, rotation: 0, floor: 1, label: 'A-3', aisle: 'A', shelfNum: 3 },
+        // Shelves: Aisle B
+        { id: 'shelf-b1', type: 'shelf', x: -1, z: -4, rotation: 0, floor: 1, label: 'B-1', aisle: 'B', shelfNum: 1 },
+        { id: 'shelf-b2', type: 'shelf', x: -1, z: -1, rotation: 0, floor: 1, label: 'B-2', aisle: 'B', shelfNum: 2 },
+        { id: 'shelf-b3', type: 'shelf', x: -1, z: 2, rotation: 0, floor: 1, label: 'B-3', aisle: 'B', shelfNum: 3 },
+        // Shelves: Aisle C
+        { id: 'shelf-c1', type: 'shelf', x: 3, z: -4, rotation: 0, floor: 1, label: 'C-1', aisle: 'C', shelfNum: 1 },
+        { id: 'shelf-c2', type: 'shelf', x: 3, z: -1, rotation: 0, floor: 1, label: 'C-2', aisle: 'C', shelfNum: 2 },
+        { id: 'shelf-c3', type: 'shelf', x: 3, z: 2, rotation: 0, floor: 1, label: 'C-3', aisle: 'C', shelfNum: 3 },
+    ],
+});
+
+// ─── Store ───────────────────────────────────────────────────
 interface PartsMappingState {
-    floors: FloorData[];
-    currentFloorId: number;
-    isDesignMode: boolean;
-    selectedObjectId: string | null;
-    searchQuery: string;
-    highlightedObjectId: string | null;
-    isLoading: boolean;
-    is2DView: boolean;
+    // Layout data
+    layout: { objects: LayoutObject[] };
+    savedLayouts: SavedLayout[];
+    currentLayoutId: number | null;
+    currentLayoutName: string;
 
-    // Derived
-    currentFloor: () => FloorData;
-    stats: () => { shelves: number; counters: number; entrances: number; floors: number };
+    // View state
+    currentFloor: number;
+    isTransitioning: boolean;
+    editMode: boolean;
+    viewMode: '3d' | '2d';
+    selectedId: string | null;
+    isDragging: boolean;
+    isLoading: boolean;
+
+    // Pathfinding
+    highlightedPart: HighlightedPart | null;
+    pathPoints: any[];
 
     // Actions
     initialize: () => Promise<void>;
-    setFloor: (id: number) => void;
+    setFloor: (floor: number) => void;
     toggleDesignMode: () => void;
-    toggle2DView: () => void;
+    toggleViewMode: () => void;
     selectObject: (id: string | null) => void;
-    setSearchQuery: (q: string) => void;
-    highlightObject: (id: string | null) => void;
+    setDragging: (d: boolean) => void;
+    setHighlightedPart: (p: HighlightedPart | null) => void;
+    setPathPoints: (pts: any[]) => void;
 
-    // Design actions
-    addObject: (type: ObjectType) => void;
-    removeObject: (id: string) => void;
-    updateObjectPosition: (id: string, pos: [number, number, number]) => void;
-    updateObjectRotation: (id: string, rot: number) => void;
-    updateObjectLabel: (id: string, label: string) => void;
+    // Layout CRUD
     saveLayout: () => Promise<void>;
+    saveLayoutAs: (name: string) => Promise<void>;
+    loadLayout: (l: SavedLayout) => void;
+    deleteLayout: (id: number) => Promise<void>;
+    setPriorityLayout: (id: number) => Promise<void>;
     resetLayout: () => void;
+
+    // Object mutations
+    addObject: (type: string) => void;
+    deleteSelected: () => void;
+    updatePosition: (id: string, x: number, z: number) => void;
+    updateRotation: (id: string, rot: number) => void;
+    rotateSelected: (delta: number) => void;
+    updateLabel: (id: string, label: string) => void;
+    updateObjectSize: (id: string, dim: 'width' | 'height' | 'depth', val: number) => void;
+    updateObjectField: (id: string, field: string, value: any) => void;
+    toggleLock: (id: string) => void;
+
+    // Derived
+    stats: () => { shelves: number; counters: number; entrances: number; floors: number };
 }
 
 export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
-    floors: [],
-    currentFloorId: 1,
-    isDesignMode: false,
-    selectedObjectId: null,
-    searchQuery: '',
-    highlightedObjectId: null,
+    layout: { objects: [] },
+    savedLayouts: [],
+    currentLayoutId: null,
+    currentLayoutName: 'Loading...',
+    currentFloor: 1,
+    isTransitioning: false,
+    editMode: false,
+    viewMode: '3d',
+    selectedId: null,
+    isDragging: false,
     isLoading: true,
-    is2DView: false,
-
-    currentFloor: () => {
-        const { floors, currentFloorId } = get();
-        return floors.find(f => f.id === currentFloorId) || floors[0] || { id: 1, name: '1st Floor', objects: [] };
-    },
-
-    stats: () => {
-        const allObjects = get().floors.flatMap(f => f.objects);
-        return {
-            shelves: allObjects.filter(o => o.type === 'shelf4' || o.type === 'shelf2').length,
-            counters: allObjects.filter(o => o.type === 'counter').length,
-            entrances: allObjects.filter(o => o.type === 'entrance').length,
-            floors: get().floors.length,
-        };
-    },
+    highlightedPart: null,
+    pathPoints: [],
 
     initialize: async () => {
         set({ isLoading: true });
         try {
-            const { data, error } = await supabase.from('pm_floors').select('*').order('id');
-            if (error || !data || data.length === 0) {
-                set({ floors: DEFAULT_FLOORS, isLoading: false });
-                return;
+            const { data, error } = await supabase.from('pm_layouts').select('*').order('created_at', { ascending: false });
+            if (error || !data) throw error;
+            const layouts = data as SavedLayout[];
+            set({ savedLayouts: layouts });
+
+            // Try last-used from localStorage
+            const lastId = localStorage.getItem('lastUsedLayoutId');
+            let toLoad = lastId ? layouts.find(l => l.id === parseInt(lastId)) : null;
+            if (!toLoad) toLoad = layouts.find(l => l.is_default) || null;
+
+            if (toLoad?.layout_data) {
+                const parsed = JSON.parse(toLoad.layout_data);
+                set({ layout: parsed, currentLayoutId: toLoad.id, currentLayoutName: toLoad.name, isLoading: false });
+                localStorage.setItem('lastUsedLayoutId', String(toLoad.id));
+            } else {
+                set({ layout: getDefaultLayout(), currentLayoutName: 'Default', isLoading: false });
             }
-            const floors: FloorData[] = data.map((row: any) => ({
-                id: row.id,
-                name: row.name,
-                objects: Array.isArray(row.layout_data) ? row.layout_data : [],
-            }));
-            set({ floors, isLoading: false });
         } catch {
-            set({ floors: DEFAULT_FLOORS, isLoading: false });
+            // Fallback localStorage or default
+            const saved = localStorage.getItem('stockroomLayoutV2');
+            if (saved) {
+                try { set({ layout: JSON.parse(saved), currentLayoutName: 'Local', isLoading: false }); return; } catch { }
+            }
+            set({ layout: getDefaultLayout(), currentLayoutName: 'Default', isLoading: false });
         }
     },
 
-    setFloor: (id) => set({ currentFloorId: id, selectedObjectId: null, highlightedObjectId: null }),
-    toggleDesignMode: () => set(s => ({ isDesignMode: !s.isDesignMode, selectedObjectId: null })),
-    toggle2DView: () => set(s => ({ is2DView: !s.is2DView })),
-    selectObject: (id) => set({ selectedObjectId: id }),
-    setSearchQuery: (q) => set({ searchQuery: q }),
-    highlightObject: (id) => set({ highlightedObjectId: id, selectedObjectId: id }),
-
-    addObject: (type) => {
-        const id = `obj-${nextId++}`;
-        const labels: Record<ObjectType, string> = {
-            shelf4: '4-Layer Shelf', shelf2: '2-Layer Shelf', counter: 'Counter',
-            stairs: 'Stairs', entrance: 'Entrance', wall: 'Wall', floor: 'Floor',
-            parking: 'Parking', room: 'Room', label: 'Label',
-        };
-        const obj: FloorObject = { id, type, position: [0, 0, 0], rotation: 0, label: labels[type] };
-        set(s => ({
-            floors: s.floors.map(f =>
-                f.id === s.currentFloorId ? { ...f, objects: [...f.objects, obj] } : f
-            ),
-            selectedObjectId: id,
-        }));
+    setFloor: (floor) => {
+        const { currentFloor, isTransitioning } = get();
+        if (floor === currentFloor || isTransitioning) return;
+        set({ isTransitioning: true });
+        setTimeout(() => {
+            set({ currentFloor: floor });
+            setTimeout(() => set({ isTransitioning: false }), 300);
+        }, 300);
     },
 
-    removeObject: (id) => set(s => ({
-        floors: s.floors.map(f =>
-            f.id === s.currentFloorId ? { ...f, objects: f.objects.filter(o => o.id !== id) } : f
-        ),
-        selectedObjectId: s.selectedObjectId === id ? null : s.selectedObjectId,
-    })),
-
-    updateObjectPosition: (id, pos) => set(s => ({
-        floors: s.floors.map(f =>
-            f.id === s.currentFloorId
-                ? { ...f, objects: f.objects.map(o => o.id === id ? { ...o, position: pos } : o) }
-                : f
-        ),
-    })),
-
-    updateObjectRotation: (id, rot) => set(s => ({
-        floors: s.floors.map(f =>
-            f.id === s.currentFloorId
-                ? { ...f, objects: f.objects.map(o => o.id === id ? { ...o, rotation: rot } : o) }
-                : f
-        ),
-    })),
-
-    updateObjectLabel: (id, label) => set(s => ({
-        floors: s.floors.map(f =>
-            f.id === s.currentFloorId
-                ? { ...f, objects: f.objects.map(o => o.id === id ? { ...o, label } : o) }
-                : f
-        ),
-    })),
+    toggleDesignMode: () => set(s => ({ editMode: !s.editMode, selectedId: null })),
+    toggleViewMode: () => set(s => ({ viewMode: s.viewMode === '3d' ? '2d' : '3d' })),
+    selectObject: (id) => set({ selectedId: id }),
+    setDragging: (d) => set({ isDragging: d }),
+    setHighlightedPart: (p) => set({ highlightedPart: p }),
+    setPathPoints: (pts) => set({ pathPoints: pts }),
 
     saveLayout: async () => {
-        const { floors } = get();
+        const { layout, currentLayoutId, currentLayoutName, savedLayouts } = get();
+        const data = JSON.stringify(layout);
+        localStorage.setItem('stockroomLayoutV2', data);
         try {
-            for (const floor of floors) {
-                await supabase.from('pm_floors').upsert({
-                    id: floor.id,
-                    name: floor.name,
-                    layout_data: floor.objects,
-                });
+            if (currentLayoutId) {
+                await supabase.from('pm_layouts').update({ layout_data: data, updated_at: new Date().toISOString() }).eq('id', currentLayoutId);
+                set({ savedLayouts: savedLayouts.map(l => l.id === currentLayoutId ? { ...l, layout_data: data } : l) });
             }
-        } catch (e) {
-            console.error('Failed to save layout to Supabase', e);
-        }
+        } catch (e) { console.error('Save failed', e); }
     },
 
-    resetLayout: () => set({ floors: DEFAULT_FLOORS, selectedObjectId: null }),
+    saveLayoutAs: async (name) => {
+        const { layout, savedLayouts } = get();
+        const data = JSON.stringify(layout);
+        try {
+            const { data: result, error } = await supabase.from('pm_layouts').insert({
+                name, description: `Created ${new Date().toLocaleDateString()}`, layout_data: data, is_default: savedLayouts.length === 0,
+            }).select().single();
+            if (error) throw error;
+            set({ savedLayouts: [result, ...savedLayouts], currentLayoutId: result.id, currentLayoutName: name });
+            localStorage.setItem('lastUsedLayoutId', String(result.id));
+        } catch (e) { console.error('Save As failed', e); }
+    },
+
+    loadLayout: (l) => {
+        const parsed = JSON.parse(l.layout_data);
+        set({ layout: parsed, currentLayoutId: l.id, currentLayoutName: l.name, selectedId: null });
+        localStorage.setItem('stockroomLayoutV2', l.layout_data);
+        localStorage.setItem('lastUsedLayoutId', String(l.id));
+    },
+
+    deleteLayout: async (id) => {
+        try {
+            await supabase.from('pm_layouts').delete().eq('id', id);
+            set(s => ({
+                savedLayouts: s.savedLayouts.filter(l => l.id !== id),
+                currentLayoutId: s.currentLayoutId === id ? null : s.currentLayoutId,
+                currentLayoutName: s.currentLayoutId === id ? 'Unsaved' : s.currentLayoutName,
+            }));
+        } catch (e) { console.error('Delete failed', e); }
+    },
+
+    setPriorityLayout: async (id) => {
+        try {
+            // Unset all defaults
+            await supabase.from('pm_layouts').update({ is_default: false }).eq('is_default', true);
+            await supabase.from('pm_layouts').update({ is_default: true }).eq('id', id);
+            set(s => ({ savedLayouts: s.savedLayouts.map(l => ({ ...l, is_default: l.id === id })) }));
+        } catch (e) { console.error('Set priority failed', e); }
+    },
+
+    resetLayout: () => {
+        const def = getDefaultLayout();
+        set({ layout: def, selectedId: null, currentLayoutId: null, currentLayoutName: 'Default' });
+        localStorage.setItem('stockroomLayoutV2', JSON.stringify(def));
+    },
+
+    addObject: (type) => {
+        const { layout, currentFloor } = get();
+        const id = `${type}-${Date.now()}`;
+        const defaults: Record<string, any> = {
+            wall: { size: [10, 3, 0.3] }, shelf2: { size: [1.5, 1.2, 0.8] }, floor: { size: [10, 0.2, 10] },
+        };
+        const obj: LayoutObject = { id, type, x: 0, z: 0, rotation: 0, floor: currentFloor, label: `New ${OBJECT_TYPES[type]?.label || type}`, ...defaults[type] };
+        set({ layout: { ...layout, objects: [...layout.objects, obj] }, selectedId: id });
+    },
+
+    deleteSelected: () => {
+        const { layout, selectedId } = get();
+        if (!selectedId) return;
+        set({ layout: { ...layout, objects: layout.objects.filter(o => o.id !== selectedId) }, selectedId: null });
+    },
+
+    updatePosition: (id, x, z) => set(s => ({
+        layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === id ? { ...o, x, z } : o) },
+    })),
+
+    updateRotation: (id, rot) => set(s => ({
+        layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === id ? { ...o, rotation: rot } : o) },
+    })),
+
+    rotateSelected: (delta) => {
+        const { selectedId } = get();
+        if (!selectedId) return;
+        set(s => ({ layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === selectedId ? { ...o, rotation: (o.rotation || 0) + delta } : o) } }));
+    },
+
+    updateLabel: (id, label) => set(s => ({
+        layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === id ? { ...o, label } : o) },
+    })),
+
+    updateObjectSize: (id, dim, val) => {
+        set(s => {
+            const obj = s.layout.objects.find(o => o.id === id);
+            if (!obj) return s;
+            const defSize: [number, number, number] = obj.type === 'wall' ? [10, 3, 0.3] : obj.type === 'floor' ? [10, 0.2, 10] : [1.5, 1.2, 0.8];
+            const curr = obj.size || defSize;
+            const newSize: [number, number, number] = [...curr];
+            if (dim === 'width') newSize[0] = val;
+            else if (dim === 'height') newSize[1] = val;
+            else newSize[2] = val;
+            return { layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === id ? { ...o, size: newSize } : o) } };
+        });
+    },
+
+    updateObjectField: (id, field, value) => set(s => ({
+        layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === id ? { ...o, [field]: value } : o) },
+    })),
+
+    toggleLock: (id) => set(s => ({
+        layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === id ? { ...o, locked: !o.locked } : o) },
+    })),
+
+    stats: () => {
+        const objs = get().layout.objects;
+        return {
+            shelves: objs.filter(o => o.type === 'shelf' || o.type === 'shelf2').length,
+            counters: objs.filter(o => o.type === 'counter').length,
+            entrances: objs.filter(o => o.type === 'entrance').length,
+            floors: 2,
+        };
+    },
 }));
