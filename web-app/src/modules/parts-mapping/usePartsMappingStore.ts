@@ -24,7 +24,7 @@ export interface LayoutObject {
 }
 
 export interface SavedLayout {
-    id: number;
+    id: string;
     name: string;
     description?: string;
     layout_data: string;
@@ -110,7 +110,7 @@ interface PartsMappingState {
     // Layout data
     layout: { objects: LayoutObject[] };
     savedLayouts: SavedLayout[];
-    currentLayoutId: number | null;
+    currentLayoutId: string | null;
     currentLayoutName: string;
 
     // View state
@@ -140,8 +140,8 @@ interface PartsMappingState {
     saveLayout: () => Promise<void>;
     saveLayoutAs: (name: string) => Promise<void>;
     loadLayout: (l: SavedLayout) => void;
-    deleteLayout: (id: number) => Promise<void>;
-    setPriorityLayout: (id: number) => Promise<void>;
+    deleteLayout: (id: string) => Promise<void>;
+    setPriorityLayout: (id: string) => Promise<void>;
     resetLayout: () => void;
 
     // Object mutations
@@ -182,7 +182,7 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
 
             // Try last-used from localStorage
             const lastId = localStorage.getItem('lastUsedLayoutId');
-            let toLoad = lastId ? layouts.find(l => l.id === parseInt(lastId)) : null;
+            let toLoad = lastId ? layouts.find(l => l.id === lastId) : null;
             if (!toLoad) toLoad = layouts.find(l => l.is_default) || null;
 
             if (toLoad?.layout_data) {

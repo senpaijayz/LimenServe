@@ -110,6 +110,8 @@ export interface StockroomSearchResult {
   name: string;
   modelName?: string | null;
   category?: string | null;
+  sourceCategory?: string | null;
+  classification?: Record<string, unknown> | null;
   brand?: string | null;
   partCode?: string | null;
   keywords: string[];
@@ -146,6 +148,9 @@ export interface StockroomItemDetails {
     productId: string;
     sku: string;
     name: string;
+    category?: string | null;
+    sourceCategory?: string | null;
+    classification?: Record<string, unknown> | null;
     partCode?: string | null;
     keywords: string[];
     quantity: number;
@@ -188,6 +193,8 @@ export interface StockroomMasterItem {
   sku: string;
   name: string;
   category?: string | null;
+  sourceCategory?: string | null;
+  classification?: Record<string, unknown> | null;
   modelName?: string | null;
   brand?: string | null;
   partCode?: string | null;

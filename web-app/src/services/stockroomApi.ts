@@ -1,5 +1,5 @@
 import apiClient, { extractApiError } from './apiClient';
-import { MOCK_PRODUCTS } from '../modules/stockroom/data/mockProducts';
+import { MOCK_SEED_PRODUCTS as MOCK_PRODUCTS } from '../modules/stockroom/data/mockProducts';
 import type {
   StockroomBootstrap,
   StockroomItemDetails,
@@ -34,11 +34,16 @@ export async function searchStockroomItems(query: string): Promise<StockroomSear
         productId: p.id,
         sku: p.sku,
         name: p.name,
-        matchType: 'keyword',
+        category: p.category,
+        matchedBy: 'keyword',
+        keywords: [p.category].filter(Boolean),
+        quantity: Number(p.stock ?? 0),
         floor: { id: 'f1', floorNumber: 1, name: 'Ground Floor' },
         zone: { id: 'z1', code: 'Z1', name: 'Main Hall' },
         aisle: { id: 'a1', code: 'A1', name: 'Aisle 1' },
-        shelf: { id: 's1', code: 'S1', name: 'Shelf 1' },
+        shelf: { id: 's1', code: 'S1', name: 'Shelf 1', shelfType: '4_level', positionX: 0, positionY: 0, width: 1 },
+        level: { id: 'l1', levelNumber: 1, elevation: 0.8 },
+        slot: { id: 'sl1', slotNumber: 1, slotLabel: 'Slot 1', positionX: 0, width: 1 },
         similarity: 1
       })) as StockroomSearchResult[];
     }
@@ -52,11 +57,16 @@ export async function searchStockroomItems(query: string): Promise<StockroomSear
       productId: p.id,
       sku: p.sku,
       name: p.name,
-      matchType: 'keyword',
+      category: p.category,
+      matchedBy: 'keyword',
+      keywords: [p.category].filter(Boolean),
+      quantity: Number(p.stock ?? 0),
       floor: { id: 'f1', floorNumber: 1, name: 'Ground Floor' },
       zone: { id: 'z1', code: 'Z1', name: 'Main Hall' },
       aisle: { id: 'a1', code: 'A1', name: 'Aisle 1' },
-      shelf: { id: 's1', code: 'S1', name: 'Shelf 1' },
+      shelf: { id: 's1', code: 'S1', name: 'Shelf 1', shelfType: '4_level', positionX: 0, positionY: 0, width: 1 },
+      level: { id: 'l1', levelNumber: 1, elevation: 0.8 },
+      slot: { id: 'sl1', slotNumber: 1, slotLabel: 'Slot 1', positionX: 0, width: 1 },
       similarity: 1
     })) as StockroomSearchResult[];
   }
@@ -72,7 +82,14 @@ export async function getStockroomItemDetails(productId: string, currentFloor: n
     // Generate an automatic route for mocked details
     const mockItem = MOCK_PRODUCTS.find(p => p.id === productId) || MOCK_PRODUCTS[0];
     return {
-      item: { productId: mockItem.id, sku: mockItem.sku, name: mockItem.name },
+      item: {
+        productId: mockItem.id,
+        sku: mockItem.sku,
+        name: mockItem.name,
+        category: mockItem.category,
+        keywords: [mockItem.category].filter(Boolean),
+        quantity: Number(mockItem.stock ?? 0)
+      },
       currentFloor,
       targetFloor: 1,
       targetShelfId: 'mock-shelf-123',
@@ -135,6 +152,7 @@ export async function getStockroomMasterItems(params: Record<string, unknown> = 
         productId: p.id,
         sku: p.sku,
         name: p.name,
+        category: p.category,
         partCode: p.sku,
         keywords: [p.category]
       })) as StockroomMasterItem[];
@@ -145,6 +163,7 @@ export async function getStockroomMasterItems(params: Record<string, unknown> = 
       productId: p.id,
       sku: p.sku,
       name: p.name,
+      category: p.category,
       partCode: p.sku,
       keywords: [p.category]
     })) as StockroomMasterItem[];

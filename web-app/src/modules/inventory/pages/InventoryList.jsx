@@ -12,8 +12,10 @@ import { useToast } from '../../../components/ui/Toast';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
+import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
 import { getCatalogSummary } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
+import useDataStore from '../../../store/useDataStore';
 
 const PAGE_SIZE = 12;
 
@@ -24,6 +26,8 @@ function formatCatalogProduct(product) {
         name: product.name,
         model: product.model,
         category: product.category,
+        sourceCategory: product.sourceCategory ?? null,
+        classification: product.classification ?? null,
         price: Number(product.price ?? 0),
         stock: Number(product.stock ?? 0),
         quantity: Number(product.stock ?? 0),
@@ -36,8 +40,9 @@ function formatCatalogProduct(product) {
 }
 
 const InventoryList = () => {
-    const { success } = useToast();
+    const { success, error: showError } = useToast();
     const { isAdmin } = useAuth();
+    const findProduct = useDataStore((state) => state.findProduct);
     const [catalogSummary, setCatalogSummary] = useState(null);
     const [summaryError, setSummaryError] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
@@ -49,6 +54,7 @@ const InventoryList = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [refreshKey, setRefreshKey] = useState(0);
     const [productOverrides, setProductOverrides] = useState({});
+    const [selectedPreviewProduct, setSelectedPreviewProduct] = useState(null);
     const deferredSearchQuery = useDeferredValue(searchQuery);
     const {
         products,
@@ -139,6 +145,39 @@ const InventoryList = () => {
     const rangeStart = pagination.totalCount === 0 ? 0 : (((pagination.page ?? currentPage) - 1) * (pagination.pageSize ?? PAGE_SIZE)) + 1;
     const rangeEnd = pagination.totalCount === 0 ? 0 : Math.min((pagination.page ?? currentPage) * (pagination.pageSize ?? PAGE_SIZE), pagination.totalCount ?? 0);
 
+    const openPreview = (product) => {
+        if (!product) {
+            return;
+        }
+
+        setSelectedPreviewProduct(productOverrides[product.id] ?? formatCatalogProduct(product));
+    };
+
+    const lookupAndPreviewProduct = async (identifier) => {
+        const trimmedIdentifier = String(identifier || '').trim();
+        if (!trimmedIdentifier) {
+            return;
+        }
+
+        const visibleMatch = visibleProducts.find((product) => (
+            String(product.sku || '').trim().toLowerCase() === trimmedIdentifier.toLowerCase()
+            || String(product.id || '').trim().toLowerCase() === trimmedIdentifier.toLowerCase()
+        ));
+
+        if (visibleMatch) {
+            openPreview(visibleMatch);
+            return;
+        }
+
+        const product = await findProduct(trimmedIdentifier);
+        if (product) {
+            openPreview(product);
+            return;
+        }
+
+        showError(`No inventory item matched ${trimmedIdentifier}.`);
+    };
+
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -186,6 +225,11 @@ const InventoryList = () => {
                                 placeholder="Search products or scan barcode..."
                                 value={searchQuery}
                                 onChange={(event) => setSearchQuery(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                        void lookupAndPreviewProduct(searchQuery);
+                                    }
+                                }}
                                 className="w-full pl-10 pr-4 py-2.5 bg-white border border-primary-200 rounded-lg text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue shadow-sm"
                             />
                         </div>
@@ -278,7 +322,11 @@ const InventoryList = () => {
                     className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
                 >
                     {filteredProducts.map((product) => (
-                        <ProductCard key={product.id} product={product} />
+                        <ProductCard
+                            key={product.id}
+                            product={product}
+                            onSelect={openPreview}
+                        />
                     ))}
                 </motion.div>
             ) : (
@@ -298,7 +346,11 @@ const InventoryList = () => {
                             </thead>
                             <tbody>
                                 {filteredProducts.map((product) => (
-                                    <tr key={product.id} className="cursor-pointer hover:bg-primary-50 transition-colors">
+                                    <tr
+                                        key={product.id}
+                                        className="cursor-pointer hover:bg-primary-50 transition-colors"
+                                        onClick={() => openPreview(product)}
+                                    >
                                         <td className="font-bold text-primary-950 border-b border-primary-100 py-3">{product.name}</td>
                                         <td className="font-mono text-sm text-primary-500 border-b border-primary-100 py-3">{product.sku}</td>
                                         <td className="border-b border-primary-100 py-3 text-primary-700">{product.category}</td>
@@ -367,8 +419,16 @@ const InventoryList = () => {
                     if (barcode) {
                         setSearchQuery(barcode);
                         success(`Scanned: ${barcode}`);
+                        void lookupAndPreviewProduct(barcode);
                     }
                 }}
+            />
+
+            <ProductLabelPreviewModal
+                isOpen={Boolean(selectedPreviewProduct)}
+                onClose={() => setSelectedPreviewProduct(null)}
+                product={selectedPreviewProduct}
+                title="Inventory Label Preview"
             />
         </div>
     );

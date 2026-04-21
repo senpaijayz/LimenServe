@@ -11,6 +11,8 @@ function formatProduct(product) {
         name: product.name,
         model: product.model,
         category: product.category,
+        sourceCategory: product.sourceCategory ?? null,
+        classification: product.classification ?? null,
         price: Number(product.price ?? 0),
         stock: Number(product.stock ?? 0),
         quantity: Number(product.stock ?? 0),

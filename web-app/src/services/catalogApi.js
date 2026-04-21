@@ -1,5 +1,8 @@
 import apiClient, { extractApiError } from './apiClient';
-import { ALL_VEHICLE_MODELS, PRODUCT_CATEGORIES, products as fallbackProducts } from '../data/productData';
+import { ALL_VEHICLE_MODELS, products as fallbackProducts } from '../data/productData';
+import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
+
+const { OPERATIONAL_CATEGORIES, classifyInventoryItem } = inventoryClassifier;
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -11,8 +14,58 @@ function normalizeText(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+let fallbackCatalogPromise = null;
+
+function normalizeFallbackProduct(product, index = 0) {
+  const sourceCategory = product.sourceCategory ?? product.source_category ?? null;
+  const runtimeClassification = classifyInventoryItem({
+    sku: product.sku,
+    name: product.name,
+    model_name: product.model,
+    category: product.category,
+    sourceCategory,
+    pcc: product.pcc,
+    metadata: {
+      ...(product.classification ? { classification: product.classification } : {}),
+      ...(product.pcc ? { pcc: product.pcc } : {}),
+      ...(sourceCategory ? { sourceCategory } : {}),
+    },
+  });
+
+  return {
+    ...product,
+    id: product.id ?? `${product.sku || 'fallback'}-${index + 1}`,
+    model: product.model ?? product.model_name ?? '',
+    category: runtimeClassification.category,
+    sourceCategory: runtimeClassification.sourceCategory ?? sourceCategory,
+    classification: product.classification ?? runtimeClassification.trace,
+  };
+}
+
+async function loadFallbackCatalogSource() {
+  if (!fallbackCatalogPromise) {
+    fallbackCatalogPromise = (async () => {
+      try {
+        const response = await fetch('/data/fullPricelist.json', { cache: 'force-cache' });
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data) && data.length > 0) {
+            return data.map(normalizeFallbackProduct);
+          }
+        }
+      } catch {
+        // Fall through to the curated embedded sample.
+      }
+
+      return fallbackProducts.map(normalizeFallbackProduct);
+    })();
+  }
+
+  return fallbackCatalogPromise;
+}
+
 function buildFallbackCategoryOptions(items, selectedCategory = 'all') {
-  const counts = PRODUCT_CATEGORIES.map((category) => {
+  const counts = OPERATIONAL_CATEGORIES.map((category) => {
     const categoryCount = items.filter((product) => product.category === category).length;
     return {
       value: category.toLowerCase(),
@@ -70,15 +123,16 @@ function buildFallbackPagination(items, page = 1, pageSize = 12) {
   };
 }
 
-function getFallbackCatalog(params = {}) {
+async function getFallbackCatalog(params = {}) {
   const page = Number(params.page) || 1;
   const pageSize = Number(params.pageSize) || 12;
   const searchQuery = normalizeText(params.q);
   const selectedCategory = normalizeText(params.category || 'all');
   const selectedVehicleModel = normalizeText(params.vehicleModel);
   const selectedVehicleYear = normalizeText(params.vehicleYear);
+  const fallbackCatalog = await loadFallbackCatalogSource();
 
-  const filteredProducts = fallbackProducts.filter((product) => {
+  const filteredProducts = fallbackCatalog.filter((product) => {
     const matchesSearch = !searchQuery || [
       product.name,
       product.sku,
@@ -95,7 +149,7 @@ function getFallbackCatalog(params = {}) {
 
   const sortedProducts = sortFallbackProducts(filteredProducts, params.sortBy);
   const paginated = buildFallbackPagination(sortedProducts, page, pageSize);
-  const categorySource = fallbackProducts.filter((product) => {
+  const categorySource = fallbackCatalog.filter((product) => {
     const matchesSearch = !searchQuery || [
       product.name,
       product.sku,
@@ -227,7 +281,7 @@ export async function getFullProductCatalog() {
     return data.products ?? [];
   } catch (error) {
     if (isNetworkFailure(error)) {
-      return fallbackProducts;
+      return loadFallbackCatalogSource();
     }
     extractApiError(error, 'Failed to load full product catalog.');
   }
