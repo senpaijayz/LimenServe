@@ -15,7 +15,7 @@ function formatLocation(location = {}) {
         location?.slot ? `Slot ${location.slot}` : null,
     ].filter(Boolean);
 
-    return segments.length > 0 ? segments.join(' • ') : 'Unassigned';
+    return segments.length > 0 ? segments.join(' / ') : 'Unassigned';
 }
 
 function formatRouteLocation(details) {
@@ -31,7 +31,7 @@ function formatRouteLocation(details) {
         details.location.slot?.slotLabel || details.location.slot?.number,
     ].filter(Boolean);
 
-    return parts.join(' • ');
+    return parts.join(' / ');
 }
 
 const InfoPill = ({ icon: Icon, label, value }) => (
@@ -145,7 +145,14 @@ const ProductLabelPreviewModal = ({
                             )}
                         </div>
 
-                        <div className="flex items-center justify-center rounded-[24px] border border-white/10 bg-white/5 p-4">
+                        <div
+                            className="flex items-center justify-center rounded-[24px] border p-5"
+                            style={{
+                                borderColor: 'rgba(255, 255, 255, 0.14)',
+                                background: 'linear-gradient(180deg, rgba(245, 242, 235, 0.96) 0%, rgba(232, 228, 220, 0.9) 100%)',
+                                boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.65)',
+                            }}
+                        >
                             <MitsubishiGenuinePartsLabel
                                 ref={labelRef}
                                 product={product}

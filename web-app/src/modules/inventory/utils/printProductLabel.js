@@ -24,21 +24,43 @@ export function printProductLabelNode(node, title = 'Mitsubishi Genuine Parts La
               padding: 0;
               background: #ffffff;
               color: #000000;
-              font-family: Arial, sans-serif;
+              font-family: "Arial Narrow", Arial, sans-serif;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
             body {
               min-height: 100vh;
               display: flex;
-              align-items: flex-start;
+              align-items: center;
               justify-content: center;
-              padding: 16px;
+              padding: 8mm;
+              background: #f4f1eb;
             }
-            svg {
+            [data-product-label-root="true"] {
+              width: 92mm !important;
+              min-width: 92mm !important;
+              max-width: 92mm !important;
+              box-shadow: none !important;
+              border-radius: 2mm !important;
+            }
+            [data-product-label-root="true"] img {
               max-width: 100%;
+              height: auto;
+            }
+            [data-product-label-root="true"] svg {
+              display: block;
+              max-width: none !important;
+              overflow: visible;
             }
             @page {
               size: auto;
-              margin: 8mm;
+              margin: 6mm;
+            }
+            @media print {
+              body {
+                padding: 0;
+                background: #ffffff;
+              }
             }
           </style>
         </head>
@@ -53,7 +75,7 @@ export function printProductLabelNode(node, title = 'Mitsubishi Genuine Parts La
         printWindow.focus();
         printWindow.print();
         printWindow.close();
-    }, 250);
+    }, 350);
 
     return true;
 }
