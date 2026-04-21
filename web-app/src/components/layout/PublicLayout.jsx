@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CarFront, Clock, MapPin, Menu, Phone, Search, ShieldCheck, X } from 'lucide-react';
-import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { CarFront, Clock, MapPin, Menu, Phone, ShieldCheck, X } from 'lucide-react';
+import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
 
 const primaryNav = [
@@ -15,10 +15,8 @@ const primaryNav = [
 const PublicLayout = () => {
     const { isAuthenticated } = useAuth();
     const location = useLocation();
-    const navigate = useNavigate();
     const [scrolled, setScrolled] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const [headerQuery, setHeaderQuery] = useState('');
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -29,12 +27,6 @@ const PublicLayout = () => {
     if (isAuthenticated) {
         return <Navigate to="/dashboard" replace />;
     }
-
-    const submitHeaderSearch = () => {
-        const query = headerQuery.trim();
-        navigate(query ? `/catalog?q=${encodeURIComponent(query)}` : '/catalog');
-        setMobileMenuOpen(false);
-    };
 
     const isNavItemActive = (to) => {
         if (to === '/catalog') {
@@ -94,33 +86,7 @@ const PublicLayout = () => {
                                         {item.label}
                                     </Link>
                                 ))}
-                                <a href="#footer-contact" className="text-sm font-medium text-primary-600 transition-colors hover:text-primary-950">
-                                    Contact
-                                </a>
                             </nav>
-
-                            <div className="flex w-full max-w-[430px] items-center overflow-hidden rounded-xl border border-primary-300 bg-primary-100 shadow-sm">
-                                <Search className="ml-4 h-4 w-4 text-primary-500" />
-                                <input
-                                    type="text"
-                                    value={headerQuery}
-                                    onChange={(event) => setHeaderQuery(event.target.value)}
-                                    onKeyDown={(event) => {
-                                        if (event.key === 'Enter') {
-                                            submitHeaderSearch();
-                                        }
-                                    }}
-                                    placeholder="Search by part name, vehicle, or part number"
-                                    className="w-full bg-transparent px-3 py-3 text-sm text-primary-900 outline-none placeholder:text-primary-500"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={submitHeaderSearch}
-                                    className="mr-2 rounded-lg bg-accent-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-blueDark"
-                                >
-                                    Search
-                                </button>
-                            </div>
 
                             <Link to="/login" className="btn btn-primary px-4 py-2 text-xs">
                                 Staff Portal
@@ -148,27 +114,6 @@ const PublicLayout = () => {
                         className="fixed inset-0 z-40 overflow-y-auto bg-white px-4 pb-8 pt-24 shadow-2xl xl:hidden"
                     >
                         <div className="mx-auto max-w-xl space-y-4">
-                            <div className="rounded-2xl border border-primary-200 bg-primary-100 p-3">
-                                <div className="flex items-center rounded-xl border border-primary-300 bg-white">
-                                    <Search className="ml-4 h-4 w-4 text-primary-500" />
-                                    <input
-                                        type="text"
-                                        value={headerQuery}
-                                        onChange={(event) => setHeaderQuery(event.target.value)}
-                                        onKeyDown={(event) => {
-                                            if (event.key === 'Enter') {
-                                                submitHeaderSearch();
-                                            }
-                                        }}
-                                        placeholder="Search by part name, vehicle, or part number"
-                                        className="w-full bg-transparent px-3 py-3 text-sm text-primary-900 outline-none placeholder:text-primary-500"
-                                    />
-                                </div>
-                                <button type="button" onClick={submitHeaderSearch} className="btn btn-primary mt-3 w-full">
-                                    Search Catalog
-                                </button>
-                            </div>
-
                             <div className="rounded-2xl border border-primary-200 bg-white">
                                 {primaryNav.map((item) => (
                                     <Link
@@ -180,9 +125,6 @@ const PublicLayout = () => {
                                         {item.label}
                                     </Link>
                                 ))}
-                                <a href="#footer-contact" onClick={() => setMobileMenuOpen(false)} className="block px-5 py-4 text-base font-semibold text-primary-900">
-                                    Contact
-                                </a>
                                 <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block border-t border-primary-200 px-5 py-4 text-base font-semibold text-accent-primary">
                                     Staff Portal
                                 </Link>
