@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
+import inventoryClassifier from '../lib/inventoryClassifier';
 
 const { classifyInventoryItem, OPERATIONAL_CATEGORIES } = inventoryClassifier;
 

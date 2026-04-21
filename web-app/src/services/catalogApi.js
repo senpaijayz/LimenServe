@@ -1,6 +1,6 @@
 import apiClient, { extractApiError } from './apiClient';
 import { ALL_VEHICLE_MODELS, products as fallbackProducts } from '../data/productData';
-import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
+import inventoryClassifier from '../lib/inventoryClassifier';
 
 const { OPERATIONAL_CATEGORIES, classifyInventoryItem } = inventoryClassifier;
 

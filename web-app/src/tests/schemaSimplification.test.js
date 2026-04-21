@@ -59,6 +59,8 @@ describe('schema simplification rollout', () => {
     const stockroomService = readFile('backend/src/services/stockroomService.js');
     const catalogRoutes = readFile('backend/src/routes/catalogRoutes.js');
     const partsMappingStore = readFile('web-app/src/modules/parts-mapping/usePartsMappingStore.ts');
+    const catalogApi = readFile('web-app/src/services/catalogApi.js');
+    const webClassifierPath = path.join(repoRoot, 'web-app', 'src', 'lib', 'inventoryClassifier.js');
 
     expect(partsMappingService).not.toContain("from('pm_layouts')");
     expect(partsMappingService).toContain("schema('stockroom')");
@@ -72,5 +74,9 @@ describe('schema simplification rollout', () => {
 
     expect(partsMappingStore).toContain('id: string;');
     expect(partsMappingStore).not.toContain('id: number;');
+
+    expect(catalogApi).not.toContain('../../../scripts/lib/inventory-classifier.cjs');
+    expect(catalogApi).toContain("../lib/inventoryClassifier");
+    expect(fs.existsSync(webClassifierPath)).toBe(true);
   });
 });
