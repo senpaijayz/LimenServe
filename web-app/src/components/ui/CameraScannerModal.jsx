@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { X, Camera } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
@@ -21,7 +21,15 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
             // Initialize scanner
             scanner = new Html5QrcodeScanner(
                 "reader",
-                { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.777778 },
+                {
+                    fps: 10,
+                    qrbox: { width: 250, height: 150 },
+                    aspectRatio: 1.777778,
+                    formatsToSupport: [
+                        Html5QrcodeSupportedFormats.CODE_39,
+                        Html5QrcodeSupportedFormats.CODE_128,
+                    ],
+                },
                 /* verbose= */ false
             );
 

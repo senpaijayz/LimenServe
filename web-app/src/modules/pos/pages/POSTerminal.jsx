@@ -13,6 +13,7 @@ import AddServiceModal from '../../../components/ui/AddServiceModal';
 import { createPosSale } from '../../../services/posApi';
 import SaleReceiptPreview from '../components/SaleReceiptPreview.jsx';
 import useProductCatalog from '../../../hooks/useProductCatalog';
+import { buildProductBarcodeValue, productMatchesIdentifier } from '../../../utils/barcode';
 
 const PAGE_SIZE = 14;
 
@@ -94,12 +95,12 @@ const POSTerminal = () => {
     const handleBarcodeScanned = async (barcode) => {
         if (!barcode) return;
 
-        const normalizedBarcode = String(barcode).trim().toLowerCase();
-        const localProduct = visibleProducts.find((product) => product.sku.toLowerCase() === normalizedBarcode || String(product.id) === String(barcode));
+        const localProduct = visibleProducts.find((product) => productMatchesIdentifier(product, barcode));
         const product = localProduct || await findProduct(barcode);
 
         if (product) {
             addItem(product, 1);
+            setSearchQuery(product.sku || String(barcode).trim());
             success(`Scanned: ${product.name}`);
         } else {
             console.warn(`Barcode not found in inventory: ${barcode}`);
@@ -229,8 +230,9 @@ const POSTerminal = () => {
                                     <div className="h-16 bg-primary-50 rounded-lg mb-2 flex items-center justify-center border border-primary-100 p-1 overflow-hidden">
                                         <div className="w-full flex items-center justify-center opacity-80 mix-blend-multiply">
                                             <Barcode
-                                                value={product.sku || 'UNKNOWN'}
-                                                width={1}
+                                                value={buildProductBarcodeValue(product.sku || 'UNKNOWN') || (product.sku || 'UNKNOWN')}
+                                                format="CODE39"
+                                                width={0.52}
                                                 height={30}
                                                 fontSize={10}
                                                 margin={0}

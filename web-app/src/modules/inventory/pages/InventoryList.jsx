@@ -16,6 +16,7 @@ import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
 import { getCatalogSummary } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
+import { productMatchesIdentifier } from '../../../utils/barcode';
 
 const PAGE_SIZE = 12;
 
@@ -159,23 +160,21 @@ const InventoryList = () => {
             return;
         }
 
-        const visibleMatch = visibleProducts.find((product) => (
-            String(product.sku || '').trim().toLowerCase() === trimmedIdentifier.toLowerCase()
-            || String(product.id || '').trim().toLowerCase() === trimmedIdentifier.toLowerCase()
-        ));
+        const visibleMatch = visibleProducts.find((product) => productMatchesIdentifier(product, trimmedIdentifier));
 
         if (visibleMatch) {
             openPreview(visibleMatch);
-            return;
+            return visibleMatch;
         }
 
         const product = await findProduct(trimmedIdentifier);
         if (product) {
             openPreview(product);
-            return;
+            return product;
         }
 
         showError(`No inventory item matched ${trimmedIdentifier}.`);
+        return null;
     };
 
     return (
@@ -415,11 +414,14 @@ const InventoryList = () => {
             <CameraScannerModal
                 isOpen={showCameraScanner}
                 onClose={() => setShowCameraScanner(false)}
-                onScan={(barcode) => {
+                onScan={async (barcode) => {
                     if (barcode) {
                         setSearchQuery(barcode);
                         success(`Scanned: ${barcode}`);
-                        void lookupAndPreviewProduct(barcode);
+                        const matchedProduct = await lookupAndPreviewProduct(barcode);
+                        if (matchedProduct?.sku) {
+                            setSearchQuery(matchedProduct.sku);
+                        }
                     }
                 }}
             />

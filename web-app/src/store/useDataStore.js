@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getProductCatalog } from '../services/catalogApi';
+import { getBarcodeLookupQueries, productMatchesIdentifier } from '../utils/barcode';
 
 const BOOTSTRAP_PAGE_SIZE = 100;
 const BACKGROUND_BATCH_SIZE = 4;
@@ -59,15 +60,11 @@ async function hydrateRemainingPages(totalPages, onPageLoaded) {
 }
 
 function findExactProductMatch(products, identifier) {
-    const normalizedIdentifier = String(identifier || '').trim().toLowerCase();
-    if (!normalizedIdentifier) {
+    if (!String(identifier || '').trim()) {
         return null;
     }
 
-    return products.find((product) => (
-        String(product.sku || '').trim().toLowerCase() === normalizedIdentifier
-        || String(product.id || '').trim().toLowerCase() === normalizedIdentifier
-    )) || null;
+    return products.find((product) => productMatchesIdentifier(product, identifier)) || null;
 }
 
 /**
@@ -169,24 +166,35 @@ const useDataStore = create((set, get) => ({
             return exactMatch;
         }
 
-        const query = String(identifier || '').trim();
-        if (!query) {
+        const lookupQueries = getBarcodeLookupQueries(identifier);
+        if (lookupQueries.length === 0) {
             return null;
         }
 
         try {
-            const catalog = await getProductCatalog({
-                page: 1,
-                pageSize: 20,
-                q: query,
-                includeCategories: false,
-            });
-            const remoteProducts = (catalog.products ?? []).map(formatProduct);
-            const remoteMatch = findExactProductMatch(remoteProducts, query);
+            let mergedRemoteProducts = [];
+            let remoteMatch = null;
 
-            if (remoteProducts.length > 0) {
+            for (const query of lookupQueries) {
+                const catalog = await getProductCatalog({
+                    page: 1,
+                    pageSize: 20,
+                    q: query,
+                    includeCategories: false,
+                });
+                const remoteProducts = (catalog.products ?? []).map(formatProduct);
+
+                mergedRemoteProducts = mergeProducts(mergedRemoteProducts, remoteProducts);
+                remoteMatch = findExactProductMatch(mergedRemoteProducts, identifier);
+
+                if (remoteMatch) {
+                    break;
+                }
+            }
+
+            if (mergedRemoteProducts.length > 0) {
                 set((state) => ({
-                    products: mergeProducts(state.products, remoteProducts),
+                    products: mergeProducts(state.products, mergedRemoteProducts),
                 }));
             }
 

@@ -23,6 +23,7 @@ import useVehiclePackages from '../../../hooks/useVehiclePackages';
 import ProductPackageSuggestions from './ProductPackageSuggestions';
 import PublicVehicleSelector from './PublicVehicleSelector';
 import VehiclePackageShowcase from './VehiclePackageShowcase';
+import { buildProductBarcodeValue } from '../../../utils/barcode';
 
 const PAGE_SIZE = 12;
 
@@ -35,7 +36,7 @@ const SORT_OPTIONS = [
 
 const GenuinePartsLabel = ({ product, compact = false, dense = false }) => {
   const labelHeight = dense ? 'h-48 sm:h-52' : compact ? 'h-56' : 'h-full min-h-[300px]';
-  const barcodeWidth = dense ? 1.2 : compact ? 1.45 : 1.7;
+  const barcodeWidth = dense ? 0.72 : compact ? 0.84 : 1.04;
   const barcodeHeight = dense ? 38 : compact ? 48 : 68;
   const skuTextSize = dense ? 'text-[1.55rem] sm:text-[1.75rem]' : compact ? 'text-[1.95rem]' : 'text-[2.4rem]';
   const headerLabelSize = dense ? 'text-[7px]' : compact ? 'text-[8px]' : 'text-[10px]';
@@ -74,8 +75,8 @@ const GenuinePartsLabel = ({ product, compact = false, dense = false }) => {
       <div className="flex-1 px-4 pt-5 pb-4 flex items-center justify-center">
         <div className="w-full bg-transparent px-1 py-2 flex justify-center overflow-hidden">
           <Barcode
-            value={product.sku || 'UNKNOWN'}
-            format="CODE128"
+            value={buildProductBarcodeValue(product.sku || 'UNKNOWN') || (product.sku || 'UNKNOWN')}
+            format="CODE39"
             width={barcodeWidth}
             height={barcodeHeight}
             fontSize={0}

@@ -15,13 +15,15 @@ describe('Mitsubishi genuine parts label', () => {
     });
 
     it('renders the Mitsubishi sticker header with the official logo asset and sample-like defaults', () => {
-        render(<MitsubishiGenuinePartsLabel product={product} quantity={1} />);
+        const { container } = render(<MitsubishiGenuinePartsLabel product={product} quantity={1} />);
+        const labelRoot = container.querySelector('[data-product-label-root="true"]');
 
         expect(screen.getByAltText('Mitsubishi Motors')).toBeTruthy();
         expect(screen.getByText('GENUINE PARTS')).toBeTruthy();
         expect(screen.getByText('R')).toBeTruthy();
         expect(screen.getByText('MA')).toBeTruthy();
         expect(screen.getByText('MADE IN JAPAN')).toBeTruthy();
+        expect(labelRoot?.getAttribute('data-barcode-value')).toBe('DP0103740001');
     });
 
     it('writes print output with sticker-specific sizing and print color fidelity', () => {

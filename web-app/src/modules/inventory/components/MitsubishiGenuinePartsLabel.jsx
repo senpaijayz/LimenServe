@@ -1,6 +1,7 @@
 import { forwardRef } from 'react';
 import Barcode from 'react-barcode';
 import mitsubishiLogo from '../../../assets/branding/mitsubishi-motors-logo.svg';
+import { buildProductBarcodeValue } from '../../../utils/barcode';
 
 const SIZE_PRESETS = {
     default: {
@@ -14,7 +15,7 @@ const SIZE_PRESETS = {
         footerFontSize: 11,
         footerCountryFontSize: 11,
         barcodeHeight: 78,
-        barcodeWidth: 1.9,
+        barcodeWidth: 1.14,
         logoHeight: 28,
         markerFontSize: 28,
         genuineBoxWidth: 126,
@@ -30,7 +31,7 @@ const SIZE_PRESETS = {
         footerFontSize: 9,
         footerCountryFontSize: 9,
         barcodeHeight: 64,
-        barcodeWidth: 1.5,
+        barcodeWidth: 0.78,
         logoHeight: 22,
         markerFontSize: 22,
         genuineBoxWidth: 110,
@@ -55,13 +56,14 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
     const preset = SIZE_PRESETS[size] || SIZE_PRESETS.default;
     const description = formatLabelDescription(product?.name);
     const sku = String(product?.sku || 'UNKNOWN').trim().toUpperCase();
+    const barcodeValue = buildProductBarcodeValue(sku) || sku;
 
     return (
         <div
             ref={ref}
             data-product-label-root="true"
             data-label-variant="mitsubishi-sticker"
-            data-barcode-value={sku}
+            data-barcode-value={barcodeValue}
             className={className}
             style={{
                 width: '100%',
@@ -245,8 +247,8 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
                         }}
                     >
                         <Barcode
-                            value={sku}
-                            format="CODE128"
+                            value={barcodeValue}
+                            format="CODE39"
                             width={preset.barcodeWidth}
                             height={preset.barcodeHeight}
                             fontSize={0}
