@@ -19,11 +19,14 @@ describe('Mitsubishi genuine parts label', () => {
         const labelRoot = container.querySelector('[data-product-label-root="true"]');
 
         expect(screen.getByAltText('Mitsubishi Motors')).toBeTruthy();
-        expect(screen.getByText('GENUINE PARTS')).toBeTruthy();
+        expect(screen.getByText('Genuine Parts')).toBeTruthy();
         expect(screen.getByText('R')).toBeTruthy();
         expect(screen.getByText('MA')).toBeTruthy();
         expect(screen.getByText('MADE IN JAPAN')).toBeTruthy();
+        expect(screen.getByText('RIKEN CP38 (SANDPAPER)')).toBeTruthy();
+        expect(screen.getByText('QTY: 1')).toBeTruthy();
         expect(labelRoot?.getAttribute('data-barcode-value')).toBe('DP0103740001');
+        expect(labelRoot?.getAttribute('data-barcode-format')).toBe('CODE39');
     });
 
     it('writes print output with sticker-specific sizing and print color fidelity', () => {
@@ -55,7 +58,7 @@ describe('Mitsubishi genuine parts label', () => {
         const html = written.join('\n');
 
         expect(html).toContain('print-color-adjust: exact');
-        expect(html).toContain('92mm');
+        expect(html).toContain('96mm');
         expect(html).toContain('data-product-label-root="true"');
         expect(fakeWindow.print).toHaveBeenCalledTimes(1);
     });

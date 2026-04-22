@@ -227,17 +227,17 @@ const POSTerminal = () => {
                                     onClick={() => handleProductClick(product)}
                                     className="pos-item text-left"
                                 >
-                                    <div className="h-16 bg-primary-50 rounded-lg mb-2 flex items-center justify-center border border-primary-100 p-1 overflow-hidden">
-                                        <div className="w-full flex items-center justify-center opacity-80 mix-blend-multiply">
+                                    <div className="h-[4.5rem] bg-white rounded-lg mb-2 flex items-center justify-center border border-primary-100 p-2 overflow-hidden">
+                                        <div className="w-full flex items-center justify-center">
                                             <Barcode
                                                 value={buildProductBarcodeValue(product.sku || 'UNKNOWN') || (product.sku || 'UNKNOWN')}
                                                 format="CODE39"
-                                                width={0.52}
-                                                height={30}
+                                                width={0.68}
+                                                height={36}
                                                 fontSize={10}
-                                                margin={0}
+                                                margin={6}
                                                 displayValue={false}
-                                                background="transparent"
+                                                background="#ffffff"
                                                 lineColor="#0f172a"
                                             />
                                         </div>

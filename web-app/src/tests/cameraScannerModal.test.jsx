@@ -27,6 +27,9 @@ vi.mock('html5-qrcode', () => ({
         CODE_39: 'CODE_39',
         CODE_128: 'CODE_128',
     },
+    Html5QrcodeScanType: {
+        SCAN_TYPE_CAMERA: 'SCAN_TYPE_CAMERA',
+    },
 }));
 
 import CameraScannerModal from '../components/ui/CameraScannerModal';
@@ -48,7 +51,12 @@ describe('CameraScannerModal', () => {
         expect(constructorSpy).toHaveBeenCalledWith(
             'reader',
             expect.objectContaining({
+                fps: 12,
+                rememberLastUsedCamera: true,
+                showTorchButtonIfSupported: true,
+                showZoomSliderIfSupported: true,
                 formatsToSupport: ['CODE_39', 'CODE_128'],
+                supportedScanTypes: ['SCAN_TYPE_CAMERA'],
             }),
             false
         );

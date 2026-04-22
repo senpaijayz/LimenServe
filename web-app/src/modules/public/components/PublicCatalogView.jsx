@@ -15,7 +15,6 @@ import {
   CarFront,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import Barcode from 'react-barcode';
 import { formatCurrency } from '../../../utils/formatters';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import usePublicVehicleSelection from '../../../hooks/usePublicVehicleSelection';
@@ -23,7 +22,7 @@ import useVehiclePackages from '../../../hooks/useVehiclePackages';
 import ProductPackageSuggestions from './ProductPackageSuggestions';
 import PublicVehicleSelector from './PublicVehicleSelector';
 import VehiclePackageShowcase from './VehiclePackageShowcase';
-import { buildProductBarcodeValue } from '../../../utils/barcode';
+import MitsubishiGenuinePartsLabel from '../../inventory/components/MitsubishiGenuinePartsLabel';
 
 const PAGE_SIZE = 12;
 
@@ -35,57 +34,18 @@ const SORT_OPTIONS = [
 ];
 
 const GenuinePartsLabel = ({ product, compact = false, dense = false }) => {
-  const labelHeight = dense ? 'h-48 sm:h-52' : compact ? 'h-56' : 'h-full min-h-[300px]';
-  const barcodeWidth = dense ? 0.72 : compact ? 0.84 : 1.04;
-  const barcodeHeight = dense ? 38 : compact ? 48 : 68;
-  const skuTextSize = dense ? 'text-[1.55rem] sm:text-[1.75rem]' : compact ? 'text-[1.95rem]' : 'text-[2.4rem]';
-  const headerLabelSize = dense ? 'text-[7px]' : compact ? 'text-[8px]' : 'text-[10px]';
+  const labelHeight = dense ? 'min-h-[210px]' : compact ? 'min-h-[250px]' : 'min-h-[320px]';
+  const labelSize = dense ? 'dense' : compact ? 'compact' : 'default';
+  const previewScale = dense ? 'scale-[0.94]' : compact ? 'scale-[0.96]' : 'scale-100';
 
   return (
-    <div className={`${labelHeight} bg-[#f7f7f5] rounded-[1.35rem] border-2 border-primary-200 flex flex-col relative overflow-hidden shadow-[0_14px_34px_rgba(17,18,22,0.08)]`}>
-      <div className="h-10 bg-[#17181c] flex items-center justify-between px-4 w-full shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="relative w-5 h-4 flex items-center justify-center">
-            <div className="absolute w-[7px] h-[7px] bg-[#e60012] rotate-45 -top-[1px]" />
-            <div className="absolute w-[7px] h-[7px] bg-[#e60012] rotate-45 -left-[5px] top-[3px]" />
-            <div className="absolute w-[7px] h-[7px] bg-[#e60012] rotate-45 -right-[5px] top-[3px]" />
-          </div>
-          <span className={`${headerLabelSize} font-bold text-white leading-tight uppercase tracking-[0.18em]`}>
-            Mitsubishi
-            <br />
-            Motors
-          </span>
-        </div>
-        <span className="text-[10px] font-bold text-white tracking-[0.28em] uppercase">Genuine Parts</span>
-        <span className="text-[9px] font-bold text-white">R</span>
-      </div>
-
-      <div className="flex justify-between items-start px-4 pt-4">
-        <span className="text-[12px] text-primary-700 font-bold uppercase tracking-wide line-clamp-2">
-          {product.name}
-        </span>
-      </div>
-
-      <div className="px-4 pt-3 text-center">
-        <span className={`${skuTextSize} font-semibold tracking-[0.18em] text-primary-900 leading-none`}>
-          {product.sku || 'UNKNOWN'}
-        </span>
-      </div>
-
-      <div className="flex-1 px-4 pt-5 pb-4 flex items-center justify-center">
-        <div className="w-full bg-transparent px-1 py-2 flex justify-center overflow-hidden">
-          <Barcode
-            value={buildProductBarcodeValue(product.sku || 'UNKNOWN') || (product.sku || 'UNKNOWN')}
-            format="CODE39"
-            width={barcodeWidth}
-            height={barcodeHeight}
-            fontSize={0}
-            margin={0}
-            displayValue={false}
-            background="transparent"
-            lineColor="#111216"
-          />
-        </div>
+    <div className={`${labelHeight} flex items-center justify-center overflow-visible`}>
+      <div className={`origin-top ${previewScale}`}>
+        <MitsubishiGenuinePartsLabel
+          product={product}
+          quantity={1}
+          size={labelSize}
+        />
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ export function printProductLabelNode(node, title = 'Mitsubishi Genuine Parts La
         return false;
     }
 
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=420,height=720');
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=460,height=760');
     if (!printWindow) {
         return false;
     }
@@ -34,14 +34,14 @@ export function printProductLabelNode(node, title = 'Mitsubishi Genuine Parts La
               align-items: center;
               justify-content: center;
               padding: 8mm;
-              background: #f4f1eb;
+              background: #ffffff;
             }
             [data-product-label-root="true"] {
-              width: 92mm !important;
-              min-width: 92mm !important;
-              max-width: 92mm !important;
+              width: 96mm !important;
+              min-width: 96mm !important;
+              max-width: 96mm !important;
               box-shadow: none !important;
-              border-radius: 2mm !important;
+              border-radius: 1mm !important;
             }
             [data-product-label-root="true"] img {
               max-width: 100%;
@@ -54,7 +54,7 @@ export function printProductLabelNode(node, title = 'Mitsubishi Genuine Parts La
             }
             @page {
               size: auto;
-              margin: 6mm;
+              margin: 5mm;
             }
             @media print {
               body {

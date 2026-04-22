@@ -42,8 +42,8 @@ const InfoPill = ({ icon: Icon, label, value }) => (
             gap: '10px',
             padding: '12px 14px',
             borderRadius: '14px',
-            background: 'rgba(9, 13, 22, 0.58)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: '#ffffff',
+            border: '1px solid rgba(15, 23, 42, 0.1)',
         }}
     >
         <div
@@ -54,16 +54,16 @@ const InfoPill = ({ icon: Icon, label, value }) => (
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: 'rgba(216, 23, 36, 0.18)',
-                color: '#ff7781',
+                background: 'rgba(217, 34, 42, 0.12)',
+                color: '#d9222a',
                 flexShrink: 0,
             }}
         >
             <Icon className="h-4 w-4" />
         </div>
         <div>
-            <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.12em', color: '#8e9ab4', textTransform: 'uppercase' }}>{label}</div>
-            <div style={{ marginTop: '4px', fontSize: '14px', lineHeight: 1.45, color: '#f7f9fc', fontWeight: 600 }}>{value}</div>
+            <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.12em', color: '#64748b', textTransform: 'uppercase' }}>{label}</div>
+            <div style={{ marginTop: '4px', fontSize: '14px', lineHeight: 1.45, color: '#0f172a', fontWeight: 600 }}>{value}</div>
         </div>
     </div>
 );
@@ -95,24 +95,46 @@ const ProductLabelPreviewModal = ({
             onClose={onClose}
             title={title}
             size="xl"
-            className="border border-primary-900/40 bg-[#08101b] text-white"
+            className="border border-primary-200 bg-[#f7f6f2] text-primary-950"
         >
             <div className="space-y-5">
                 <div
-                    className="rounded-[28px] border border-primary-900/40"
+                    className="rounded-[28px] border border-primary-200"
                     style={{
-                        background: 'radial-gradient(circle at top left, rgba(216, 23, 36, 0.16), transparent 34%), linear-gradient(160deg, #0b1320 0%, #101929 48%, #0c1322 100%)',
+                        background: 'radial-gradient(circle at top left, rgba(217, 34, 42, 0.08), transparent 26%), linear-gradient(180deg, #fbfaf7 0%, #f2efe7 100%)',
                         padding: '24px',
                     }}
                 >
-                    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+                    <div className="grid gap-5 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+                        <div
+                            className="flex items-center justify-center rounded-[24px] border p-6"
+                            style={{
+                                borderColor: 'rgba(15, 23, 42, 0.1)',
+                                background: '#ffffff',
+                                boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.65)',
+                            }}
+                        >
+                            <div
+                                style={{
+                                    transform: 'scale(1.08)',
+                                    transformOrigin: 'center center',
+                                }}
+                            >
+                                <MitsubishiGenuinePartsLabel
+                                    ref={labelRef}
+                                    product={product}
+                                    quantity={quantity}
+                                />
+                            </div>
+                        </div>
+
                         <div className="space-y-4">
                             <div>
-                                <div className="text-[11px] font-bold uppercase tracking-[0.26em] text-[#8e9ab4]">Operational Category</div>
-                                <div className="mt-2 text-2xl font-black tracking-tight text-white">{product.category || 'General Parts & Accessories'}</div>
+                                <div className="text-[11px] font-bold uppercase tracking-[0.26em] text-primary-500">Operational Category</div>
+                                <div className="mt-2 text-2xl font-black tracking-tight text-primary-950">{product.category || 'General Parts & Accessories'}</div>
                                 {product.sourceCategory && product.sourceCategory !== product.category && (
-                                    <div className="mt-2 text-sm text-[#c5cedf]">
-                                        Source category: <span className="font-semibold text-white">{product.sourceCategory}</span>
+                                    <div className="mt-2 text-sm text-primary-600">
+                                        Source category: <span className="font-semibold text-primary-950">{product.sourceCategory}</span>
                                     </div>
                                 )}
                             </div>
@@ -129,11 +151,11 @@ const ProductLabelPreviewModal = ({
                             </div>
 
                             {Array.isArray(routeDetails?.steps) && routeDetails.steps.length > 0 && (
-                                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                                    <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#8e9ab4]">Route Guidance</div>
+                                <div className="rounded-2xl border border-primary-200 bg-white/80 p-4">
+                                    <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-primary-500">Route Guidance</div>
                                     <div className="mt-3 space-y-2">
                                         {routeDetails.steps.map((step, index) => (
-                                            <div key={`${step}-${index}`} className="flex items-start gap-3 text-sm text-[#edf2ff]">
+                                            <div key={`${step}-${index}`} className="flex items-start gap-3 text-sm text-primary-900">
                                                 <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#d81724] text-[11px] font-black text-white">
                                                     {index + 1}
                                                 </span>
@@ -143,21 +165,6 @@ const ProductLabelPreviewModal = ({
                                     </div>
                                 </div>
                             )}
-                        </div>
-
-                        <div
-                            className="flex items-center justify-center rounded-[24px] border p-5"
-                            style={{
-                                borderColor: 'rgba(255, 255, 255, 0.14)',
-                                background: 'linear-gradient(180deg, rgba(245, 242, 235, 0.96) 0%, rgba(232, 228, 220, 0.9) 100%)',
-                                boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.65)',
-                            }}
-                        >
-                            <MitsubishiGenuinePartsLabel
-                                ref={labelRef}
-                                product={product}
-                                quantity={quantity}
-                            />
                         </div>
                     </div>
                 </div>

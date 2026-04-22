@@ -6,35 +6,84 @@ import { buildProductBarcodeValue } from '../../../utils/barcode';
 const SIZE_PRESETS = {
     default: {
         width: 360,
-        minHeight: 244,
-        paddingX: 22,
+        minHeight: 250,
+        paddingX: 18,
         headerPaddingTop: 16,
-        descriptionFontSize: 17,
-        quantityFontSize: 16,
-        skuFontSize: 46,
-        footerFontSize: 11,
-        footerCountryFontSize: 11,
-        barcodeHeight: 78,
-        barcodeWidth: 1.14,
-        logoHeight: 28,
+        headerGap: 14,
+        logoWidth: 172,
+        badgeMinWidth: 156,
+        badgeTopFontSize: 8.5,
+        badgeMainFontSize: 16,
+        badgePadding: '6px 14px 5px',
         markerFontSize: 28,
-        genuineBoxWidth: 126,
+        ruleMarginTop: 12,
+        bodyPaddingTop: 14,
+        bodyPaddingBottom: 12,
+        descriptionFontSize: 16,
+        quantityFontSize: 16,
+        skuFontSize: 64,
+        barcodeTopMargin: 12,
+        barcodeHeight: 82,
+        barcodeWidth: 1.28,
+        barcodeMargin: 14,
+        barcodePadX: 8,
+        footerTopMargin: 8,
+        footerFontSize: 10.5,
+        footerCountryFontSize: 10.5,
     },
     compact: {
-        width: 304,
-        minHeight: 214,
-        paddingX: 18,
+        width: 320,
+        minHeight: 224,
+        paddingX: 16,
         headerPaddingTop: 14,
+        headerGap: 12,
+        logoWidth: 154,
+        badgeMinWidth: 140,
+        badgeTopFontSize: 7.5,
+        badgeMainFontSize: 14,
+        badgePadding: '5px 12px 4px',
+        markerFontSize: 24,
+        ruleMarginTop: 10,
+        bodyPaddingTop: 12,
+        bodyPaddingBottom: 10,
         descriptionFontSize: 14,
-        quantityFontSize: 13,
-        skuFontSize: 34,
+        quantityFontSize: 14,
+        skuFontSize: 52,
+        barcodeTopMargin: 10,
+        barcodeHeight: 68,
+        barcodeWidth: 1.02,
+        barcodeMargin: 11,
+        barcodePadX: 6,
+        footerTopMargin: 8,
         footerFontSize: 9,
         footerCountryFontSize: 9,
-        barcodeHeight: 64,
-        barcodeWidth: 0.78,
-        logoHeight: 22,
-        markerFontSize: 22,
-        genuineBoxWidth: 110,
+    },
+    dense: {
+        width: 270,
+        minHeight: 194,
+        paddingX: 14,
+        headerPaddingTop: 12,
+        headerGap: 10,
+        logoWidth: 132,
+        badgeMinWidth: 116,
+        badgeTopFontSize: 6.5,
+        badgeMainFontSize: 11.5,
+        badgePadding: '4px 9px 4px',
+        markerFontSize: 20,
+        ruleMarginTop: 8,
+        bodyPaddingTop: 10,
+        bodyPaddingBottom: 9,
+        descriptionFontSize: 12,
+        quantityFontSize: 12,
+        skuFontSize: 40,
+        barcodeTopMargin: 8,
+        barcodeHeight: 52,
+        barcodeWidth: 0.82,
+        barcodeMargin: 8,
+        barcodePadX: 4,
+        footerTopMargin: 6,
+        footerFontSize: 8,
+        footerCountryFontSize: 8,
     },
 };
 
@@ -63,6 +112,7 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
             ref={ref}
             data-product-label-root="true"
             data-label-variant="mitsubishi-sticker"
+            data-barcode-format="CODE39"
             data-barcode-value={barcodeValue}
             className={className}
             style={{
@@ -72,11 +122,10 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
                 display: 'flex',
                 flexDirection: 'column',
                 background: '#ffffff',
-                color: '#121212',
-                borderRadius: '6px',
-                overflow: 'hidden',
-                border: '1px solid #d5d8dd',
-                boxShadow: '0 14px 32px rgba(13, 17, 23, 0.12)',
+                color: '#111111',
+                borderRadius: '4px',
+                border: '1px solid #d7d8dc',
+                boxShadow: '0 8px 18px rgba(13, 17, 23, 0.08)',
                 fontFamily: '"Arial Narrow", Arial, sans-serif',
             }}
         >
@@ -90,77 +139,78 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
                     style={{
                         display: 'grid',
                         gridTemplateColumns: 'minmax(0, 1fr) auto auto',
-                        alignItems: 'start',
-                        gap: size === 'compact' ? '12px' : '16px',
+                        alignItems: 'center',
+                        gap: `${preset.headerGap}px`,
                     }}
                 >
-                    <div style={{ minWidth: 0 }}>
-                        <img
-                            src={mitsubishiLogo}
-                            alt="Mitsubishi Motors"
-                            style={{
-                                height: `${preset.logoHeight}px`,
-                                width: 'auto',
-                                display: 'block',
-                                objectFit: 'contain',
-                            }}
-                        />
-                    </div>
+                    <img
+                        src={mitsubishiLogo}
+                        alt="Mitsubishi Motors"
+                        style={{
+                            width: `${preset.logoWidth}px`,
+                            height: 'auto',
+                            display: 'block',
+                            objectFit: 'contain',
+                        }}
+                    />
 
                     <div
                         style={{
-                            justifySelf: 'center',
+                            minWidth: `${preset.badgeMinWidth}px`,
+                            padding: preset.badgePadding,
+                            border: '2px solid #d9222a',
+                            borderRadius: '12px',
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            width: `${preset.genuineBoxWidth}px`,
-                            minHeight: size === 'compact' ? '42px' : '48px',
-                            padding: size === 'compact' ? '5px 12px 6px' : '6px 14px 8px',
-                            border: '2px solid #d81724',
-                            borderRadius: size === 'compact' ? '11px' : '13px',
-                            color: '#d81724',
-                            textAlign: 'center',
+                            color: '#d9222a',
                             lineHeight: 1,
                         }}
                     >
                         <span
                             style={{
-                                fontSize: size === 'compact' ? '8px' : '9px',
-                                fontWeight: 800,
-                                letterSpacing: '0.11em',
+                                fontSize: `${preset.badgeTopFontSize}px`,
+                                fontWeight: 700,
+                                letterSpacing: '0.08em',
+                                textTransform: 'uppercase',
                             }}
                         >
-                            MITSUBISHI MOTORS
+                            Mitsubishi Motors
                         </span>
                         <span
                             style={{
-                                marginTop: size === 'compact' ? '3px' : '4px',
-                                fontSize: size === 'compact' ? '16px' : '18px',
-                                fontWeight: 900,
-                                letterSpacing: '0.03em',
+                                marginTop: '2px',
+                                fontSize: `${preset.badgeMainFontSize}px`,
+                                fontWeight: 800,
+                                letterSpacing: '0.02em',
+                                textTransform: 'uppercase',
                             }}
                         >
-                            GENUINE PARTS
+                            Genuine Parts
                         </span>
                     </div>
 
-                    <div
+                    <span
                         style={{
                             fontSize: `${preset.markerFontSize}px`,
                             lineHeight: 1,
                             fontWeight: 500,
-                            letterSpacing: '0.03em',
                             alignSelf: 'center',
-                            justifySelf: 'end',
-                            color: '#23262d',
+                            color: '#1a1a1a',
                         }}
                     >
                         R
-                    </div>
+                    </span>
                 </div>
 
-                <div style={{ height: '2px', background: '#d81724', marginTop: size === 'compact' ? '10px' : '12px' }} />
+                <div
+                    style={{
+                        height: '2px',
+                        background: '#d9222a',
+                        marginTop: `${preset.ruleMarginTop}px`,
+                    }}
+                />
             </div>
 
             <div
@@ -168,43 +218,45 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
                     flex: 1,
                     display: 'flex',
                     flexDirection: 'column',
-                    padding: `${size === 'compact' ? 16 : 18}px ${preset.paddingX}px ${size === 'compact' ? 12 : 14}px`,
+                    padding: `${preset.bodyPaddingTop}px ${preset.paddingX}px ${preset.bodyPaddingBottom}px`,
                     background: '#ffffff',
                 }}
             >
                 <div
                     style={{
                         display: 'flex',
-                        alignItems: 'flex-start',
+                        alignItems: 'baseline',
                         justifyContent: 'space-between',
-                        gap: '12px',
+                        gap: '10px',
                     }}
                 >
                     <div
+                        title={description}
                         style={{
-                            fontSize: `${preset.descriptionFontSize}px`,
-                            fontWeight: 700,
-                            letterSpacing: '0.02em',
-                            lineHeight: 1.1,
                             flex: 1,
                             minWidth: 0,
+                            fontSize: `${preset.descriptionFontSize}px`,
+                            fontWeight: 500,
+                            letterSpacing: '0.08em',
+                            lineHeight: 1.05,
+                            color: '#2f3135',
+                            textTransform: 'uppercase',
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
-                            color: '#4b5563',
                         }}
-                        title={description}
                     >
-                        {`#${description}`}
+                        {description}
                     </div>
 
                     <div
                         style={{
                             fontSize: `${preset.quantityFontSize}px`,
-                            fontWeight: 800,
-                            letterSpacing: '0.04em',
+                            fontWeight: 700,
+                            letterSpacing: '0.06em',
                             whiteSpace: 'nowrap',
-                            color: '#23262d',
+                            color: '#222428',
+                            textTransform: 'uppercase',
                         }}
                     >
                         QTY: {quantity}
@@ -213,13 +265,13 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
 
                 <div
                     style={{
-                        marginTop: size === 'compact' ? '18px' : '22px',
+                        marginTop: size === 'dense' ? '10px' : '12px',
                         textAlign: 'center',
                         fontSize: `${preset.skuFontSize}px`,
-                        lineHeight: 0.92,
-                        fontWeight: 700,
-                        letterSpacing: size === 'compact' ? '0.12em' : '0.15em',
-                        color: '#1f2937',
+                        lineHeight: 0.96,
+                        fontWeight: 500,
+                        letterSpacing: '0.02em',
+                        color: '#131517',
                     }}
                 >
                     {sku}
@@ -227,12 +279,12 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
 
                 <div
                     style={{
-                        marginTop: size === 'compact' ? '18px' : '22px',
+                        marginTop: `${preset.barcodeTopMargin}px`,
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
-                        minHeight: `${preset.barcodeHeight}px`,
-                        padding: size === 'compact' ? '0 10px' : '0 12px',
+                        padding: `0 ${preset.barcodePadX}px`,
+                        background: '#ffffff',
                         lineHeight: 0,
                     }}
                 >
@@ -242,7 +294,6 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            padding: 0,
                             background: '#ffffff',
                         }}
                     >
@@ -252,29 +303,30 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
                             width={preset.barcodeWidth}
                             height={preset.barcodeHeight}
                             fontSize={0}
-                            margin={0}
+                            margin={preset.barcodeMargin}
                             displayValue={false}
                             background="#ffffff"
-                            lineColor="#101114"
+                            lineColor="#111214"
                         />
                     </div>
                 </div>
 
                 <div
                     style={{
-                        marginTop: '16px',
+                        marginTop: `${preset.footerTopMargin}px`,
                         display: 'flex',
                         alignItems: 'flex-end',
                         justifyContent: 'space-between',
-                        gap: '12px',
+                        gap: '10px',
                     }}
                 >
                     <span
                         style={{
                             fontSize: `${preset.footerFontSize}px`,
-                            fontWeight: 900,
+                            fontWeight: 700,
                             letterSpacing: '0.18em',
-                            color: '#1f2937',
+                            color: '#202225',
+                            textTransform: 'uppercase',
                         }}
                     >
                         {footerCode}
@@ -283,9 +335,10 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
                         style={{
                             fontSize: `${preset.footerCountryFontSize}px`,
                             fontWeight: 700,
-                            letterSpacing: '0.16em',
+                            letterSpacing: '0.18em',
+                            color: '#202225',
                             textAlign: 'right',
-                            color: '#23262d',
+                            textTransform: 'uppercase',
                         }}
                     >
                         {countryOfOrigin}

@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { X, Camera } from 'lucide-react';
+import {
+    Html5QrcodeScanner,
+    Html5QrcodeSupportedFormats,
+    Html5QrcodeScanType,
+} from 'html5-qrcode';
+import { Camera, Zap, ScanLine } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
 
@@ -22,9 +26,13 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
             scanner = new Html5QrcodeScanner(
                 "reader",
                 {
-                    fps: 10,
-                    qrbox: { width: 250, height: 150 },
-                    aspectRatio: 1.777778,
+                    fps: 12,
+                    qrbox: { width: 320, height: 180 },
+                    aspectRatio: 1.333334,
+                    rememberLastUsedCamera: true,
+                    supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+                    showTorchButtonIfSupported: true,
+                    showZoomSliderIfSupported: true,
                     formatsToSupport: [
                         Html5QrcodeSupportedFormats.CODE_39,
                         Html5QrcodeSupportedFormats.CODE_128,
@@ -68,13 +76,26 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
             size="md"
         >
             <div className="space-y-4">
-                <div className="text-center mb-4">
-                    <p className="text-sm text-primary-500">
-                        Point your camera at a barcode to scan.
-                    </p>
+                <div className="rounded-2xl border border-primary-200 bg-primary-50/80 p-4">
+                    <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl bg-white text-accent-blue shadow-sm">
+                            <ScanLine className="h-5 w-5" />
+                        </div>
+                        <div className="space-y-2 text-sm text-primary-600">
+                            <p className="font-semibold text-primary-900">Scan physical Mitsubishi stickers or the larger web label preview.</p>
+                            <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.18em] text-primary-500">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
+                                    <Camera className="h-3.5 w-3.5" /> Code 39
+                                </span>
+                                <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
+                                    <Zap className="h-3.5 w-3.5" /> Torch / zoom when supported
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="bg-primary-50 border border-primary-200 rounded-xl overflow-hidden relative min-h-[300px] flex items-center justify-center">
+                <div className="bg-primary-50 border border-primary-200 rounded-xl overflow-hidden relative min-h-[360px] flex items-center justify-center">
                     {/* The div where html5-qrcode will render the video element */}
                     <div id="reader" className="w-full" />
 
@@ -117,6 +138,9 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                         color: #3b82f6;
                         text-decoration: underline;
                     }
+                    #reader__dashboard_section {
+                        padding: 12px;
+                    }
                     #reader__camera_selection {
                         margin-bottom: 12px;
                         padding: 8px;
@@ -124,6 +148,9 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                         border: 1px solid #e2e8f0;
                         width: 100%;
                         max-width: 300px;
+                    }
+                    #reader__scan_region {
+                        background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
                     }
                 `}</style>
 
