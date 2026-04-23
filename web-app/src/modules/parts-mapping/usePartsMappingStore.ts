@@ -105,6 +105,21 @@ const getDefaultLayout = (): { objects: LayoutObject[] } => ({
     ],
 });
 
+function parseSavedLayoutData(layoutData?: string | null) {
+    if (typeof layoutData !== 'string' || !layoutData.trim()) {
+        throw new Error('The selected layout does not contain a scene payload.');
+    }
+
+    const parsed = JSON.parse(layoutData);
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.objects)) {
+        throw new Error('The saved stockroom scene is malformed.');
+    }
+
+    return {
+        objects: parsed.objects.filter((object: LayoutObject | null) => object && typeof object === 'object'),
+    };
+}
+
 // ─── Store ───────────────────────────────────────────────────
 interface PartsMappingState {
     // Layout data
@@ -121,6 +136,7 @@ interface PartsMappingState {
     selectedId: string | null;
     isDragging: boolean;
     isLoading: boolean;
+    initializationError: string | null;
 
     // Pathfinding
     highlightedPart: HighlightedPart | null;
@@ -171,11 +187,12 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
     selectedId: null,
     isDragging: false,
     isLoading: true,
+    initializationError: null,
     highlightedPart: null,
     pathPoints: [],
 
     initialize: async () => {
-        set({ isLoading: true });
+        set({ isLoading: true, initializationError: null });
         try {
             const layouts = await getPartsMappingLayouts() as SavedLayout[];
             set({ savedLayouts: layouts });
@@ -186,19 +203,33 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
             if (!toLoad) toLoad = layouts.find(l => l.is_default) || null;
 
             if (toLoad?.layout_data) {
-                const parsed = JSON.parse(toLoad.layout_data);
-                set({ layout: parsed, currentLayoutId: toLoad.id, currentLayoutName: toLoad.name, isLoading: false });
+                const parsed = parseSavedLayoutData(toLoad.layout_data);
+                set({
+                    layout: parsed,
+                    currentLayoutId: toLoad.id,
+                    currentLayoutName: toLoad.name,
+                    isLoading: false,
+                    initializationError: null,
+                });
                 localStorage.setItem('lastUsedLayoutId', String(toLoad.id));
             } else {
-                set({ layout: getDefaultLayout(), currentLayoutName: 'Default', isLoading: false });
+                set({
+                    layout: getDefaultLayout(),
+                    currentLayoutName: 'Default',
+                    isLoading: false,
+                    initializationError: layouts.length > 0 ? 'No active stockroom scene was found. Showing the safe default shell.' : null,
+                });
             }
-        } catch {
-            // Fallback localStorage or default
-            const saved = localStorage.getItem('stockroomLayoutV2');
-            if (saved) {
-                try { set({ layout: JSON.parse(saved), currentLayoutName: 'Local', isLoading: false }); return; } catch { }
-            }
-            set({ layout: getDefaultLayout(), currentLayoutName: 'Default', isLoading: false });
+        } catch (error) {
+            set({
+                layout: getDefaultLayout(),
+                currentLayoutId: null,
+                currentLayoutName: 'Default',
+                isLoading: false,
+                initializationError: error instanceof Error
+                    ? error.message
+                    : 'Failed to load the live stockroom layout. Showing the safe default shell.',
+            });
         }
     },
 
@@ -278,10 +309,28 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
     },
 
     loadLayout: (l) => {
-        const parsed = JSON.parse(l.layout_data);
-        set({ layout: parsed, currentLayoutId: l.id, currentLayoutName: l.name, selectedId: null });
-        localStorage.setItem('stockroomLayoutV2', l.layout_data);
-        localStorage.setItem('lastUsedLayoutId', String(l.id));
+        try {
+            const parsed = parseSavedLayoutData(l.layout_data);
+            set({
+                layout: parsed,
+                currentLayoutId: l.id,
+                currentLayoutName: l.name,
+                selectedId: null,
+                initializationError: null,
+            });
+            localStorage.setItem('stockroomLayoutV2', l.layout_data);
+            localStorage.setItem('lastUsedLayoutId', String(l.id));
+        } catch (error) {
+            set({
+                layout: getDefaultLayout(),
+                currentLayoutId: null,
+                currentLayoutName: 'Default',
+                selectedId: null,
+                initializationError: error instanceof Error
+                    ? error.message
+                    : 'The selected stockroom scene could not be opened.',
+            });
+        }
     },
 
     deleteLayout: async (id) => {
@@ -308,7 +357,13 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
 
     resetLayout: () => {
         const def = getDefaultLayout();
-        set({ layout: def, selectedId: null, currentLayoutId: null, currentLayoutName: 'Default' });
+        set({
+            layout: def,
+            selectedId: null,
+            currentLayoutId: null,
+            currentLayoutName: 'Default',
+            initializationError: null,
+        });
         localStorage.setItem('stockroomLayoutV2', JSON.stringify(def));
     },
 

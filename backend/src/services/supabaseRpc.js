@@ -10,8 +10,8 @@ export async function callRpc(name, params = {}) {
   return data;
 }
 
-export async function queryAppTable(table, queryBuilder) {
-  let query = supabaseAdmin.schema('app').from(table);
+export async function querySchemaTable(schema, table, queryBuilder) {
+  let query = supabaseAdmin.schema(schema).from(table);
 
   if (typeof queryBuilder === 'function') {
     query = queryBuilder(query);
@@ -24,4 +24,8 @@ export async function queryAppTable(table, queryBuilder) {
   }
 
   return data;
+}
+
+export async function queryAppTable(table, queryBuilder) {
+  return querySchemaTable('catalog', table, queryBuilder);
 }

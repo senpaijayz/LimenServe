@@ -32,3 +32,21 @@ export async function getPosSaleDetail(saleId) {
         extractApiError(error, 'Failed to load the receipt.');
     }
 }
+
+export async function createHistoricalPosSale(payload) {
+    try {
+        const { data } = await apiClient.post('/pos/sales/historical', payload);
+        return data;
+    } catch (error) {
+        extractApiError(error, 'Failed to encode the historical sale.');
+    }
+}
+
+export async function updateHistoricalPosSale(saleId, payload) {
+    try {
+        const { data } = await apiClient.put(`/pos/sales/${saleId}/historical`, payload);
+        return data;
+    } catch (error) {
+        extractApiError(error, 'Failed to update the historical sale.');
+    }
+}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Download, Filter, Receipt, RefreshCw, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Download, FilePlus2, Filter, Receipt, RefreshCw, TrendingUp } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
@@ -14,9 +14,12 @@ import {
 import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
 import { getPosSaleDetail, listPosSales } from '../../../services/posApi';
 import { PAYMENT_LABELS } from '../../../utils/constants';
+import { useAuth } from '../../../context/useAuth';
 import SaleReceiptPreview from '../../pos/components/SaleReceiptPreview.jsx';
+import HistoricalSaleEditorModal from '../components/HistoricalSaleEditorModal.jsx';
 
 const SalesReport = () => {
+    const { isAdmin } = useAuth();
     const [filters, setFilters] = useState({
         startDate: new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10),
         endDate: new Date().toISOString().slice(0, 10),
@@ -38,6 +41,8 @@ const SalesReport = () => {
     const [historySearch, setHistorySearch] = useState('');
     const [selectedSale, setSelectedSale] = useState(null);
     const [loadingSaleDetail, setLoadingSaleDetail] = useState(false);
+    const [isHistoricalEditorOpen, setIsHistoricalEditorOpen] = useState(false);
+    const [editingHistoricalSale, setEditingHistoricalSale] = useState(null);
     const activeSaleRequestRef = useRef(null);
 
     const loadAnalytics = useCallback(async () => {
@@ -135,6 +140,16 @@ const SalesReport = () => {
         }
     };
 
+    const handleHistoricalSaved = async (saved) => {
+        await loadSalesHistory();
+
+        if (saved?.saleId) {
+            await handleOpenSale(saved.saleId);
+        } else if (saved?.sale?.id) {
+            await handleOpenSale(saved.sale.id);
+        }
+    };
+
     const topLeader = topSellingItems[0];
     const peakLeader = peakPeriods[0];
     const trendRevenue = useMemo(() => itemTrend.reduce((sum, item) => sum + Number(item.revenue ?? 0), 0), [itemTrend]);
@@ -148,6 +163,18 @@ const SalesReport = () => {
                 </div>
 
                 <div className="flex flex-wrap gap-3">
+                    {isAdmin && (
+                        <Button
+                            variant="primary"
+                            leftIcon={<FilePlus2 className="w-4 h-4" />}
+                            onClick={() => {
+                                setEditingHistoricalSale(null);
+                                setIsHistoricalEditorOpen(true);
+                            }}
+                        >
+                            Encode Historical Sale
+                        </Button>
+                    )}
                     <Button variant="secondary" leftIcon={<RefreshCw className="w-4 h-4" />} isLoading={refreshing} onClick={handleRefresh}>Refresh Analytics</Button>
                     <Button variant="outline" leftIcon={<Download className="w-4 h-4" />}>Export</Button>
                 </div>
@@ -262,7 +289,7 @@ const SalesReport = () => {
 
             <Card
                 title="Sales History"
-                subtitle="Receipt-level history for POS and converted sales."
+                subtitle="Receipt-level ledger of live POS and admin-encoded historical sales."
                 headerAction={(
                     <div className="w-72">
                         <input
@@ -289,6 +316,7 @@ const SalesReport = () => {
                                 <th>Date / Time</th>
                                 <th>Customer</th>
                                 <th>Cashier</th>
+                                <th>Source</th>
                                 <th className="text-right">Items</th>
                                 <th>Payment</th>
                                 <th>Status</th>
@@ -305,12 +333,22 @@ const SalesReport = () => {
                                     <td>
                                         <div className="flex flex-col">
                                             <span className="font-semibold text-primary-950">{sale.transaction_number}</span>
-                                            <span className="text-xs text-primary-500">Business date {sale.business_date}</span>
+                                            <span className="text-xs text-primary-500">
+                                                {sale.originalReference ? `Ref ${sale.originalReference}` : `Business date ${sale.business_date}`}
+                                            </span>
                                         </div>
                                     </td>
-                                    <td>{formatDateTime(sale.created_at)}</td>
+                                    <td>{formatDateTime(sale.saleAt || sale.sale_at || sale.created_at)}</td>
                                     <td>{sale.customer_name}</td>
                                     <td>{sale.cashier_name}</td>
+                                    <td>
+                                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${sale.sourceType === 'historical_encoded'
+                                            ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                            : 'border-accent-success/20 bg-accent-success/10 text-accent-success'
+                                            }`}>
+                                            {sale.sourceType === 'historical_encoded' ? 'Historical' : 'POS'}
+                                        </span>
+                                    </td>
                                     <td className="text-right">{formatNumber(sale.item_count)}</td>
                                     <td>{PAYMENT_LABELS[sale.payment_method] || sale.payment_method}</td>
                                     <td>
@@ -323,12 +361,12 @@ const SalesReport = () => {
                             ))}
                             {!historyLoading && salesHistory.length === 0 && (
                                 <tr>
-                                    <td colSpan="8" className="py-8 text-center text-primary-500">No sales matched the selected filters yet.</td>
+                                    <td colSpan="9" className="py-8 text-center text-primary-500">No sales matched the selected filters yet.</td>
                                 </tr>
                             )}
                             {historyLoading && (
                                 <tr>
-                                    <td colSpan="8" className="py-8 text-center text-primary-500">Loading sales history...</td>
+                                    <td colSpan="9" className="py-8 text-center text-primary-500">Loading sales history...</td>
                                 </tr>
                             )}
                         </tbody>
@@ -355,6 +393,18 @@ const SalesReport = () => {
                         <SaleReceiptPreview receipt={selectedSale.receipt} printId="report-sale-receipt" />
 
                         <div className="flex justify-end gap-3 print:hidden">
+                            {isAdmin && selectedSale?.sale?.sourceType === 'historical_encoded' && (
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setEditingHistoricalSale(selectedSale);
+                                        setSelectedSale(null);
+                                        setIsHistoricalEditorOpen(true);
+                                    }}
+                                >
+                                    Edit Historical Entry
+                                </Button>
+                            )}
                             <Button variant="secondary" onClick={() => setSelectedSale(null)}>
                                 Close
                             </Button>
@@ -365,6 +415,18 @@ const SalesReport = () => {
                     </div>
                 )}
             </Modal>
+
+            {isAdmin && (
+                <HistoricalSaleEditorModal
+                    isOpen={isHistoricalEditorOpen}
+                    onClose={() => {
+                        setIsHistoricalEditorOpen(false);
+                        setEditingHistoricalSale(null);
+                    }}
+                    onSaved={(saved) => void handleHistoricalSaved(saved)}
+                    saleDetail={editingHistoricalSale}
+                />
+            )}
         </div>
     );
 };

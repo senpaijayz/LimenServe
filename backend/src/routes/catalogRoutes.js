@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireRole } from '../middleware/auth.js';
 import { callRpc } from '../services/supabaseRpc.js';
+import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
+
+const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
 const router = Router();
 const PRODUCT_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -319,18 +322,41 @@ function invalidateProductCatalogCache() {
 }
 
 function mapCatalogRow(row) {
+  const sourceCategory = row.source_category
+    ?? row.sourceCategory
+    ?? row.metadata?.sourceCategory
+    ?? row.metadata?.source_category
+    ?? null;
+  const storedClassification = row.metadata?.classification ?? row.classification ?? null;
+  const runtimeClassification = classifyInventoryItem({
+    sku: row.sku,
+    name: row.name,
+    model_name: row.model ?? row.model_name,
+    category: row.category,
+    sourceCategory,
+    pcc: row.pcc ?? row.metadata?.pcc,
+    metadata: row.metadata ?? {},
+  });
+  const classification = storedClassification?.version === CLASSIFIER_VERSION
+    && runtimeClassification.category === row.category
+    ? storedClassification
+    : runtimeClassification.trace;
+
   return {
     id: row.id,
     sku: row.sku,
     name: row.name,
     model: row.model,
-    category: row.category,
+    category: runtimeClassification.category,
+    sourceCategory: runtimeClassification.sourceCategory ?? sourceCategory,
+    classification,
     price: Number(row.price ?? 0),
     stock: Number(row.stock ?? 0),
     status: row.status,
     uom: row.uom,
     brand: row.brand,
     location: row.location ?? {},
+    metadata: row.metadata ?? {},
   };
 }
 
@@ -354,7 +380,13 @@ function matchesAnyKeyword(text, keywords = []) {
 }
 
 function buildProductSearchText(product) {
-  return normalizeText([product.name, product.category, product.model, product.sku].filter(Boolean).join(' '));
+  return normalizeText([
+    product.name,
+    product.category,
+    product.sourceCategory,
+    product.model,
+    product.sku,
+  ].filter(Boolean).join(' '));
 }
 
 function buildServiceSearchText(service) {
@@ -1403,6 +1435,12 @@ async function fetchProductCatalogPage({ page, pageSize, searchQuery = null, sel
   });
 }
 
+async function fetchProductCatalogCategories({ searchQuery = null }) {
+  return callRpc('get_product_catalog_categories', {
+    p_search: searchQuery || null,
+  });
+}
+
 async function fetchRemainingCatalogPagesInBatches(totalPages) {
   const allRows = [];
 
@@ -1549,15 +1587,51 @@ router.get('/products', async (req, res, next) => {
     const vehicleModel = String(req.query.vehicleModel || '').trim();
     const vehicleYear = String(req.query.vehicleYear || '').trim();
     const includeCategories = String(req.query.includeCategories || 'true').trim().toLowerCase() !== 'false';
-
-    if (vehicleModel) {
-      const catalog = await getCachedProductCatalog();
-      const vehicleContext = buildVehicleFilterContext({
+    const vehicleContext = vehicleModel
+      ? buildVehicleFilterContext({
         vehicleModel,
         vehicleYear,
         vehicleFamily: extractVehicleFamily(vehicleModel),
-      });
-      const vehicleScopedProducts = catalog.filter((product) => matchesCatalogFilters(product, {
+      })
+      : null;
+    let products = [];
+    let categories = [];
+    let totalCount = 0;
+    let totalPages = 1;
+
+    if (!vehicleContext) {
+      const [pageRows, categoryRows] = await Promise.all([
+        fetchProductCatalogPage({
+          page,
+          pageSize,
+          searchQuery,
+          selectedCategory,
+          sortBy,
+        }),
+        includeCategories
+          ? fetchProductCatalogCategories({ searchQuery })
+          : Promise.resolve([]),
+      ]);
+
+      products = (pageRows ?? []).map(mapCatalogRow);
+      totalCount = Number(pageRows?.[0]?.total_count ?? 0);
+      totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+      if (includeCategories) {
+        const normalizedCategoryRows = (categoryRows ?? []).map((row) => ({
+          value: row.value,
+          label: row.label,
+          count: Number(row.count ?? 0),
+        }));
+        const categoryCountTotal = normalizedCategoryRows.reduce((sum, row) => sum + Number(row.count ?? 0), 0);
+        categories = [
+          { value: 'all', label: 'All Categories', count: categoryCountTotal || totalCount },
+          ...normalizedCategoryRows,
+        ];
+      }
+    } else {
+      const catalog = await getCachedProductCatalog();
+      const scopedProducts = catalog.filter((product) => matchesCatalogFilters(product, {
         searchQuery,
         selectedCategory,
         vehicleContext,
@@ -1567,59 +1641,21 @@ router.get('/products', async (req, res, next) => {
         selectedCategory: 'all',
         vehicleContext,
       }));
-      const sortedProducts = sortCatalogProducts(vehicleScopedProducts, sortBy);
-      const totalCount = sortedProducts.length;
-      const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-      const products = sortedProducts.slice((page - 1) * pageSize, page * pageSize);
-      const categoryRows = buildCategoryRows(categoryScopedProducts);
-      const categoryCountTotal = categoryRows.reduce((sum, row) => sum + Number(row.count ?? 0), 0);
-      const categories = [
-        { value: 'all', label: 'All Categories', count: categoryCountTotal || totalCount },
-        ...categoryRows,
-      ];
+      const sortedProducts = sortCatalogProducts(scopedProducts, sortBy);
 
-      res.json({
-        products,
-        categories,
-        pagination: {
-          page,
-          pageSize,
-          totalCount,
-          totalPages,
-        },
-      });
-      return;
+      totalCount = sortedProducts.length;
+      totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+      products = sortedProducts.slice((page - 1) * pageSize, page * pageSize);
+
+      if (includeCategories) {
+        const categoryRows = buildCategoryRows(categoryScopedProducts);
+        const categoryCountTotal = categoryRows.reduce((sum, row) => sum + Number(row.count ?? 0), 0);
+        categories = [
+          { value: 'all', label: 'All Categories', count: categoryCountTotal || totalCount },
+          ...categoryRows,
+        ];
+      }
     }
-
-    const pageRows = await fetchProductCatalogPage({
-      page,
-      pageSize,
-      searchQuery,
-      selectedCategory,
-      sortBy,
-    });
-
-    const categoryRows = includeCategories
-      ? await callRpc('get_product_catalog_categories', {
-        p_search: searchQuery || null,
-      })
-      : [];
-
-    const products = (pageRows ?? []).map(mapCatalogRow);
-
-    const totalCount = Number(pageRows?.[0]?.total_count ?? 0);
-    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-    const categoryCountTotal = (categoryRows ?? []).reduce((sum, row) => sum + Number(row.count ?? 0), 0);
-    const categories = includeCategories
-      ? [
-        { value: 'all', label: 'All Categories', count: categoryCountTotal || totalCount },
-        ...(categoryRows ?? []).map((row) => ({
-          value: row.value,
-          label: row.label,
-          count: Number(row.count ?? 0),
-        })),
-      ]
-      : [];
 
     res.json({
       products,
@@ -1728,7 +1764,7 @@ router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next)
 
     const skuList = uniqueItems.map((item) => item.sku);
     const { data: products, error: productsError } = await supabaseAdmin
-      .schema('app')
+      .schema('catalog')
       .from('products')
       .select('id, sku, name')
       .in('sku', skuList);
@@ -1749,7 +1785,7 @@ router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next)
     const previousDate = getPreviousDate(effectiveFrom);
 
     const { error: archiveError } = await supabaseAdmin
-      .schema('app')
+      .schema('catalog')
       .from('product_prices')
       .update({
         is_current: false,
@@ -1776,7 +1812,7 @@ router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next)
     }));
 
     const { error: insertError } = await supabaseAdmin
-      .schema('app')
+      .schema('catalog')
       .from('product_prices')
       .insert(newPrices);
 

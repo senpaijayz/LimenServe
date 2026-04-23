@@ -1,8 +1,51 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { buildRouteResponse } from './stockroomRouting.js';
+import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
+
+const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
 const STOCKROOM_CACHE_TTL_MS = 60 * 1000;
 const snapshotCache = new Map();
+const TABLE_SCHEMAS = {
+  stores: 'stockroom',
+  admin_users: 'stockroom',
+  layouts: 'stockroom',
+  floors: 'stockroom',
+  zones: 'stockroom',
+  aisles: 'stockroom',
+  shelves: 'stockroom',
+  shelf_levels: 'stockroom',
+  shelf_slots: 'stockroom',
+  items: 'stockroom',
+  item_locations: 'stockroom',
+  legacy_layout_archives: 'stockroom',
+  products: 'catalog',
+  product_prices: 'catalog',
+  inventory_balances: 'catalog',
+  inventory_movements: 'catalog',
+};
+
+function stockroomDb() {
+  return supabaseAdmin.schema('stockroom');
+}
+
+function catalogDb() {
+  return supabaseAdmin.schema('catalog');
+}
+
+function dbForTable(table) {
+  const schema = TABLE_SCHEMAS[table] ?? 'public';
+
+  if (schema === 'stockroom') {
+    return stockroomDb();
+  }
+
+  if (schema === 'catalog') {
+    return catalogDb();
+  }
+
+  return supabaseAdmin.schema(schema);
+}
 
 function mapLayout(row) {
   if (!row) {
@@ -142,12 +185,34 @@ function mapItemLocation(row) {
 }
 
 function mapProduct(row) {
+  const sourceCategory = row.source_category
+    ?? row.sourceCategory
+    ?? row.metadata?.sourceCategory
+    ?? row.metadata?.source_category
+    ?? null;
+  const storedClassification = row.metadata?.classification ?? row.classification ?? null;
+  const runtimeClassification = classifyInventoryItem({
+    sku: row.sku,
+    name: row.name,
+    model_name: row.model_name ?? row.modelName,
+    category: row.category,
+    sourceCategory,
+    pcc: row.pcc ?? row.metadata?.pcc,
+    metadata: row.metadata ?? {},
+  });
+  const classification = storedClassification?.version === CLASSIFIER_VERSION
+    && runtimeClassification.category === row.category
+    ? storedClassification
+    : runtimeClassification.trace;
+
   return {
     id: row.id,
     sku: row.sku,
     name: row.name,
     modelName: row.model_name,
-    category: row.category,
+    category: runtimeClassification.category,
+    sourceCategory: runtimeClassification.sourceCategory ?? sourceCategory,
+    classification,
     brand: row.brand,
     status: row.status,
     isActive: Boolean(row.is_active),
@@ -181,7 +246,7 @@ function extractSingle(data) {
 }
 
 async function selectRows(table, queryBuilder) {
-  let query = supabaseAdmin.from(table).select('*');
+  let query = dbForTable(table).from(table).select('*');
 
   if (typeof queryBuilder === 'function') {
     query = queryBuilder(query);
@@ -195,7 +260,7 @@ async function selectRows(table, queryBuilder) {
 }
 
 async function insertRow(table, payload) {
-  const { data, error } = await supabaseAdmin.from(table).insert(payload).select('*').single();
+  const { data, error } = await dbForTable(table).from(table).insert(payload).select('*').single();
   if (error) {
     throw error;
   }
@@ -203,7 +268,7 @@ async function insertRow(table, payload) {
 }
 
 async function updateRow(table, id, payload) {
-  const { data, error } = await supabaseAdmin.from(table).update(payload).eq('id', id).select('*').single();
+  const { data, error } = await dbForTable(table).from(table).update(payload).eq('id', id).select('*').single();
   if (error) {
     throw error;
   }
@@ -211,7 +276,7 @@ async function updateRow(table, id, payload) {
 }
 
 async function deleteRow(table, id) {
-  const { error } = await supabaseAdmin.from(table).delete().eq('id', id);
+  const { error } = await dbForTable(table).from(table).delete().eq('id', id);
   if (error) {
     throw error;
   }
@@ -219,14 +284,14 @@ async function deleteRow(table, id) {
 
 async function getLayoutRow({ layoutId = null, allowDraft = false } = {}) {
   if (layoutId) {
-    const { data, error } = await supabaseAdmin.from('layouts').select('*').eq('id', layoutId).single();
+    const { data, error } = await dbForTable('layouts').from('layouts').select('*').eq('id', layoutId).single();
     if (error) {
       throw error;
     }
     return data;
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await dbForTable('layouts')
     .from('layouts')
     .select('*')
     .in('status', allowDraft ? ['published', 'draft'] : ['published'])
@@ -243,7 +308,7 @@ async function getLayoutRow({ layoutId = null, allowDraft = false } = {}) {
     return layout;
   }
 
-  const { data: fallbackData, error: fallbackError } = await supabaseAdmin
+  const { data: fallbackData, error: fallbackError } = await dbForTable('layouts')
     .from('layouts')
     .select('*')
     .order('version_number', { ascending: false })
@@ -394,6 +459,8 @@ function buildSearchRecord({ snapshot, maps, itemLocation }) {
     name: product.name,
     modelName: product.modelName,
     category: product.category,
+    sourceCategory: product.sourceCategory ?? null,
+    classification: product.classification ?? null,
     brand: product.brand,
     partCode: item.partCode,
     keywords: item.keywords,
@@ -450,6 +517,8 @@ function matchRecord(query, record) {
   const partCode = normalizeText(record.partCode);
   const keywordText = normalizeText(record.keywords.join(' '));
   const modelName = normalizeText(record.modelName);
+  const category = normalizeText(record.category);
+  const sourceCategory = normalizeText(record.sourceCategory);
 
   if (sku === normalizedQuery) {
     return 'sku';
@@ -462,6 +531,9 @@ function matchRecord(query, record) {
   }
   if (keywordText.includes(normalizedQuery) || modelName.includes(normalizedQuery)) {
     return 'keyword';
+  }
+  if (category.includes(normalizedQuery) || sourceCategory.includes(normalizedQuery)) {
+    return 'category';
   }
   if (sku.includes(normalizedQuery)) {
     return 'sku_partial';
@@ -614,6 +686,9 @@ export async function getItemRouteDetails(productId, currentFloor = 1) {
       productId: targetLocation.product.id,
       sku: targetLocation.product.sku,
       name: targetLocation.product.name,
+      category: targetLocation.product.category,
+      sourceCategory: targetLocation.product.sourceCategory ?? null,
+      classification: targetLocation.product.classification ?? null,
       partCode: targetLocation.item.partCode,
       keywords: targetLocation.item.keywords,
       quantity: targetLocation.quantity,
@@ -840,6 +915,7 @@ export async function publishLayout(layoutId) {
   }
 
   const { error: archiveError } = await supabaseAdmin
+    .schema('stockroom')
     .from('layouts')
     .update({ status: 'archived' })
     .eq('store_id', layout.store_id)
@@ -987,6 +1063,7 @@ export async function removeShelf(shelfId) {
 
 export async function updateItemMaster(productId, payload) {
   const { data, error } = await supabaseAdmin
+    .schema('stockroom')
     .from('items')
     .upsert({
       product_id: productId,
@@ -1044,6 +1121,7 @@ export async function createOrUpdateItemLocation(payload) {
 
 export async function deleteItemLocation(layoutId, itemId) {
   const { error } = await supabaseAdmin
+    .schema('stockroom')
     .from('item_locations')
     .delete()
     .eq('layout_id', layoutId)
@@ -1076,6 +1154,8 @@ export async function listMasterItems(query = '', layoutId = null) {
       sku: product.sku,
       name: product.name,
       category: product.category,
+      sourceCategory: product.sourceCategory ?? null,
+      classification: product.classification ?? null,
       modelName: product.modelName,
       brand: product.brand,
       partCode: item.partCode,

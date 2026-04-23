@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireRole } from '../middleware/auth.js';
-import { callRpc } from '../services/supabaseRpc.js';
+import { callRpc, querySchemaTable } from '../services/supabaseRpc.js';
 
 const router = Router();
 
@@ -17,6 +17,15 @@ function isMissingItemAnalyticsRpcError(error) {
   );
 }
 
+function isMissingAnalyticsDependency(error, names = []) {
+  const message = String(error?.message || error || '');
+
+  return names.some((name) => message.includes(name))
+    || message.includes('schema cache')
+    || message.includes('Could not find the function')
+    || message.includes('does not exist');
+}
+
 async function callOptionalItemAnalyticsRpc(name, params = {}, fallbackValue = null) {
   try {
     return await callRpc(name, params);
@@ -29,10 +38,105 @@ async function callOptionalItemAnalyticsRpc(name, params = {}, fallbackValue = n
   }
 }
 
+async function getOptionalMlRows(viewName, queryBuilder, fallbackValue = []) {
+  try {
+    return await querySchemaTable('ml', viewName, queryBuilder);
+  } catch (error) {
+    if (isMissingAnalyticsDependency(error, [viewName])) {
+      return fallbackValue;
+    }
+
+    throw error;
+  }
+}
+
+async function getOptionalLatestRefreshRun() {
+  try {
+    const rows = await querySchemaTable('core', 'analytics_refresh_runs', (query) => query
+      .select('id, status, notes, error_message, dimension_rows, fact_rows, rule_rows, forecast_rows, started_at, ended_at')
+      .order('started_at', { ascending: false })
+      .limit(1));
+
+    const latest = rows?.[0];
+    if (!latest) {
+      return null;
+    }
+
+    return {
+      id: latest.id,
+      status: latest.status,
+      notes: latest.notes,
+      errorMessage: latest.error_message,
+      dimensionRows: Number(latest.dimension_rows ?? 0),
+      factRows: Number(latest.fact_rows ?? 0),
+      ruleRows: Number(latest.rule_rows ?? 0),
+      forecastRows: Number(latest.forecast_rows ?? 0),
+      startedAt: latest.started_at,
+      endedAt: latest.ended_at,
+    };
+  } catch (error) {
+    if (isMissingAnalyticsDependency(error, ['analytics_refresh_runs'])) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+async function buildAnalyticsDashboardSnapshotFallback() {
+  const [latestRefresh, topUpsellOpportunities, predictedLowStockRisk, topProductForecasts, topServiceForecasts] = await Promise.all([
+    getOptionalLatestRefreshRun(),
+    getOptionalMlRows('v_top_upsell_opportunities', (query) => query
+      .select('*')
+      .order('lift', { ascending: false })
+      .order('confidence', { ascending: false })
+      .limit(5)),
+    getOptionalMlRows('v_predicted_low_stock_risk', (query) => query
+      .select('*')
+      .in('risk_level', ['critical', 'high', 'medium'])
+      .order('predicted_quantity', { ascending: false })
+      .limit(5)),
+    callRpc('get_monthly_product_forecasts', { target_month: null }).catch((error) => {
+      if (isMissingAnalyticsDependency(error, ['get_monthly_product_forecasts'])) {
+        return [];
+      }
+
+      throw error;
+    }),
+    callRpc('get_monthly_service_forecasts', { target_month: null }).catch((error) => {
+      if (isMissingAnalyticsDependency(error, ['get_monthly_service_forecasts'])) {
+        return [];
+      }
+
+      throw error;
+    }),
+  ]);
+
+  return {
+    latestRefresh,
+    topUpsellOpportunities: topUpsellOpportunities ?? [],
+    predictedLowStockRisk: predictedLowStockRisk ?? [],
+    topProductForecasts: (topProductForecasts ?? []).slice(0, 5),
+    topServiceForecasts: (topServiceForecasts ?? []).slice(0, 5),
+  };
+}
+
+async function loadAnalyticsDashboardSnapshot() {
+  try {
+    return await callRpc('get_analytics_dashboard_snapshot');
+  } catch (error) {
+    if (isMissingAnalyticsDependency(error, ['get_analytics_dashboard_snapshot', 'analytics_refresh_runs'])) {
+      return buildAnalyticsDashboardSnapshotFallback();
+    }
+
+    throw error;
+  }
+}
+
 router.get('/dashboard', async (req, res, next) => {
   try {
     const [snapshot, itemSnapshot] = await Promise.all([
-      callRpc('get_analytics_dashboard_snapshot'),
+      loadAnalyticsDashboardSnapshot(),
       callOptionalItemAnalyticsRpc(
         'get_dashboard_item_sales_snapshot',
         {
@@ -145,9 +249,23 @@ router.get('/items/snapshot', async (req, res, next) => {
 
 router.get('/refresh-runs', requireRole('admin'), async (req, res, next) => {
   try {
-    const refreshRuns = await callRpc('get_analytics_refresh_runs', {
-      limit_count: Number(req.query.limit || 10),
-    });
+    const limitCount = Number(req.query.limit || 10);
+    let refreshRuns;
+
+    try {
+      refreshRuns = await callRpc('get_analytics_refresh_runs', {
+        limit_count: limitCount,
+      });
+    } catch (error) {
+      if (!isMissingAnalyticsDependency(error, ['get_analytics_refresh_runs', 'analytics_refresh_runs'])) {
+        throw error;
+      }
+
+      refreshRuns = await querySchemaTable('core', 'analytics_refresh_runs', (query) => query
+        .select('id, status, notes, error_message, dimension_rows, fact_rows, rule_rows, forecast_rows, started_at, ended_at')
+        .order('started_at', { ascending: false })
+        .limit(Math.max(limitCount, 1)));
+    }
 
     res.json({ refreshRuns: refreshRuns ?? [] });
   } catch (error) {

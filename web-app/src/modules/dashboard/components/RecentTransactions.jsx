@@ -7,7 +7,7 @@ import { listPosSales } from '../../../services/posApi';
 
 /**
  * Recent Transactions Component
- * Displays latest sales and quotes
+ * Displays the latest recorded sales from the live ledger.
  */
 const RecentTransactions = () => {
     const [recentTransactions, setRecentTransactions] = useState([]);
@@ -38,7 +38,7 @@ const RecentTransactions = () => {
     return (
         <Card
             title="Recent Transactions"
-            subtitle="Latest sales and quotations"
+            subtitle="Latest recorded sales from the live ledger"
             headerAction={
                 <Link to="/reports/sales" className="text-accent-blue text-sm hover:underline">
                     View All
@@ -87,12 +87,15 @@ const RecentTransactions = () => {
                                 <td className="py-3 px-4 border-b border-primary-100 text-primary-600">{txn.item_count} items</td>
                                 <td className="py-3 px-4 border-b border-primary-100 text-right font-bold text-accent-blue">{formatCurrency(txn.total_amount)}</td>
                                 <td className="py-3 px-4 border-b border-primary-100">
-                                    <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold tracking-widest uppercase border bg-accent-success/10 text-accent-success border-accent-success/20">
-                                        Sale
+                                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold tracking-widest uppercase border ${txn.sourceType === 'historical_encoded'
+                                        ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                        : 'bg-accent-success/10 text-accent-success border-accent-success/20'
+                                        }`}>
+                                        {txn.sourceType === 'historical_encoded' ? 'Historical' : 'Sale'}
                                     </span>
                                 </td>
                                 <td className="py-3 px-4 border-b border-primary-100 text-right text-sm text-primary-500">
-                                    {formatRelativeTime(txn.created_at)}
+                                    {formatRelativeTime(txn.saleAt || txn.sale_at || txn.created_at)}
                                 </td>
                             </tr>
                         ))}

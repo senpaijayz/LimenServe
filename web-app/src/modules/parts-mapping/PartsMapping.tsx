@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import {
     ChevronDown,
@@ -25,12 +25,13 @@ import {
     ZoomIn,
     ZoomOut,
 } from 'lucide-react';
-import Scene3D from './Scene3D';
 import { OBJECT_TYPES, usePartsMappingStore } from './usePartsMappingStore';
 import { useToast } from '../../components/ui/Toast';
 import { getStockroomItemDetails, searchStockroomItems } from '../../services/stockroomApi';
 import MitsubishiGenuinePartsLabel from '../inventory/components/MitsubishiGenuinePartsLabel';
 import ProductLabelPreviewModal from '../inventory/components/ProductLabelPreviewModal';
+
+const Scene3D = lazy(() => import('./Scene3D'));
 
 function formatLocatorLocation(item: any, details?: any) {
     const source = details?.location || item;
@@ -435,6 +436,12 @@ export default function PartsMapping() {
                 </div>
             )}
 
+            {store.initializationError && (
+                <div className="mb-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                    {store.initializationError}
+                </div>
+            )}
+
             {store.editMode && (
                 <div className="card mb-4" style={{ position: 'relative', zIndex: 100 }}>
                     <div className="flex gap-4 flex-wrap items-center">
@@ -635,9 +642,13 @@ export default function PartsMapping() {
                     </div>
                 </div>
 
-                <Canvas camera={{ position: store.viewMode === '2d' ? [0, 40, 0.1] : [0, 20, 25], fov: 50 }}>
-                    {!store.isLoading && <Scene3D />}
-                </Canvas>
+                {!store.isLoading && (
+                    <Canvas camera={{ position: store.viewMode === '2d' ? [0, 40, 0.1] : [0, 20, 25], fov: 50 }}>
+                        <Suspense fallback={null}>
+                            <Scene3D />
+                        </Suspense>
+                    </Canvas>
+                )}
 
                 {store.isLoading && (
                     <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80 z-50">
