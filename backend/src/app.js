@@ -10,7 +10,9 @@ import mechanicsRoutes from './routes/mechanicsRoutes.js';
 import partsMappingRoutes from './routes/partsMappingRoutes.js';
 import posRoutes from './routes/posRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
+import serviceOrderRoutes from './routes/serviceOrderRoutes.js';
 import stockroomRoutes from './routes/stockroomRoutes.js';
+import userRoutes from './routes/userRoutes.js';
 
 const app = express();
 const allowedOriginPatterns = env.frontendUrls;
@@ -74,6 +76,8 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/pos', posRoutes);
 app.use('/api/estimates', estimateRoutes);
 app.use('/api/mechanics', mechanicsRoutes);
+app.use('/api/service-orders', serviceOrderRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/parts-mapping', partsMappingRoutes);
 app.use('/api/stockroom', stockroomRoutes);
 

@@ -217,7 +217,34 @@ const SalesReport = () => {
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                 <Card title="Top-Selling Items" subtitle="Best performing items in the selected time frame">
-                    <div className="overflow-x-auto">
+                    <div className="grid gap-3 md:hidden">
+                        {topSellingItems.map((item) => (
+                            <div key={item.product_id} className="rounded-xl border border-primary-200 bg-white px-4 py-3">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <p className="font-semibold text-primary-950">{item.product_name}</p>
+                                        <p className="text-xs font-mono text-primary-500">{item.sku}</p>
+                                        <p className="mt-1 text-xs text-primary-500">{item.category}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-semibold text-accent-blue">{formatCurrency(item.revenue)}</p>
+                                        <p className="text-xs text-primary-500">{formatNumber(item.quantity)} units</p>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        {!loading && topSellingItems.length === 0 && (
+                            <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-6 text-center text-sm text-primary-500">
+                                No item sales data matched the selected filters.
+                            </div>
+                        )}
+                        {loading && (
+                            <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-6 text-center text-sm text-primary-500">
+                                Loading top-selling items...
+                            </div>
+                        )}
+                    </div>
+                    <div className="hidden overflow-x-auto md:block">
                         <table className="table">
                             <thead>
                                 <tr>
@@ -252,7 +279,35 @@ const SalesReport = () => {
                 </Card>
 
                 <Card title="Peak Periods" subtitle="When each product performed best">
-                    <div className="overflow-x-auto">
+                    <div className="grid gap-3 md:hidden">
+                        {peakPeriods.map((item) => (
+                            <div key={`${item.product_id}-${item.peak_month}`} className="rounded-xl border border-primary-200 bg-white px-4 py-3">
+                                <p className="font-semibold text-primary-950">{item.product_name}</p>
+                                <p className="text-xs font-mono text-primary-500">{item.sku}</p>
+                                <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                                    <div>
+                                        <p className="text-xs uppercase tracking-wide text-primary-400">Peak Month</p>
+                                        <p className="font-semibold text-primary-900">{new Date(item.peak_month).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' })}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-xs uppercase tracking-wide text-primary-400">Revenue</p>
+                                        <p className="font-semibold text-accent-blue">{formatCurrency(item.peak_revenue)}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        {!loading && peakPeriods.length === 0 && (
+                            <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-6 text-center text-sm text-primary-500">
+                                No peak-period data matched the selected filters.
+                            </div>
+                        )}
+                        {loading && (
+                            <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-6 text-center text-sm text-primary-500">
+                                Loading peak-period data...
+                            </div>
+                        )}
+                    </div>
+                    <div className="hidden overflow-x-auto md:block">
                         <table className="table">
                             <thead>
                                 <tr>
@@ -291,7 +346,7 @@ const SalesReport = () => {
                 title="Sales History"
                 subtitle="Receipt-level ledger of live POS and admin-encoded historical sales."
                 headerAction={(
-                    <div className="w-72">
+                    <div className="w-full sm:w-72">
                         <input
                             type="text"
                             value={historySearch}
@@ -308,7 +363,51 @@ const SalesReport = () => {
                     </div>
                 )}
 
-                <div className="overflow-x-auto">
+                <div className="grid gap-3 md:hidden">
+                    {salesHistory.map((sale) => (
+                        <button
+                            type="button"
+                            key={sale.sale_id}
+                            onClick={() => handleOpenSale(sale.sale_id)}
+                            className="rounded-xl border border-primary-200 bg-white px-4 py-3 text-left shadow-sm"
+                        >
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <p className="font-semibold text-primary-950">{sale.transaction_number}</p>
+                                    <p className="mt-1 text-sm text-primary-500">{sale.customer_name}</p>
+                                    <p className="text-xs text-primary-400">{formatDateTime(sale.saleAt || sale.sale_at || sale.created_at)}</p>
+                                </div>
+                                <p className="font-semibold text-accent-blue">{formatCurrency(sale.total_amount)}</p>
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                                <span className="rounded-full border border-primary-200 px-2.5 py-1 font-semibold uppercase tracking-wide text-primary-500">
+                                    {sale.item_count} items
+                                </span>
+                                <span className="rounded-full border border-primary-200 px-2.5 py-1 font-semibold uppercase tracking-wide text-primary-500">
+                                    {PAYMENT_LABELS[sale.payment_method] || sale.payment_method}
+                                </span>
+                                <span className={`rounded-full border px-2.5 py-1 font-semibold uppercase tracking-wide ${sale.sourceType === 'historical_encoded'
+                                    ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                    : 'border-accent-success/20 bg-accent-success/10 text-accent-success'
+                                    }`}>
+                                    {sale.sourceType === 'historical_encoded' ? 'Historical' : 'POS'}
+                                </span>
+                            </div>
+                        </button>
+                    ))}
+                    {!historyLoading && salesHistory.length === 0 && (
+                        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-6 text-center text-sm text-primary-500">
+                            No sales matched the selected filters yet.
+                        </div>
+                    )}
+                    {historyLoading && (
+                        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-6 text-center text-sm text-primary-500">
+                            Loading sales history...
+                        </div>
+                    )}
+                </div>
+
+                <div className="hidden overflow-x-auto md:block">
                     <table className="table">
                         <thead>
                             <tr>

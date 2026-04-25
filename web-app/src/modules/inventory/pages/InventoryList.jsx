@@ -257,7 +257,7 @@ const InventoryList = () => {
                     />
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                     {isAdmin && (
                         <PriceListManager onUpdated={async () => {
                             setRefreshKey((value) => value + 1);
@@ -271,7 +271,7 @@ const InventoryList = () => {
                         }} />
                     )}
 
-                    <div className="flex items-center glass rounded-lg p-1">
+                    <div className="hidden items-center glass rounded-lg p-1 sm:flex">
                         <button
                             onClick={() => setViewMode('grid')}
                             className={`p-2 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-accent-primary text-white' : 'text-primary-400 hover:text-primary-100'}`}
@@ -290,6 +290,7 @@ const InventoryList = () => {
                         variant="primary"
                         leftIcon={<Plus className="w-4 h-4" />}
                         onClick={() => setShowAddModal(true)}
+                        className="w-full sm:w-auto"
                     >
                         Add Stock
                     </Button>

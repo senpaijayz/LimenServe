@@ -1,103 +1,93 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Plus, Search, Filter, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Plus, Search, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { StatusBadge } from '../../../components/ui/Badge';
 import Tabs from '../../../components/ui/Tabs';
-import { formatCurrency, formatDate, formatRelativeTime } from '../../../utils/formatters';
+import { formatCurrency, formatRelativeTime } from '../../../utils/formatters';
 import { CreateServiceOrderModal, ServiceOrderDetailModal } from '../components/ServiceOrderModals';
 import { useToast } from '../../../components/ui/Toast';
-
-// Mock service orders
-const mockServiceOrders = [
-    {
-        id: 'SVC-001',
-        customerName: 'Juan Garcia',
-        customerPhone: '09171234567',
-        vehicle: { make: 'Mitsubishi', model: 'Montero Sport', year: 2019, plate: 'ABC 1234' },
-        description: 'Oil change and brake inspection',
-        status: 'in_progress',
-        estimatedCost: 3500,
-        createdAt: new Date(Date.now() - 2 * 60 * 60000),
-    },
-    {
-        id: 'SVC-002',
-        customerName: 'Maria Santos',
-        customerPhone: '09181234567',
-        vehicle: { make: 'Mitsubishi', model: 'Xpander', year: 2021, plate: 'XYZ 5678' },
-        description: 'Engine tune-up and air filter replacement',
-        status: 'pending',
-        estimatedCost: 5200,
-        createdAt: new Date(Date.now() - 4 * 60 * 60000),
-    },
-    {
-        id: 'SVC-003',
-        customerName: 'Pedro Cruz',
-        customerPhone: '09191234567',
-        vehicle: { make: 'Mitsubishi', model: 'Mirage', year: 2020, plate: 'DEF 9012' },
-        description: 'Brake pad replacement - front and rear',
-        status: 'completed',
-        estimatedCost: 8000,
-        createdAt: new Date(Date.now() - 24 * 60 * 60000),
-    },
-    {
-        id: 'SVC-004',
-        customerName: 'Ana Reyes',
-        customerPhone: '09201234567',
-        vehicle: { make: 'Mitsubishi', model: 'Strada', year: 2022, plate: 'GHI 3456' },
-        description: 'Wheel alignment and tire rotation',
-        status: 'pending',
-        estimatedCost: 2500,
-        createdAt: new Date(Date.now() - 1 * 60 * 60000),
-    },
-];
+import { createServiceOrder, listServiceOrders, updateServiceOrder } from '../../../services/serviceOrdersApi';
 
 /**
  * Service Order List Page
  * View and manage service orders
  */
 const ServiceOrderList = () => {
-    const { success } = useToast();
+    const { success, error: showError } = useToast();
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
-    const [orders, setOrders] = useState(mockServiceOrders);
+    const [orders, setOrders] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
+
+    useEffect(() => {
+        const timer = window.setTimeout(() => {
+            const loadOrders = async () => {
+                setLoading(true);
+                setLoadError('');
+
+                try {
+                    const rows = await listServiceOrders({
+                        search: searchQuery || null,
+                        status: 'all',
+                        limit: 100,
+                    });
+                    setOrders(rows);
+                } catch (error) {
+                    setOrders([]);
+                    setLoadError(error.message || 'Unable to load service orders.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            void loadOrders();
+        }, 180);
+
+        return () => window.clearTimeout(timer);
+    }, [searchQuery]);
 
     // Filter orders
-    const filteredOrders = orders.filter((order) => {
+    const filteredOrders = useMemo(() => orders.filter((order) => {
         const matchesSearch =
-            order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            order.vehicle.plate.toLowerCase().includes(searchQuery.toLowerCase());
+            String(order.customerName || '').toLowerCase().includes(searchQuery.toLowerCase())
+            || String(order.orderNumber || order.id).toLowerCase().includes(searchQuery.toLowerCase())
+            || String(order.vehicle?.plate || '').toLowerCase().includes(searchQuery.toLowerCase());
         const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
         return matchesSearch && matchesStatus;
-    });
+    }), [orders, searchQuery, statusFilter]);
 
     // Group by status
-    const pendingOrders = orders.filter(o => o.status === 'pending');
-    const inProgressOrders = orders.filter(o => o.status === 'in_progress');
-    const completedOrders = orders.filter(o => o.status === 'completed');
+    const pendingOrders = filteredOrders.filter(o => o.status === 'pending');
+    const inProgressOrders = filteredOrders.filter(o => o.status === 'in_progress');
+    const completedOrders = filteredOrders.filter(o => o.status === 'completed');
 
     // Handle status update
-    const handleStatusUpdate = (orderId, newStatus) => {
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
-        setSelectedOrder(null);
-        success(`Order ${orderId} status updated to ${newStatus.replace('_', ' ')}`);
+    const handleStatusUpdate = async (orderId, newStatus) => {
+        try {
+            const updatedOrder = await updateServiceOrder(orderId, { status: newStatus });
+            setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+            setSelectedOrder(null);
+            success(`Order ${updatedOrder.orderNumber || orderId} status updated to ${newStatus.replace('_', ' ')}`);
+        } catch (error) {
+            showError(error.message || 'Unable to update service order status.');
+            throw error;
+        }
     };
 
     // Handle new order creation
-    const handleCreateOrder = (newOrder) => {
+    const handleCreateOrder = async (payload) => {
+        const newOrder = await createServiceOrder(payload);
         setOrders(prev => [newOrder, ...prev]);
-        success(`Service order ${newOrder.id} created successfully!`);
+        success(`Service order ${newOrder.orderNumber || newOrder.id} created successfully!`);
     };
 
     // Order card component
     const OrderCard = ({ order }) => (
-        <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
+        <div
             className="group relative bg-white border border-primary-200 rounded-xl overflow-hidden cursor-pointer hover:border-red-500/50 transition-all duration-300 shadow-sm hover:shadow-md"
             onClick={() => setSelectedOrder(order)}
         >
@@ -106,7 +96,7 @@ const ServiceOrderList = () => {
             <div className="p-5">
                 <div className="flex items-start justify-between mb-4">
                     <div>
-                        <p className="font-mono text-xs tracking-widest text-primary-500 mb-1">{order.id}</p>
+                        <p className="font-mono text-xs tracking-widest text-primary-500 mb-1">{order.orderNumber || order.id}</p>
                         <h3 className="font-display font-semibold text-lg text-primary-950 group-hover:text-red-600 transition-colors">{order.customerName}</h3>
                     </div>
                     <StatusBadge status={order.status} />
@@ -116,12 +106,12 @@ const ServiceOrderList = () => {
                     <div className="flex justify-between items-center border-b border-primary-200 pb-2">
                         <span className="text-xs font-mono text-primary-500">VEHICLE</span>
                         <span className="text-sm font-medium text-primary-900">
-                            {order.vehicle.year} {order.vehicle.make} {order.vehicle.model}
+                            {[order.vehicle?.year, order.vehicle?.make, order.vehicle?.model].filter(Boolean).join(' ') || 'Vehicle not recorded'}
                         </span>
                     </div>
                     <div className="flex justify-between items-center border-b border-primary-200 pb-2">
                         <span className="text-xs font-mono text-primary-500">PLATE</span>
-                        <span className="text-sm font-mono text-primary-900 bg-white px-2 py-0.5 rounded border border-primary-200">{order.vehicle.plate}</span>
+                        <span className="text-sm font-mono text-primary-900 bg-white px-2 py-0.5 rounded border border-primary-200">{order.vehicle?.plate || 'N/A'}</span>
                     </div>
                     <div className="pt-1">
                         <p className="text-sm text-primary-700 line-clamp-2 leading-relaxed">{order.description}</p>
@@ -137,7 +127,7 @@ const ServiceOrderList = () => {
                     </p>
                 </div>
             </div>
-        </motion.div>
+        </div>
     );
 
     // Status tabs
@@ -218,6 +208,18 @@ const ServiceOrderList = () => {
                 </div>
             </div>
 
+            {loadError && (
+                <Card className="border border-accent-danger/20 bg-accent-danger/5" padding="sm">
+                    <div className="flex items-start gap-3 text-sm text-accent-danger">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                            <p className="font-semibold">Service orders unavailable</p>
+                            <p>{loadError}</p>
+                        </div>
+                    </div>
+                </Card>
+            )}
+
             {/* Content Area */}
             <div className="surface p-6">
                 {/* Search */}
@@ -234,11 +236,39 @@ const ServiceOrderList = () => {
                     </div>
                 </div>
 
-                {/* Status Tabs */}
-                <Tabs tabs={tabs} defaultTab="all" variant="pills" />
+                <div className="mb-4 flex flex-wrap gap-2 sm:hidden">
+                    {['all', 'pending', 'in_progress', 'completed'].map((status) => (
+                        <button
+                            key={status}
+                            type="button"
+                            onClick={() => setStatusFilter(status)}
+                            className={`rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide ${statusFilter === status ? 'border-accent-blue bg-accent-blue text-white' : 'border-primary-200 bg-white text-primary-600'}`}
+                        >
+                            {status === 'all' ? 'All' : status.replace('_', ' ')}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="hidden sm:block">
+                    <Tabs tabs={tabs} defaultTab="all" variant="pills" onChange={setStatusFilter} />
+                </div>
+
+                <div className="sm:hidden">
+                    <div className="grid grid-cols-1 gap-4 mt-6">
+                        {filteredOrders.map((order) => (
+                            <OrderCard key={order.id} order={order} />
+                        ))}
+                    </div>
+                </div>
+
+                {loading && (
+                    <div className="text-center py-12 text-primary-500">
+                        Loading service orders...
+                    </div>
+                )}
 
                 {/* Empty State */}
-                {filteredOrders.length === 0 && (
+                {!loading && filteredOrders.length === 0 && (
                     <div className="text-center py-20 bg-primary-50 border border-primary-200 rounded-2xl">
                         <AlertCircle className="w-16 h-16 text-primary-300 mx-auto mb-6" />
                         <h3 className="text-xl font-display font-semibold text-primary-900 mb-2 tracking-wide uppercase">No orders found</h3>

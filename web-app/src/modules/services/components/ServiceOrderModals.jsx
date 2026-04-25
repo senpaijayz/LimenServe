@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { X, Wrench, User, Phone, Car, FileText, Save, Clock, CheckCircle, AlertTriangle, ArrowRight } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
@@ -24,6 +24,7 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
     });
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
+    const [submitError, setSubmitError] = useState('');
 
     const validate = () => {
         const newErrors = {};
@@ -39,27 +40,27 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
         e.preventDefault();
         if (!validate()) return;
         setSaving(true);
-        await new Promise(r => setTimeout(r, 600));
-        setSaving(false);
-        if (onSave) {
-            onSave({
-                id: `SVC-${String(Date.now()).slice(-3)}`,
+        setSubmitError('');
+
+        try {
+            await onSave?.({
                 customerName: formData.customerName,
                 customerPhone: formData.customerPhone,
-                vehicle: {
-                    make: formData.vehicleMake,
-                    model: formData.vehicleModel,
-                    year: parseInt(formData.vehicleYear) || new Date().getFullYear(),
-                    plate: formData.vehiclePlate,
-                },
+                vehicleMake: formData.vehicleMake,
+                vehicleModel: formData.vehicleModel,
+                vehicleYear: parseInt(formData.vehicleYear, 10) || null,
+                vehiclePlate: formData.vehiclePlate,
                 description: formData.description,
                 estimatedCost: parseFloat(formData.estimatedCost) || 0,
                 status: 'pending',
                 priority: formData.priority,
-                createdAt: new Date(),
             });
+            onClose();
+        } catch (error) {
+            setSubmitError(error.message || 'Failed to create service order.');
+        } finally {
+            setSaving(false);
         }
-        onClose();
     };
 
     const updateField = (field, value) => {
@@ -71,14 +72,14 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
 
     return (
         <AnimatePresence>
-            <motion.div
+            <Motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
                 onClick={onClose}
             >
-                <motion.div
+                <Motion.div
                     initial={{ scale: 0.95, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.95, opacity: 0 }}
@@ -104,7 +105,7 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
                             <p className="text-sm font-semibold text-primary-300 mb-3 flex items-center gap-2">
                                 <User className="w-4 h-4 text-accent-primary" /> Customer Information
                             </p>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <Input
                                     label="Customer Name *"
                                     placeholder="Full name"
@@ -122,12 +123,18 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
                             </div>
                         </div>
 
+                        {submitError && (
+                            <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/5 px-4 py-3 text-sm text-accent-danger">
+                                {submitError}
+                            </div>
+                        )}
+
                         {/* Vehicle Info Section */}
                         <div>
                             <p className="text-sm font-semibold text-primary-300 mb-3 flex items-center gap-2">
                                 <Car className="w-4 h-4 text-accent-primary" /> Vehicle Information
                             </p>
-                            <div className="grid grid-cols-2 gap-4 mb-3">
+                            <div className="grid grid-cols-1 gap-4 mb-3 sm:grid-cols-2">
                                 <div>
                                     <label className="input-label mb-1 block">Make</label>
                                     <select value={formData.vehicleMake} onChange={e => updateField('vehicleMake', e.target.value)} className="input">
@@ -146,7 +153,7 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
                                     error={errors.vehicleModel}
                                 />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <Input
                                     label="Year"
                                     type="number"
@@ -180,7 +187,7 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
                                 />
                                 {errors.description && <p className="text-xs text-accent-danger mt-1">{errors.description}</p>}
                             </div>
-                            <div className="grid grid-cols-2 gap-4 mt-3">
+                            <div className="grid grid-cols-1 gap-4 mt-3 sm:grid-cols-2">
                                 <Input
                                     label="Estimated Cost (₱)"
                                     type="number"
@@ -210,8 +217,8 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
                             </Button>
                         </div>
                     </form>
-                </motion.div>
-            </motion.div>
+                </Motion.div>
+            </Motion.div>
         </AnimatePresence>
     );
 };
@@ -237,21 +244,23 @@ export const ServiceOrderDetailModal = ({ isOpen, onClose, order, onStatusUpdate
 
     const handleStatusUpdate = async (newStatus) => {
         setUpdating(true);
-        await new Promise(r => setTimeout(r, 500));
-        setUpdating(false);
-        if (onStatusUpdate) onStatusUpdate(order.id, newStatus);
+        try {
+            await onStatusUpdate?.(order.id, newStatus);
+        } finally {
+            setUpdating(false);
+        }
     };
 
     return (
         <AnimatePresence>
-            <motion.div
+            <Motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
                 onClick={onClose}
             >
-                <motion.div
+                <Motion.div
                     initial={{ scale: 0.95, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.95, opacity: 0 }}
@@ -261,7 +270,7 @@ export const ServiceOrderDetailModal = ({ isOpen, onClose, order, onStatusUpdate
                     {/* Header */}
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <p className="font-mono text-sm text-primary-500">{order.id}</p>
+                            <p className="font-mono text-sm text-primary-500">{order.orderNumber || order.id}</p>
                             <h2 className="text-xl font-display font-bold text-primary-950">Service Order Details</h2>
                         </div>
                         <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-primary-50 transition-colors">
@@ -270,7 +279,7 @@ export const ServiceOrderDetailModal = ({ isOpen, onClose, order, onStatusUpdate
                     </div>
 
                     {/* Status Progress */}
-                    <div className="flex items-center gap-2 mb-6 p-3 bg-primary-800/50 rounded-xl">
+                    <div className="flex items-center gap-2 mb-6 p-3 bg-primary-50 rounded-xl">
                         {statusFlow.map((status, i) => (
                             <div key={status} className="flex items-center gap-2 flex-1">
                                 <div className={`flex items-center gap-2 ${currentIndex >= i ? 'text-accent-primary' : 'text-primary-600'}`}>
@@ -287,7 +296,7 @@ export const ServiceOrderDetailModal = ({ isOpen, onClose, order, onStatusUpdate
                     </div>
 
                     {/* Customer & Vehicle Info */}
-                    <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="grid grid-cols-1 gap-4 mb-4 sm:grid-cols-2">
                         <div className="p-3 bg-primary-50 border border-primary-100 rounded-lg">
                             <p className="text-xs text-primary-500 mb-1">Customer</p>
                             <p className="text-sm font-semibold text-primary-950">{order.customerName}</p>
@@ -296,9 +305,9 @@ export const ServiceOrderDetailModal = ({ isOpen, onClose, order, onStatusUpdate
                         <div className="p-3 bg-primary-50 border border-primary-100 rounded-lg">
                             <p className="text-xs text-primary-500 mb-1">Vehicle</p>
                             <p className="text-sm font-semibold text-primary-950">
-                                {order.vehicle.year} {order.vehicle.make} {order.vehicle.model}
+                                {[order.vehicle?.year, order.vehicle?.make, order.vehicle?.model].filter(Boolean).join(' ') || 'Vehicle not recorded'}
                             </p>
-                            <p className="text-xs text-primary-600">{order.vehicle.plate}</p>
+                            <p className="text-xs text-primary-600">{order.vehicle?.plate || 'N/A'}</p>
                         </div>
                     </div>
 
@@ -309,7 +318,7 @@ export const ServiceOrderDetailModal = ({ isOpen, onClose, order, onStatusUpdate
                     </div>
 
                     {/* Details */}
-                    <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className="grid grid-cols-1 gap-3 mb-4 sm:grid-cols-3">
                         <div className="p-3 bg-primary-50 border border-primary-100 rounded-lg text-center">
                             <p className="text-xs text-primary-500 mb-1">Status</p>
                             <StatusBadge status={order.status} />
@@ -325,7 +334,7 @@ export const ServiceOrderDetailModal = ({ isOpen, onClose, order, onStatusUpdate
                     </div>
 
                     {/* Status Actions */}
-                    <div className="flex gap-3 pt-4 border-t border-primary-700">
+                    <div className="flex flex-col gap-3 pt-4 border-t border-primary-200 sm:flex-row">
                         <Button variant="secondary" fullWidth onClick={onClose}>Close</Button>
                         {nextStatus && (
                             <Button
@@ -345,8 +354,8 @@ export const ServiceOrderDetailModal = ({ isOpen, onClose, order, onStatusUpdate
                             </div>
                         )}
                     </div>
-                </motion.div>
-            </motion.div>
+                </Motion.div>
+            </Motion.div>
         </AnimatePresence>
     );
 };

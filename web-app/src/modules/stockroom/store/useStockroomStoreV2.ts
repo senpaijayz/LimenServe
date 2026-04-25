@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { supabase } from '../../../services/supabase';
-import { MOCK_SEED_PRODUCTS } from '../data/mockProducts';
+import { getStockroomMasterItems } from '../../../services/stockroomApi';
 
 export interface ProductLocation {
     aisle: number;
@@ -59,24 +58,20 @@ export const useStockroomStore = create<StockroomState>((set, get) => ({
     initializeStockroom: async () => {
         set({ isInitializing: true });
         try {
-            // Look for a table named 'inventory' or 'parts'. We'll try fetching 'master_items' or 'inventory'
-            // If the query inherently fails (e.g. table doesn't exist), we catch and use mock data.
-            const { data, error } = await supabase.from('stockroom_items').select('*');
-
-            let fetchedProducts: StockroomProduct[] = [];
-            if (error || !data || data.length === 0) {
-                console.warn('Supabase fetch failed or returned 0 rows. Using 30 Cinematic Seeder Products.');
-                fetchedProducts = [...MOCK_SEED_PRODUCTS];
-            } else {
-                fetchedProducts = data.map((d: any) => ({
-                    id: d.id,
-                    name: d.name || d.part_name || 'Unknown Part',
-                    sku: d.sku || d.part_number || 'N/A',
-                    category: d.category || 'Uncategorized',
-                    quantity: d.quantity || 0,
-                    location: d.location || { aisle: 1, shelf: 1, level: 1, bin: 1 }
-                }));
-            }
+            const data = await getStockroomMasterItems({ limit: 250 });
+            const fetchedProducts = (data ?? []).map((item: any) => ({
+                id: item.productId || item.id,
+                name: item.name || 'Unknown Part',
+                sku: item.sku || item.partCode || 'N/A',
+                category: item.category || 'Uncategorized',
+                quantity: Number(item.stock ?? item.quantity ?? 0),
+                location: {
+                    aisle: Number(item.location?.aisle?.number ?? item.location?.aisle ?? 1),
+                    shelf: Number(item.location?.shelf?.number ?? item.location?.shelf ?? 1),
+                    level: Number(item.location?.level?.number ?? item.location?.level ?? 1),
+                    bin: Number(item.location?.slot?.number ?? item.location?.bin ?? 1),
+                },
+            }));
 
             const cats = Array.from(new Set(fetchedProducts.map(p => p.category)));
 
@@ -87,10 +82,9 @@ export const useStockroomStore = create<StockroomState>((set, get) => ({
             });
         } catch (e) {
             console.error(e);
-            const cats = Array.from(new Set(MOCK_SEED_PRODUCTS.map(p => p.category)));
             set({
-                products: MOCK_SEED_PRODUCTS,
-                categories: cats,
+                products: [],
+                categories: [],
                 isInitializing: false
             });
         }
@@ -130,11 +124,6 @@ export const useStockroomStore = create<StockroomState>((set, get) => ({
             focusedLocation: newLocation
         });
 
-        try {
-            // Attempt to save to Supabase
-            await supabase.from('stockroom_items').update({ location: newLocation }).eq('id', id);
-        } catch (err) {
-            console.error('Failed to sync location to backend', err);
-        }
+        console.warn('Legacy stockroom location editor is read-only. Use the canonical stockroom admin controls for database updates.', id, newLocation);
     }
 }));

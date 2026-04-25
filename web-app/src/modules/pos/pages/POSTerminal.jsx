@@ -69,6 +69,7 @@ const POSTerminal = () => {
         searchQuery,
         selectedCategory: 'all',
         sortBy: 'name-asc',
+        includeCategories: false,
     });
 
     useEffect(() => {
@@ -171,11 +172,11 @@ const POSTerminal = () => {
     };
 
     return (
-        <div className="h-[calc(100vh-8rem)] flex flex-col lg:flex-row gap-4">
+        <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4 lg:h-[calc(100vh-8rem)] lg:flex-row">
             {/* Products Section */}
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Search Bar */}
-                <div className="relative mb-4 flex gap-2">
+                <div className="relative mb-4 flex flex-col gap-2 sm:flex-row">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-primary-400" />
                         <input
@@ -220,7 +221,7 @@ const POSTerminal = () => {
                     </div>
                 ) : (
                     <div className="flex flex-1 flex-col">
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                             {visibleProducts.map((product) => (
                                 <button
                                     key={product.id}
@@ -285,7 +286,7 @@ const POSTerminal = () => {
             </div>
 
             {/* Cart Sidebar */}
-            <div className="w-full lg:w-96 flex flex-col bg-white border border-primary-200 shadow-sm rounded-xl p-4">
+            <div className="w-full lg:w-96 flex max-h-[80dvh] flex-col bg-white border border-primary-200 shadow-sm rounded-xl p-4 lg:max-h-none">
                 {/* Cart Header */}
                 <div className="flex items-center justify-between pb-3 border-b border-primary-100">
                     <h2 className="text-lg font-display font-bold text-primary-950">

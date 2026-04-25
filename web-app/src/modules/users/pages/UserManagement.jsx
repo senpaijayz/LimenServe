@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, Trash2, Shield, User, UserCheck } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Search, Plus, Edit2, Shield, User, UserCheck } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
@@ -10,13 +10,7 @@ import Table from '../../../components/ui/Table';
 import { useToast } from '../../../components/ui/Toast';
 import { listMechanics } from '../../../services/mechanicsApi';
 import MechanicManagementPanel from '../components/MechanicManagementPanel';
-
-const mockUsers = [
-    { id: '1', firstName: 'Wilson', lastName: 'Limen', email: 'admin@limen.com', role: 'admin', status: 'active', lastLogin: '2024-01-15' },
-    { id: '2', firstName: 'Maria', lastName: 'Santos', email: 'cashier@limen.com', role: 'cashier', status: 'active', lastLogin: '2024-01-15' },
-    { id: '3', firstName: 'Juan', lastName: 'Dela Cruz', email: 'clerk@limen.com', role: 'stock_clerk', status: 'active', lastLogin: '2024-01-14' },
-    { id: '4', firstName: 'Ana', lastName: 'Reyes', email: 'ana@limen.com', role: 'cashier', status: 'inactive', lastLogin: '2024-01-10' },
-];
+import { createUser, listUsers, updateUser } from '../../../services/usersApi';
 
 const roleOptions = [
     { value: 'admin', label: 'Administrator' },
@@ -25,10 +19,13 @@ const roleOptions = [
 ];
 
 const UserManagement = () => {
-    const { success } = useToast();
+    const { success, error: showError } = useToast();
     const [searchQuery, setSearchQuery] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
+    const [users, setUsers] = useState([]);
+    const [usersLoading, setUsersLoading] = useState(true);
+    const [usersError, setUsersError] = useState('');
     const [mechanics, setMechanics] = useState([]);
     const [formData, setFormData] = useState({
         firstName: '',
@@ -42,20 +39,35 @@ const UserManagement = () => {
         try {
             const rows = await listMechanics();
             setMechanics(rows);
-        } catch (_error) {
+        } catch {
             setMechanics([]);
         }
     };
 
+    const loadUsers = async () => {
+        setUsersLoading(true);
+        setUsersError('');
+        try {
+            const rows = await listUsers();
+            setUsers(rows);
+        } catch (error) {
+            setUsers([]);
+            setUsersError(error.message || 'Unable to load users.');
+        } finally {
+            setUsersLoading(false);
+        }
+    };
+
     useEffect(() => {
+        void loadUsers();
         void loadMechanics();
     }, []);
 
-    const filteredUsers = mockUsers.filter((user) =>
-        user.firstName.toLowerCase().includes(searchQuery.toLowerCase())
-        || user.lastName.toLowerCase().includes(searchQuery.toLowerCase())
-        || user.email.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredUsers = useMemo(() => users.filter((user) =>
+        String(user.firstName || '').toLowerCase().includes(searchQuery.toLowerCase())
+        || String(user.lastName || '').toLowerCase().includes(searchQuery.toLowerCase())
+        || String(user.email || '').toLowerCase().includes(searchQuery.toLowerCase())
+    ), [searchQuery, users]);
 
     const resetForm = () => {
         setFormData({
@@ -67,12 +79,34 @@ const UserManagement = () => {
         });
     };
 
-    const handleSubmit = (event) => {
+    const handleSubmit = async (event) => {
         event.preventDefault();
-        success(editingUser ? 'User updated successfully!' : 'User created successfully!');
-        setShowAddModal(false);
-        setEditingUser(null);
-        resetForm();
+        try {
+            const payload = {
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                fullName: `${formData.firstName} ${formData.lastName}`.trim(),
+                email: formData.email,
+                role: formData.role,
+                password: formData.password,
+            };
+            const savedUser = editingUser
+                ? await updateUser(editingUser.id, payload)
+                : await createUser(payload);
+
+            setUsers((current) => {
+                if (editingUser) {
+                    return current.map((user) => (user.id === savedUser.id ? savedUser : user));
+                }
+                return [savedUser, ...current];
+            });
+            success(editingUser ? 'User updated successfully!' : 'User created successfully!');
+            setShowAddModal(false);
+            setEditingUser(null);
+            resetForm();
+        } catch (error) {
+            showError(error.message || 'Unable to save user.');
+        }
     };
 
     const handleEdit = (user) => {
@@ -94,7 +128,7 @@ const UserManagement = () => {
             render: (_, row) => (
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center border border-primary-200">
-                        <span className="text-sm font-bold text-primary-500">{row.firstName[0]}{row.lastName[0]}</span>
+                        <span className="text-sm font-bold text-primary-500">{row.firstName?.[0] || row.email?.[0] || 'U'}{row.lastName?.[0] || ''}</span>
                     </div>
                     <div>
                         <p className="font-bold text-primary-950">{row.firstName} {row.lastName}</p>
@@ -121,7 +155,7 @@ const UserManagement = () => {
         {
             key: 'lastLogin',
             label: 'Last Login',
-            render: (date) => new Date(date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+            render: (date) => date ? new Date(date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Never',
         },
         {
             key: 'actions',
@@ -135,17 +169,14 @@ const UserManagement = () => {
                     >
                         <Edit2 className="w-4 h-4" />
                     </button>
-                    <button className="p-1.5 rounded-lg hover:bg-primary-50 text-primary-400 hover:text-accent-danger transition-colors border border-transparent hover:border-primary-200">
-                        <Trash2 className="w-4 h-4" />
-                    </button>
                 </div>
             ),
         },
     ];
 
-    const adminCount = mockUsers.filter((user) => user.role === 'admin').length;
-    const cashierCount = mockUsers.filter((user) => user.role === 'cashier').length;
-    const clerkCount = mockUsers.filter((user) => user.role === 'stock_clerk').length;
+    const adminCount = users.filter((user) => user.role === 'admin').length;
+    const cashierCount = users.filter((user) => user.role === 'cashier').length;
+    const clerkCount = users.filter((user) => user.role === 'stock_clerk').length;
 
     return (
         <div className="space-y-6">
@@ -163,22 +194,22 @@ const UserManagement = () => {
                 <Card padding="default" className="flex items-center gap-4">
                     <div className="p-3 rounded-xl bg-accent-danger/20"><Shield className="w-6 h-6 text-accent-danger" /></div>
                     <div>
-                        <p className="text-2xl font-bold font-display text-primary-100">{adminCount}</p>
-                        <p className="text-sm text-primary-400">Administrators</p>
+                        <p className="text-2xl font-bold font-display text-primary-950">{adminCount}</p>
+                        <p className="text-sm text-primary-500">Administrators</p>
                     </div>
                 </Card>
                 <Card padding="default" className="flex items-center gap-4">
                     <div className="p-3 rounded-xl bg-accent-info/20"><UserCheck className="w-6 h-6 text-accent-info" /></div>
                     <div>
-                        <p className="text-2xl font-bold font-display text-primary-100">{cashierCount}</p>
-                        <p className="text-sm text-primary-400">Cashiers</p>
+                        <p className="text-2xl font-bold font-display text-primary-950">{cashierCount}</p>
+                        <p className="text-sm text-primary-500">Cashiers</p>
                     </div>
                 </Card>
                 <Card padding="default" className="flex items-center gap-4">
                     <div className="p-3 rounded-xl bg-accent-success/20"><User className="w-6 h-6 text-accent-success" /></div>
                     <div>
-                        <p className="text-2xl font-bold font-display text-primary-100">{clerkCount}</p>
-                        <p className="text-sm text-primary-400">Stock Clerks</p>
+                        <p className="text-2xl font-bold font-display text-primary-950">{clerkCount}</p>
+                        <p className="text-sm text-primary-500">Stock Clerks</p>
                     </div>
                 </Card>
             </div>
@@ -196,7 +227,50 @@ const UserManagement = () => {
                 </div>
             </div>
 
-            <Table columns={columns} data={filteredUsers} emptyMessage="No users found" />
+            {usersError && (
+                <Card className="border border-accent-danger/20 bg-accent-danger/5" padding="sm">
+                    <div className="flex items-start gap-3 text-sm text-accent-danger">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                            <p className="font-semibold">Users unavailable</p>
+                            <p>{usersError}</p>
+                        </div>
+                    </div>
+                </Card>
+            )}
+
+            <div className="grid gap-3 md:hidden">
+                {usersLoading ? (
+                    <Card padding="sm" className="text-center text-primary-500">Loading users...</Card>
+                ) : filteredUsers.length === 0 ? (
+                    <Card padding="sm" className="text-center text-primary-500">No users found.</Card>
+                ) : filteredUsers.map((user) => (
+                    <Card key={user.id} padding="sm">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="font-semibold text-primary-950">{user.firstName} {user.lastName}</p>
+                                <p className="text-sm text-primary-500">{user.email}</p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    <RoleBadge role={user.role} />
+                                    <span className="rounded-full border border-primary-200 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-primary-500">
+                                        {user.status}
+                                    </span>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => handleEdit(user)}
+                                className="rounded-lg border border-primary-200 p-2 text-primary-500"
+                            >
+                                <Edit2 className="h-4 w-4" />
+                            </button>
+                        </div>
+                    </Card>
+                ))}
+            </div>
+
+            <div className="hidden md:block">
+                <Table columns={columns} data={filteredUsers} loading={usersLoading} emptyMessage="No users found" />
+            </div>
 
             <MechanicManagementPanel mechanics={mechanics} onReload={loadMechanics} onNotify={success} />
 

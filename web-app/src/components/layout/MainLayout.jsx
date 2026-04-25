@@ -3,6 +3,7 @@ import { useAuth } from '../../context/useAuth';
 import { useTheme } from '../../context/ThemeContext';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import MobileBottomNav from './MobileBottomNav';
 
 /**
  * MainLayout Component
@@ -33,10 +34,11 @@ const MainLayout = () => {
             <Header />
 
             <main className={`main-content ${sidebarCollapsed ? 'main-content-collapsed' : ''} bg-primary-50`}>
-                <div className="w-full max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-10 transition-all duration-300">
+                <div className="w-full max-w-[1600px] mx-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-10 transition-all duration-300">
                     <Outlet />
                 </div>
             </main>
+            <MobileBottomNav />
         </div>
     );
 };

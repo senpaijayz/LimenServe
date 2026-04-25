@@ -157,6 +157,7 @@ const QuoteBuilder = () => {
         pageSize: 12,
         searchQuery,
         sortBy: 'name-asc',
+        includeCategories: false,
     });
 
     const totals = useMemo(() => {

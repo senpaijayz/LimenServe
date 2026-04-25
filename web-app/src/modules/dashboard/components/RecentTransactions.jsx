@@ -45,7 +45,44 @@ const RecentTransactions = () => {
                 </Link>
             }
         >
-            <div className="overflow-x-auto">
+            <div className="grid gap-3 md:hidden">
+                {error && !loading && (
+                    <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left text-sm text-amber-800">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                            <p className="font-semibold">Transactions temporarily unavailable</p>
+                            <p className="mt-1">{error}</p>
+                        </div>
+                    </div>
+                )}
+                {loading && (
+                    <div className="rounded-xl border border-primary-200 bg-white px-4 py-6 text-center text-primary-500">
+                        Loading recent transactions...
+                    </div>
+                )}
+                {!loading && !error && recentTransactions.map((txn) => (
+                    <div key={txn.sale_id} className="rounded-xl border border-primary-200 bg-white px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="font-mono text-sm font-semibold text-primary-700">{txn.transaction_number}</p>
+                                <p className="mt-1 text-sm text-primary-950">{txn.customer_name}</p>
+                                <p className="text-xs text-primary-500">{txn.item_count} items</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="font-bold text-accent-blue">{formatCurrency(txn.total_amount)}</p>
+                                <p className="text-xs text-primary-500">{formatRelativeTime(txn.saleAt || txn.sale_at || txn.created_at)}</p>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                {!loading && !error && recentTransactions.length === 0 && (
+                    <div className="rounded-xl border border-primary-200 bg-white px-4 py-6 text-center text-primary-500">
+                        No recent sales found.
+                    </div>
+                )}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
                 <table className="table">
                     <thead>
                         <tr>

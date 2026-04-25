@@ -170,12 +170,24 @@ export default function PartsMapping() {
     const [selectedItem, setSelectedItem] = useState<any | null>(null);
     const [selectedRouteDetails, setSelectedRouteDetails] = useState<any | null>(null);
     const [showLabelPreview, setShowLabelPreview] = useState(false);
+    const [showMobileScene, setShowMobileScene] = useState(false);
+    const [isLargeViewport, setIsLargeViewport] = useState(true);
     const [isLocatingPart, setIsLocatingPart] = useState(false);
     const layoutMenuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         void store.initialize();
     }, [store]);
+
+    useEffect(() => {
+        const media = window.matchMedia('(min-width: 1024px)');
+        const syncViewport = () => setIsLargeViewport(media.matches);
+
+        syncViewport();
+        media.addEventListener('change', syncViewport);
+
+        return () => media.removeEventListener('change', syncViewport);
+    }, []);
 
     const selectedObj = store.layout.objects.find((object) => object.id === store.selectedId);
 
@@ -325,7 +337,7 @@ export default function PartsMapping() {
     };
 
     return (
-        <div className="stockroom-viewer animate-fade-in pb-10 bg-[#0a0f1a] text-white min-h-[calc(100vh-100px)] p-6 rounded-2xl border border-slate-800/50 shadow-2xl">
+        <div className="stockroom-viewer animate-fade-in pb-10 bg-[#0a0f1a] text-white min-h-[calc(100vh-100px)] p-4 sm:p-6 rounded-2xl border border-slate-800/50 shadow-2xl">
             <header className="page-header">
                 <div className="flex justify-between items-center flex-wrap gap-4">
                     <div>
@@ -621,7 +633,44 @@ export default function PartsMapping() {
                 </div>
             )}
 
-            <div className="card shadow-inner" style={{ height: 600, padding: 0, overflow: 'hidden', position: 'relative', background: '#070b14', border: '1px solid #1e293b' }}>
+            {!isLargeViewport && !showMobileScene && (
+                <div className="mb-4 rounded-2xl border border-slate-700 bg-slate-900/80 p-4 lg:hidden">
+                    <div className="flex flex-col gap-4">
+                        <div>
+                            <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Mobile locator mode</p>
+                            <h2 className="mt-2 text-lg font-semibold text-white">Search a part first, then open 3D only when needed.</h2>
+                            <p className="mt-2 text-sm text-slate-400">
+                                Floor {store.currentFloor} is ready with {stats.shelves} shelves in the locator shell.
+                            </p>
+                        </div>
+
+                        {selectedItem && (
+                            <div className="rounded-xl border border-slate-700 bg-slate-800/70 p-3">
+                                <p className="text-sm font-semibold text-white">{selectedItem.sku}</p>
+                                <p className="text-sm text-slate-300">{selectedItem.name}</p>
+                                <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-red-300">
+                                    {formatLocatorLocation(selectedItem, selectedRouteDetails)}
+                                </p>
+                            </div>
+                        )}
+
+                        <button className="btn btn-secondary w-full" onClick={() => setShowMobileScene(true)}>
+                            <Eye size={18} /> Open 3D View
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {(isLargeViewport || showMobileScene) && (
+            <div className="card shadow-inner" style={{ height: isLargeViewport ? 600 : 520, padding: 0, overflow: 'hidden', position: 'relative', background: '#070b14', border: '1px solid #1e293b' }}>
+                {!isLargeViewport && (
+                    <button
+                        className="absolute right-4 top-4 z-[120] rounded-lg border border-slate-700 bg-slate-950/90 px-3 py-2 text-sm font-semibold text-white"
+                        onClick={() => setShowMobileScene(false)}
+                    >
+                        Close 3D
+                    </button>
+                )}
                 <div
                     style={{
                         position: 'absolute',
@@ -687,6 +736,8 @@ export default function PartsMapping() {
                     {store.viewMode === '2d' ? '2D View • Drag to pan' : '3D View • Drag to rotate • Scroll to zoom'}
                 </div>
             </div>
+
+            )}
 
             <div className="grid grid-cols-1 gap-4 mt-6 md:grid-cols-4">
                 {[
