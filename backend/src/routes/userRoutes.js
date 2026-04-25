@@ -38,49 +38,45 @@ function mapUser(authUser, profile = null) {
   };
 }
 
-async function loadProfiles() {
+async function fetchProfileByUserId(userId) {
   const { data, error } = await supabaseAdmin
-    .schema('core')
-    .from('user_profiles')
-    .select('id, user_id, email, full_name, role, created_at, updated_at');
+    .rpc('get_user_profile_by_user_id', {
+      p_user_id: userId,
+    });
 
   if (error) {
     throw error;
   }
 
-  return new Map((data ?? []).map((profile) => [profile.user_id, profile]));
+  return Array.isArray(data) ? (data[0] ?? null) : data;
 }
 
-async function upsertProfile({ userId, email, fullName, role }) {
-  const { error } = await supabaseAdmin
-    .schema('core')
-    .from('user_profiles')
-    .upsert({
-      user_id: userId,
-      email,
-      full_name: fullName,
-      role: normalizeRole(role),
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id' });
+async function loadProfilesForUsers(users = []) {
+  const entries = await Promise.all(users.map(async (user) => {
+    try {
+      const profile = await fetchProfileByUserId(user.id);
+      return [user.id, profile];
+    } catch (error) {
+      console.warn(`Failed to load profile for ${user.id}:`, error.message);
+      return [user.id, null];
+    }
+  }));
 
-  if (error) {
-    throw error;
-  }
+  return new Map(entries);
 }
 
 router.use(requireRole('admin'));
 
 router.get('/', async (_req, res, next) => {
   try {
-    const [{ data, error }, profiles] = await Promise.all([
-      supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 }),
-      loadProfiles(),
-    ]);
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 });
 
     if (error) {
       throw error;
     }
 
+    const authUsers = data?.users ?? [];
+    const profiles = await loadProfilesForUsers(authUsers);
     const users = (data?.users ?? [])
       .map((user) => mapUser(user, profiles.get(user.id)))
       .sort((left, right) => String(left.email).localeCompare(String(right.email)));
@@ -115,14 +111,8 @@ router.post('/', async (req, res, next) => {
       throw error;
     }
 
-    await upsertProfile({
-      userId: data.user.id,
-      email,
-      fullName,
-      role,
-    });
-
-    res.status(201).json({ user: mapUser(data.user, { email, full_name: fullName, role }) });
+    const profile = await fetchProfileByUserId(data.user.id).catch(() => null);
+    res.status(201).json({ user: mapUser(data.user, profile ?? { email, full_name: fullName, role }) });
   } catch (error) {
     next(error);
   }
@@ -152,14 +142,8 @@ router.patch('/:userId', async (req, res, next) => {
       throw error;
     }
 
-    await upsertProfile({
-      userId: req.params.userId,
-      email: email || data.user.email,
-      fullName,
-      role,
-    });
-
-    res.json({ user: mapUser(data.user, { email: email || data.user.email, full_name: fullName, role }) });
+    const profile = await fetchProfileByUserId(req.params.userId).catch(() => null);
+    res.json({ user: mapUser(data.user, profile ?? { email: email || data.user.email, full_name: fullName, role }) });
   } catch (error) {
     next(error);
   }
