@@ -18,7 +18,7 @@ function normalizeRole(role) {
 }
 
 function mapUser(authUser, profile = null) {
-  const fullName = profile?.full_name || authUser?.user_metadata?.full_name || '';
+  const fullName = authUser?.user_metadata?.full_name || profile?.full_name || '';
   const name = splitName(fullName);
   const bannedUntil = authUser?.banned_until ? new Date(authUser.banned_until) : null;
   const isBanned = Boolean(bannedUntil && bannedUntil.getTime() > Date.now());
@@ -29,13 +29,48 @@ function mapUser(authUser, profile = null) {
     firstName: name.firstName,
     lastName: name.lastName,
     fullName,
-    email: profile?.email || authUser.email || '',
-    role: normalizeRole(profile?.role || authUser?.app_metadata?.role),
+    email: authUser.email || profile?.email || '',
+    role: normalizeRole(authUser?.app_metadata?.role || profile?.role),
     status: isBanned ? 'inactive' : 'active',
     lastLogin: authUser.last_sign_in_at || null,
     createdAt: authUser.created_at || profile?.created_at || null,
-    updatedAt: profile?.updated_at || authUser.updated_at || null,
+    updatedAt: authUser.updated_at || profile?.updated_at || null,
   };
+}
+
+function isMissingProfileSyncRpc(error) {
+  const message = String(error?.message || '');
+  return error?.code === 'PGRST202'
+    || message.includes('admin_upsert_user_profile')
+    || message.includes('Could not find the function');
+}
+
+function normalizeUserSaveError(error) {
+  const message = String(error?.message || '');
+  if (message.includes('app.user_profiles') || message.includes('handle_auth_user')) {
+    error.statusCode = 503;
+    error.message = 'Supabase Auth profile sync still points to the old app.user_profiles table. Run 01_core_identity.sql to install the core.user_profiles sync functions.';
+  }
+  return error;
+}
+
+async function syncUserProfile({ userId, email, fullName, role }) {
+  const { data, error } = await supabaseAdmin.rpc('admin_upsert_user_profile', {
+    p_user_id: userId,
+    p_email: email || null,
+    p_full_name: fullName || null,
+    p_role: normalizeRole(role),
+  });
+
+  if (error) {
+    if (isMissingProfileSyncRpc(error)) {
+      console.warn('admin_upsert_user_profile RPC is not installed; using Supabase Auth metadata as the user source.');
+      return null;
+    }
+    throw error;
+  }
+
+  return Array.isArray(data) ? (data[0] ?? null) : data;
 }
 
 async function fetchProfileByUserId(userId) {
@@ -83,7 +118,7 @@ router.get('/', async (_req, res, next) => {
 
     res.json({ users });
   } catch (error) {
-    next(error);
+    next(normalizeUserSaveError(error));
   }
 });
 
@@ -111,10 +146,19 @@ router.post('/', async (req, res, next) => {
       throw error;
     }
 
-    const profile = await fetchProfileByUserId(data.user.id).catch(() => null);
-    res.status(201).json({ user: mapUser(data.user, profile ?? { email, full_name: fullName, role }) });
+    const profile = await syncUserProfile({
+      userId: data.user.id,
+      email,
+      fullName,
+      role,
+    }) ?? await fetchProfileByUserId(data.user.id).catch(() => null);
+
+    res.status(201).json({
+      user: mapUser(data.user, profile ?? { email, full_name: fullName, role }),
+      profileSynced: Boolean(profile),
+    });
   } catch (error) {
-    next(error);
+    next(normalizeUserSaveError(error));
   }
 });
 
@@ -142,10 +186,19 @@ router.patch('/:userId', async (req, res, next) => {
       throw error;
     }
 
-    const profile = await fetchProfileByUserId(req.params.userId).catch(() => null);
-    res.json({ user: mapUser(data.user, profile ?? { email: email || data.user.email, full_name: fullName, role }) });
+    const profile = await syncUserProfile({
+      userId: req.params.userId,
+      email: email || data.user.email,
+      fullName,
+      role,
+    }) ?? await fetchProfileByUserId(req.params.userId).catch(() => null);
+
+    res.json({
+      user: mapUser(data.user, profile ?? { email: email || data.user.email, full_name: fullName, role }),
+      profileSynced: Boolean(profile),
+    });
   } catch (error) {
-    next(error);
+    next(normalizeUserSaveError(error));
   }
 });
 

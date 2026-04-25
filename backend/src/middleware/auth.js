@@ -33,13 +33,13 @@ export async function attachUser(req, _res, next) {
 
     const profile = await fetchProfile(data.user.id);
     const fallbackFullName = data.user.user_metadata?.full_name || '';
-    const fallbackRole = data.user.app_metadata?.role || 'customer';
+    const fallbackRole = data.user.app_metadata?.role || profile?.role || 'customer';
 
     req.user = {
       id: data.user.id,
       email: data.user.email,
       fullName: profile?.full_name || fallbackFullName,
-      role: profile?.role || fallbackRole,
+      role: fallbackRole,
       profile,
     };
 

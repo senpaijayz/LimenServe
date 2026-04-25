@@ -140,8 +140,8 @@ const LoginPage = () => {
                         </p>
                         <div className="rounded-xl border border-primary-100 bg-primary-50 px-4 py-3 text-xs text-primary-500">
                             <p className="text-center">
-                                Sign in with a user created in Supabase Auth. Access level is controlled by the matching
-                                `app.user_profiles` role in the database.
+                                Sign in with a user created in Supabase Auth. Access level is controlled by Auth app metadata
+                                and mirrored to the core user profile.
                             </p>
                         </div>
                     </div>

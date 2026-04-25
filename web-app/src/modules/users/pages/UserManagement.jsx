@@ -15,7 +15,10 @@ import { createUser, listUsers, updateUser } from '../../../services/usersApi';
 const roleOptions = [
     { value: 'admin', label: 'Administrator' },
     { value: 'cashier', label: 'Cashier' },
+    { value: 'staff', label: 'Staff' },
     { value: 'stock_clerk', label: 'Stock Clerk' },
+    { value: 'viewer', label: 'Viewer' },
+    { value: 'customer', label: 'Customer' },
 ];
 
 const UserManagement = () => {
@@ -26,6 +29,7 @@ const UserManagement = () => {
     const [users, setUsers] = useState([]);
     const [usersLoading, setUsersLoading] = useState(true);
     const [usersError, setUsersError] = useState('');
+    const [isSavingUser, setIsSavingUser] = useState(false);
     const [mechanics, setMechanics] = useState([]);
     const [formData, setFormData] = useState({
         firstName: '',
@@ -81,6 +85,7 @@ const UserManagement = () => {
 
     const handleSubmit = async (event) => {
         event.preventDefault();
+        setIsSavingUser(true);
         try {
             const payload = {
                 firstName: formData.firstName,
@@ -90,22 +95,21 @@ const UserManagement = () => {
                 role: formData.role,
                 password: formData.password,
             };
-            const savedUser = editingUser
+            const saveResult = editingUser
                 ? await updateUser(editingUser.id, payload)
                 : await createUser(payload);
 
-            setUsers((current) => {
-                if (editingUser) {
-                    return current.map((user) => (user.id === savedUser.id ? savedUser : user));
-                }
-                return [savedUser, ...current];
-            });
-            success(editingUser ? 'User updated successfully!' : 'User created successfully!');
+            await loadUsers();
+            success(saveResult?.profileSynced === false
+                ? 'User saved in Supabase Auth. Run the profile sync SQL to mirror it in core.user_profiles.'
+                : (editingUser ? 'User updated in Supabase.' : 'User created in Supabase.'));
             setShowAddModal(false);
             setEditingUser(null);
             resetForm();
         } catch (error) {
             showError(error.message || 'Unable to save user.');
+        } finally {
+            setIsSavingUser(false);
         }
     };
 
@@ -276,12 +280,12 @@ const UserManagement = () => {
 
             <Modal
                 isOpen={showAddModal}
-                onClose={() => { setShowAddModal(false); setEditingUser(null); }}
+                onClose={() => { setShowAddModal(false); setEditingUser(null); resetForm(); }}
                 title={editingUser ? 'Edit User' : 'Add New User'}
                 size="md"
             >
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Input label="First Name" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} required />
                         <Input label="Last Name" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} required />
                     </div>
@@ -298,11 +302,11 @@ const UserManagement = () => {
                         required={!editingUser}
                     />
 
-                    <div className="flex gap-3 pt-4">
-                        <Button variant="secondary" fullWidth onClick={() => { setShowAddModal(false); setEditingUser(null); }}>
+                    <div className="flex flex-col gap-3 pt-4 sm:flex-row">
+                        <Button variant="secondary" fullWidth isDisabled={isSavingUser} onClick={() => { setShowAddModal(false); setEditingUser(null); resetForm(); }}>
                             Cancel
                         </Button>
-                        <Button variant="primary" fullWidth type="submit">
+                        <Button variant="primary" fullWidth type="submit" isLoading={isSavingUser}>
                             {editingUser ? 'Update User' : 'Create User'}
                         </Button>
                     </div>
