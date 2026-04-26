@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion as Motion, useReducedMotion } from 'framer-motion';
 
 /**
  * Tabs Component
@@ -21,6 +21,7 @@ const Tabs = ({
     className = '',
 }) => {
     const [activeTab, setActiveTab] = useState(defaultTab || tabs[0]?.id);
+    const shouldReduceMotion = useReducedMotion();
 
     const handleTabChange = (tabId) => {
         setActiveTab(tabId);
@@ -55,7 +56,7 @@ const Tabs = ({
     return (
         <div className={className}>
             {/* Tab List */}
-            <div className={`flex ${styles.container}`}>
+            <div className={`flex max-w-full overflow-x-auto overscroll-x-contain ${styles.container}`}>
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
@@ -63,6 +64,7 @@ const Tabs = ({
                         disabled={tab.disabled}
                         className={`
               ${styles.tab}
+              min-h-11 shrink-0 whitespace-nowrap
               ${activeTab === tab.id ? styles.active : styles.inactive}
               ${tab.disabled ? 'opacity-50 cursor-not-allowed' : ''}
             `}
@@ -79,7 +81,7 @@ const Tabs = ({
 
                         {/* Animated underline for underline variant */}
                         {variant === 'underline' && activeTab === tab.id && (
-                            <motion.div
+                            <Motion.div
                                 layoutId="tab-underline"
                                 className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-primary"
                             />
@@ -90,14 +92,14 @@ const Tabs = ({
 
             {/* Tab Panel */}
             <div className="mt-4">
-                <motion.div
+                <Motion.div
                     key={activeTab}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2 }}
+                    initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
+                    animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+                    transition={shouldReduceMotion ? undefined : { duration: 0.16 }}
                 >
                     {activeTabData?.content}
-                </motion.div>
+                </Motion.div>
             </div>
         </div>
     );

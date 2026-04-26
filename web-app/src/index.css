@@ -45,10 +45,28 @@
 }
 
 @layer base {
+  html {
+    @apply scroll-smooth;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     @apply bg-primary-100 text-primary-900 antialiased font-sans selection:bg-accent-blue selection:text-white;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
+  }
+
+  * {
+    @apply min-w-0;
+  }
+
+  button,
+  [role='button'],
+  input,
+  select,
+  textarea {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-offset-2 focus-visible:ring-offset-white;
   }
 
   h1,
@@ -69,7 +87,19 @@
 
   /* Buttons */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-sans text-sm font-semibold transition-all duration-300 active:scale-95 disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-3 font-sans text-sm font-semibold transition-all duration-200 active:scale-95 disabled:pointer-events-none disabled:opacity-50 sm:px-5;
+  }
+
+  .btn-sm {
+    @apply min-h-10 px-3 py-2 text-xs;
+  }
+
+  .btn-lg {
+    @apply min-h-12 px-5 py-3.5 text-base;
+  }
+
+  .btn-icon {
+    @apply min-h-11 min-w-11 px-3 py-3;
   }
 
   .btn-primary {
@@ -90,12 +120,12 @@
 
   /* Inputs */
   .input {
-    @apply w-full rounded-xl border border-primary-300 bg-white px-4 py-3 font-sans text-primary-900 placeholder-primary-500 shadow-sm transition-colors focus:border-accent-primary focus:outline-none focus:ring-2 focus:ring-blue-100;
+    @apply min-h-11 w-full rounded-xl border border-primary-300 bg-white px-4 py-3 font-sans text-base text-primary-900 placeholder-primary-500 shadow-sm transition-colors focus:border-accent-primary focus:outline-none focus:ring-2 focus:ring-blue-100 sm:text-sm;
   }
 
   /* Surface Cards */
   .surface {
-    @apply overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-[0_20px_50px_rgba(15,23,42,0.06)] transition-all duration-300 hover:border-primary-300 hover:shadow-[0_24px_60px_rgba(15,23,42,0.08)];
+    @apply overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-[0_20px_50px_rgba(15,23,42,0.06)] transition-all duration-200 hover:border-primary-300 hover:shadow-[0_24px_60px_rgba(15,23,42,0.08)];
   }
 
   /* Dynamic Shield Aesthetic (Angled Elements) */
@@ -105,27 +135,39 @@
 
   /* Modals */
   .modal-overlay {
-    @apply fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm overflow-y-auto;
+    @apply fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-2 backdrop-blur-sm sm:items-center sm:p-4;
   }
 
   .modal {
-    @apply relative w-full bg-white border border-primary-200 rounded-xl shadow-2xl overflow-hidden my-auto;
+    @apply relative flex max-h-[min(92dvh,900px)] w-full flex-col overflow-hidden rounded-t-2xl border border-primary-200 bg-white shadow-2xl sm:my-auto sm:rounded-xl;
   }
 
   .modal-header {
-    @apply flex items-center justify-between p-4 border-b border-primary-200;
+    @apply flex shrink-0 items-center justify-between gap-3 border-b border-primary-200 p-4;
   }
 
   .modal-title {
-    @apply text-xl font-display font-bold text-primary-950;
+    @apply text-lg font-display font-bold text-primary-950 sm:text-xl;
   }
 
   .modal-body {
-    @apply p-4;
+    @apply flex-1 overflow-y-auto overscroll-contain p-4;
   }
 
   .modal-footer {
-    @apply flex items-center justify-end gap-3 p-4 border-t border-primary-200 bg-primary-50;
+    @apply flex shrink-0 flex-col-reverse gap-3 border-t border-primary-200 bg-primary-50 p-4 sm:flex-row sm:items-center sm:justify-end;
+  }
+
+  .table {
+    @apply w-full min-w-[720px] border-collapse text-left text-sm;
+  }
+
+  .table th {
+    @apply bg-primary-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-primary-500;
+  }
+
+  .table td {
+    @apply border-t border-primary-100 px-4 py-3 align-middle text-primary-700;
   }
 }
 
@@ -161,7 +203,7 @@
   }
 
   .sidebar-nav-item {
-    @apply flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg text-primary-600 hover:text-primary-950 hover:bg-primary-50 transition-all duration-200;
+    @apply mb-1 flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-primary-600 transition-all duration-200 hover:bg-primary-50 hover:text-primary-950;
   }
 
   .sidebar-nav-item-active {
@@ -349,5 +391,24 @@
   .receipt-preview table th:nth-child(3),
   .receipt-preview table td:nth-child(3) {
     text-align: right !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
   }
 }

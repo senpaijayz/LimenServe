@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion as Motion, useReducedMotion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 
 /**
@@ -17,6 +17,7 @@ const Button = forwardRef(({
     size = 'md',
     isLoading = false,
     isDisabled = false,
+    disabled = false,
     leftIcon,
     rightIcon,
     fullWidth = false,
@@ -25,6 +26,9 @@ const Button = forwardRef(({
     onClick,
     ...props
 }, ref) => {
+    const shouldReduceMotion = useReducedMotion();
+    const isUnavailable = isDisabled || disabled || isLoading;
+
     // Variant classes
     const variants = {
         primary: 'btn-primary',
@@ -49,18 +53,18 @@ const Button = forwardRef(({
     ${variants[variant] || variants.primary}
     ${sizes[size] || ''}
     ${fullWidth ? 'w-full' : ''}
-    ${isDisabled || isLoading ? 'opacity-50 cursor-not-allowed' : ''}
+    ${isUnavailable ? 'opacity-50 cursor-not-allowed' : ''}
     ${className}
   `.trim().replace(/\s+/g, ' ');
 
     return (
-        <motion.button
+        <Motion.button
             ref={ref}
             type={type}
             className={buttonClasses}
-            disabled={isDisabled || isLoading}
+            disabled={isUnavailable}
             onClick={onClick}
-            whileTap={{ scale: isDisabled || isLoading ? 1 : 0.98 }}
+            whileTap={shouldReduceMotion || isUnavailable ? undefined : { scale: 0.98 }}
             {...props}
         >
             {isLoading ? (
@@ -75,7 +79,7 @@ const Button = forwardRef(({
                     {rightIcon && <span className="w-4 h-4">{rightIcon}</span>}
                 </>
             )}
-        </motion.button>
+        </Motion.button>
     );
 });
 

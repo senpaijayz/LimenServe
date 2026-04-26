@@ -186,13 +186,13 @@ const ServiceOrderList = () => {
     ];
 
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 sm:space-y-8">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between bg-white border border-primary-200 rounded-2xl p-6 shadow-sm relative overflow-hidden">
+            <div className="relative flex flex-col items-start justify-between gap-4 overflow-hidden rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:p-6">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-accent-blue/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
                 <div className="relative z-10">
-                    <h1 className="text-3xl font-display font-bold text-primary-950 tracking-widest uppercase flex items-center gap-3">
-                        <span className="w-8 h-8 rounded bg-primary-100 flex items-center justify-center border border-primary-200">
+                    <h1 className="flex items-center gap-3 text-2xl font-display font-bold uppercase tracking-wider text-primary-950 sm:text-3xl sm:tracking-widest">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-primary-200 bg-primary-100">
                             <Plus className="w-4 h-4 text-primary-700" />
                         </span>
                         Service Orders
@@ -201,8 +201,8 @@ const ServiceOrderList = () => {
                         {'>> LIVE WORKSHOP DATA. TRACK AND MANAGE CUSTOMER SERVICE REQUESTS. <<'}
                     </p>
                 </div>
-                <div className="relative z-10">
-                    <button className="btn bg-gradient-to-r from-red-600 to-red-800 text-white border-none shadow-lg shadow-red-600/40" onClick={() => setShowCreateModal(true)}>
+                <div className="relative z-10 w-full sm:w-auto">
+                    <button className="btn w-full border-none bg-gradient-to-r from-red-600 to-red-800 text-white shadow-lg shadow-red-600/40 sm:w-auto" onClick={() => setShowCreateModal(true)}>
                         <Plus className="w-4 h-4" /> NEW SERVICE ORDER
                     </button>
                 </div>
@@ -221,10 +221,10 @@ const ServiceOrderList = () => {
             )}
 
             {/* Content Area */}
-            <div className="surface p-6">
+            <div className="surface p-4 sm:p-6">
                 {/* Search */}
                 <div className="mb-8">
-                    <div className="relative max-w-xl">
+                    <div className="relative w-full max-w-xl">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary-500" />
                         <input
                             type="text"
@@ -242,7 +242,7 @@ const ServiceOrderList = () => {
                             key={status}
                             type="button"
                             onClick={() => setStatusFilter(status)}
-                            className={`rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide ${statusFilter === status ? 'border-accent-blue bg-accent-blue text-white' : 'border-primary-200 bg-white text-primary-600'}`}
+                            className={`min-h-10 rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide ${statusFilter === status ? 'border-accent-blue bg-accent-blue text-white' : 'border-primary-200 bg-white text-primary-600'}`}
                         >
                             {status === 'all' ? 'All' : status.replace('_', ' ')}
                         </button>

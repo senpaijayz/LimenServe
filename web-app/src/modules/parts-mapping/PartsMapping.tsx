@@ -97,7 +97,7 @@ function SearchBar({ onPartSelect, disabled }: { onPartSelect: (part: any) => Pr
     }, [query, disabled]);
 
     return (
-        <div style={{ position: 'relative', width: '100%', maxWidth: 460 }}>
+        <div className="w-full lg:max-w-[460px]" style={{ position: 'relative' }}>
             <div className="relative flex items-center w-full">
                 <Search className="absolute left-3 text-slate-400" size={18} />
                 <input
@@ -337,11 +337,11 @@ export default function PartsMapping() {
     };
 
     return (
-        <div className="stockroom-viewer animate-fade-in pb-10 bg-[#0a0f1a] text-white min-h-[calc(100vh-100px)] p-4 sm:p-6 rounded-2xl border border-slate-800/50 shadow-2xl">
+        <div className="stockroom-viewer animate-fade-in min-h-[calc(100dvh-100px)] rounded-2xl border border-slate-800/50 bg-[#0a0f1a] p-3 pb-10 text-white shadow-2xl sm:p-6">
             <header className="page-header">
-                <div className="flex justify-between items-center flex-wrap gap-4">
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight mb-1">
+                <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+                    <div className="w-full min-w-0">
+                        <h1 className="mb-1 text-2xl font-bold tracking-tight sm:text-3xl">
                             <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500">
                                 {store.currentFloor === 1 ? '1st' : '2nd'} Floor
                             </span>{' '}
@@ -356,7 +356,7 @@ export default function PartsMapping() {
                         </div>
                     </div>
 
-                    <div className="flex gap-2 flex-wrap">
+                    <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:justify-end">
                         <div className="btn-group flex gap-0" style={{ borderRadius: 8, overflow: 'hidden' }}>
                             <button
                                 className={`btn ${store.currentFloor === 1 ? 'btn-primary' : 'btn-outline'}`}
@@ -662,7 +662,7 @@ export default function PartsMapping() {
             )}
 
             {(isLargeViewport || showMobileScene) && (
-            <div className="card shadow-inner" style={{ height: isLargeViewport ? 600 : 520, padding: 0, overflow: 'hidden', position: 'relative', background: '#070b14', border: '1px solid #1e293b' }}>
+            <div className="card h-[min(520px,calc(100dvh-9rem))] shadow-inner lg:h-[600px]" style={{ padding: 0, overflow: 'hidden', position: 'relative', background: '#070b14', border: '1px solid #1e293b' }}>
                 {!isLargeViewport && (
                     <button
                         className="absolute right-4 top-4 z-[120] rounded-lg border border-slate-700 bg-slate-950/90 px-3 py-2 text-sm font-semibold text-white"
@@ -685,7 +685,7 @@ export default function PartsMapping() {
                         pointerEvents: 'none',
                     }}
                 >
-                    <div className="text-center text-white">
+                    <div className="px-4 text-center text-white">
                         <div className="text-5xl mb-4 text-primary">{store.currentFloor === 1 ? <ChevronDown size={64} className="mx-auto" /> : <ChevronUp size={64} className="mx-auto" />}</div>
                         <div className="text-2xl font-bold">Switching to {store.currentFloor === 1 ? '1st' : '2nd'} Floor...</div>
                     </div>
@@ -701,14 +701,14 @@ export default function PartsMapping() {
 
                 {store.isLoading && (
                     <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80 z-50">
-                        <div className="text-white text-lg font-bold flex items-center gap-3">
+                        <div className="flex items-center gap-3 px-4 text-base font-bold text-white sm:text-lg">
                             <div className="w-6 h-6 border-4 border-primary border-t-transparent rounded-full animate-spin" />
                             Loading Warehouse Digital Twin...
                         </div>
                     </div>
                 )}
 
-                <div className="absolute bottom-4 left-4 bg-gray-900/90 p-4 rounded-xl border border-gray-700 backdrop-blur">
+                <div className="absolute bottom-4 left-4 max-w-[calc(100%-2rem)] rounded-xl border border-gray-700 bg-gray-900/90 p-3 backdrop-blur sm:p-4">
                     <div className="text-xs font-bold text-gray-400 mb-2">{store.currentFloor === 1 ? '1ST FLOOR' : '2ND FLOOR'}</div>
                     <div className="text-sm flex flex-col gap-1 text-white">
                         <span>Shelves: {store.layout.objects.filter((object) => object.floor === store.currentFloor && (object.type === 'shelf' || object.type === 'shelf2')).length}</span>
@@ -732,7 +732,7 @@ export default function PartsMapping() {
                     </button>
                 </div>
 
-                <div className="absolute bottom-4 right-4 bg-gray-900/80 px-4 py-2 rounded-lg text-sm text-gray-300">
+                <div className="absolute bottom-4 right-4 hidden rounded-lg bg-gray-900/80 px-4 py-2 text-sm text-gray-300 sm:block">
                     {store.viewMode === '2d' ? '2D View • Drag to pan' : '3D View • Drag to rotate • Scroll to zoom'}
                 </div>
             </div>
@@ -761,8 +761,8 @@ export default function PartsMapping() {
             </div>
 
             {saveAsModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[99999] flex items-center justify-center">
-                    <div className="bg-gray-800 border border-gray-700 p-6 rounded-2xl w-full max-w-md shadow-2xl">
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+                    <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-gray-700 bg-gray-800 p-4 shadow-2xl sm:p-6">
                         <h3 className="text-xl font-bold mb-4 text-white">Save Layout As...</h3>
                         <div className="form-group mb-6">
                             <label className="form-label">Layout Name</label>
@@ -780,7 +780,7 @@ export default function PartsMapping() {
                                 }}
                             />
                         </div>
-                        <div className="flex justify-end gap-3">
+                        <div className="flex flex-col justify-end gap-3 sm:flex-row">
                             <button className="btn btn-outline" onClick={() => setSaveAsModal(false)}>Cancel</button>
                             <button className="btn btn-primary" disabled={!saveName.trim()} onClick={() => void handleSaveLayoutAs()}>
                                 Save Layout

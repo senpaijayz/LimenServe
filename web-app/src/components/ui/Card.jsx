@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion as Motion, useReducedMotion } from 'framer-motion';
 
 /**
  * Card Component
@@ -20,6 +20,8 @@ const Card = ({
     padding = 'default',
     ...props
 }) => {
+    const shouldReduceMotion = useReducedMotion();
+
     // Padding classes
     const paddings = {
         none: '',
@@ -36,11 +38,11 @@ const Card = ({
   `.trim().replace(/\s+/g, ' ');
 
     return (
-        <motion.div
+        <Motion.div
             className={cardClasses}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
+            initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
+            animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+            transition={shouldReduceMotion ? undefined : { duration: 0.22 }}
             {...props}
         >
             {/* Header */}
@@ -65,7 +67,7 @@ const Card = ({
                     {footer}
                 </div>
             )}
-        </motion.div>
+        </Motion.div>
     );
 };
 
@@ -87,10 +89,10 @@ export const KPICard = ({
 
     return (
         <Card className={`kpi-card group border-l-4 ${accentColor} ${className}`} padding="default">
-            <div className="flex items-start justify-between">
-                <div>
+            <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
                     <p className="text-sm text-primary-500 font-medium tracking-wide uppercase">{title}</p>
-                    <p className="text-2xl lg:text-3xl font-bold font-display text-primary-950 mt-1">
+                    <p className="mt-1 break-words text-2xl font-bold font-display leading-tight text-primary-950 lg:text-3xl">
                         {value}
                     </p>
                     {trendValue && (

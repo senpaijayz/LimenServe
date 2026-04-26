@@ -34,7 +34,7 @@ const MainLayout = () => {
             <Header />
 
             <main className={`main-content ${sidebarCollapsed ? 'main-content-collapsed' : ''} bg-primary-50`}>
-                <div className="w-full max-w-[1600px] mx-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-10 transition-all duration-300">
+                <div className="mx-auto w-full max-w-[1600px] p-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] transition-all duration-300 sm:p-6 sm:pb-24 lg:p-10">
                     <Outlet />
                 </div>
             </main>

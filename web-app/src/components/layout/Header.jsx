@@ -37,22 +37,23 @@ const Header = () => {
     return (
         <header className={`header ${sidebarCollapsed ? 'header-collapsed' : ''}`}>
             {/* Left Section */}
-            <div className="flex items-center gap-4">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-4">
                 {/* Mobile Menu Toggle */}
                 <button
                     onClick={toggleMobileSidebar}
-                    className="lg:hidden p-2 rounded-lg hover:bg-primary-50 transition-colors border border-primary-200"
+                    className="min-h-11 min-w-11 rounded-lg border border-primary-200 p-2 transition-colors hover:bg-primary-50 lg:hidden"
+                    aria-label="Open navigation menu"
                 >
                     <Menu className="w-5 h-5 text-primary-700" />
                 </button>
 
                 {/* Page Title & Date */}
-                <div className="hidden sm:flex items-center gap-3">
-                    <h1 className="text-xl font-display font-bold text-primary-950">
+                <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                    <h1 className="max-w-[48vw] truncate text-base font-display font-bold text-primary-950 sm:max-w-none sm:text-xl">
                         {getPageTitle()}
                     </h1>
-                    <span className="w-px h-5 bg-primary-200" />
-                    <span className="text-sm text-primary-500 font-medium">
+                    <span className="hidden h-5 w-px bg-primary-200 sm:block" />
+                    <span className="hidden text-sm font-medium text-primary-500 sm:block">
                         {new Date().toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })}
                     </span>
                 </div>
@@ -73,7 +74,7 @@ const Header = () => {
                 )}
 
                 {/* User Avatar (Mobile) */}
-                <div className="lg:hidden w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center border border-primary-200">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-primary-200 bg-primary-100 lg:hidden">
                     <span className="text-primary-700 text-sm font-bold">
                         {user?.firstName?.[0]}{user?.lastName?.[0]}
                     </span>

@@ -185,7 +185,7 @@ const QuoteBuilder = () => {
                 if (active) {
                     setSavedQuotes(records);
                 }
-            } catch (_loadError) {
+            } catch {
                 if (active) {
                     setSavedQuotes([]);
                 }
@@ -538,7 +538,7 @@ const QuoteBuilder = () => {
                 </div>
 
                 <div className="xl:col-span-1">
-                    <div className="bg-white border border-primary-200 rounded-xl shadow-sm p-4 sticky top-20">
+                    <div className="rounded-xl border border-primary-200 bg-white p-4 shadow-sm xl:sticky xl:top-20">
                         <h3 className="text-lg font-display font-bold text-primary-950 mb-4 pb-3 border-b border-primary-100">Quote Summary</h3>
 
                         {selectedParts.length > 0 && (
@@ -611,7 +611,7 @@ const QuoteBuilder = () => {
                             </div>
                             <div className="flex justify-between text-xl font-bold text-primary-950 pt-3 mt-1 border-t border-primary-200">
                                 <span>Total Estimate</span>
-                                <span className="text-accent-blue">{formatCurrency(totals.total)}</span>
+                                <span className="min-w-0 break-words text-right text-accent-blue">{formatCurrency(totals.total)}</span>
                             </div>
                         </div>
 

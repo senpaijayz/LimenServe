@@ -30,7 +30,10 @@ export default function MobileBottomNav() {
     }
 
     return (
-        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-primary-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
+        <nav
+            className="fixed inset-x-0 bottom-0 z-40 border-t border-primary-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden"
+            aria-label="Primary mobile navigation"
+        >
             <div className="mx-auto grid max-w-md grid-flow-col auto-cols-fr gap-1 py-2">
                 {items.map((item) => {
                     const Icon = iconMap[item.icon];
@@ -38,7 +41,7 @@ export default function MobileBottomNav() {
                         <NavLink
                             key={item.path}
                             to={item.path}
-                            className={({ isActive }) => `flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[11px] font-semibold ${isActive ? 'bg-primary-950 text-white' : 'text-primary-500'}`}
+                            className={({ isActive }) => `flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[11px] font-semibold ${isActive ? 'bg-primary-950 text-white' : 'text-primary-500'}`}
                         >
                             {Icon && <Icon className="h-4 w-4" />}
                             <span className="max-w-full truncate">{item.label.replace('Point of Sale', 'POS')}</span>

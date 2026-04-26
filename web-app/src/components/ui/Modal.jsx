@@ -1,5 +1,5 @@
-import { useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useCallback, useRef } from 'react';
+import { motion as Motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 
@@ -24,6 +24,9 @@ const Modal = ({
     footer,
     className = '',
 }) => {
+    const modalRef = useRef(null);
+    const shouldReduceMotion = useReducedMotion();
+
     // Handle escape key
     const handleEscape = useCallback((e) => {
         if (e.key === 'Escape' && closeOnEscape) {
@@ -35,6 +38,9 @@ const Modal = ({
         if (isOpen) {
             document.addEventListener('keydown', handleEscape);
             document.body.style.overflow = 'hidden';
+            window.requestAnimationFrame(() => {
+                modalRef.current?.focus();
+            });
         }
 
         return () => {
@@ -62,19 +68,24 @@ const Modal = ({
     const modalContent = (
         <AnimatePresence>
             {isOpen && (
-                <motion.div
+                <Motion.div
                     className="modal-overlay"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
+                    initial={shouldReduceMotion ? false : { opacity: 0 }}
+                    animate={shouldReduceMotion ? undefined : { opacity: 1 }}
+                    exit={shouldReduceMotion ? undefined : { opacity: 0 }}
                     onClick={handleBackdropClick}
                 >
-                    <motion.div
+                    <Motion.div
+                        ref={modalRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={typeof title === 'string' ? title : 'Dialog'}
+                        tabIndex={-1}
                         className={`modal ${sizes[size]} ${className}`}
-                        initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        transition={{ duration: 0.2 }}
+                        initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.96, y: 16 }}
+                        animate={shouldReduceMotion ? undefined : { opacity: 1, scale: 1, y: 0 }}
+                        exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.96, y: 16 }}
+                        transition={shouldReduceMotion ? undefined : { duration: 0.18 }}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Header */}
@@ -104,8 +115,8 @@ const Modal = ({
                                 {footer}
                             </div>
                         )}
-                    </motion.div>
-                </motion.div>
+                    </Motion.div>
+                </Motion.div>
             )}
         </AnimatePresence>
     );

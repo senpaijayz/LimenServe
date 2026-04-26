@@ -1,5 +1,5 @@
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useEffect, useMemo, useState } from 'react';
+import { motion as Motion } from 'framer-motion';
 import { Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -56,7 +56,6 @@ const InventoryList = () => {
     const [refreshKey, setRefreshKey] = useState(0);
     const [productOverrides, setProductOverrides] = useState({});
     const [selectedPreviewProduct, setSelectedPreviewProduct] = useState(null);
-    const deferredSearchQuery = useDeferredValue(searchQuery);
     const {
         products,
         categories: catalogCategories,
@@ -71,10 +70,6 @@ const InventoryList = () => {
         sortBy: 'name-asc',
         refreshKey,
     });
-
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [deferredSearchQuery, selectedCategory, selectedStockFilter]);
 
     useEffect(() => {
         let active = true;
@@ -154,6 +149,21 @@ const InventoryList = () => {
         setSelectedPreviewProduct(productOverrides[product.id] ?? formatCatalogProduct(product));
     };
 
+    const handleSearchQueryChange = (value) => {
+        setSearchQuery(value);
+        setCurrentPage(1);
+    };
+
+    const handleCategoryChange = (value) => {
+        setSelectedCategory(value);
+        setCurrentPage(1);
+    };
+
+    const handleStockFilterChange = (value) => {
+        setSelectedStockFilter(value);
+        setCurrentPage(1);
+    };
+
     const lookupAndPreviewProduct = async (identifier) => {
         const trimmedIdentifier = String(identifier || '').trim();
         if (!trimmedIdentifier) {
@@ -216,14 +226,14 @@ const InventoryList = () => {
 
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                 <div className="flex flex-col lg:flex-row gap-3 flex-1 w-full sm:w-auto">
-                    <div className="relative flex-1 max-w-md flex gap-2">
+                    <div className="relative flex w-full flex-1 gap-2 lg:max-w-md">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                             <input
                                 type="text"
                                 placeholder="Search products or scan barcode..."
                                 value={searchQuery}
-                                onChange={(event) => setSearchQuery(event.target.value)}
+                                onChange={(event) => handleSearchQueryChange(event.target.value)}
                                 onKeyDown={(event) => {
                                     if (event.key === 'Enter') {
                                         void lookupAndPreviewProduct(searchQuery);
@@ -245,14 +255,14 @@ const InventoryList = () => {
                     <Dropdown
                         options={categories}
                         value={selectedCategory}
-                        onChange={setSelectedCategory}
+                        onChange={handleCategoryChange}
                         className="w-full sm:w-56"
                     />
 
                     <Dropdown
                         options={stockFilters}
                         value={selectedStockFilter}
-                        onChange={setSelectedStockFilter}
+                        onChange={handleStockFilterChange}
                         className="w-full sm:w-64"
                     />
                 </div>
@@ -274,13 +284,15 @@ const InventoryList = () => {
                     <div className="hidden items-center glass rounded-lg p-1 sm:flex">
                         <button
                             onClick={() => setViewMode('grid')}
-                            className={`p-2 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-accent-primary text-white' : 'text-primary-400 hover:text-primary-100'}`}
+                            className={`min-h-10 min-w-10 rounded-md p-2 transition-colors ${viewMode === 'grid' ? 'bg-accent-primary text-white' : 'text-primary-400 hover:text-primary-100'}`}
+                            aria-label="Show inventory as cards"
                         >
                             <Grid className="w-4 h-4" />
                         </button>
                         <button
                             onClick={() => setViewMode('list')}
-                            className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-accent-primary text-white' : 'text-primary-400 hover:text-primary-100'}`}
+                            className={`min-h-10 min-w-10 rounded-md p-2 transition-colors ${viewMode === 'list' ? 'bg-accent-primary text-white' : 'text-primary-400 hover:text-primary-100'}`}
+                            aria-label="Show inventory as table"
                         >
                             <List className="w-4 h-4" />
                         </button>
@@ -316,7 +328,7 @@ const InventoryList = () => {
                     <p className="text-primary-500 font-medium">Try adjusting your search or filter criteria</p>
                 </Card>
             ) : viewMode === 'grid' ? (
-                <motion.div
+                <Motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
@@ -328,7 +340,7 @@ const InventoryList = () => {
                             onSelect={openPreview}
                         />
                     ))}
-                </motion.div>
+                </Motion.div>
             ) : (
                 <Card padding="none">
                     <div className="overflow-x-auto">
@@ -374,12 +386,13 @@ const InventoryList = () => {
                         <p className="text-sm text-primary-600">
                             Showing <span className="font-semibold text-primary-950">{rangeStart}-{rangeEnd}</span> of <span className="font-semibold text-primary-950">{formatNumber(pagination.totalCount ?? 0)}</span> products
                         </p>
-                        <div className="flex items-center gap-2">
+                        <div className="flex w-full flex-col gap-2 min-[420px]:flex-row sm:w-auto sm:items-center">
                             <Button
                                 variant="secondary"
                                 onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
                                 disabled={!canGoPrev}
                                 leftIcon={<ChevronLeft className="h-4 w-4" />}
+                                className="w-full min-[420px]:w-auto"
                             >
                                 Previous
                             </Button>
@@ -391,6 +404,7 @@ const InventoryList = () => {
                                 onClick={() => setCurrentPage((page) => Math.min(page + 1, pagination.totalPages ?? page))}
                                 disabled={!canGoNext}
                                 rightIcon={<ChevronRight className="h-4 w-4" />}
+                                className="w-full min-[420px]:w-auto"
                             >
                                 Next
                             </Button>
@@ -417,11 +431,11 @@ const InventoryList = () => {
                 onClose={() => setShowCameraScanner(false)}
                 onScan={async (barcode) => {
                     if (barcode) {
-                        setSearchQuery(barcode);
+                        handleSearchQueryChange(barcode);
                         success(`Scanned: ${barcode}`);
                         const matchedProduct = await lookupAndPreviewProduct(barcode);
                         if (matchedProduct?.sku) {
-                            setSearchQuery(matchedProduct.sku);
+                            handleSearchQueryChange(matchedProduct.sku);
                         }
                     }
                 }}

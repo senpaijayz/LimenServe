@@ -185,7 +185,6 @@ const POSTerminal = () => {
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full pl-12 pr-4 py-3 bg-white border border-primary-200 rounded-xl text-lg text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue shadow-sm"
-                            autoFocus
                         />
                     </div>
                     <Button
@@ -258,12 +257,13 @@ const POSTerminal = () => {
                                 <p className="text-sm text-primary-600">
                                     Showing <span className="font-semibold text-primary-950">{rangeStart}-{rangeEnd}</span> of <span className="font-semibold text-primary-950">{pagination.totalCount ?? 0}</span> products
                                 </p>
-                                <div className="flex items-center gap-2">
+                                <div className="flex w-full flex-col gap-2 min-[420px]:flex-row sm:w-auto sm:items-center">
                                     <Button
                                         variant="secondary"
                                         onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
                                         disabled={!canGoPrev}
                                         leftIcon={<ChevronLeft className="h-4 w-4" />}
+                                        className="w-full min-[420px]:w-auto"
                                     >
                                         Previous
                                     </Button>
@@ -275,6 +275,7 @@ const POSTerminal = () => {
                                         onClick={() => setCurrentPage((page) => Math.min(page + 1, pagination.totalPages ?? page))}
                                         disabled={!canGoNext}
                                         rightIcon={<ChevronRight className="h-4 w-4" />}
+                                        className="w-full min-[420px]:w-auto"
                                     >
                                         Next
                                     </Button>
@@ -286,7 +287,7 @@ const POSTerminal = () => {
             </div>
 
             {/* Cart Sidebar */}
-            <div className="w-full lg:w-96 flex max-h-[80dvh] flex-col bg-white border border-primary-200 shadow-sm rounded-xl p-4 lg:max-h-none">
+            <div className="flex max-h-[80dvh] w-full flex-col rounded-xl border border-primary-200 bg-white p-4 shadow-sm lg:sticky lg:top-20 lg:max-h-[calc(100dvh-7rem)] lg:w-96">
                 {/* Cart Header */}
                 <div className="flex items-center justify-between pb-3 border-b border-primary-100">
                     <h2 className="text-lg font-display font-bold text-primary-950">
@@ -332,23 +333,26 @@ const POSTerminal = () => {
                                         {formatCurrency(item.price)}
                                     </p>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5 sm:gap-2">
                                     <button
                                         onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                                        className="p-1 rounded-md bg-white border border-primary-200 text-primary-600 hover:bg-primary-50 transition-colors shadow-sm"
+                                        className="flex min-h-9 min-w-9 items-center justify-center rounded-md border border-primary-200 bg-white text-primary-600 shadow-sm transition-colors hover:bg-primary-50"
+                                        aria-label={`Decrease ${item.name} quantity`}
                                     >
                                         <Minus className="w-4 h-4" />
                                     </button>
                                     <span className="w-8 text-center font-bold text-primary-950">{item.quantity}</span>
                                     <button
                                         onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                                        className="p-1 rounded-md bg-white border border-primary-200 text-primary-600 hover:bg-primary-50 transition-colors shadow-sm"
+                                        className="flex min-h-9 min-w-9 items-center justify-center rounded-md border border-primary-200 bg-white text-primary-600 shadow-sm transition-colors hover:bg-primary-50"
+                                        aria-label={`Increase ${item.name} quantity`}
                                     >
                                         <Plus className="w-4 h-4" />
                                     </button>
                                     <button
                                         onClick={() => removeItem(item.id)}
-                                        className="p-1.5 rounded-md text-accent-danger hover:bg-accent-danger/10 transition-colors ml-2"
+                                        className="ml-1 flex min-h-9 min-w-9 items-center justify-center rounded-md text-accent-danger transition-colors hover:bg-accent-danger/10 sm:ml-2"
+                                        aria-label={`Remove ${item.name}`}
                                     >
                                         <Trash2 className="w-4 h-4" />
                                     </button>
@@ -457,7 +461,7 @@ const POSTerminal = () => {
                             <button
                                 key={amount}
                                 onClick={() => setPaymentAmount(String(amount))}
-                                className="p-3 rounded-lg bg-white border border-primary-200 hover:border-accent-blue hover:shadow-sm hover:text-accent-blue transition-all text-primary-700 font-bold"
+                                className="min-h-11 rounded-lg border border-primary-200 bg-white p-3 font-bold text-primary-700 transition-all hover:border-accent-blue hover:text-accent-blue hover:shadow-sm"
                             >
                                 ₱{amount.toLocaleString()}
                             </button>
@@ -483,7 +487,7 @@ const POSTerminal = () => {
                     )}
 
                     {/* Actions */}
-                    <div className="flex gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row">
                         <Button
                             variant="secondary"
                             fullWidth
@@ -531,7 +535,7 @@ const POSTerminal = () => {
                     <SaleReceiptPreview receipt={lastTransaction.receipt} printId="pos-receipt" />
                 )}
 
-                <div className="flex gap-3 print:hidden">
+                <div className="flex flex-col gap-3 print:hidden sm:flex-row">
                     <Button variant="secondary" fullWidth onClick={() => setShowSuccessModal(false)}>
                         New Transaction
                     </Button>
