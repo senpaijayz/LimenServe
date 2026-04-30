@@ -105,6 +105,7 @@ const PublicCatalogView = () => {
 
   const visibleProducts = useMemo(() => products.map((product) => ({
     id: product.id,
+    catalogEntryId: product.catalogEntryId || product.id,
     name: product.name,
     sku: product.sku,
     category: product.category,
@@ -344,7 +345,7 @@ const PublicCatalogView = () => {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {visibleProducts.map((product, index) => (
                   <Motion.div
-                    key={product.id}
+                    key={product.catalogEntryId || product.id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: index * 0.05 }}

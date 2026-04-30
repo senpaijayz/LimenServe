@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Minus, Calculator, Printer, User, Phone, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
@@ -327,6 +327,7 @@ const PublicEstimate = () => {
 
     const filteredProducts = priceListProducts.map((product) => ({
         id: product.id,
+        catalogEntryId: product.catalogEntryId || product.id,
         name: product.name,
         sku: product.sku,
         price: Number(product.price ?? 0),
@@ -857,7 +858,7 @@ const PublicEstimate = () => {
                                         const isSelected = selectedParts.some((part) => part.id === product.id);
                                         return (
                                             <button
-                                                key={product.id}
+                                                key={product.catalogEntryId || product.id}
                                                 onClick={() => addPart(product)}
                                                 className={`p-4 text-left rounded-xl border flex flex-col gap-2 transition-all duration-300 ${isSelected
                                                     ? 'bg-accent-primary/5 border-accent-primary/30 ring-1 ring-accent-primary/30'
@@ -993,7 +994,7 @@ const PublicEstimate = () => {
             </section>
 
             {mode === 'estimate' && estimatePhase === 'summary' && (
-                <motion.aside
+                <Motion.aside
                     className={summaryPanelClassName}
                     initial={{ opacity: 0, x: isDesktopDock ? 28 : 0, y: isDesktopDock ? 0 : 28, scale: isDesktopDock ? 1 : 0.98 }}
                     animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
@@ -1201,7 +1202,7 @@ const PublicEstimate = () => {
                                             </Button>
                                         </div>
                                     </div>
-                                </motion.aside>
+                                </Motion.aside>
             )}
 
             <Modal

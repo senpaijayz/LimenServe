@@ -354,6 +354,7 @@ function mapCatalogRow(row) {
 
   return {
     id: row.id,
+    catalogEntryId: row.catalog_entry_id ?? row.catalogEntryId ?? row.metadata?.catalogEntryId ?? row.id,
     sku: row.sku,
     name: row.name,
     model: row.model,
@@ -368,6 +369,44 @@ function mapCatalogRow(row) {
     location: row.location ?? {},
     metadata: row.metadata ?? {},
   };
+}
+
+function mapPricelistStagingRow(row, productBySku = new Map(), balanceByProductId = new Map()) {
+  const product = productBySku.get(row.sku) ?? null;
+  const balance = product?.id ? balanceByProductId.get(product.id) : null;
+
+  return mapCatalogRow({
+    id: product?.id || `staging-${row.id || row.source_line_number}`,
+    catalog_entry_id: `pricelist-${row.id || row.source_line_number}`,
+    sku: row.sku,
+    name: row.name,
+    model: row.model_name,
+    category: row.category,
+    source_category: row.source_category,
+    pcc: row.pcc,
+    price: row.price,
+    stock: balance?.on_hand ?? 0,
+    status: row.status || product?.status || 'out_of_stock',
+    uom: row.uom || product?.uom || 'PC',
+    brand: product?.brand || 'Mitsubishi',
+    location: balance?.location ?? {},
+    metadata: {
+      ...(product?.metadata ?? {}),
+      pcc: row.pcc || product?.metadata?.pcc || null,
+      source: '2025-10 pricelist import',
+      sourceSheet: row.source_sheet,
+      sourceLineNumber: row.source_line_number,
+      catalogEntryId: `pricelist-${row.id || row.source_line_number}`,
+      sourceCategory: row.source_category ?? product?.metadata?.sourceCategory ?? null,
+      classification: {
+        version: row.classification_version,
+        confidence: row.classification_confidence,
+        strategy: row.classification_strategy,
+        ruleKey: row.classification_rule_key,
+        matchedTokens: row.classification_tokens ?? [],
+      },
+    },
+  });
 }
 
 function mapServiceRow(service) {
@@ -1451,6 +1490,145 @@ async function fetchProductCatalogCategories({ searchQuery = null }) {
   });
 }
 
+function normalizePostgrestSearchTerm(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[%_]/g, '')
+    .replace(/,/g, ' ');
+}
+
+function applyPricelistCatalogFilters(query, { searchQuery = '', selectedCategory = 'all' } = {}) {
+  let nextQuery = query;
+  const normalizedSearch = normalizePostgrestSearchTerm(searchQuery);
+
+  if (selectedCategory && selectedCategory !== 'all') {
+    nextQuery = nextQuery.eq('category', selectedCategory);
+  }
+
+  if (normalizedSearch) {
+    const pattern = `*${normalizedSearch}*`;
+    nextQuery = nextQuery.or([
+      `sku.ilike.${pattern}`,
+      `name.ilike.${pattern}`,
+      `model_name.ilike.${pattern}`,
+      `category.ilike.${pattern}`,
+      `source_category.ilike.${pattern}`,
+      `pcc.ilike.${pattern}`,
+    ].join(','));
+  }
+
+  return nextQuery;
+}
+
+function applyPricelistCatalogSort(query, sortBy = 'name-asc') {
+  switch (sortBy) {
+    case 'name-desc':
+      return query
+        .order('name', { ascending: false })
+        .order('sku', { ascending: true })
+        .order('source_line_number', { ascending: true });
+    case 'price-asc':
+      return query
+        .order('price', { ascending: true })
+        .order('name', { ascending: true })
+        .order('source_line_number', { ascending: true });
+    case 'price-desc':
+      return query
+        .order('price', { ascending: false })
+        .order('name', { ascending: true })
+        .order('source_line_number', { ascending: true });
+    default:
+      return query
+        .order('name', { ascending: true })
+        .order('sku', { ascending: true })
+        .order('source_line_number', { ascending: true });
+  }
+}
+
+async function fetchPricelistCatalogPage({ page, pageSize, searchQuery = '', selectedCategory = 'all', sortBy = 'name-asc' }) {
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  let query = supabaseAdmin
+    .schema('catalog')
+    .from('pricelist_import_staging')
+    .select(`
+      id,
+      source_sheet,
+      source_line_number,
+      sku,
+      name,
+      model_name,
+      uom,
+      pcc,
+      price,
+      status,
+      category,
+      source_category,
+      classification_version,
+      classification_confidence,
+      classification_strategy,
+      classification_rule_key,
+      classification_tokens
+    `, { count: 'exact' });
+
+  query = applyPricelistCatalogFilters(query, { searchQuery, selectedCategory });
+  query = applyPricelistCatalogSort(query, sortBy).range(from, to);
+
+  const { data, error, count } = await query;
+
+  if (error) {
+    const message = String(error.message || '');
+    if (message.includes('pricelist_import_staging') || message.includes('does not exist')) {
+      return null;
+    }
+    throw error;
+  }
+
+  const stagingRows = data ?? [];
+  if (!stagingRows.length && Number(count ?? 0) === 0) {
+    return {
+      products: [],
+      totalCount: 0,
+      sourceAvailable: true,
+    };
+  }
+
+  const skus = [...new Set(stagingRows.map((row) => row.sku).filter(Boolean))];
+  const { data: productRows, error: productsError } = skus.length
+    ? await supabaseAdmin
+      .schema('catalog')
+      .from('products')
+      .select('id, sku, brand, uom, status, metadata')
+      .in('sku', skus)
+    : { data: [], error: null };
+
+  if (productsError) {
+    throw productsError;
+  }
+
+  const productBySku = new Map((productRows ?? []).map((product) => [product.sku, product]));
+  const productIds = [...new Set((productRows ?? []).map((product) => product.id).filter(Boolean))];
+  const { data: balanceRows, error: balancesError } = productIds.length
+    ? await supabaseAdmin
+      .schema('catalog')
+      .from('inventory_balances')
+      .select('product_id, on_hand, location')
+      .in('product_id', productIds)
+    : { data: [], error: null };
+
+  if (balancesError) {
+    throw balancesError;
+  }
+
+  const balanceByProductId = new Map((balanceRows ?? []).map((balance) => [balance.product_id, balance]));
+
+  return {
+    products: stagingRows.map((row) => mapPricelistStagingRow(row, productBySku, balanceByProductId)),
+    totalCount: Number(count ?? stagingRows.length),
+    sourceAvailable: true,
+  };
+}
+
 async function fetchRemainingCatalogPagesInBatches(totalPages) {
   const allRows = [];
 
@@ -1610,8 +1788,8 @@ router.get('/products', async (req, res, next) => {
     let totalPages = 1;
 
     if (!vehicleContext) {
-      const [pageRows, categoryRows] = await Promise.all([
-        fetchProductCatalogPage({
+      const [pricelistPage, categoryRows] = await Promise.all([
+        fetchPricelistCatalogPage({
           page,
           pageSize,
           searchQuery,
@@ -1623,8 +1801,21 @@ router.get('/products', async (req, res, next) => {
           : Promise.resolve([]),
       ]);
 
-      products = (pageRows ?? []).map(mapCatalogRow);
-      totalCount = Number(pageRows?.[0]?.total_count ?? 0);
+      if (pricelistPage?.sourceAvailable) {
+        products = pricelistPage.products;
+        totalCount = pricelistPage.totalCount;
+      } else {
+        const pageRows = await fetchProductCatalogPage({
+          page,
+          pageSize,
+          searchQuery,
+          selectedCategory,
+          sortBy,
+        });
+        products = (pageRows ?? []).map(mapCatalogRow);
+        totalCount = Number(pageRows?.[0]?.total_count ?? 0);
+      }
+
       totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
       if (includeCategories) {
@@ -1635,7 +1826,7 @@ router.get('/products', async (req, res, next) => {
         }));
         const categoryCountTotal = normalizedCategoryRows.reduce((sum, row) => sum + Number(row.count ?? 0), 0);
         categories = [
-          { value: 'all', label: 'All Categories', count: categoryCountTotal || totalCount },
+          { value: 'all', label: 'All Categories', count: totalCount || categoryCountTotal },
           ...normalizedCategoryRows,
         ];
       }
@@ -1699,7 +1890,7 @@ router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, ne
 
       res.json({
         summary: {
-          totalProducts: Number(summary?.total_products ?? 0),
+          totalProducts: Math.max(Number(summary?.total_products ?? 0), Number(summary?.pricelist_rows ?? 0)),
           pricelistRows: Number(summary?.pricelist_rows ?? 0),
           uniqueProducts: Number(summary?.unique_products ?? 0),
           currentPrices: Number(summary?.current_prices ?? 0),

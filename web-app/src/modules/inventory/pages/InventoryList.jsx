@@ -23,6 +23,7 @@ const PAGE_SIZE = 12;
 function formatCatalogProduct(product) {
     return {
         id: product.id,
+        catalogEntryId: product.catalogEntryId || product.id,
         sku: product.sku,
         name: product.name,
         model: product.model,
@@ -335,7 +336,7 @@ const InventoryList = () => {
                 >
                     {filteredProducts.map((product) => (
                         <ProductCard
-                            key={product.id}
+                            key={product.catalogEntryId || product.id}
                             product={product}
                             onSelect={openPreview}
                         />
@@ -359,7 +360,7 @@ const InventoryList = () => {
                             <tbody>
                                 {filteredProducts.map((product) => (
                                     <tr
-                                        key={product.id}
+                                        key={product.catalogEntryId || product.id}
                                         className="cursor-pointer hover:bg-primary-50 transition-colors"
                                         onClick={() => openPreview(product)}
                                     >
