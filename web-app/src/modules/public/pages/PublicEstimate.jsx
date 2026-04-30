@@ -328,7 +328,7 @@ const PublicEstimate = () => {
             return;
         }
 
-        setShowSummaryDrawer(estimatePhase === 'summary');
+        setShowSummaryDrawer(estimatePhase === 'catalog' || estimatePhase === 'summary');
     }, [estimatePhase, mode]);
 
     useEffect(() => {
@@ -413,6 +413,7 @@ const PublicEstimate = () => {
 
     const addPart = (product, extra = {}) => {
         setFocusedProduct(product);
+        setSavedDraftQuote(null);
         setSelectedParts((parts) => {
             const existing = parts.find((part) => part.id === product.id);
             const nextPrice = Number(extra.price ?? product.price ?? existing?.price ?? 0);
@@ -437,6 +438,7 @@ const PublicEstimate = () => {
     };
 
     const removePart = (id) => {
+        setSavedDraftQuote(null);
         setSelectedParts((parts) => parts.filter((part) => part.id !== id));
         if (focusedProduct?.id === id) {
             setFocusedProduct(null);
@@ -444,6 +446,7 @@ const PublicEstimate = () => {
     };
 
     const updateQty = (id, qty) => {
+        setSavedDraftQuote(null);
         if (qty < 1) {
             removePart(id);
             return;
@@ -453,10 +456,12 @@ const PublicEstimate = () => {
     };
 
     const removeService = (id) => {
+        setSavedDraftQuote(null);
         setSelectedServices((services) => services.filter((service) => service.id !== id));
     };
 
     const toggleService = (service) => {
+        setSavedDraftQuote(null);
         setSelectedServices((services) => {
             const existing = services.find((selected) => selected.id === service.id);
             if (existing) {
@@ -472,6 +477,7 @@ const PublicEstimate = () => {
     };
 
     const addSuggestedPart = (recommendation) => {
+        setSavedDraftQuote(null);
         const matchedProduct = recommendation.recommendedProduct || null;
         const productId = recommendation.recommendedProductId || matchedProduct?.id;
 
@@ -514,6 +520,7 @@ const PublicEstimate = () => {
     };
 
     const addSuggestedService = (recommendation) => {
+        setSavedDraftQuote(null);
         const recommendedService = recommendation.recommendedService || null;
         const serviceId = recommendation.recommendedServiceId || recommendedService?.id;
 
@@ -593,6 +600,10 @@ const PublicEstimate = () => {
     };
 
     const saveDraftQuote = async () => {
+        if (savedDraftQuote?.estimate?.estimate_number) {
+            return savedDraftQuote;
+        }
+
         const payload = buildEstimatePayload({
             customerName,
             customerPhone,
@@ -626,6 +637,16 @@ const PublicEstimate = () => {
         }
     };
 
+    const finishQuote = async () => {
+        if (!hasItems) {
+            return;
+        }
+
+        setShowSummaryDrawer(true);
+        setPrintSource('draft');
+        await saveDraftQuote();
+    };
+
     const openPreview = async (source = 'draft') => {
         if (source === 'draft' && !hasItems) {
             return;
@@ -637,9 +658,11 @@ const PublicEstimate = () => {
 
         setShowSummaryDrawer(false);
         if (source === 'draft') {
-            const persistedQuote = await saveDraftQuote();
-            if (!persistedQuote) {
-                return;
+            if (!savedDraftQuote?.estimate?.estimate_number) {
+                const persistedQuote = await saveDraftQuote();
+                if (!persistedQuote) {
+                    return;
+                }
             }
         }
 
@@ -671,6 +694,16 @@ const PublicEstimate = () => {
         setCurrentPage(1);
     };
 
+    const handleVehicleChange = (patch) => {
+        setSavedDraftQuote(null);
+        updateVehicle(patch);
+    };
+
+    const handleVehicleClear = () => {
+        setSavedDraftQuote(null);
+        clearVehicle();
+    };
+
     const handleModeSelect = (nextMode) => {
         setWorkflowStage('active');
         setMode(nextMode);
@@ -687,6 +720,13 @@ const PublicEstimate = () => {
     const contentShiftClass = mode === 'estimate' && showSummaryDrawer && isDesktopDock
         ? 'md:pr-[29rem]'
         : '';
+    const isCartPanelVisible = mode === 'estimate' && (estimatePhase === 'catalog' || estimatePhase === 'summary');
+    const cartPanelTitle = estimatePhase === 'catalog' ? 'Active Quote Cart' : 'Review and Print';
+    const cartPanelDescription = estimatePhase === 'catalog'
+        ? 'Added parts and services stay visible while you browse. Adjust quantities or remove items before review.'
+        : savedDraftQuote?.estimate?.estimate_number
+            ? 'Quote finished. Use this generated quote number to retrieve it later.'
+            : 'Review the final draft, add last recommendations, then finish to generate a retrievable quote number.';
 
     const summaryPanelClassName = isDesktopDock
         ? 'fixed inset-y-6 right-6 z-50 flex w-[440px] min-h-0 flex-col overflow-hidden rounded-[30px] border border-primary-200 bg-primary-50 shadow-[0_32px_90px_rgba(15,23,42,0.18)] print:hidden'
@@ -819,14 +859,20 @@ const PublicEstimate = () => {
                                         <label className="block text-sm font-semibold text-primary-700 mb-2">Customer Name</label>
                                         <div className="relative">
                                             <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
-                                            <input value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Walk-in customer" className="input pl-10 py-2.5 text-sm" />
+                                            <input value={customerName} onChange={(event) => {
+                                                setSavedDraftQuote(null);
+                                                setCustomerName(event.target.value);
+                                            }} placeholder="Walk-in customer" className="input pl-10 py-2.5 text-sm" />
                                         </div>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-semibold text-primary-700 mb-2">Phone Number</label>
                                         <div className="relative">
                                             <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
-                                            <input value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="09XX XXX XXXX" className="input pl-10 py-2.5 text-sm" />
+                                            <input value={customerPhone} onChange={(event) => {
+                                                setSavedDraftQuote(null);
+                                                setCustomerPhone(event.target.value);
+                                            }} placeholder="09XX XXX XXXX" className="input pl-10 py-2.5 text-sm" />
                                         </div>
                                     </div>
                                 </div>
@@ -834,8 +880,8 @@ const PublicEstimate = () => {
                                 <div className="mt-6">
                                     <PublicVehicleSelector
                                         vehicle={vehicle}
-                                        onChange={updateVehicle}
-                                        onClear={clearVehicle}
+                                        onChange={handleVehicleChange}
+                                        onClear={handleVehicleClear}
                                         includePlate
                                         title="Tell us which Mitsubishi you are shopping for"
                                         subtitle="Model-first browsing unlocks vehicle-matched parts, visual service packages, and smarter Good / Better / Best bundle offers."
@@ -1007,15 +1053,17 @@ const PublicEstimate = () => {
                                 <ProductPackageSuggestions
                                     product={focusedProduct}
                                     vehicleModelId={vehicle.model || focusedProduct.model || focusedProduct.vehicleModelName || ''}
-                                    vehicleContext={vehicle}
+                                    vehicleContext={hasVehicle ? vehicle : null}
                                     anchorQuantity={focusedPartSelection?.quantity ?? 1}
                                     onAddProduct={addSuggestedPart}
                                     onAddService={addSuggestedService}
                                     onAddBundle={addBundleToEstimate}
                                     selectedProductIds={selectedProductIds}
                                     selectedServiceIds={selectedServiceIds}
-                                    title="Good / Better / Best smart bundles"
-                                    subtitle="Vehicle-aware smart upsell bundles of matched Mitsubishi parts and labor for the selected anchor part."
+                                    title={hasVehicle ? 'Good / Better / Best smart bundles' : 'Part-based Good / Better / Best bundles'}
+                                    subtitle={hasVehicle
+                                        ? 'Vehicle-aware smart upsell bundles of matched Mitsubishi parts and labor for the selected anchor part.'
+                                        : 'Vehicle selection is optional. These recommendations use the selected part as the bundle anchor.'}
                                     highlightedPackageKey={incomingPackageKey}
                                     bundleMode="estimate"
                                 />
@@ -1089,7 +1137,7 @@ const PublicEstimate = () => {
                 ))}
             </section>
 
-            {mode === 'estimate' && estimatePhase === 'summary' && (
+            {isCartPanelVisible && (
                 <Motion.aside
                     className={summaryPanelClassName}
                     initial={{ opacity: 0, x: isDesktopDock ? 28 : 0, y: isDesktopDock ? 0 : 28, scale: isDesktopDock ? 1 : 0.98 }}
@@ -1102,16 +1150,22 @@ const PublicEstimate = () => {
                                         <div className="flex items-start justify-between gap-4">
                                             <div>
                                                 <span className="text-[0.65rem] font-bold uppercase tracking-[0.28em] text-primary-500">
-                                                    Public Quotation
+                                                    {estimatePhase === 'catalog' ? 'Phase 2 Cart' : 'Public Quotation'}
                                                 </span>
-                                                <h3 className="mt-2 text-xl font-display font-semibold text-primary-950">Quotation Summary</h3>
-                                                <p className="mt-1 text-sm text-primary-500">Review the draft while continuing to browse parts and smart packages.</p>
+                                                <h3 className="mt-2 text-xl font-display font-semibold text-primary-950">{cartPanelTitle}</h3>
+                                                <p className="mt-1 text-sm text-primary-500">{cartPanelDescription}</p>
                                             </div>
                                             <button
                                                 type="button"
-                                                onClick={() => setEstimatePhase('catalog')}
+                                                onClick={() => {
+                                                    if (estimatePhase === 'summary') {
+                                                        setEstimatePhase('catalog');
+                                                    } else {
+                                                        setEstimatePhase('details');
+                                                    }
+                                                }}
                                                 className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-primary-200 bg-primary-50 text-primary-500 transition hover:border-primary-300 hover:bg-white hover:text-primary-950"
-                                                aria-label="Back to parts and services"
+                                                aria-label="Back to previous phase"
                                             >
                                                 <ChevronLeft className="h-5 w-5" />
                                             </button>
@@ -1134,6 +1188,14 @@ const PublicEstimate = () => {
                                     </div>
 
                                     <div className={`flex-1 min-h-0 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 touch-pan-y ${isDesktopDock ? 'md:px-6 md:py-5' : 'sm:px-5 sm:py-5'}`}>
+                                        {estimatePhase === 'summary' && savedDraftQuote?.estimate?.estimate_number && (
+                                            <div className="rounded-[24px] border border-accent-success/30 bg-accent-success/10 p-4 shadow-sm">
+                                                <span className="text-[0.68rem] font-bold uppercase tracking-[0.24em] text-accent-success">Quote created</span>
+                                                <p className="mt-2 text-2xl font-display font-bold text-primary-950">{savedDraftQuote.estimate.estimate_number}</p>
+                                                <p className="mt-2 text-sm text-primary-600">This quote is stored in Supabase and can be retrieved later using this quote number.</p>
+                                            </div>
+                                        )}
+
                                         <div className="rounded-[24px] border border-primary-200 bg-white p-4 shadow-sm">
                                             <div className="flex items-center gap-2">
                                                 <User className="h-4 w-4 text-accent-primary" />
@@ -1254,15 +1316,17 @@ const PublicEstimate = () => {
                                             <ProductPackageSuggestions
                                                 product={summaryFocusProduct}
                                                 vehicleModelId={vehicle.model || summaryFocusProduct.model || summaryFocusProduct.vehicleModelName || ''}
-                                                vehicleContext={vehicle}
+                                                vehicleContext={hasVehicle ? vehicle : null}
                                                 anchorQuantity={summaryFocusSelection?.quantity ?? 1}
                                                 onAddProduct={addSuggestedPart}
                                                 onAddService={addSuggestedService}
                                                 onAddBundle={addBundleToEstimate}
                                                 selectedProductIds={selectedProductIds}
                                                 selectedServiceIds={selectedServiceIds}
-                                                title="Recommendations and packages in this cart"
-                                                subtitle="Use the review phase to add the remaining upsell items and labor for the selected product without going back to the long catalog view."
+                                                title={hasVehicle ? 'Recommendations and packages in this cart' : 'Part-based smart bundles'}
+                                                subtitle={hasVehicle
+                                                    ? 'Add remaining upsell items and labor for the selected product without going back to the long catalog view.'
+                                                    : 'Vehicle selection is optional. These bundles are based on the part you clicked and can still be added to the quote.'}
                                                 highlightedPackageKey={incomingPackageKey}
                                                 bundleMode="estimate"
                                             />
@@ -1296,12 +1360,26 @@ const PublicEstimate = () => {
                                         )}
 
                                         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                                            <Button variant="secondary" fullWidth onClick={resetForm}>
-                                                Reset
+                                            <Button
+                                                variant="secondary"
+                                                fullWidth
+                                                onClick={estimatePhase === 'catalog' ? resetForm : () => setEstimatePhase('catalog')}
+                                            >
+                                                {estimatePhase === 'catalog' ? 'Reset' : 'Add More Parts'}
                                             </Button>
-                                            <Button variant="primary" fullWidth leftIcon={<Printer className="h-4 w-4" />} onClick={() => openPreview('draft')} isDisabled={!hasItems} isLoading={savingQuote}>
-                                                Save and Preview
-                                            </Button>
+                                            {estimatePhase === 'catalog' ? (
+                                                <Button variant="primary" fullWidth onClick={() => setEstimatePhase('summary')} isDisabled={!hasItems}>
+                                                    Review Quote
+                                                </Button>
+                                            ) : savedDraftQuote?.estimate?.estimate_number ? (
+                                                <Button variant="primary" fullWidth leftIcon={<Printer className="h-4 w-4" />} onClick={() => openPreview('draft')}>
+                                                    Printable Preview
+                                                </Button>
+                                            ) : (
+                                                <Button variant="primary" fullWidth onClick={finishQuote} isDisabled={!hasItems} isLoading={savingQuote}>
+                                                    Finish Quote
+                                                </Button>
+                                            )}
                                         </div>
                                     </div>
                                 </Motion.aside>
