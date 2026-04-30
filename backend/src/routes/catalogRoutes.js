@@ -19,6 +19,13 @@ const SMART_PART_DISCOUNT_RATE = 0.05;
 const SMART_SERVICE_DISCOUNT_RATE = 0.03;
 const SMART_RECOMMENDATION_LABEL = 'Smart Recommendation';
 
+function isPrivateSchemaAccessError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('invalid schema')
+    || message.includes('schema must be one of')
+    || message.includes('not included in the schema cache');
+}
+
 const SERVICE_GROUP_CONFIG = {
   oil_change: {
     packageKey: 'oil-change-package',
@@ -1578,7 +1585,7 @@ async function fetchPricelistCatalogPage({ page, pageSize, searchQuery = '', sel
 
   if (error) {
     const message = String(error.message || '');
-    if (message.includes('pricelist_import_staging') || message.includes('does not exist')) {
+    if (message.includes('pricelist_import_staging') || message.includes('does not exist') || isPrivateSchemaAccessError(error)) {
       return null;
     }
     throw error;
@@ -1603,6 +1610,9 @@ async function fetchPricelistCatalogPage({ page, pageSize, searchQuery = '', sel
     : { data: [], error: null };
 
   if (productsError) {
+    if (isPrivateSchemaAccessError(productsError)) {
+      return null;
+    }
     throw productsError;
   }
 
@@ -1617,6 +1627,9 @@ async function fetchPricelistCatalogPage({ page, pageSize, searchQuery = '', sel
     : { data: [], error: null };
 
   if (balancesError) {
+    if (isPrivateSchemaAccessError(balancesError)) {
+      return null;
+    }
     throw balancesError;
   }
 
