@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -62,7 +62,8 @@ const PublicCatalogView = () => {
     readFromSearch: false,
     syncToSearch: false,
   });
-  const { packages: vehiclePackages, loading: vehiclePackagesLoading, error: vehiclePackagesError } = useVehiclePackages(vehicle);
+  const deferredVehicleModel = useDeferredValue(vehicle.model);
+  const deferredVehicleYear = useDeferredValue(vehicle.year);
 
   const {
     products,
@@ -76,8 +77,12 @@ const PublicCatalogView = () => {
     searchQuery,
     selectedCategory,
     sortBy,
-    vehicleModel: vehicle.model,
-    vehicleYear: vehicle.year,
+    vehicleModel: deferredVehicleModel,
+    vehicleYear: deferredVehicleYear,
+  });
+  const { packages: vehiclePackages, loading: vehiclePackagesLoading, error: vehiclePackagesError } = useVehiclePackages(vehicle, {
+    enabled: hasVehicle && !loading,
+    deferMs: 450,
   });
 
   useEffect(() => {

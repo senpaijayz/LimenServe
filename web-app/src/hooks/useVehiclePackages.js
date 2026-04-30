@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { getVehiclePackages } from '../services/catalogApi';
 
-export default function useVehiclePackages(vehicle) {
+export default function useVehiclePackages(vehicle, { enabled = true, deferMs = 0 } = {}) {
+  const vehicleModel = vehicle?.model ?? '';
+  const vehicleYear = vehicle?.year ?? '';
   const [packages, setPackages] = useState([]);
   const [vehicleContext, setVehicleContext] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -10,7 +12,7 @@ export default function useVehiclePackages(vehicle) {
   useEffect(() => {
     let active = true;
 
-    if (!vehicle?.model) {
+    if (!enabled || !vehicleModel) {
       setPackages([]);
       setVehicleContext(null);
       setError(null);
@@ -25,7 +27,10 @@ export default function useVehiclePackages(vehicle) {
       setError(null);
 
       try {
-        const data = await getVehiclePackages(vehicle);
+        const data = await getVehiclePackages({
+          vehicleModel,
+          vehicleYear,
+        });
         if (!active) {
           return;
         }
@@ -47,12 +52,13 @@ export default function useVehiclePackages(vehicle) {
       }
     };
 
-    loadPackages();
+    const timeoutId = setTimeout(loadPackages, Math.max(0, deferMs));
 
     return () => {
       active = false;
+      clearTimeout(timeoutId);
     };
-  }, [vehicle?.model, vehicle?.year]);
+  }, [enabled, vehicleModel, vehicleYear, deferMs]);
 
   return {
     packages,

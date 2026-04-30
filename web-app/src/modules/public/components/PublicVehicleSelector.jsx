@@ -13,6 +13,8 @@ export default function PublicVehicleSelector({
 }) {
   const { models, years, loading, error } = useVehicleFitmentOptions(vehicle?.model);
   const hasVehicle = Boolean(vehicle?.model);
+  const isInitialLoading = loading && models.length === 0;
+  const isUpdatingYears = loading && models.length > 0 && hasVehicle;
   const newestYear = years[0]?.label || '';
   const oldestYear = years[years.length - 1]?.label || '';
   const yearHelperText = !vehicle?.model
@@ -116,9 +118,9 @@ export default function PublicVehicleSelector({
           </div>
         )}
 
-        {(loading || error) && (
+        {(isInitialLoading || isUpdatingYears || error) && (
           <div className={`rounded-2xl border px-4 py-3 text-sm ${error ? 'border-accent-danger/20 bg-accent-danger/5 text-accent-danger' : 'border-primary-200 bg-primary-50/70 text-primary-500'}`}>
-            {error || 'Refreshing available models from the pricelist...'}
+            {error || (isUpdatingYears ? 'Updating compatible years...' : 'Loading available models from the pricelist...')}
           </div>
         )}
       </div>

@@ -5,9 +5,56 @@ import inventoryClassifier from '../lib/inventoryClassifier';
 const { OPERATIONAL_CATEGORIES, classifyInventoryItem } = inventoryClassifier;
 
 const CURRENT_YEAR = new Date().getFullYear();
+const FITMENT_CACHE_TTL_MS = 10 * 60 * 1000;
+const CATALOG_CACHE_TTL_MS = 45 * 1000;
+const PACKAGE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+const requestCache = new Map();
+const inflightRequests = new Map();
 
 function isNetworkFailure(error) {
   return !error?.response;
+}
+
+function buildRequestKey(scope, params = {}) {
+  const normalizedParams = Object.keys(params)
+    .sort()
+    .reduce((result, key) => {
+      const value = params[key];
+      if (value !== undefined && value !== null && value !== '') {
+        result[key] = value;
+      }
+      return result;
+    }, {});
+
+  return `${scope}:${JSON.stringify(normalizedParams)}`;
+}
+
+async function withCachedRequest(key, ttlMs, loader) {
+  const cached = requestCache.get(key);
+  if (cached && Date.now() - cached.timestamp < ttlMs) {
+    return cached.value;
+  }
+
+  const inflight = inflightRequests.get(key);
+  if (inflight) {
+    return inflight;
+  }
+
+  const request = loader()
+    .then((value) => {
+      requestCache.set(key, {
+        timestamp: Date.now(),
+        value,
+      });
+      return value;
+    })
+    .finally(() => {
+      inflightRequests.delete(key);
+    });
+
+  inflightRequests.set(key, request);
+  return request;
 }
 
 function normalizeText(value) {
@@ -226,14 +273,24 @@ function buildFallbackVehicleContext(vehicle = {}) {
   };
 }
 
+function normalizeVehiclePackageParams(params = {}) {
+  return {
+    vehicleModel: String(params.vehicleModel || params.model || '').trim(),
+    vehicleYear: String(params.vehicleYear || params.year || '').trim(),
+  };
+}
+
 export async function getProductCatalog(params = {}) {
   try {
-    const { data } = await apiClient.get('/catalog/products', { params });
-    return {
-      products: data.products ?? [],
-      pagination: data.pagination ?? { page: 1, pageSize: 12, totalCount: 0, totalPages: 1 },
-      categories: data.categories ?? [],
-    };
+    const cacheKey = buildRequestKey('catalog-products', params);
+    return await withCachedRequest(cacheKey, CATALOG_CACHE_TTL_MS, async () => {
+      const { data } = await apiClient.get('/catalog/products', { params });
+      return {
+        products: data.products ?? [],
+        pagination: data.pagination ?? { page: 1, pageSize: 12, totalCount: 0, totalPages: 1 },
+        categories: data.categories ?? [],
+      };
+    });
   } catch (error) {
     if (isNetworkFailure(error)) {
       return getFallbackCatalog(params);
@@ -244,11 +301,14 @@ export async function getProductCatalog(params = {}) {
 
 export async function getVehicleFitmentOptions(params = {}) {
   try {
-    const { data } = await apiClient.get('/catalog/vehicle-fitment/options', { params });
-    return {
-      models: data.models ?? [],
-      years: data.years ?? [],
-    };
+    const cacheKey = buildRequestKey('vehicle-fitment-options', params);
+    return await withCachedRequest(cacheKey, FITMENT_CACHE_TTL_MS, async () => {
+      const { data } = await apiClient.get('/catalog/vehicle-fitment/options', { params });
+      return {
+        models: data.models ?? [],
+        years: data.years ?? [],
+      };
+    });
   } catch (error) {
     if (isNetworkFailure(error)) {
       return getFallbackVehicleFitmentOptions(params.model);
@@ -259,11 +319,15 @@ export async function getVehicleFitmentOptions(params = {}) {
 
 export async function getVehiclePackages(params = {}) {
   try {
-    const { data } = await apiClient.get('/catalog/vehicle-packages', { params });
-    return {
-      vehicleContext: data.vehicleContext ?? null,
-      packages: data.packages ?? [],
-    };
+    const requestParams = normalizeVehiclePackageParams(params);
+    const cacheKey = buildRequestKey('vehicle-packages', requestParams);
+    return await withCachedRequest(cacheKey, PACKAGE_CACHE_TTL_MS, async () => {
+      const { data } = await apiClient.get('/catalog/vehicle-packages', { params: requestParams });
+      return {
+        vehicleContext: data.vehicleContext ?? null,
+        packages: data.packages ?? [],
+      };
+    });
   } catch (error) {
     if (isNetworkFailure(error)) {
       return {
