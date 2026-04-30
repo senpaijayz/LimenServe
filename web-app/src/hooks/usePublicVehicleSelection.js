@@ -38,33 +38,54 @@ function readVehicleFromSearch(searchParams) {
   });
 }
 
-export default function usePublicVehicleSelection({ syncToSearch = false, includePlate = false } = {}) {
+export default function usePublicVehicleSelection({
+  syncToSearch = false,
+  includePlate = false,
+  persist = true,
+  readFromSearch = true,
+} = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [vehicle, setVehicle] = useState(() => {
     const fromSearch = readVehicleFromSearch(new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search));
-    return fromSearch.model ? fromSearch : readStoredVehicle();
+    if (readFromSearch && fromSearch.model) {
+      return fromSearch;
+    }
+    return persist ? readStoredVehicle() : normalizeVehicle();
   });
 
   useEffect(() => {
+    if (!readFromSearch) {
+      return;
+    }
+
     const fromSearch = readVehicleFromSearch(searchParams);
     if (!fromSearch.model) {
       return;
     }
 
-    setVehicle((current) => {
-      const currentSignature = JSON.stringify(current);
-      const searchSignature = JSON.stringify(fromSearch);
-      return currentSignature === searchSignature ? current : fromSearch;
-    });
-  }, [searchParams]);
+    const timeoutId = window.setTimeout(() => {
+      setVehicle((current) => {
+        const currentSignature = JSON.stringify(current);
+        const searchSignature = JSON.stringify(fromSearch);
+        return currentSignature === searchSignature ? current : fromSearch;
+      });
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [readFromSearch, searchParams]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
 
+    if (!persist) {
+      window.localStorage.removeItem(STORAGE_KEY);
+      return;
+    }
+
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(vehicle));
-  }, [vehicle]);
+  }, [persist, vehicle]);
 
   useEffect(() => {
     if (!syncToSearch) {

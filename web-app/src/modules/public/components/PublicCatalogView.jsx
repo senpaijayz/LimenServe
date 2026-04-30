@@ -34,9 +34,9 @@ const SORT_OPTIONS = [
 ];
 
 const GenuinePartsLabel = ({ product, compact = false, dense = false }) => {
-  const labelHeight = dense ? 'min-h-[210px]' : compact ? 'min-h-[250px]' : 'min-h-[320px]';
+  const labelHeight = dense ? 'min-h-[150px]' : compact ? 'min-h-[250px]' : 'min-h-[320px]';
   const labelSize = dense ? 'dense' : compact ? 'compact' : 'default';
-  const previewScale = dense ? 'scale-[0.94]' : compact ? 'scale-[0.96]' : 'scale-100';
+  const previewScale = dense ? 'scale-[0.72] sm:scale-[0.78]' : compact ? 'scale-[0.96]' : 'scale-100';
 
   return (
     <div className={`${labelHeight} flex items-center justify-center overflow-visible`}>
@@ -57,7 +57,11 @@ const PublicCatalogView = () => {
   const [sortBy, setSortBy] = useState('name-asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const { vehicle, updateVehicle, clearVehicle, hasVehicle } = usePublicVehicleSelection({ syncToSearch: true });
+  const { vehicle, updateVehicle, clearVehicle, hasVehicle } = usePublicVehicleSelection({
+    persist: false,
+    readFromSearch: false,
+    syncToSearch: false,
+  });
   const { packages: vehiclePackages, loading: vehiclePackagesLoading, error: vehiclePackagesError } = useVehiclePackages(vehicle);
 
   const {
@@ -435,7 +439,7 @@ const PublicCatalogView = () => {
               exit={{ scale: 0.98, opacity: 0, y: 28 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               onClick={(event) => event.stopPropagation()}
-              className="relative w-full overflow-hidden rounded-t-[2rem] border border-primary-200 bg-white shadow-2xl sm:my-4 sm:max-w-[min(94vw,1080px)] sm:rounded-3xl"
+              className="relative w-full overflow-hidden rounded-t-[2rem] border border-primary-200 bg-white shadow-2xl sm:my-3 sm:max-w-[min(98vw,1320px)] sm:rounded-3xl"
             >
               <div className="pointer-events-none flex justify-center pt-3 sm:hidden">
                 <span className="h-1.5 w-14 rounded-full bg-primary-300" />
@@ -449,11 +453,11 @@ const PublicCatalogView = () => {
                 <X className="w-5 h-5" />
               </button>
 
-              <div className="max-h-[90dvh] overflow-y-auto">
-                <div className="grid lg:grid-cols-[minmax(220px,0.7fr)_minmax(0,1.3fr)]">
-                  <div className="relative flex min-h-[190px] flex-col overflow-hidden bg-gradient-to-br from-primary-50 to-white p-4 lg:min-h-[220px] lg:p-5">
+              <div className="max-h-[92dvh] overflow-y-auto">
+                <div className="grid xl:grid-cols-[minmax(190px,0.45fr)_minmax(0,1.55fr)]">
+                  <div className="relative flex min-h-[170px] flex-col overflow-hidden bg-gradient-to-br from-primary-50 to-white p-3 xl:min-h-[220px] xl:p-4">
                     <div className="absolute inset-0 bg-grid-pattern opacity-10" />
-                    <div className="relative z-10 mb-3 font-mono text-[11px] uppercase tracking-[0.18em] text-primary-500 sm:text-xs">ID: {selectedProduct.sku}</div>
+                    <div className="relative z-10 mb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-primary-500 sm:text-xs">ID: {selectedProduct.sku}</div>
                     <div className="relative z-10 flex-1">
                       <GenuinePartsLabel product={selectedProduct} dense />
                     </div>
@@ -463,8 +467,8 @@ const PublicCatalogView = () => {
                     </div>
                   </div>
 
-                  <div className="flex flex-col bg-white p-4 sm:p-5 lg:border-l lg:border-primary-200">
-                    <div className="mb-3 flex flex-wrap gap-1.5">
+                  <div className="flex flex-col bg-white p-3 sm:p-4 xl:border-l xl:border-primary-200">
+                    <div className="mb-2 flex flex-wrap gap-1.5">
                       <span className="rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary-600">{selectedProduct.category}</span>
                       {selectedProduct.inStock && (
                         <span className="flex items-center gap-1 rounded-full bg-accent-success/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-accent-success">
@@ -477,9 +481,9 @@ const PublicCatalogView = () => {
                     </div>
 
                     <h2 className="mb-2 pr-12 text-xl font-display font-bold leading-tight text-primary-950 sm:text-2xl">{selectedProduct.name}</h2>
-                    <p className="mb-3 text-sm leading-relaxed text-primary-600">{selectedProduct.description} Designed to meet exact specifications and ensure optimal performance for your vehicle.</p>
+                    <p className="mb-2 line-clamp-2 text-sm leading-relaxed text-primary-600">{selectedProduct.description} Designed to meet exact specifications and ensure optimal performance for your vehicle.</p>
 
-                    <div className="mb-3">
+                    <div className="mb-2">
                       <h4 className="mb-2 text-[11px] font-bold uppercase tracking-[0.22em] text-primary-500">Model Compatibility</h4>
                       <div className="flex flex-wrap gap-2">
                         {selectedProduct.compatibility.map((model, index) => (
@@ -488,7 +492,7 @@ const PublicCatalogView = () => {
                       </div>
                     </div>
 
-                    <div className="mb-3">
+                    <div className="mb-2">
                       <ProductPackageSuggestions
                         product={selectedProduct}
                         vehicleModelId={vehicle.model || selectedProduct.model}
@@ -501,7 +505,7 @@ const PublicCatalogView = () => {
                       />
                     </div>
 
-                    <div className="mt-auto flex flex-col gap-3 border-t border-primary-200 pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                    <div className="mt-auto flex flex-col gap-3 border-t border-primary-200 pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                       <div>
                         <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.22em] text-primary-500">Unit Valuation (VAT Inc.)</p>
                         <p className="text-2xl font-display font-bold text-accent-blue sm:text-[2rem]">{formatCurrency(selectedProduct.price)}</p>

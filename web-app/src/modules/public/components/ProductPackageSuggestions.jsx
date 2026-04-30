@@ -173,22 +173,22 @@ const ProductPackageSuggestions = ({
   };
 
   const panelClassName = compact
-    ? 'min-w-0 overflow-hidden rounded-2xl border border-primary-200 bg-primary-50/70 p-3 sm:p-4'
+    ? 'min-w-0 overflow-hidden rounded-xl border border-primary-200 bg-primary-50/70 p-2'
     : 'min-w-0 overflow-hidden rounded-[28px] border border-primary-200 bg-primary-50/70 p-4 sm:p-6';
 
   return (
     <div className={panelClassName}>
-      <div className="mb-5 flex items-start gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-accent-primary/20 bg-accent-primary/5 text-accent-primary">
+      <div className={`${compact ? 'mb-2' : 'mb-5'} flex items-start gap-3`}>
+        <div className={`${compact ? 'hidden' : 'flex'} h-10 w-10 items-center justify-center rounded-2xl border border-accent-primary/20 bg-accent-primary/5 text-accent-primary`}>
           <Sparkles className="h-5 w-5" />
         </div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h4 className={`${compact ? 'text-base' : 'text-lg'} font-display font-semibold text-primary-950`}>{title}</h4>
-            <span className="rounded-full bg-primary-950 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-white">Good / Better / Best</span>
+            {!compact && <span className="rounded-full bg-primary-950 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-white">Good / Better / Best</span>}
           </div>
-          <p className={`${compact ? 'mt-1 text-xs' : 'mt-1 text-sm'} text-primary-500`}>{subtitle}</p>
-          <p className={`${compact ? 'mt-2 text-[11px]' : 'mt-2 text-xs'} font-semibold uppercase tracking-[0.22em] text-primary-400`}>
+          {!compact && <p className="mt-1 text-sm text-primary-500">{subtitle}</p>}
+          <p className={`${compact ? 'mt-1 text-[10px]' : 'mt-2 text-xs'} font-semibold uppercase tracking-[0.22em] text-primary-400`}>
             Based on: {product.name} - {activeVehicleLabel}
           </p>
         </div>
@@ -218,22 +218,22 @@ const ProductPackageSuggestions = ({
             const added = isTierAdded(activeTier, selectedProductIds, selectedServiceIds);
             const ctaLabel = bundleMode === 'catalog' ? 'Build This Bundle' : added ? 'Bundle Added' : 'Add Bundle';
             const linkTarget = typeof buildBundleHref === 'function' ? buildBundleHref(pkg, activeTier) : '#';
-            const activeParts = renderItemList(activeTier?.items || [], 'product');
-            const activeServices = renderItemList(activeTier?.items || [], 'service');
+            const activeParts = renderItemList(activeTier?.items || [], 'product', compact ? 2 : 4);
+            const activeServices = renderItemList(activeTier?.items || [], 'service', compact ? 2 : 4);
 
             return (
               <div
                 key={pkg.packageKey}
                 className={`overflow-hidden rounded-[22px] border bg-white shadow-sm ${highlightedPackageKey === pkg.packageKey ? 'border-accent-blue ring-2 ring-accent-blue/20' : 'border-primary-200'}`}
               >
-                <div className="border-b border-primary-200 bg-gradient-to-br from-white to-primary-50 px-4 py-3 sm:px-5">
+                <div className={`${compact ? 'px-3 py-2' : 'px-4 py-3 sm:px-5'} border-b border-primary-200 bg-gradient-to-br from-white to-primary-50`}>
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h5 className="text-base font-display font-semibold text-primary-950 sm:text-lg">{pkg.packageName}</h5>
-                        <span className="rounded-full bg-primary-950 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white">{pkg.recommendationLabel || 'Smart Recommendation'}</span>
+                        {!compact && <span className="rounded-full bg-primary-950 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white">{pkg.recommendationLabel || 'Smart Recommendation'}</span>}
                       </div>
-                      <p className="mt-1 text-sm text-primary-500">{pkg.packageDescription}</p>
+                      {!compact && <p className="mt-1 text-sm text-primary-500">{pkg.packageDescription}</p>}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {pkg.serviceGroup && (
@@ -244,13 +244,13 @@ const ProductPackageSuggestions = ({
                   </div>
                 </div>
 
-                <div className="px-4 py-4 sm:px-5">
-                  <div className="mb-3 rounded-2xl bg-primary-950 px-4 py-3 text-white">
+                <div className={compact ? 'px-3 py-3' : 'px-4 py-4 sm:px-5'}>
+                  <div className={`${compact ? 'mb-2 rounded-xl px-3 py-2' : 'mb-3 rounded-2xl px-4 py-3'} bg-primary-950 text-white`}>
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">{activeTier?.badgeLabel || 'Bundle'} total</p>
                         <div className="mt-1 flex items-end gap-3">
-                          <p className="text-xl font-display font-bold text-white">{formatCurrency(activeTier?.smartTotal || 0)}</p>
+                          <p className={`${compact ? 'text-lg' : 'text-xl'} font-display font-bold text-white`}>{formatCurrency(activeTier?.smartTotal || 0)}</p>
                           {(activeTier?.savingsAmount || 0) > 0 && <p className="text-xs text-white/45 line-through">{formatCurrency(activeTier?.catalogTotal || 0)}</p>}
                         </div>
                       </div>
@@ -261,7 +261,7 @@ const ProductPackageSuggestions = ({
                     </div>
                   </div>
 
-                  <div className="mb-3 grid grid-cols-3 gap-2 rounded-2xl border border-primary-200 bg-primary-50 p-1.5">
+                  <div className={`${compact ? 'mb-2 gap-1 rounded-xl p-1' : 'mb-3 gap-2 rounded-2xl p-1.5'} grid grid-cols-3 border border-primary-200 bg-primary-50`}>
                     {tiers.map((tier) => {
                       const isHighlighted = tier.tierKey === highlightedTierKey;
 
@@ -270,7 +270,7 @@ const ProductPackageSuggestions = ({
                           key={`${pkg.packageKey}-${tier.tierKey}`}
                           type="button"
                           onClick={() => setHighlightedTiers((current) => ({ ...current, [pkg.packageKey]: tier.tierKey }))}
-                          className={`min-h-11 rounded-xl px-2 py-2 text-center text-[11px] font-bold uppercase tracking-[0.16em] transition sm:text-xs ${isHighlighted ? 'bg-accent-blue text-white shadow-sm' : 'bg-white text-primary-500 hover:text-primary-950'}`}
+                          className={`${compact ? 'min-h-9 rounded-lg py-1.5 text-[10px]' : 'min-h-11 rounded-xl py-2 text-[11px] sm:text-xs'} px-2 text-center font-bold uppercase tracking-[0.16em] transition ${isHighlighted ? 'bg-accent-blue text-white shadow-sm' : 'bg-white text-primary-500 hover:text-primary-950'}`}
                         >
                           {tier.badgeLabel}
                         </button>
@@ -278,30 +278,30 @@ const ProductPackageSuggestions = ({
                     })}
                   </div>
 
-                  <div className="rounded-2xl border border-primary-200 bg-white p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className={`${compact ? 'rounded-xl p-3' : 'rounded-2xl p-4'} border border-primary-200 bg-white`}>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <span className="inline-flex rounded-full bg-accent-blue/10 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-[0.22em] text-accent-blue">{activeTier?.badgeLabel}</span>
-                        <h6 className="mt-2 text-lg font-display font-semibold text-primary-950">{activeTier?.title}</h6>
-                        <p className="mt-1 text-sm leading-relaxed text-primary-500">{activeTier?.description}</p>
+                        <h6 className={`${compact ? 'mt-1 text-base' : 'mt-2 text-lg'} font-display font-semibold text-primary-950`}>{activeTier?.title}</h6>
+                        {!compact && <p className="mt-1 text-sm leading-relaxed text-primary-500">{activeTier?.description}</p>}
                       </div>
                       {(activeTier?.savingsAmount || 0) > 0 && (
                         <span className="shrink-0 rounded-full bg-accent-success/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-accent-success">Save {formatCurrency(activeTier.savingsAmount)}</span>
                       )}
                     </div>
 
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl bg-primary-50 p-3">
+                    <div className={`${compact ? 'mt-2 gap-2' : 'mt-4 gap-3'} grid sm:grid-cols-2`}>
+                      <div className={`${compact ? 'rounded-xl p-2' : 'rounded-2xl p-3'} bg-primary-50`}>
                         <span className="block text-[0.64rem] font-bold uppercase tracking-[0.2em] text-primary-400">Included parts</span>
-                        <div className="mt-2 space-y-1">
+                        <div className="mt-1 space-y-0.5">
                           {activeParts.map((name) => (
                             <p key={`part-${name}`} className="text-sm font-semibold text-primary-950">{name}</p>
                           ))}
                         </div>
                       </div>
-                      <div className="rounded-2xl bg-primary-50 p-3">
+                      <div className={`${compact ? 'rounded-xl p-2' : 'rounded-2xl p-3'} bg-primary-50`}>
                         <span className="block text-[0.64rem] font-bold uppercase tracking-[0.2em] text-primary-400">Included labor</span>
-                        <div className="mt-2 space-y-1">
+                        <div className="mt-1 space-y-0.5">
                           {activeServices.map((name) => (
                             <p key={`service-${name}`} className="text-sm font-semibold text-primary-950">{name}</p>
                           ))}
@@ -309,7 +309,7 @@ const ProductPackageSuggestions = ({
                       </div>
                     </div>
 
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    {!compact && <div className="mt-3 flex flex-wrap gap-2">
                       {(activeTier?.items || []).slice(0, 3).map((item) => {
                         const matchBadge = getMatchBadge(item.matchLevel);
                         const isService = (item.consequentKind || item.consequent_kind) === 'service';
@@ -319,9 +319,9 @@ const ProductPackageSuggestions = ({
                           </span>
                         );
                       })}
-                    </div>
+                    </div>}
 
-                    <div className="mt-4 flex flex-col gap-3 border-t border-primary-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className={`${compact ? 'mt-3 pt-3' : 'mt-4 pt-4'} flex flex-col gap-3 border-t border-primary-200 sm:flex-row sm:items-center sm:justify-between`}>
                       <div className="space-y-1 text-sm">
                         <div className="flex items-center gap-3 text-primary-500">
                           <span>Normal total</span>
