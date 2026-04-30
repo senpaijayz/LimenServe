@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatCurrency } from '../../../utils/formatters';
+import { cleanVehicleModelLabel } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import usePublicVehicleSelection from '../../../hooks/usePublicVehicleSelection';
 import useVehiclePackages from '../../../hooks/useVehiclePackages';
@@ -148,7 +149,10 @@ const PublicCatalogView = () => {
   };
 
   const handleVehicleChange = (nextVehicle) => {
-    updateVehicle(nextVehicle);
+    updateVehicle({
+      ...nextVehicle,
+      ...(nextVehicle.model !== undefined ? { model: cleanVehicleModelLabel(nextVehicle.model) } : {}),
+    });
     setCurrentPage(1);
     setSelectedProduct(null);
   };

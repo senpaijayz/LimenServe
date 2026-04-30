@@ -61,6 +61,16 @@ function normalizeText(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+export function cleanVehicleModelLabel(modelName) {
+  return String(modelName || '')
+    .replace(/\((?:19|20)\d{2}\s*[-/]\s*(?:present|(?:19|20)\d{2})\)/ig, ' ')
+    .replace(/\b(?:19|20)\d{2}\s*[-/]\s*(?:present|(?:19|20)\d{2})\b/ig, ' ')
+    .replace(/\b(?:19|20)\d{2}\b/ig, ' ')
+    .replace(/\(\s*\)/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 let fallbackCatalogPromise = null;
 
 function normalizeFallbackProduct(product, index = 0) {
@@ -243,20 +253,40 @@ function buildFallbackYearOptions(model) {
 }
 
 function getFallbackVehicleFitmentOptions(model = '') {
-  const normalizedModel = normalizeText(model);
-  const models = [...new Set(ALL_VEHICLE_MODELS)]
-    .filter(Boolean)
+  const normalizedModel = normalizeText(cleanVehicleModelLabel(model));
+  const yearMap = new Map();
+  const rawModels = [...new Set(ALL_VEHICLE_MODELS)].filter(Boolean);
+
+  rawModels.forEach((item) => {
+    const cleanModel = cleanVehicleModelLabel(item);
+    if (!cleanModel) {
+      return;
+    }
+
+    if (!yearMap.has(cleanModel)) {
+      yearMap.set(cleanModel, new Map());
+    }
+
+    buildFallbackYearOptions(item).forEach((yearOption) => {
+      yearMap.get(cleanModel).set(yearOption.value, yearOption);
+    });
+  });
+
+  const models = [...yearMap.keys()]
     .sort((left, right) => left.localeCompare(right))
     .map((item) => ({
       value: item,
       label: item,
     }));
 
-  const selectedModel = models.find((item) => normalizeText(item.value) === normalizedModel)?.value || model;
+  const selectedModel = models.find((item) => normalizeText(item.value) === normalizedModel)?.value || cleanVehicleModelLabel(model);
+  const fallbackYears = selectedModel && yearMap.has(selectedModel)
+    ? [...yearMap.get(selectedModel).values()].sort((left, right) => Number(right.value) - Number(left.value))
+    : [];
 
   return {
     models,
-    years: buildFallbackYearOptions(selectedModel),
+    years: fallbackYears,
   };
 }
 
@@ -275,7 +305,7 @@ function buildFallbackVehicleContext(vehicle = {}) {
 
 function normalizeVehiclePackageParams(params = {}) {
   return {
-    vehicleModel: String(params.vehicleModel || params.model || '').trim(),
+    vehicleModel: cleanVehicleModelLabel(params.vehicleModel || params.model || ''),
     vehicleYear: String(params.vehicleYear || params.year || '').trim(),
   };
 }

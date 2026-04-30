@@ -64,6 +64,16 @@ const SERVICE_GROUP_CONFIG = {
   },
 };
 
+const VEHICLE_PACKAGE_ORDER = [
+  'oil_change',
+  'filter_service',
+  'tune_up',
+  'brake_service',
+  'cooling_service',
+  'battery_service',
+  'tire_service',
+];
+
 const PART_FUNCTION_RULES = [
   { partFunction: 'oil_filter', serviceGroup: 'oil_change', keywords: ['oil filter'] },
   { partFunction: 'engine_oil', serviceGroup: 'oil_change', keywords: ['engine oil', 'synthetic oil', 'motor oil'] },
