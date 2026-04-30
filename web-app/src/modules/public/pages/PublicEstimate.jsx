@@ -9,7 +9,7 @@ import usePublicVehicleSelection from '../../../hooks/usePublicVehicleSelection'
 import useVehiclePackages from '../../../hooks/useVehiclePackages';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
-import { lookupPublicEstimate } from '../../../services/estimatesApi';
+import { createEstimate, lookupPublicEstimate } from '../../../services/estimatesApi';
 import ProductPackageSuggestions from '../components/ProductPackageSuggestions';
 import PublicQuoteLookupCard from '../components/PublicQuoteLookupCard';
 import PublicVehicleSelector from '../components/PublicVehicleSelector';
@@ -60,10 +60,8 @@ const ESTIMATE_PHASES = [
 
 const DESKTOP_DOCK_QUERY = '(min-width: 768px)';
 
-const createQuoteMeta = () => ({
-    issuedAt: new Date(),
-    reference: `QT-${Date.now().toString().slice(-6)}`,
-});
+const QUOTE_VALID_DAYS = 30;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const formatPrintDate = (value) => {
     if (!value) {
@@ -102,45 +100,115 @@ const formatVehicleSummary = (vehicle) => {
     return parts.join(' / ') || vehicle.description || vehicle.name || 'N/A';
 };
 
-const buildDraftPrintableQuote = ({
-    quoteMeta,
+const addDaysAsIsoDate = (days) => {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    return date.toISOString().slice(0, 10);
+};
+
+const isUuid = (value) => UUID_PATTERN.test(String(value || ''));
+
+const buildEstimatePayload = ({
     customerName,
     customerPhone,
-    vehicleInfo,
+    vehicle,
     selectedParts,
     selectedServices,
     subtotal,
     vat,
     total,
-}) => ({
-    issuedAt: quoteMeta.issuedAt,
-    referenceLabel: 'Ref No',
-    referenceValue: quoteMeta.reference,
-    customerName: customerName || 'Walk-in Customer',
-    customerPhone: customerPhone || '',
-    vehicleInfo: vehicleInfo || 'N/A',
-    subtotal,
-    vat,
-    total,
-    items: [
-        ...selectedParts.map((part) => ({
-            id: `part-${part.id}`,
-            quantity: Number(part.quantity ?? 1),
-            name: part.name,
-            subtitle: part.sku || 'Pricelist item',
-            unitPrice: Number(part.price ?? 0),
-            lineTotal: Number((part.price ?? 0) * (part.quantity ?? 1)),
-        })),
-        ...selectedServices.map((service) => ({
-            id: `service-${service.id}`,
-            quantity: 1,
-            name: service.name,
-            subtitle: 'Service / Labor',
-            unitPrice: Number(service.price ?? 0),
-            lineTotal: Number(service.price ?? 0),
-        })),
-    ],
-});
+}) => {
+    const issuedAt = new Date();
+    const trimmedName = customerName.trim();
+    const trimmedPhone = customerPhone.trim();
+    const customer = {
+        customer_type: 'walk_in',
+        name: trimmedName || 'Walk-in Customer',
+        phone: trimmedPhone || null,
+        metadata: {
+            source: 'public_estimate_page',
+        },
+    };
+    const vehiclePayload = vehicle.model ? {
+        make: 'Mitsubishi',
+        model_name: vehicle.model,
+        year: vehicle.year || null,
+        plate_no: vehicle.plateNo || null,
+        metadata: {
+            displayLabel: vehicle.displayLabel || null,
+            source: 'public_estimate_page',
+        },
+    } : undefined;
+
+    return {
+        customer,
+        ...(vehiclePayload ? { vehicle: vehiclePayload } : {}),
+        estimate: {
+            status: 'sent',
+            source: 'public',
+            note: 'Public estimate generated from LimenServe quote builder.',
+            subtotal: Number(subtotal.toFixed(2)),
+            discount_total: 0,
+            tax_total: Number(vat.toFixed(2)),
+            grand_total: Number(total.toFixed(2)),
+            issued_at: issuedAt.toISOString(),
+            valid_until: addDaysAsIsoDate(QUOTE_VALID_DAYS),
+            revision_note: 'Public quote created',
+        },
+        items: [
+            ...selectedParts.map((part) => {
+                const quantity = Number(part.quantity ?? 1);
+                const unitPrice = Number(part.price ?? 0);
+
+                return {
+                    line_type: 'product',
+                    product_id: isUuid(part.id) ? part.id : null,
+                    product_name: part.name,
+                    product_sku: part.sku || null,
+                    quantity,
+                    unit_price: unitPrice,
+                    line_total: Number((unitPrice * quantity).toFixed(2)),
+                    recommendation_rule_id: isUuid(part.recommendationRuleId) ? part.recommendationRuleId : null,
+                    is_upsell: Boolean(part.isUpsell),
+                };
+            }),
+            ...selectedServices.map((service) => {
+                const unitPrice = Number(service.price ?? 0);
+
+                return {
+                    line_type: 'service',
+                    service_id: isUuid(service.id) ? service.id : null,
+                    service_name: service.name,
+                    quantity: 1,
+                    unit_price: unitPrice,
+                    line_total: Number(unitPrice.toFixed(2)),
+                    recommendation_rule_id: isUuid(service.recommendationRuleId) ? service.recommendationRuleId : null,
+                    is_upsell: Boolean(service.isUpsell),
+                };
+            }),
+        ],
+    };
+};
+
+const enrichCreatedQuoteWithRequestedLabels = (quote, requestedItems = []) => {
+    if (!quote) {
+        return null;
+    }
+
+    return {
+        ...quote,
+        items: (quote.items ?? []).map((item, index) => {
+            const requestedItem = requestedItems[index] ?? {};
+
+            return {
+                ...item,
+                product_name: item.product_name || requestedItem.product_name || null,
+                product_sku: item.product_sku || requestedItem.product_sku || null,
+                service_name: item.service_name || requestedItem.service_name || null,
+            };
+        }),
+    };
+};
 
 const buildRetrievedPrintableQuote = (quote) => {
     if (!quote) {
@@ -200,11 +268,12 @@ const PublicEstimate = () => {
     const [showSummaryDrawer, setShowSummaryDrawer] = useState(false);
     const [printSource, setPrintSource] = useState('draft');
     const [lookupEstimateNumber, setLookupEstimateNumber] = useState('');
-    const [lookupPhone, setLookupPhone] = useState('');
     const [lookupLoading, setLookupLoading] = useState(false);
     const [lookupError, setLookupError] = useState('');
     const [retrievedQuote, setRetrievedQuote] = useState(null);
-    const [quoteMeta, setQuoteMeta] = useState(() => createQuoteMeta());
+    const [savedDraftQuote, setSavedDraftQuote] = useState(null);
+    const [savingQuote, setSavingQuote] = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [isDesktopDock, setIsDesktopDock] = useState(() => {
         if (typeof window === 'undefined') {
             return false;
@@ -504,26 +573,16 @@ const PublicEstimate = () => {
     const selectedServiceIds = selectedServices.map((service) => service.id);
     const summaryFocusProduct = focusedProduct || selectedParts[selectedParts.length - 1] || null;
     const summaryFocusSelection = selectedParts.find((part) => part.id === summaryFocusProduct?.id);
-    const draftPrintableQuote = buildDraftPrintableQuote({
-        quoteMeta,
-        customerName,
-        customerPhone,
-        vehicleInfo,
-        selectedParts,
-        selectedServices,
-        subtotal,
-        vat,
-        total,
-    });
+    const savedDraftPrintableQuote = buildRetrievedPrintableQuote(savedDraftQuote);
     const retrievedPrintableQuote = buildRetrievedPrintableQuote(retrievedQuote);
-    const printableQuote = printSource === 'retrieved' ? retrievedPrintableQuote : draftPrintableQuote;
+    const printableQuote = printSource === 'retrieved' ? retrievedPrintableQuote : savedDraftPrintableQuote;
 
     const handleLookupQuote = async () => {
         setLookupLoading(true);
         setLookupError('');
 
         try {
-            const estimate = await lookupPublicEstimate(lookupEstimateNumber, lookupPhone);
+            const estimate = await lookupPublicEstimate(lookupEstimateNumber);
             setRetrievedQuote(estimate);
         } catch (lookupFailure) {
             setRetrievedQuote(null);
@@ -533,7 +592,41 @@ const PublicEstimate = () => {
         }
     };
 
-    const openPreview = (source = 'draft') => {
+    const saveDraftQuote = async () => {
+        const payload = buildEstimatePayload({
+            customerName,
+            customerPhone,
+            vehicle,
+            selectedParts,
+            selectedServices,
+            subtotal,
+            vat,
+            total,
+        });
+
+        setSavingQuote(true);
+        setSaveError('');
+
+        try {
+            const createdQuote = await createEstimate(payload);
+            const persistedQuote = enrichCreatedQuoteWithRequestedLabels(createdQuote?.estimate, payload.items);
+
+            if (!persistedQuote?.estimate?.estimate_number) {
+                throw new Error('The quote was saved, but the saved quote number could not be loaded.');
+            }
+
+            setSavedDraftQuote(persistedQuote);
+            return persistedQuote;
+        } catch (saveFailure) {
+            setSavedDraftQuote(null);
+            setSaveError(saveFailure.message || 'Unable to save quotation.');
+            return null;
+        } finally {
+            setSavingQuote(false);
+        }
+    };
+
+    const openPreview = async (source = 'draft') => {
         if (source === 'draft' && !hasItems) {
             return;
         }
@@ -543,10 +636,14 @@ const PublicEstimate = () => {
         }
 
         setShowSummaryDrawer(false);
-        setPrintSource(source);
         if (source === 'draft') {
-            setQuoteMeta(createQuoteMeta());
+            const persistedQuote = await saveDraftQuote();
+            if (!persistedQuote) {
+                return;
+            }
         }
+
+        setPrintSource(source);
         setShowPrintPreview(true);
     };
 
@@ -564,7 +661,8 @@ const PublicEstimate = () => {
         setShowPrintPreview(false);
         setPrintSource('draft');
         setEstimatePhase('details');
-        setQuoteMeta(createQuoteMeta());
+        setSavedDraftQuote(null);
+        setSaveError('');
     };
 
     const resetPriceListView = () => {
@@ -704,9 +802,7 @@ const PublicEstimate = () => {
                 {workflowStage === 'active' && (mode === 'retrieve' ? (
                     <PublicQuoteLookupCard
                         estimateNumber={lookupEstimateNumber}
-                        phone={lookupPhone}
                         onEstimateNumberChange={setLookupEstimateNumber}
-                        onPhoneChange={setLookupPhone}
                         onLookup={handleLookupQuote}
                         loading={lookupLoading}
                         error={lookupError}
@@ -1193,12 +1289,18 @@ const PublicEstimate = () => {
                                             </div>
                                         </div>
 
+                                        {saveError && (
+                                            <div className="mt-4 rounded-2xl border border-accent-danger/20 bg-accent-danger/5 px-4 py-3 text-sm text-accent-danger">
+                                                {saveError}
+                                            </div>
+                                        )}
+
                                         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
                                             <Button variant="secondary" fullWidth onClick={resetForm}>
                                                 Reset
                                             </Button>
-                                            <Button variant="primary" fullWidth leftIcon={<Printer className="h-4 w-4" />} onClick={() => openPreview('draft')} isDisabled={!hasItems}>
-                                                Printable Preview
+                                            <Button variant="primary" fullWidth leftIcon={<Printer className="h-4 w-4" />} onClick={() => openPreview('draft')} isDisabled={!hasItems} isLoading={savingQuote}>
+                                                Save and Preview
                                             </Button>
                                         </div>
                                     </div>

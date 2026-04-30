@@ -1,4 +1,4 @@
-import { Car, Phone, Printer, Search } from 'lucide-react';
+import { Car, Printer, Search, User } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import { formatCurrency } from '../../../utils/formatters';
 
@@ -44,9 +44,7 @@ const getLineMeta = (item) => (item?.line_type === 'service' ? 'Service / Labor'
 
 const PublicQuoteLookupCard = ({
     estimateNumber,
-    phone,
     onEstimateNumberChange,
-    onPhoneChange,
     onLookup,
     loading,
     error,
@@ -55,7 +53,6 @@ const PublicQuoteLookupCard = ({
 }) => {
     const items = result?.items ?? [];
     const customerName = result?.customer?.name || 'Walk-in Customer';
-    const customerPhone = result?.customer?.phone || phone || 'Not provided';
     const vehicleSummary = formatVehicleSummary(result?.vehicle);
 
     return (
@@ -64,26 +61,26 @@ const PublicQuoteLookupCard = ({
                 <div className="max-w-2xl">
                     <p className="text-xs font-bold tracking-[0.3em] text-primary-400 uppercase">Retrieve quotation</p>
                     <h2 className="mt-2 text-2xl font-display font-bold text-primary-950">Look up a saved quote for 30 days</h2>
-                    <p className="mt-2 text-sm text-primary-500">Enter the quote number and customer phone number to retrieve an existing quotation and open a printable preview without rebuilding it.</p>
+                    <p className="mt-2 text-sm text-primary-500">Enter the quote number to retrieve an existing quotation and open a printable preview without rebuilding it.</p>
                 </div>
-                <div className="grid w-full gap-3 md:grid-cols-3 lg:max-w-3xl">
+                <div className="grid w-full gap-3 md:grid-cols-[minmax(0,1fr)_auto] lg:max-w-2xl">
                     <input
                         value={estimateNumber}
                         onChange={(event) => onEstimateNumberChange(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Enter' && estimateNumber.trim()) {
+                                onLookup();
+                            }
+                        }}
+                        aria-label="Quote number"
                         placeholder="Quote number"
-                        className="input py-2.5 text-sm"
-                    />
-                    <input
-                        value={phone}
-                        onChange={(event) => onPhoneChange(event.target.value)}
-                        placeholder="Customer phone"
                         className="input py-2.5 text-sm"
                     />
                     <Button
                         variant="secondary"
                         onClick={onLookup}
                         isLoading={loading}
-                        isDisabled={!estimateNumber.trim() || !phone.trim()}
+                        isDisabled={!estimateNumber.trim()}
                         leftIcon={<Search className="w-4 h-4" />}
                     >
                         Retrieve Quote
@@ -123,11 +120,10 @@ const PublicQuoteLookupCard = ({
                     <div className="mt-5 grid gap-4 md:grid-cols-3">
                         <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-4 py-4 md:col-span-1">
                             <div className="flex items-center gap-2 text-primary-500">
-                                <Phone className="h-4 w-4 text-accent-primary" />
+                                <User className="h-4 w-4 text-accent-primary" />
                                 <span className="text-xs font-bold uppercase tracking-[0.22em]">Customer</span>
                             </div>
                             <p className="mt-3 text-sm font-semibold text-primary-950">{customerName}</p>
-                            <p className="mt-1 text-sm text-primary-500">{customerPhone}</p>
                         </div>
                         <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-4 py-4 md:col-span-2">
                             <div className="flex items-center gap-2 text-primary-500">

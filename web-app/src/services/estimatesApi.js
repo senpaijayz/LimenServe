@@ -3,7 +3,10 @@ import apiClient, { extractApiError } from './apiClient';
 export async function createEstimate(payload) {
   try {
     const { data } = await apiClient.post('/estimates', payload);
-    return data.estimateId;
+    return {
+      estimateId: data.estimateId,
+      estimate: data.estimate ?? null,
+    };
   } catch (error) {
     extractApiError(error, 'Failed to create estimate.');
   }
@@ -62,11 +65,10 @@ export async function getEstimateRevisions(estimateId) {
   }
 }
 
-export async function lookupPublicEstimate(estimateNumber, phone) {
+export async function lookupPublicEstimate(estimateNumber) {
   try {
     const { data } = await apiClient.post('/estimates/public/lookup', {
       estimateNumber,
-      phone,
     });
     return data.estimate ?? null;
   } catch (error) {
