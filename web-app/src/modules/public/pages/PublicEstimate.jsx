@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion as Motion } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Minus, Calculator, Printer, User, Phone, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
@@ -14,6 +14,7 @@ import ProductPackageSuggestions from '../components/ProductPackageSuggestions';
 import PublicQuoteLookupCard from '../components/PublicQuoteLookupCard';
 import PublicVehicleSelector from '../components/PublicVehicleSelector';
 import VehiclePackageShowcase from '../components/VehiclePackageShowcase';
+import { buildSmartQuoteModel } from '../utils/quoteRecommendationModel';
 
 const SORT_OPTIONS = [
     { value: 'name-asc', label: 'A-Z' },
@@ -323,12 +324,8 @@ const PublicEstimate = () => {
     }, []);
 
     useEffect(() => {
-        if (mode !== 'estimate') {
-            setShowSummaryDrawer(false);
-            return;
-        }
-
-        setShowSummaryDrawer(estimatePhase === 'catalog' || estimatePhase === 'summary');
+        // The quote summary now lives inline with the estimate flow, not as a fixed mobile drawer.
+        setShowSummaryDrawer(false);
     }, [estimatePhase, mode]);
 
     useEffect(() => {
@@ -567,11 +564,6 @@ const PublicEstimate = () => {
         });
     };
 
-    const partsTotal = selectedParts.reduce((sum, part) => sum + (part.price * part.quantity), 0);
-    const servicesTotal = selectedServices.reduce((sum, service) => sum + service.price, 0);
-    const subtotal = partsTotal + servicesTotal;
-    const vat = subtotal * 0.12;
-    const total = subtotal + vat;
     const hasItems = selectedParts.length > 0 || selectedServices.length > 0;
     const focusedPartSelection = selectedParts.find((part) => part.id === focusedProduct?.id);
     const totalItemCount = selectedParts.reduce((sum, part) => sum + part.quantity, 0) + selectedServices.length;
@@ -580,6 +572,16 @@ const PublicEstimate = () => {
     const selectedServiceIds = selectedServices.map((service) => service.id);
     const summaryFocusProduct = focusedProduct || selectedParts[selectedParts.length - 1] || null;
     const summaryFocusSelection = selectedParts.find((part) => part.id === summaryFocusProduct?.id);
+    const quoteFinancialModel = useMemo(() => buildSmartQuoteModel({
+        selectedProduct: summaryFocusProduct,
+        selectedParts,
+        selectedServices,
+    }), [summaryFocusProduct, selectedParts, selectedServices]);
+    const partsTotal = quoteFinancialModel.totals.partsSubtotal;
+    const servicesTotal = quoteFinancialModel.totals.servicesSubtotal;
+    const subtotal = quoteFinancialModel.totals.subtotal;
+    const vat = quoteFinancialModel.totals.vat;
+    const total = quoteFinancialModel.totals.estimatedTotal;
     const savedDraftPrintableQuote = buildRetrievedPrintableQuote(savedDraftQuote);
     const retrievedPrintableQuote = buildRetrievedPrintableQuote(retrievedQuote);
     const printableQuote = printSource === 'retrieved' ? retrievedPrintableQuote : savedDraftPrintableQuote;
@@ -642,7 +644,6 @@ const PublicEstimate = () => {
             return;
         }
 
-        setShowSummaryDrawer(true);
         setPrintSource('draft');
         await saveDraftQuote();
     };
@@ -717,10 +718,8 @@ const PublicEstimate = () => {
         setShowSummaryDrawer(false);
     };
 
-    const contentShiftClass = mode === 'estimate' && showSummaryDrawer && isDesktopDock
-        ? 'md:pr-[29rem]'
-        : '';
-    const isCartPanelVisible = mode === 'estimate' && (estimatePhase === 'catalog' || estimatePhase === 'summary');
+    const contentShiftClass = '';
+    const isCartPanelVisible = false;
     const cartPanelTitle = estimatePhase === 'catalog' ? 'Active Quote Cart' : 'Review and Print';
     const cartPanelDescription = estimatePhase === 'catalog'
         ? 'Added parts and services stay visible while you browse. Adjust quantities or remove items before review.'
@@ -731,6 +730,373 @@ const PublicEstimate = () => {
     const summaryPanelClassName = isDesktopDock
         ? 'fixed inset-y-6 right-6 z-50 flex w-[440px] min-h-0 flex-col overflow-hidden rounded-[30px] border border-primary-200 bg-primary-50 shadow-[0_32px_90px_rgba(15,23,42,0.18)] print:hidden'
         : 'fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] min-h-0 flex-col overflow-hidden rounded-t-[32px] border border-primary-200 border-b-0 bg-primary-50 shadow-[0_32px_90px_rgba(15,23,42,0.28)] print:hidden';
+    const quoteNumber = savedDraftQuote?.estimate?.estimate_number || '';
+    const quoteSummaryCard = (
+        <Motion.aside
+            className="overflow-hidden rounded-[32px] border border-primary-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.10)]"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.24, ease: 'easeOut' }}
+        >
+            <div className="bg-primary-950 px-5 py-5 text-white sm:px-6">
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <p className="text-[0.68rem] font-bold uppercase tracking-[0.26em] text-white/55">Live quote summary</p>
+                        <h3 className="mt-2 text-2xl font-display font-bold tracking-tight">Your quotation</h3>
+                        <p className="mt-2 text-sm text-white/65">
+                            {estimatePhase === 'summary'
+                                ? 'Review totals, adjust lines, then finish to generate a retrievable quote number.'
+                                : 'Your selected parts and services stay visible while you browse.'}
+                        </p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-right">
+                        <span className="block text-[0.62rem] font-bold uppercase tracking-[0.22em] text-white/50">Total</span>
+                        <span className="mt-1 block text-lg font-display font-bold text-white">{formatCurrency(total)}</span>
+                    </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-3 gap-2">
+                    <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
+                        <span className="block text-[0.62rem] font-bold uppercase tracking-[0.2em] text-white/45">Qty</span>
+                        <span className="mt-1 block text-lg font-display font-bold">{totalItemCount}</span>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
+                        <span className="block text-[0.62rem] font-bold uppercase tracking-[0.2em] text-white/45">Lines</span>
+                        <span className="mt-1 block text-lg font-display font-bold">{totalLineCount}</span>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
+                        <span className="block text-[0.62rem] font-bold uppercase tracking-[0.2em] text-white/45">VAT</span>
+                        <span className="mt-1 block text-lg font-display font-bold">12%</span>
+                    </div>
+                </div>
+            </div>
+
+            <div className="space-y-5 p-5 sm:p-6">
+                {quoteNumber && (
+                    <div className="rounded-[24px] border border-accent-success/25 bg-accent-success/10 p-4">
+                        <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-accent-success">Quote created</p>
+                        <p className="mt-2 text-2xl font-display font-bold text-primary-950">{quoteNumber}</p>
+                        <p className="mt-2 text-sm text-primary-600">Stored in Supabase. Customers can retrieve this later using the quote number.</p>
+                    </div>
+                )}
+
+                <div className="rounded-[24px] border border-primary-200 bg-primary-50/70 p-4">
+                    <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-accent-primary" />
+                        <p className="text-[0.7rem] font-bold uppercase tracking-[0.22em] text-primary-500">Customer context</p>
+                    </div>
+                    <div className="mt-4 grid gap-3 text-sm">
+                        <div className="rounded-2xl bg-white px-3 py-3">
+                            <span className="block text-[0.65rem] font-bold uppercase tracking-[0.18em] text-primary-400">Name</span>
+                            <span className="mt-1 block font-semibold text-primary-950">{customerName || 'Walk-in Customer'}</span>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                            <div className="rounded-2xl bg-white px-3 py-3">
+                                <span className="block text-[0.65rem] font-bold uppercase tracking-[0.18em] text-primary-400">Phone</span>
+                                <span className="mt-1 block font-semibold text-primary-950">{customerPhone || 'Optional'}</span>
+                            </div>
+                            <div className="rounded-2xl bg-white px-3 py-3">
+                                <span className="block text-[0.65rem] font-bold uppercase tracking-[0.18em] text-primary-400">Vehicle</span>
+                                <span className="mt-1 block font-semibold text-primary-950">{vehicleInfo || 'Optional'}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {!hasItems ? (
+                    <div className="rounded-[24px] border border-dashed border-primary-300 bg-white px-5 py-8 text-center">
+                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-accent-primary/20 bg-accent-primary/5">
+                            <Calculator className="h-7 w-7 text-accent-primary" />
+                        </div>
+                        <p className="text-lg font-display font-semibold text-primary-950">No quote lines yet</p>
+                        <p className="mt-2 text-sm text-primary-500">Add a part or service to build a customer-ready quotation.</p>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {selectedParts.length > 0 && (
+                            <div className="rounded-[24px] border border-primary-200 bg-white p-4">
+                                <div className="mb-4 flex items-center justify-between gap-3">
+                                    <div>
+                                        <p className="text-[0.7rem] font-bold uppercase tracking-[0.22em] text-primary-500">Parts</p>
+                                        <p className="mt-1 text-sm text-primary-500">Quantities are editable.</p>
+                                    </div>
+                                    <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">{selectedParts.length} selected</span>
+                                </div>
+                                <div className="space-y-3">
+                                    {selectedParts.map((part) => (
+                                        <div key={part.id} className="rounded-2xl border border-primary-200 bg-primary-50/70 p-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-semibold text-primary-950">{part.name}</p>
+                                                    <p className="mt-1 text-xs text-primary-500">{part.sku || 'Pricelist item'}</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removePart(part.id)}
+                                                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-primary-400 transition hover:bg-accent-danger/10 hover:text-accent-danger"
+                                                    aria-label={`Remove ${part.name}`}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                            <div className="mt-3 flex items-center justify-between gap-3">
+                                                <div className="flex min-h-[44px] items-center rounded-2xl border border-primary-200 bg-white p-1">
+                                                    <button type="button" onClick={() => updateQty(part.id, part.quantity - 1)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Decrease ${part.name} quantity`}>
+                                                        <Minus className="h-4 w-4" />
+                                                    </button>
+                                                    <span className="w-9 text-center text-sm font-semibold text-primary-950">{part.quantity}</span>
+                                                    <button type="button" onClick={() => updateQty(part.id, part.quantity + 1)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Increase ${part.name} quantity`}>
+                                                        <Plus className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                                <span className="text-sm font-bold text-accent-blue">{formatCurrency(part.price * part.quantity)}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {selectedServices.length > 0 && (
+                            <div className="rounded-[24px] border border-primary-200 bg-white p-4">
+                                <div className="mb-4 flex items-center justify-between gap-3">
+                                    <div>
+                                        <p className="text-[0.7rem] font-bold uppercase tracking-[0.22em] text-primary-500">Services</p>
+                                        <p className="mt-1 text-sm text-primary-500">Labor and maintenance lines.</p>
+                                    </div>
+                                    <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">{selectedServices.length} selected</span>
+                                </div>
+                                <div className="space-y-3">
+                                    {selectedServices.map((service) => (
+                                        <div key={service.id} className="flex min-h-[64px] items-center justify-between gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 p-3">
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-semibold text-primary-950">{service.name}</p>
+                                                <p className="mt-1 text-xs text-primary-500">Service / labor line</p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-bold text-accent-blue">{formatCurrency(service.price)}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeService(service.id)}
+                                                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-primary-400 transition hover:bg-accent-danger/10 hover:text-accent-danger"
+                                                    aria-label={`Remove ${service.name}`}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div className="rounded-[26px] border border-primary-200 bg-primary-50/80 p-4">
+                    <div className="space-y-3">
+                        <div className="flex justify-between text-sm text-primary-600">
+                            <span>Parts subtotal</span>
+                            <span className="font-semibold text-primary-950">{formatCurrency(partsTotal)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm text-primary-600">
+                            <span>Services subtotal</span>
+                            <span className="font-semibold text-primary-950">{formatCurrency(servicesTotal)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm text-primary-600">
+                            <span>VAT (12%)</span>
+                            <span className="font-semibold text-primary-950">{formatCurrency(vat)}</span>
+                        </div>
+                        <div className="flex justify-between border-t border-primary-200 pt-3 text-lg font-bold text-primary-950">
+                            <span>Estimated total</span>
+                            <span className="text-accent-blue">{formatCurrency(total)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {saveError && (
+                    <div className="rounded-2xl border border-accent-danger/20 bg-accent-danger/5 px-4 py-3 text-sm text-accent-danger">
+                        {saveError}
+                    </div>
+                )}
+
+                {!hasItems && estimatePhase !== 'catalog' && (
+                    <div className="rounded-2xl border border-accent-warning/20 bg-accent-warning/10 px-4 py-3 text-sm text-primary-700">
+                        Add at least one part or service before finishing the quote.
+                    </div>
+                )}
+
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                    <Button
+                        variant="secondary"
+                        fullWidth
+                        onClick={estimatePhase === 'catalog' ? resetForm : () => setEstimatePhase('catalog')}
+                    >
+                        {estimatePhase === 'catalog' ? 'Reset Quote' : 'Add More Parts'}
+                    </Button>
+                    {estimatePhase === 'catalog' ? (
+                        <Button variant="primary" fullWidth onClick={() => setEstimatePhase('summary')} isDisabled={!hasItems}>
+                            Review Quote
+                        </Button>
+                    ) : quoteNumber ? (
+                        <Button variant="primary" fullWidth leftIcon={<Printer className="h-4 w-4" />} onClick={() => openPreview('draft')}>
+                            Printable Preview
+                        </Button>
+                    ) : (
+                        <Button variant="primary" fullWidth onClick={finishQuote} isDisabled={!hasItems} isLoading={savingQuote}>
+                            Finish Quote
+                        </Button>
+                    )}
+                </div>
+            </div>
+        </Motion.aside>
+    );
+
+    const reviewWorkspace = (
+        <div className="space-y-6">
+            <div className="overflow-hidden rounded-[36px] border border-primary-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+                <div className="grid gap-6 bg-gradient-to-br from-white via-primary-50 to-accent-blue/5 p-6 md:p-8 lg:grid-cols-[minmax(0,1fr)_280px]">
+                    <div>
+                        <p className="text-[0.7rem] font-bold uppercase tracking-[0.28em] text-accent-blue">Final review</p>
+                        <h3 className="mt-3 text-3xl font-display font-bold tracking-tight text-primary-950 md:text-4xl">
+                            Confirm the quote before sending it to the customer.
+                        </h3>
+                        <p className="mt-3 max-w-2xl text-sm leading-6 text-primary-600">
+                            Review the customer context, selected parts, service labor, and estimated total. When you finish, LimenServe saves the quotation and generates a quote number for retrieval.
+                        </p>
+                    </div>
+                    <div className="rounded-[28px] border border-primary-200 bg-white/90 p-5 shadow-sm">
+                        <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-primary-400">Estimated total</p>
+                        <p className="mt-2 text-3xl font-display font-bold text-primary-950">{formatCurrency(total)}</p>
+                        <p className="mt-2 text-sm text-primary-500">{totalLineCount} quote line{totalLineCount === 1 ? '' : 's'} with VAT included.</p>
+                    </div>
+                </div>
+            </div>
+
+            {quoteNumber && (
+                <div className="rounded-[30px] border border-accent-success/25 bg-accent-success/10 p-5 md:p-6">
+                    <p className="text-[0.7rem] font-bold uppercase tracking-[0.24em] text-accent-success">Quote successfully saved</p>
+                    <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <p className="text-3xl font-display font-bold text-primary-950">{quoteNumber}</p>
+                            <p className="mt-2 text-sm text-primary-600">Use this quote number in Retrieve Quote to open the saved quotation again.</p>
+                        </div>
+                        <Button variant="primary" leftIcon={<Printer className="h-4 w-4" />} onClick={() => openPreview('draft')}>
+                            Open Printable Preview
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            <div className="grid gap-5 lg:grid-cols-2">
+                <div className="rounded-[30px] border border-primary-200 bg-white p-5 shadow-sm md:p-6">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-accent-primary/20 bg-accent-primary/5 text-accent-primary">
+                            <User className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-primary-400">Customer details</p>
+                            <h4 className="text-lg font-display font-semibold text-primary-950">Prepared for {customerName || 'Walk-in Customer'}</h4>
+                        </div>
+                    </div>
+                    <div className="mt-5 grid gap-3 text-sm">
+                        <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-4 py-3">
+                            <span className="block text-[0.65rem] font-bold uppercase tracking-[0.18em] text-primary-400">Phone</span>
+                            <span className="mt-1 block font-semibold text-primary-950">{customerPhone || 'Not provided'}</span>
+                        </div>
+                        <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-4 py-3">
+                            <span className="block text-[0.65rem] font-bold uppercase tracking-[0.18em] text-primary-400">Vehicle</span>
+                            <span className="mt-1 block font-semibold text-primary-950">{vehicleInfo || 'No vehicle selected - quote can still continue'}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="rounded-[30px] border border-primary-200 bg-white p-5 shadow-sm md:p-6">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-accent-blue/20 bg-accent-blue/5 text-accent-blue">
+                            <Sparkles className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-primary-400">Quote confidence</p>
+                            <h4 className="text-lg font-display font-semibold text-primary-950">Live catalog pricing</h4>
+                        </div>
+                    </div>
+                    <div className="mt-5 grid gap-3 text-sm">
+                        <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-4 py-3">
+                            <span className="block text-[0.65rem] font-bold uppercase tracking-[0.18em] text-primary-400">Source</span>
+                            <span className="mt-1 block font-semibold text-primary-950">Current Supabase parts and service catalog</span>
+                        </div>
+                        <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-4 py-3">
+                            <span className="block text-[0.65rem] font-bold uppercase tracking-[0.18em] text-primary-400">Validity</span>
+                            <span className="mt-1 block font-semibold text-primary-950">{QUOTE_VALID_DAYS} days after quote generation</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="rounded-[30px] border border-primary-200 bg-white p-5 shadow-sm md:p-6">
+                <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-primary-400">Selected quote lines</p>
+                        <h4 className="mt-1 text-xl font-display font-semibold text-primary-950">Parts and services to include</h4>
+                    </div>
+                    <Button variant="secondary" onClick={() => setEstimatePhase('catalog')}>
+                        Add More Parts
+                    </Button>
+                </div>
+
+                {!hasItems ? (
+                    <div className="rounded-[24px] border border-dashed border-primary-300 bg-primary-50/70 px-5 py-10 text-center">
+                        <p className="text-lg font-display font-semibold text-primary-950">No items selected yet</p>
+                        <p className="mt-2 text-sm text-primary-500">Go back to Parts and Services to add quote lines.</p>
+                    </div>
+                ) : (
+                    <div className="grid gap-3">
+                        {selectedParts.map((part) => (
+                            <div key={part.id} className="grid gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                                <div className="min-w-0">
+                                    <p className="font-semibold text-primary-950">{part.name}</p>
+                                    <p className="mt-1 text-xs text-primary-500">{part.sku || 'Pricelist item'} - Qty {part.quantity}</p>
+                                </div>
+                                <p className="font-bold text-accent-blue">{formatCurrency(part.price * part.quantity)}</p>
+                            </div>
+                        ))}
+                        {selectedServices.map((service) => (
+                            <div key={service.id} className="grid gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                                <div className="min-w-0">
+                                    <p className="font-semibold text-primary-950">{service.name}</p>
+                                    <p className="mt-1 text-xs text-primary-500">Service / labor line</p>
+                                </div>
+                                <p className="font-bold text-accent-blue">{formatCurrency(service.price)}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {summaryFocusProduct && (
+                <ProductPackageSuggestions
+                    product={summaryFocusProduct}
+                    vehicleModelId={vehicle.model || summaryFocusProduct.model || summaryFocusProduct.vehicleModelName || ''}
+                    vehicleContext={hasVehicle ? vehicle : null}
+                    anchorQuantity={summaryFocusSelection?.quantity ?? 1}
+                    onAddProduct={addSuggestedPart}
+                    onAddService={addSuggestedService}
+                    onAddBundle={addBundleToEstimate}
+                    onRemoveProduct={removePart}
+                    onRemoveService={removeService}
+                    selectedProductIds={selectedProductIds}
+                    selectedServiceIds={selectedServiceIds}
+                    title={hasVehicle ? 'Recommended bundle before finishing' : 'Part-based bundle before finishing'}
+                    subtitle={hasVehicle
+                        ? 'Add any remaining matched parts or labor before generating the quote number.'
+                        : 'Vehicle selection is optional. These bundles are based on the selected anchor part.'}
+                    highlightedPackageKey={incomingPackageKey}
+                    bundleMode="estimate"
+                    smartQuote
+                />
+            )}
+        </div>
+    );
 
     return (
         <div className="bg-primary-50 min-h-screen relative font-sans text-primary-900 pb-28 print:bg-white print:p-0 print:m-0 print:min-h-0 print:block">
@@ -756,12 +1122,12 @@ const PublicEstimate = () => {
                         </h1>
                         <p className="mt-4 text-lg text-primary-600 max-w-2xl">
                             {workflowStage === 'choice'
-                                ? 'Phase 1 only shows the two main actions. Choose Build Estimate or Retrieve Quote first, then move into the next step of the flow.'
+                                ? 'Start a polished customer quotation or retrieve an existing quote number without loading unnecessary tools.'
                                 : mode === 'retrieve'
-                                    ? 'This flow is dedicated to looking up a saved quote and printing it without rebuilding the cart.'
+                                    ? 'Look up a saved quotation and open a printable copy for the customer.'
                                     : estimatePhase === 'summary'
-                                        ? 'You are now in the review phase, where the quote cart shows line items, recommendations, and smart packages together.'
-                                        : 'This estimate now moves by phase so the screen stays focused while you choose customer details, parts, and services.'}
+                                        ? 'Confirm customer details, selected parts, service labor, recommendations, and totals before generating the quote number.'
+                                        : 'A guided quote builder for Mitsubishi parts, service labor, and smart bundle recommendations.'}
                         </p>
                     </div>
                 </div>
@@ -781,9 +1147,9 @@ const PublicEstimate = () => {
                             </h2>
                             <p className="mt-2 text-sm text-primary-500">
                                 {workflowStage === 'choice'
-                                    ? 'Start with one clear action instead of loading the whole estimation workspace at once.'
+                                    ? 'Choose the exact customer task first so the quotation workspace stays focused.'
                                     : mode === 'retrieve'
-                                        ? 'This path stays separate from estimate building so the screen only shows the retrieval work.'
+                                        ? 'Quote retrieval is separate from quote creation to keep this screen simple.'
                                         : ESTIMATE_PHASES.find((phase) => phase.id === estimatePhase)?.description}
                             </p>
                         </div>
@@ -850,8 +1216,13 @@ const PublicEstimate = () => {
                         onPreviewPrint={() => openPreview('retrieved')}
                     />
                 ) : (
-                    <div className="grid grid-cols-1 gap-8">
-                        <div className="space-y-8">
+                    <div className={estimatePhase === 'details'
+                        ? 'grid grid-cols-1 gap-8'
+                        : 'grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_420px]'
+                    }>
+                        <div className="min-w-0 space-y-8">
+                            {estimatePhase === 'summary' && reviewWorkspace}
+
                             {estimatePhase === 'details' && (
                             <div className="surface p-6 md:p-7">
                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -983,7 +1354,7 @@ const PublicEstimate = () => {
                                     </button>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:max-h-[640px] lg:overflow-y-auto lg:pr-2 lg:custom-scrollbar">
                                     {loading ? (
                                         <div className="sm:col-span-2 rounded-xl border border-primary-200 bg-white p-6 text-sm text-primary-500">
                                             Loading the current pricelist...
@@ -1058,6 +1429,8 @@ const PublicEstimate = () => {
                                     onAddProduct={addSuggestedPart}
                                     onAddService={addSuggestedService}
                                     onAddBundle={addBundleToEstimate}
+                                    onRemoveProduct={removePart}
+                                    onRemoveService={removeService}
                                     selectedProductIds={selectedProductIds}
                                     selectedServiceIds={selectedServiceIds}
                                     title={hasVehicle ? 'Good / Better / Best smart bundles' : 'Part-based Good / Better / Best bundles'}
@@ -1066,6 +1439,7 @@ const PublicEstimate = () => {
                                         : 'Vehicle selection is optional. These recommendations use the selected part as the bundle anchor.'}
                                     highlightedPackageKey={incomingPackageKey}
                                     bundleMode="estimate"
+                                    smartQuote
                                 />
                             )}
 
@@ -1127,12 +1501,17 @@ const PublicEstimate = () => {
                             {estimatePhase === 'catalog' && (
                                 <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
                                     <PhaseBackButton onClick={() => setEstimatePhase('details')} label="Back to Customer + Vehicle" />
-                                    <Button variant="primary" onClick={() => setEstimatePhase('summary')}>
+                                    <Button variant="primary" onClick={() => setEstimatePhase('summary')} isDisabled={!hasItems}>
                                         Review Quote
                                     </Button>
                                 </div>
                             )}
                         </div>
+                        {estimatePhase !== 'details' && (
+                            <div className={`min-w-0 ${estimatePhase === 'catalog' ? 'order-first' : 'order-last'} xl:order-none xl:sticky xl:top-24 xl:self-start`}>
+                                {quoteSummaryCard}
+                            </div>
+                        )}
                     </div>
                 ))}
             </section>

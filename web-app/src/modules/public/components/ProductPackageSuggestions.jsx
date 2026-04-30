@@ -10,6 +10,7 @@ import {
   groupRecommendations,
   normalizePackage,
 } from '../utils/smartBundleUtils';
+import { buildSmartQuoteModel } from '../utils/quoteRecommendationModel';
 
 function getMatchBadge(matchLevel) {
   switch (matchLevel) {
@@ -65,10 +66,13 @@ const ProductPackageSuggestions = ({
   title = 'Smart Mitsubishi Bundles',
   subtitle = 'Data-driven upsell packages of matched parts and services for the selected Mitsubishi part.',
   compact = false,
+  smartQuote = false,
   anchorQuantity = 1,
   bundleMode = 'estimate',
   buildBundleHref = null,
   highlightedPackageKey = '',
+  onRemoveProduct = null,
+  onRemoveService = null,
 }) => {
   const [packages, setPackages] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
@@ -149,6 +153,17 @@ const ProductPackageSuggestions = ({
     setHighlightedTiers(next);
   }, [groupedPackages, product?.id]);
 
+  const primaryPackage = groupedPackages[0] || null;
+  const activeTierKey = primaryPackage
+    ? (highlightedTiers[primaryPackage.packageKey] ?? getDefaultHighlightedTier(buildPackageTiers(primaryPackage)))
+    : null;
+  const smartQuoteModel = buildSmartQuoteModel({
+    selectedProduct: product,
+    packages: groupedPackages,
+    recommendations,
+    activeTierKey,
+  });
+
   if (!product) {
     return null;
   }
@@ -172,9 +187,275 @@ const ProductPackageSuggestions = ({
     });
   };
 
+  const isQuoteItemSelected = (item) => (
+    item.kind === 'service'
+      ? selectedServiceIds.includes(item.id)
+      : selectedProductIds.includes(item.id)
+  );
+
+  const handleOptionalAddOnToggle = (item) => {
+    if (item.kind === 'service') {
+      if (isQuoteItemSelected(item)) {
+        onRemoveService?.(item.id);
+        return;
+      }
+
+      onAddService?.(item.raw);
+      return;
+    }
+
+    if (isQuoteItemSelected(item)) {
+      onRemoveProduct?.(item.id);
+      return;
+    }
+
+    onAddProduct?.(item.raw);
+  };
+
   const panelClassName = compact
     ? 'min-w-0 overflow-hidden rounded-xl border border-primary-200 bg-primary-50/70 p-2'
     : 'min-w-0 overflow-hidden rounded-[28px] border border-primary-200 bg-primary-50/70 p-4 sm:p-6';
+
+  if (smartQuote) {
+    const activeTier = smartQuoteModel.activeTier;
+    const activeTierAdded = activeTier ? isTierAdded(activeTier, selectedProductIds, selectedServiceIds) : false;
+    const bundleCtaLabel = activeTierAdded ? 'Bundle Added' : activeTier ? `Add ${activeTier.badgeLabel} Bundle` : 'Add Bundle';
+
+    return (
+      <div className="overflow-hidden rounded-[34px] border border-primary-200 bg-white shadow-[0_26px_80px_rgba(15,23,42,0.10)]">
+        <div className="bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800 px-5 py-6 text-white sm:px-6 lg:px-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[0.68rem] font-bold uppercase tracking-[0.22em] text-white/75">
+                <Sparkles className="h-3.5 w-3.5" />
+                Recommended based on selected product
+              </div>
+              <h4 className="mt-4 text-2xl font-display font-bold tracking-tight text-white sm:text-3xl">
+                {title}
+              </h4>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/70">
+                {subtitle}
+              </p>
+            </div>
+            <div className="rounded-[26px] border border-white/10 bg-white/10 px-4 py-4 lg:min-w-[230px]">
+              <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-white/50">Selected product</p>
+              <p className="mt-2 text-lg font-display font-semibold text-white">{product.name}</p>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-white/65">
+                {product.sku && <span className="rounded-full bg-white/10 px-3 py-1">{product.sku}</span>}
+                <span className="rounded-full bg-white/10 px-3 py-1">{formatCurrency(Number(product.price ?? 0))}</span>
+                <span className="rounded-full bg-white/10 px-3 py-1">Qty {anchorQuantity}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-5 p-5 sm:p-6 lg:p-7">
+          {loading ? (
+            <div className="flex items-center gap-3 rounded-[24px] border border-primary-200 bg-primary-50 p-5 text-sm text-primary-500">
+              <Loader2 className="h-4 w-4 animate-spin text-accent-primary" />
+              Matching the best bundle, labor, and optional add-ons...
+            </div>
+          ) : error ? (
+            <div className="rounded-[24px] border border-accent-danger/20 bg-accent-danger/5 p-5 text-sm text-accent-danger">
+              {error}
+              <span className="mt-2 block text-primary-600">You can still continue with a custom quotation.</span>
+            </div>
+          ) : !smartQuoteModel.bestPackage ? (
+            <div className="rounded-[24px] border border-dashed border-primary-300 bg-primary-50/80 p-6 text-sm text-primary-500">
+              <p className="text-lg font-display font-semibold text-primary-950">Custom quotation available</p>
+              <p className="mt-2">{smartQuoteModel.emptyReason}</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {smartQuoteModel.badges.map((badge) => (
+                  <div key={badge} className="rounded-2xl border border-primary-200 bg-primary-50/80 px-4 py-3">
+                    <span className="block text-[0.65rem] font-bold uppercase tracking-[0.22em] text-primary-400">Smart badge</span>
+                    <span className="mt-1 block text-sm font-semibold text-primary-950">{badge}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="overflow-hidden rounded-[28px] border border-accent-blue/25 bg-accent-blue/5">
+                <div className="border-b border-accent-blue/15 bg-white/80 px-5 py-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p className="text-[0.68rem] font-bold uppercase tracking-[0.24em] text-accent-blue">Best recommended bundle</p>
+                      <h5 className="mt-2 text-2xl font-display font-bold text-primary-950">{smartQuoteModel.bestPackage.packageName}</h5>
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-primary-600">{smartQuoteModel.bestPackage.packageDescription}</p>
+                    </div>
+                    <div className="rounded-[24px] bg-primary-950 px-4 py-4 text-white lg:min-w-[220px]">
+                      <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-white/50">Package impact</p>
+                      <p className="mt-2 text-2xl font-display font-bold">{formatCurrency(smartQuoteModel.totals.bundleSubtotal)}</p>
+                      {smartQuoteModel.totals.bundleSavings > 0 && (
+                        <p className="mt-1 text-sm font-semibold text-accent-success">Save {formatCurrency(smartQuoteModel.totals.bundleSavings)}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-5">
+                  <div className="mb-5 grid grid-cols-3 gap-2 rounded-2xl border border-primary-200 bg-white p-1.5">
+                    {smartQuoteModel.tiers.map((tier) => {
+                      const isActive = tier.tierKey === activeTier?.tierKey;
+
+                      return (
+                        <button
+                          key={`${smartQuoteModel.bestPackage.packageKey}-${tier.tierKey}-smart-quote`}
+                          type="button"
+                          onClick={() => setHighlightedTiers((current) => ({
+                            ...current,
+                            [smartQuoteModel.bestPackage.packageKey]: tier.tierKey,
+                          }))}
+                          className={`min-h-12 rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] transition ${
+                            isActive
+                              ? 'bg-accent-blue text-white shadow-sm'
+                              : 'bg-primary-50 text-primary-500 hover:text-primary-950'
+                          }`}
+                          aria-pressed={isActive}
+                        >
+                          {tier.badgeLabel}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {activeTier && (
+                    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
+                      <div className="rounded-[24px] border border-primary-200 bg-white p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <span className="inline-flex rounded-full bg-accent-blue px-3 py-1 text-[0.65rem] font-bold uppercase tracking-[0.22em] text-white">
+                              {activeTier.badgeLabel}
+                            </span>
+                            <h6 className="mt-3 text-xl font-display font-bold text-primary-950">{activeTier.title}</h6>
+                            <p className="mt-2 text-sm leading-6 text-primary-500">
+                              {activeTier.description} This bundle includes the most commonly requested labor for this product.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => (typeof onAddBundle === 'function' ? onAddBundle(smartQuoteModel.bestPackage, activeTier) : handleFallbackBundleAdd(activeTier))}
+                            disabled={activeTierAdded}
+                            className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-primary-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:bg-primary-200 disabled:text-primary-500"
+                          >
+                            {bundleCtaLabel}
+                          </button>
+                        </div>
+
+                        <div className="mt-5 grid gap-3 md:grid-cols-2">
+                          <div className="rounded-2xl border border-primary-200 bg-primary-50/70 p-4">
+                            <span className="block text-[0.65rem] font-bold uppercase tracking-[0.22em] text-primary-400">Included materials</span>
+                            <div className="mt-3 space-y-2">
+                              {smartQuoteModel.includedParts.length === 0 ? (
+                                <p className="text-sm text-primary-500">No extra material included in this tier.</p>
+                              ) : smartQuoteModel.includedParts.map((item) => (
+                                <div key={item.key} className="flex items-start justify-between gap-3 text-sm">
+                                  <span className="font-semibold text-primary-950">{item.name}</span>
+                                  <span className="font-bold text-accent-blue">{formatCurrency(item.price)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="rounded-2xl border border-primary-200 bg-primary-50/70 p-4">
+                            <span className="block text-[0.65rem] font-bold uppercase tracking-[0.22em] text-primary-400">Included labor / services</span>
+                            <div className="mt-3 space-y-2">
+                              {smartQuoteModel.includedLabor.length === 0 ? (
+                                <p className="text-sm text-primary-500">No automatic labor found. Staff can still confirm service requirements.</p>
+                              ) : smartQuoteModel.includedLabor.map((item) => (
+                                <div key={item.key} className="flex items-start justify-between gap-3 text-sm">
+                                  <span className="font-semibold text-primary-950">{item.name}</span>
+                                  <span className="font-bold text-accent-blue">{formatCurrency(item.price)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-[24px] border border-primary-200 bg-white p-4">
+                        <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-primary-400">Recommendation total</p>
+                        <div className="mt-4 space-y-3 text-sm">
+                          <div className="flex justify-between text-primary-600">
+                            <span>Selected product</span>
+                            <span className="font-semibold text-primary-950">{formatCurrency(Number(product.price ?? 0) * Number(anchorQuantity ?? 1))}</span>
+                          </div>
+                          <div className="flex justify-between text-primary-600">
+                            <span>{activeTier.badgeLabel} bundle</span>
+                            <span className="font-semibold text-primary-950">{formatCurrency(activeTier.smartTotal || 0)}</span>
+                          </div>
+                          {activeTier.savingsAmount > 0 && (
+                            <div className="flex justify-between text-accent-success">
+                              <span>Smart savings</span>
+                              <span className="font-semibold">{formatCurrency(activeTier.savingsAmount)}</span>
+                            </div>
+                          )}
+                          <div className="border-t border-primary-200 pt-3">
+                            <p className="text-xs leading-5 text-primary-500">
+                              You can still customize your quotation before submitting. Final price may vary after confirmation.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-primary-200 bg-primary-50/80 p-5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <p className="text-[0.68rem] font-bold uppercase tracking-[0.24em] text-primary-400">Optional upgrades</p>
+                    <h5 className="mt-2 text-xl font-display font-bold text-primary-950">Add-ons that match this product</h5>
+                    <p className="mt-1 text-sm text-primary-500">Select only what the customer wants to include in the quotation.</p>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-3 md:grid-cols-2">
+                  {smartQuoteModel.optionalAddOns.length === 0 ? (
+                    <div className="md:col-span-2 rounded-2xl border border-dashed border-primary-300 bg-white p-5 text-sm text-primary-500">
+                      No optional add-ons beyond the selected tier are available yet.
+                    </div>
+                  ) : smartQuoteModel.optionalAddOns.map((item) => {
+                    const selected = isQuoteItemSelected(item);
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => handleOptionalAddOnToggle(item)}
+                        className={`min-h-[92px] rounded-2xl border p-4 text-left transition ${
+                          selected
+                            ? 'border-accent-blue bg-accent-blue/5 ring-1 ring-accent-blue/20'
+                            : 'border-primary-200 bg-white hover:border-accent-blue/50 hover:bg-white'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <span className="inline-flex rounded-full bg-primary-100 px-2.5 py-1 text-[0.62rem] font-bold uppercase tracking-[0.18em] text-primary-500">
+                              {item.kind === 'service' ? 'Optional labor' : 'Optional part'}
+                            </span>
+                            <p className="mt-2 text-sm font-semibold text-primary-950">{item.name}</p>
+                            {item.reasonLabel && <p className="mt-1 text-xs text-primary-500">{item.reasonLabel}</p>}
+                          </div>
+                          <span className="shrink-0 text-sm font-bold text-accent-blue">{formatCurrency(item.price)}</span>
+                        </div>
+                        <span className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+                          selected ? 'bg-accent-success/10 text-accent-success' : 'bg-primary-50 text-primary-500'
+                        }`}>
+                          {selected ? 'Added to quote' : 'Add to quote'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={panelClassName}>
