@@ -31,13 +31,14 @@ function renderNames(items = [], kind) {
   return filtered.map((item) => item.recommendedProductName || item.recommendedServiceName).filter(Boolean);
 }
 
-function renderPreview(items = []) {
-  if (items.length === 0) {
-    return 'Not included yet';
+function renderItemList(items = [], kind, limit = 4) {
+  const names = renderNames(items, kind);
+  if (names.length === 0) {
+    return ['Not included yet'];
   }
 
-  const preview = items.slice(0, 2).join(' • ');
-  return items.length > 2 ? `${preview} +${items.length - 2} more` : preview;
+  const visibleNames = names.slice(0, limit);
+  return names.length > limit ? [...visibleNames, `+${names.length - limit} more`] : visibleNames;
 }
 
 function isTierAdded(tier, selectedProductIds = [], selectedServiceIds = []) {
@@ -140,15 +141,13 @@ const ProductPackageSuggestions = ({
   }, [packages, recommendations]);
 
   useEffect(() => {
-    setHighlightedTiers((current) => {
-      const next = {};
-      groupedPackages.forEach((pkg) => {
-        const tiers = buildPackageTiers(pkg);
-        next[pkg.packageKey] = current[pkg.packageKey] ?? getDefaultHighlightedTier(tiers);
-      });
-      return next;
+    const next = {};
+    groupedPackages.forEach((pkg) => {
+      const tiers = buildPackageTiers(pkg);
+      next[pkg.packageKey] = getDefaultHighlightedTier(tiers);
     });
-  }, [groupedPackages]);
+    setHighlightedTiers(next);
+  }, [groupedPackages, product?.id]);
 
   if (!product) {
     return null;
@@ -208,27 +207,33 @@ const ProductPackageSuggestions = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {groupedPackages.map((pkg) => {
+          {groupedPackages.slice(0, 1).map((pkg) => {
             const tiers = buildPackageTiers(pkg);
             const highlightedTierKey = highlightedTiers[pkg.packageKey] ?? getDefaultHighlightedTier(tiers);
+            const activeTier = tiers.find((tier) => tier.tierKey === highlightedTierKey) || tiers[0];
             const quantityRequirement = Number(pkg.minAnchorQuantity ?? 1) > 1
               ? `${pkg.minAnchorQuantity}x selected part required`
               : 'Bundle-ready';
             const isQuantityEligible = Number(anchorQuantity ?? 1) >= Number(pkg.minAnchorQuantity ?? 1);
+            const added = isTierAdded(activeTier, selectedProductIds, selectedServiceIds);
+            const ctaLabel = bundleMode === 'catalog' ? 'Build This Bundle' : added ? 'Bundle Added' : 'Add Bundle';
+            const linkTarget = typeof buildBundleHref === 'function' ? buildBundleHref(pkg, activeTier) : '#';
+            const activeParts = renderItemList(activeTier?.items || [], 'product');
+            const activeServices = renderItemList(activeTier?.items || [], 'service');
 
             return (
               <div
                 key={pkg.packageKey}
-                className={`overflow-hidden rounded-[26px] border bg-white shadow-sm ${highlightedPackageKey === pkg.packageKey ? 'border-accent-blue ring-2 ring-accent-blue/20' : 'border-primary-200'}`}
+                className={`overflow-hidden rounded-[22px] border bg-white shadow-sm ${highlightedPackageKey === pkg.packageKey ? 'border-accent-blue ring-2 ring-accent-blue/20' : 'border-primary-200'}`}
               >
-                <div className="border-b border-primary-200 bg-gradient-to-br from-white to-primary-50 px-4 py-4 sm:px-5">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="border-b border-primary-200 bg-gradient-to-br from-white to-primary-50 px-4 py-3 sm:px-5">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h5 className="text-lg font-display font-semibold text-primary-950">{pkg.packageName}</h5>
+                        <h5 className="text-base font-display font-semibold text-primary-950 sm:text-lg">{pkg.packageName}</h5>
                         <span className="rounded-full bg-primary-950 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white">{pkg.recommendationLabel || 'Smart Recommendation'}</span>
                       </div>
-                      <p className="mt-2 text-sm text-primary-500">{pkg.packageDescription}</p>
+                      <p className="mt-1 text-sm text-primary-500">{pkg.packageDescription}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {pkg.serviceGroup && (
@@ -239,98 +244,110 @@ const ProductPackageSuggestions = ({
                   </div>
                 </div>
 
-                <div className="px-4 py-4 sm:px-5 sm:py-5">
-                  <div className="mb-4 rounded-2xl bg-primary-950 px-4 py-3 text-white">
+                <div className="px-4 py-4 sm:px-5">
+                  <div className="mb-3 rounded-2xl bg-primary-950 px-4 py-3 text-white">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">Full bundle total</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">{activeTier?.badgeLabel || 'Bundle'} total</p>
                         <div className="mt-1 flex items-end gap-3">
-                          <p className="text-xl font-display font-bold text-white">{formatCurrency(pkg.smartTotal || 0)}</p>
-                          {pkg.savingsAmount > 0 && <p className="text-xs text-white/45 line-through">{formatCurrency(pkg.catalogTotal || 0)}</p>}
+                          <p className="text-xl font-display font-bold text-white">{formatCurrency(activeTier?.smartTotal || 0)}</p>
+                          {(activeTier?.savingsAmount || 0) > 0 && <p className="text-xs text-white/45 line-through">{formatCurrency(activeTier?.catalogTotal || 0)}</p>}
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">{pkg.itemCount} smart item{pkg.itemCount === 1 ? '' : 's'}</p>
-                        <p className="mt-1 text-sm font-semibold text-accent-success">{pkg.savingsAmount > 0 ? `Save ${formatCurrency(pkg.savingsAmount)}` : 'Fitment-first pricing'}</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">{activeTier?.items?.length || 0} smart item{activeTier?.items?.length === 1 ? '' : 's'}</p>
+                        <p className="mt-1 text-sm font-semibold text-accent-success">{(activeTier?.savingsAmount || 0) > 0 ? `Save ${formatCurrency(activeTier.savingsAmount)}` : 'Fitment-first pricing'}</p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid gap-3 lg:grid-cols-3">
+                  <div className="mb-3 grid grid-cols-3 gap-2 rounded-2xl border border-primary-200 bg-primary-50 p-1.5">
                     {tiers.map((tier) => {
-                      const partsPreview = renderNames(tier.items, 'product');
-                      const servicesPreview = renderNames(tier.items, 'service');
-                      const added = isTierAdded(tier, selectedProductIds, selectedServiceIds);
                       const isHighlighted = tier.tierKey === highlightedTierKey;
-                      const ctaLabel = bundleMode === 'catalog' ? 'Build This Bundle' : added ? 'Bundle Added' : 'Add Bundle';
-                      const linkTarget = typeof buildBundleHref === 'function' ? buildBundleHref(pkg, tier) : '#';
 
                       return (
-                        <div key={`${pkg.packageKey}-${tier.tierKey}`} className={`flex h-full flex-col rounded-[24px] border p-4 transition ${isHighlighted ? 'border-accent-blue bg-accent-blue/5 shadow-sm' : 'border-primary-200 bg-primary-50/40'}`}>
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <span className={`inline-flex rounded-full px-3 py-1 text-[0.65rem] font-bold uppercase tracking-[0.22em] ${isHighlighted ? 'bg-accent-blue text-white' : 'border border-primary-200 bg-white text-primary-600'}`}>{tier.badgeLabel}</span>
-                              <h6 className="mt-3 text-base font-display font-semibold text-primary-950">{tier.title}</h6>
-                            </div>
-                            {tier.savingsAmount > 0 && (
-                              <span className="rounded-full bg-accent-success/10 px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-[0.18em] text-accent-success">Save {formatCurrency(tier.savingsAmount)}</span>
-                            )}
-                          </div>
-
-                          <p className="mt-3 text-sm leading-relaxed text-primary-500">{tier.description}</p>
-
-                          <div className="mt-4 space-y-3 rounded-2xl bg-white/80 p-3">
-                            <div>
-                              <span className="block text-[0.64rem] font-bold uppercase tracking-[0.2em] text-primary-400">Included parts</span>
-                              <span className="mt-1 block text-sm font-semibold text-primary-950">{renderPreview(partsPreview)}</span>
-                            </div>
-                            <div>
-                              <span className="block text-[0.64rem] font-bold uppercase tracking-[0.2em] text-primary-400">Included labor</span>
-                              <span className="mt-1 block text-sm font-semibold text-primary-950">{renderPreview(servicesPreview)}</span>
-                            </div>
-                            <div className="flex flex-wrap gap-2 pt-1">
-                              {tier.items.slice(0, 3).map((item) => {
-                                const matchBadge = getMatchBadge(item.matchLevel);
-                                const isService = (item.consequentKind || item.consequent_kind) === 'service';
-                                return (
-                                  <span key={`${item.recommendedProductId || item.recommendedServiceId}-${item.matchLevel || item.match_level || 'tier'}`} className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${matchBadge.className}`}>
-                                    {isService ? <Wrench className="h-3 w-3" /> : <PackagePlus className="h-3 w-3" />} {matchBadge.label}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          <div className="mt-4 space-y-2 rounded-2xl border border-primary-200 bg-white px-3 py-3">
-                            <div className="flex items-center justify-between text-sm text-primary-500">
-                              <span>Normal total</span>
-                              <span className="font-semibold text-primary-400 line-through">{formatCurrency(tier.catalogTotal || 0)}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-sm font-semibold text-primary-950">
-                              <span>Package total</span>
-                              <span className="text-accent-blue">{formatCurrency(tier.smartTotal || 0)}</span>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 pt-1">
-                            {bundleMode === 'catalog' ? (
-                              <Link to={linkTarget} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-800">
-                                {ctaLabel} <ArrowRight className="h-4 w-4" />
-                              </Link>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => (typeof onAddBundle === 'function' ? onAddBundle(pkg, tier) : handleFallbackBundleAdd(tier))}
-                                disabled={added}
-                                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:bg-primary-200 disabled:text-primary-500"
-                              >
-                                {ctaLabel}
-                              </button>
-                            )}
-                          </div>
-                        </div>
+                        <button
+                          key={`${pkg.packageKey}-${tier.tierKey}`}
+                          type="button"
+                          onClick={() => setHighlightedTiers((current) => ({ ...current, [pkg.packageKey]: tier.tierKey }))}
+                          className={`min-h-11 rounded-xl px-2 py-2 text-center text-[11px] font-bold uppercase tracking-[0.16em] transition sm:text-xs ${isHighlighted ? 'bg-accent-blue text-white shadow-sm' : 'bg-white text-primary-500 hover:text-primary-950'}`}
+                        >
+                          {tier.badgeLabel}
+                        </button>
                       );
                     })}
+                  </div>
+
+                  <div className="rounded-2xl border border-primary-200 bg-white p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <span className="inline-flex rounded-full bg-accent-blue/10 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-[0.22em] text-accent-blue">{activeTier?.badgeLabel}</span>
+                        <h6 className="mt-2 text-lg font-display font-semibold text-primary-950">{activeTier?.title}</h6>
+                        <p className="mt-1 text-sm leading-relaxed text-primary-500">{activeTier?.description}</p>
+                      </div>
+                      {(activeTier?.savingsAmount || 0) > 0 && (
+                        <span className="shrink-0 rounded-full bg-accent-success/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-accent-success">Save {formatCurrency(activeTier.savingsAmount)}</span>
+                      )}
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl bg-primary-50 p-3">
+                        <span className="block text-[0.64rem] font-bold uppercase tracking-[0.2em] text-primary-400">Included parts</span>
+                        <div className="mt-2 space-y-1">
+                          {activeParts.map((name) => (
+                            <p key={`part-${name}`} className="text-sm font-semibold text-primary-950">{name}</p>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl bg-primary-50 p-3">
+                        <span className="block text-[0.64rem] font-bold uppercase tracking-[0.2em] text-primary-400">Included labor</span>
+                        <div className="mt-2 space-y-1">
+                          {activeServices.map((name) => (
+                            <p key={`service-${name}`} className="text-sm font-semibold text-primary-950">{name}</p>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {(activeTier?.items || []).slice(0, 3).map((item) => {
+                        const matchBadge = getMatchBadge(item.matchLevel);
+                        const isService = (item.consequentKind || item.consequent_kind) === 'service';
+                        return (
+                          <span key={`${item.recommendedProductId || item.recommendedServiceId}-${item.matchLevel || item.match_level || 'tier'}`} className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${matchBadge.className}`}>
+                            {isService ? <Wrench className="h-3 w-3" /> : <PackagePlus className="h-3 w-3" />} {matchBadge.label}
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-4 flex flex-col gap-3 border-t border-primary-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-1 text-sm">
+                        <div className="flex items-center gap-3 text-primary-500">
+                          <span>Normal total</span>
+                          <span className="font-semibold text-primary-400 line-through">{formatCurrency(activeTier?.catalogTotal || 0)}</span>
+                        </div>
+                        <div className="flex items-center gap-3 font-semibold text-primary-950">
+                          <span>Package total</span>
+                          <span className="text-accent-blue">{formatCurrency(activeTier?.smartTotal || 0)}</span>
+                        </div>
+                      </div>
+
+                      {bundleMode === 'catalog' ? (
+                        <Link to={linkTarget} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-primary-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-800">
+                          {ctaLabel} <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => (typeof onAddBundle === 'function' ? onAddBundle(pkg, activeTier) : handleFallbackBundleAdd(activeTier))}
+                          disabled={added}
+                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-primary-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:bg-primary-200 disabled:text-primary-500"
+                        >
+                          {ctaLabel}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
