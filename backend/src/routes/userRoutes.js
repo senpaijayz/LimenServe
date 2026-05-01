@@ -3,7 +3,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { requireRole } from '../middleware/auth.js';
 
 const router = Router();
-const ALLOWED_ROLES = new Set(['admin', 'cashier', 'staff', 'stock_clerk', 'viewer', 'customer']);
+const ALLOWED_ROLES = new Set(['admin', 'cashier', 'stock_clerk']);
 
 function splitName(fullName = '') {
   const [firstName = '', ...lastNameParts] = String(fullName || '').trim().split(/\s+/).filter(Boolean);
@@ -14,7 +14,11 @@ function splitName(fullName = '') {
 }
 
 function normalizeRole(role) {
-  return ALLOWED_ROLES.has(role) ? role : 'staff';
+  if (role === 'staff' || role === 'viewer' || role === 'customer') {
+    return 'stock_clerk';
+  }
+
+  return ALLOWED_ROLES.has(role) ? role : 'stock_clerk';
 }
 
 function mapUser(authUser, profile = null) {

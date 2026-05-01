@@ -108,7 +108,7 @@ function readItemLocationPayload(body = {}) {
   };
 }
 
-router.get('/bootstrap', requireRole('admin', 'staff', 'stock_clerk'), async (req, res, next) => {
+router.get('/bootstrap', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
     const layoutId = req.query.layoutId ? String(req.query.layoutId) : null;
     const snapshot = await getStockroomSnapshot({
@@ -121,7 +121,7 @@ router.get('/bootstrap', requireRole('admin', 'staff', 'stock_clerk'), async (re
   }
 });
 
-router.get('/search', requireRole('admin', 'staff', 'stock_clerk'), async (req, res, next) => {
+router.get('/search', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
     const q = String(req.query.q || '').trim();
     if (!q) {
@@ -136,7 +136,7 @@ router.get('/search', requireRole('admin', 'staff', 'stock_clerk'), async (req, 
   }
 });
 
-router.get('/items/:productId', requireRole('admin', 'staff', 'stock_clerk'), async (req, res, next) => {
+router.get('/items/:productId', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
     const currentFloor = numberOrDefault(req.query.currentFloor, 1);
     const details = await getItemRouteDetails(req.params.productId, currentFloor);

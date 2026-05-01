@@ -10,7 +10,7 @@ import {
 
 const router = Router();
 
-router.get('/layouts', requireRole('admin', 'staff', 'stock_clerk'), async (_req, res, next) => {
+router.get('/layouts', requireRole('admin', 'stock_clerk'), async (_req, res, next) => {
   try {
     const layouts = await listPartsMappingLayouts();
     res.json({ layouts });
@@ -19,7 +19,7 @@ router.get('/layouts', requireRole('admin', 'staff', 'stock_clerk'), async (_req
   }
 });
 
-router.post('/layouts', requireRole('admin', 'staff', 'stock_clerk'), async (req, res, next) => {
+router.post('/layouts', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
     const layout = await createPartsMappingLayout({
       name: String(req.body?.name || '').trim(),
@@ -33,7 +33,7 @@ router.post('/layouts', requireRole('admin', 'staff', 'stock_clerk'), async (req
   }
 });
 
-router.put('/layouts/:layoutId', requireRole('admin', 'staff', 'stock_clerk'), async (req, res, next) => {
+router.put('/layouts/:layoutId', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
     const layout = await updatePartsMappingLayout(req.params.layoutId, {
       name: req.body?.name,
@@ -46,7 +46,7 @@ router.put('/layouts/:layoutId', requireRole('admin', 'staff', 'stock_clerk'), a
   }
 });
 
-router.delete('/layouts/:layoutId', requireRole('admin', 'staff', 'stock_clerk'), async (req, res, next) => {
+router.delete('/layouts/:layoutId', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
     await deletePartsMappingLayout(req.params.layoutId);
     res.status(204).send();
@@ -55,7 +55,7 @@ router.delete('/layouts/:layoutId', requireRole('admin', 'staff', 'stock_clerk')
   }
 });
 
-router.post('/layouts/:layoutId/priority', requireRole('admin', 'staff', 'stock_clerk'), async (req, res, next) => {
+router.post('/layouts/:layoutId/priority', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
     const layout = await setPriorityPartsMappingLayout(req.params.layoutId);
     res.json({ layout });

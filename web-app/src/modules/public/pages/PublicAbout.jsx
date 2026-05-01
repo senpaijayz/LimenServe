@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Package, Shield, Settings, Zap, MapPin, Building, Wrench } from 'lucide-react';
+﻿import { useEffect, useState } from 'react';
+import { motion as Motion } from 'framer-motion';
+import { CalendarDays, Package, Phone, Shield, Settings, Zap, MapPin, Building, Wrench, UserRound } from 'lucide-react';
 import { getPublicMechanics } from '../../../services/mechanicsApi';
 
 const PublicAbout = () => {
@@ -16,7 +16,7 @@ const PublicAbout = () => {
                 if (active) {
                     setMechanics(rows);
                 }
-            } catch (_error) {
+            } catch {
                 if (active) {
                     setMechanics([]);
                 }
@@ -34,6 +34,22 @@ const PublicAbout = () => {
         };
     }, []);
 
+    const shiftLabel = (mechanic) => mechanic.shift_label
+        || mechanic.shiftLabel
+        || {
+            full_day: 'Full Day (8:00 AM - 5:00 PM)',
+            morning: 'Morning (8:00 AM - 12:00 PM)',
+            afternoon: 'Afternoon (1:00 PM - 5:00 PM)',
+            on_call: 'On Call / By Appointment',
+        }[mechanic.shift_type || mechanic.schedule_type]
+        || 'Schedule to be assigned';
+
+    const statusClass = (status) => {
+        if (status === 'available') return 'bg-accent-success/10 text-accent-success';
+        if (status === 'booked') return 'bg-accent-warning/10 text-accent-warning';
+        return 'bg-primary-100 text-primary-500';
+    };
+
     return (
         <div className="bg-primary-50 min-h-screen relative font-sans text-primary-900 pb-20 overflow-hidden">
 
@@ -48,7 +64,7 @@ const PublicAbout = () => {
 
             {/* Hero Section */}
             <section className="relative pt-32 pb-16 px-4 sm:px-6 lg:px-8 z-10 max-w-7xl mx-auto text-center">
-                <motion.div
+                <Motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6 }}
@@ -65,7 +81,7 @@ const PublicAbout = () => {
                     <p className="text-lg text-primary-700 leading-relaxed font-light">
                         A family-owned auto parts business in Pasay City that has been serving customers for 13 years with genuine Mitsubishi parts, dependable service, and a more modern way to manage inventory and quotations through LimenServe.
                     </p>
-                </motion.div>
+                </Motion.div>
             </section>
 
             {/* Main Content Grid */}
@@ -73,7 +89,7 @@ const PublicAbout = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center mb-24">
 
                     {/* The Story */}
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0, x: -30 }}
                         whileInView={{ opacity: 1, x: 0 }}
                         viewport={{ once: true, margin: "-100px" }}
@@ -92,10 +108,10 @@ const PublicAbout = () => {
                         <p className="text-primary-700 leading-relaxed">
                             Through **LimenServe**, the business is transitioning from manual, paper-based processes to a more organized digital workflow that supports stock visibility, faster transaction handling, structured quotations, and improved customer service.
                         </p>
-                    </motion.div>
+                    </Motion.div>
 
                     {/* Stats/Image Grid */}
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0, x: 30 }}
                         whileInView={{ opacity: 1, x: 0 }}
                         viewport={{ once: true, margin: "-100px" }}
@@ -122,7 +138,7 @@ const PublicAbout = () => {
                             <span className="text-3xl font-display font-bold text-primary-950">Family-Owned</span>
                             <span className="text-xs font-semibold text-primary-500 uppercase tracking-widest mt-1">Local Business</span>
                         </div>
-                    </motion.div>
+                    </Motion.div>
                 </div>
 
                 {/* Core Pillars */}
@@ -133,7 +149,7 @@ const PublicAbout = () => {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <motion.div
+                        <Motion.div
                             initial={{ opacity: 0, y: 20 }}
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
@@ -147,9 +163,9 @@ const PublicAbout = () => {
                             <p className="text-sm text-primary-600 leading-relaxed">
                                 The business focuses on supplying genuine Mitsubishi parts so customers can rely on accurate fitment, dependable quality, and trusted replacement components.
                             </p>
-                        </motion.div>
+                        </Motion.div>
 
-                        <motion.div
+                        <Motion.div
                             initial={{ opacity: 0, y: 20 }}
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
@@ -163,9 +179,9 @@ const PublicAbout = () => {
                             <p className="text-sm text-primary-600 leading-relaxed">
                                 LimenServe is designed to reduce delays in stock checking, quotation preparation, and transaction handling by giving staff a more structured digital workflow.
                             </p>
-                        </motion.div>
+                        </Motion.div>
 
-                        <motion.div
+                        <Motion.div
                             initial={{ opacity: 0, y: 20 }}
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
@@ -179,7 +195,7 @@ const PublicAbout = () => {
                             <p className="text-sm text-primary-600 leading-relaxed">
                                 The system supports a shift from paper-based records to digital inventory, quotation, service-order, and stockroom management for more accurate business operations.
                             </p>
-                        </motion.div>
+                        </Motion.div>
                     </div>
                 </div>
 
@@ -199,20 +215,48 @@ const PublicAbout = () => {
                                 <p className="text-sm text-primary-500">No public mechanic profiles have been published yet.</p>
                             </div>
                         ) : mechanics.map((mechanic) => (
-                            <div key={mechanic.id} className="surface p-8 bg-white border border-primary-200 shadow-sm">
+                            <div key={mechanic.id} className="surface overflow-hidden bg-white border border-primary-200 shadow-sm">
+                                <div className="h-2 bg-gradient-to-r from-accent-primary via-accent-danger to-primary-950" />
+                                <div className="p-6 sm:p-8">
                                 <div className="flex items-start justify-between gap-4">
-                                    <div>
-                                        <p className="text-xs uppercase tracking-[0.22em] text-primary-400">{mechanic.location_name}</p>
-                                        <h3 className="mt-2 text-xl font-display font-semibold text-primary-950">{mechanic.full_name}</h3>
-                                        <p className="mt-2 text-sm font-medium text-accent-primary">{mechanic.specialization}</p>
+                                    <div className="flex min-w-0 items-start gap-4">
+                                        {mechanic.photo_url ? (
+                                            <img
+                                                src={mechanic.photo_url}
+                                                alt={mechanic.full_name}
+                                                className="h-16 w-16 shrink-0 rounded-2xl border border-primary-200 object-cover shadow-sm"
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-primary-200 bg-primary-50 text-primary-400 shadow-sm">
+                                                <UserRound className="h-8 w-8" />
+                                            </div>
+                                        )}
+                                        <div className="min-w-0">
+                                            <p className="text-xs uppercase tracking-[0.22em] text-primary-400">Limen service team</p>
+                                            <h3 className="mt-2 text-xl font-display font-semibold text-primary-950">{mechanic.full_name}</h3>
+                                            <p className="mt-2 text-sm font-medium text-accent-primary">{mechanic.specialization}</p>
+                                        </div>
                                     </div>
-                                    <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${mechanic.availability_status === 'available' ? 'bg-accent-success/10 text-accent-success' : mechanic.availability_status === 'booked' ? 'bg-accent-warning/10 text-accent-warning' : 'bg-primary-100 text-primary-500'}`}>
-                                        {mechanic.availability_status.replace('_', ' ')}
+                                    <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${statusClass(mechanic.availability_status)}`}>
+                                        {String(mechanic.availability_status || 'available').replace('_', ' ')}
                                     </span>
                                 </div>
                                 <p className="mt-4 text-sm leading-relaxed text-primary-600">{mechanic.bio || 'Experienced Mitsubishi service technician.'}</p>
-                                <div className="mt-5 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600">
-                                    <p><span className="font-semibold text-primary-950">Shift:</span> {mechanic.shift_label || 'Schedule to be assigned'}</p>
+                                <div className="mt-5 grid gap-3 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600">
+                                    <p className="flex items-start gap-2">
+                                        <CalendarDays className="mt-0.5 h-4 w-4 text-accent-primary" />
+                                        <span><span className="font-semibold text-primary-950">Schedule:</span> {shiftLabel(mechanic)}</span>
+                                    </p>
+                                    <p className="flex items-start gap-2">
+                                        <CalendarDays className="mt-0.5 h-4 w-4 text-accent-primary" />
+                                        <span><span className="font-semibold text-primary-950">Available date:</span> {mechanic.available_date || 'General availability'}</span>
+                                    </p>
+                                    <p className="flex items-start gap-2">
+                                        <Phone className="mt-0.5 h-4 w-4 text-accent-primary" />
+                                        <span><span className="font-semibold text-primary-950">Contact:</span> {mechanic.contact_number || 'Contact shop for assignment'}</span>
+                                    </p>
+                                </div>
                                 </div>
                             </div>
                         ))}
@@ -220,7 +264,7 @@ const PublicAbout = () => {
                 </div>
 
                 {/* Location Banner */}
-                <motion.div
+                <Motion.div
                     initial={{ opacity: 0, scale: 0.98 }}
                     whileInView={{ opacity: 1, scale: 1 }}
                     viewport={{ once: true }}
@@ -249,7 +293,7 @@ const PublicAbout = () => {
                             title="Limen Auto Parts Center Location"
                         />
                     </div>
-                </motion.div>
+                </Motion.div>
 
             </section>
         </div >

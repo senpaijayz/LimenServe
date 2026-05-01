@@ -1,5 +1,15 @@
 import { supabaseAdmin, supabaseAuth } from '../config/supabase.js';
 
+const ALLOWED_ROLES = new Set(['admin', 'cashier', 'stock_clerk']);
+
+function normalizeRole(role) {
+  if (role === 'staff' || role === 'viewer' || role === 'customer') {
+    return 'stock_clerk';
+  }
+
+  return ALLOWED_ROLES.has(role) ? role : 'stock_clerk';
+}
+
 async function fetchProfile(userId) {
   const { data, error } = await supabaseAdmin.rpc('get_user_profile_by_user_id', {
     p_user_id: userId,
@@ -33,13 +43,13 @@ export async function attachUser(req, _res, next) {
 
     const profile = await fetchProfile(data.user.id);
     const fallbackFullName = data.user.user_metadata?.full_name || '';
-    const fallbackRole = data.user.app_metadata?.role || profile?.role || 'customer';
+    const fallbackRole = data.user.app_metadata?.role || profile?.role;
 
     req.user = {
       id: data.user.id,
       email: data.user.email,
       fullName: profile?.full_name || fallbackFullName,
-      role: fallbackRole,
+      role: normalizeRole(fallbackRole),
       profile,
     };
 

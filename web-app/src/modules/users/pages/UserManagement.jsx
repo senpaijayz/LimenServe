@@ -15,11 +15,97 @@ import { createUser, listUsers, updateUser } from '../../../services/usersApi';
 const roleOptions = [
     { value: 'admin', label: 'Administrator' },
     { value: 'cashier', label: 'Cashier' },
-    { value: 'staff', label: 'Staff' },
-    { value: 'stock_clerk', label: 'Stock Clerk' },
-    { value: 'viewer', label: 'Viewer' },
-    { value: 'customer', label: 'Customer' },
+    { value: 'stock_clerk', label: 'Clerk' },
 ];
+
+const emptyUserForm = {
+    firstName: '',
+    lastName: '',
+    email: '',
+    role: 'cashier',
+    password: '',
+};
+
+function buildUserForm(user) {
+    if (!user) {
+        return emptyUserForm;
+    }
+
+    return {
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        email: user.email || '',
+        role: roleOptions.some((option) => option.value === user.role) ? user.role : 'stock_clerk',
+        password: '',
+    };
+}
+
+function UserFormModal({ isOpen, editingUser, isSaving, onClose, onSubmit }) {
+    const [formData, setFormData] = useState(() => buildUserForm(editingUser));
+
+    const updateField = (field, value) => {
+        setFormData((current) => ({
+            ...current,
+            [field]: value,
+        }));
+    };
+
+    const handleSubmit = (event) => {
+        event.preventDefault();
+        const payload = {
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            fullName: `${formData.firstName} ${formData.lastName}`.trim(),
+            email: formData.email,
+            role: formData.role,
+            password: formData.password,
+        };
+        onSubmit(payload);
+    };
+
+    return (
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            title={editingUser ? 'Edit User' : 'Add New User'}
+            size="md"
+        >
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600">
+                    <p className="font-semibold text-primary-950">Admin panel roles</p>
+                    <p>Only Administrator, Cashier, and Clerk accounts can be created from this workspace.</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Input label="First Name" value={formData.firstName} onChange={(e) => updateField('firstName', e.target.value)} required />
+                    <Input label="Last Name" value={formData.lastName} onChange={(e) => updateField('lastName', e.target.value)} required />
+                </div>
+
+                <Input label="Email Address" type="email" value={formData.email} onChange={(e) => updateField('email', e.target.value)} required />
+
+                <Dropdown label="Role" options={roleOptions} value={formData.role} onChange={(value) => updateField('role', value)} />
+
+                <Input
+                    label={editingUser ? 'New Password (leave blank to keep current)' : 'Password'}
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => updateField('password', e.target.value)}
+                    required={!editingUser}
+                    helperText={editingUser ? 'Leave this blank unless you want to reset the password.' : 'Use a secure temporary password for the staff account.'}
+                />
+
+                <div className="flex flex-col gap-3 pt-4 sm:flex-row">
+                    <Button variant="secondary" fullWidth isDisabled={isSaving} onClick={onClose}>
+                        Cancel
+                    </Button>
+                    <Button variant="primary" fullWidth type="submit" isLoading={isSaving}>
+                        {editingUser ? 'Update User' : 'Create User'}
+                    </Button>
+                </div>
+            </form>
+        </Modal>
+    );
+}
 
 const UserManagement = () => {
     const { success, error: showError } = useToast();
@@ -31,13 +117,6 @@ const UserManagement = () => {
     const [usersError, setUsersError] = useState('');
     const [isSavingUser, setIsSavingUser] = useState(false);
     const [mechanics, setMechanics] = useState([]);
-    const [formData, setFormData] = useState({
-        firstName: '',
-        lastName: '',
-        email: '',
-        role: 'cashier',
-        password: '',
-    });
 
     const loadMechanics = async () => {
         try {
@@ -73,28 +152,14 @@ const UserManagement = () => {
         || String(user.email || '').toLowerCase().includes(searchQuery.toLowerCase())
     ), [searchQuery, users]);
 
-    const resetForm = () => {
-        setFormData({
-            firstName: '',
-            lastName: '',
-            email: '',
-            role: 'cashier',
-            password: '',
-        });
+    const closeUserModal = () => {
+        setShowAddModal(false);
+        setEditingUser(null);
     };
 
-    const handleSubmit = async (event) => {
-        event.preventDefault();
+    const handleSubmit = async (payload) => {
         setIsSavingUser(true);
         try {
-            const payload = {
-                firstName: formData.firstName,
-                lastName: formData.lastName,
-                fullName: `${formData.firstName} ${formData.lastName}`.trim(),
-                email: formData.email,
-                role: formData.role,
-                password: formData.password,
-            };
             const saveResult = editingUser
                 ? await updateUser(editingUser.id, payload)
                 : await createUser(payload);
@@ -103,9 +168,7 @@ const UserManagement = () => {
             success(saveResult?.profileSynced === false
                 ? 'User saved in Supabase Auth. Run the profile sync SQL to mirror it in core.user_profiles.'
                 : (editingUser ? 'User updated in Supabase.' : 'User created in Supabase.'));
-            setShowAddModal(false);
-            setEditingUser(null);
-            resetForm();
+            closeUserModal();
         } catch (error) {
             showError(error.message || 'Unable to save user.');
         } finally {
@@ -115,13 +178,6 @@ const UserManagement = () => {
 
     const handleEdit = (user) => {
         setEditingUser(user);
-        setFormData({
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            role: user.role,
-            password: '',
-        });
         setShowAddModal(true);
     };
 
@@ -187,9 +243,9 @@ const UserManagement = () => {
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-display font-bold text-primary-950">User Management</h1>
-                    <p className="text-primary-500 font-medium mt-1">Manage system users, roles, and public mechanic profiles.</p>
+                    <p className="text-primary-500 font-medium mt-1">Manage staff access, roles, and public mechanic profiles.</p>
                 </div>
-                <Button variant="primary" leftIcon={<Plus className="w-4 h-4" />} onClick={() => { resetForm(); setShowAddModal(true); }}>
+                <Button variant="primary" leftIcon={<Plus className="w-4 h-4" />} onClick={() => { setEditingUser(null); setShowAddModal(true); }}>
                     Add User
                 </Button>
             </div>
@@ -213,7 +269,7 @@ const UserManagement = () => {
                     <div className="p-3 rounded-xl bg-accent-success/20"><User className="w-6 h-6 text-accent-success" /></div>
                     <div>
                         <p className="text-2xl font-bold font-display text-primary-950">{clerkCount}</p>
-                        <p className="text-sm text-primary-500">Stock Clerks</p>
+                        <p className="text-sm text-primary-500">Clerks</p>
                     </div>
                 </Card>
             </div>
@@ -278,40 +334,15 @@ const UserManagement = () => {
 
             <MechanicManagementPanel mechanics={mechanics} onReload={loadMechanics} onNotify={success} />
 
-            <Modal
+            {showAddModal && (
+            <UserFormModal
                 isOpen={showAddModal}
-                onClose={() => { setShowAddModal(false); setEditingUser(null); resetForm(); }}
-                title={editingUser ? 'Edit User' : 'Add New User'}
-                size="md"
-            >
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Input label="First Name" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} required />
-                        <Input label="Last Name" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} required />
-                    </div>
-
-                    <Input label="Email Address" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
-
-                    <Dropdown label="Role" options={roleOptions} value={formData.role} onChange={(value) => setFormData({ ...formData, role: value })} />
-
-                    <Input
-                        label={editingUser ? 'New Password (leave blank to keep current)' : 'Password'}
-                        type="password"
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        required={!editingUser}
-                    />
-
-                    <div className="flex flex-col gap-3 pt-4 sm:flex-row">
-                        <Button variant="secondary" fullWidth isDisabled={isSavingUser} onClick={() => { setShowAddModal(false); setEditingUser(null); resetForm(); }}>
-                            Cancel
-                        </Button>
-                        <Button variant="primary" fullWidth type="submit" isLoading={isSavingUser}>
-                            {editingUser ? 'Update User' : 'Create User'}
-                        </Button>
-                    </div>
-                </form>
-            </Modal>
+                editingUser={editingUser}
+                isSaving={isSavingUser}
+                onClose={closeUserModal}
+                onSubmit={handleSubmit}
+            />
+            )}
         </div>
     );
 };

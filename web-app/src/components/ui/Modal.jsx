@@ -25,14 +25,19 @@ const Modal = ({
     className = '',
 }) => {
     const modalRef = useRef(null);
+    const onCloseRef = useRef(onClose);
     const shouldReduceMotion = useReducedMotion();
+
+    useEffect(() => {
+        onCloseRef.current = onClose;
+    }, [onClose]);
 
     // Handle escape key
     const handleEscape = useCallback((e) => {
         if (e.key === 'Escape' && closeOnEscape) {
-            onClose();
+            onCloseRef.current();
         }
-    }, [onClose, closeOnEscape]);
+    }, [closeOnEscape]);
 
     useEffect(() => {
         if (isOpen) {

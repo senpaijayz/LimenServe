@@ -25,7 +25,7 @@ function normalizeRole(role, email) {
         return ROLES.STOCK_CLERK;
     }
 
-    return ROLES.CUSTOMER;
+    return ROLES.STOCK_CLERK;
 }
 
 function mapSupabaseUser(sessionUser, profile) {

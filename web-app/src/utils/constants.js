@@ -8,15 +8,13 @@ export const ROLES = {
     ADMIN: 'admin',
     CASHIER: 'cashier',
     STOCK_CLERK: 'stock_clerk',
-    CUSTOMER: 'customer',
 };
 
 // Role Display Names
 export const ROLE_LABELS = {
     [ROLES.ADMIN]: 'Administrator',
     [ROLES.CASHIER]: 'Cashier',
-    [ROLES.STOCK_CLERK]: 'Stock Clerk',
-    [ROLES.CUSTOMER]: 'Customer',
+    [ROLES.STOCK_CLERK]: 'Clerk',
 };
 
 // Order/Service Status

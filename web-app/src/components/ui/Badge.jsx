@@ -56,11 +56,11 @@ export const RoleBadge = ({ role }) => {
     const roleConfig = {
         admin: { label: 'Admin', variant: 'danger' },
         cashier: { label: 'Cashier', variant: 'info' },
-        stock_clerk: { label: 'Stock Clerk', variant: 'success' },
-        customer: { label: 'Customer', variant: 'neutral' },
+        staff: { label: 'Clerk', variant: 'success' },
+        stock_clerk: { label: 'Clerk', variant: 'success' },
     };
 
-    const config = roleConfig[role] || roleConfig.customer;
+    const config = roleConfig[role] || roleConfig.stock_clerk;
 
     return (
         <Badge variant={config.variant}>
