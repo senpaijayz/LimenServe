@@ -4,6 +4,7 @@ import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
 import Input from '../../../components/ui/Input';
+import { useToast } from '../../../components/ui/Toast';
 import { deleteMechanic, upsertMechanic } from '../../../services/mechanicsApi';
 
 const availabilityOptions = [
@@ -76,16 +77,39 @@ function MechanicAvatar({ mechanic, size = 'md' }) {
 }
 
 const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify }) => {
+    const { success, error: showError } = useToast();
     const [isOpen, setIsOpen] = useState(false);
     const [editingMechanic, setEditingMechanic] = useState(null);
     const [form, setForm] = useState(initialForm);
     const [formError, setFormError] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
-    const openCreate = () => {
+    const notifySuccess = onNotify || success;
+
+    const resetForm = () => {
         setEditingMechanic(null);
         setForm(initialForm);
         setFormError('');
+    };
+
+    const closeModal = () => {
+        if (isSaving) {
+            return;
+        }
+
+        setIsOpen(false);
+        resetForm();
+    };
+
+    const formatMechanicError = (error, isEditing) => {
+        const fallback = isEditing
+            ? 'Unable to update mechanic. Please check the details and try again.'
+            : 'Unable to add mechanic. Please check the details and try again.';
+        return error?.message || fallback;
+    };
+
+    const openCreate = () => {
+        resetForm();
         setIsOpen(true);
     };
 
@@ -138,6 +162,11 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify }) => {
 
     const handleSubmit = async (event) => {
         event.preventDefault();
+
+        if (isSaving) {
+            return;
+        }
+
         setFormError('');
 
         if (!isValidContactNumber(form.contact_number)) {
@@ -146,6 +175,7 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify }) => {
         }
 
         setIsSaving(true);
+        const isEditing = Boolean(editingMechanic);
         try {
             await upsertMechanic({
                 ...form,
@@ -154,17 +184,26 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify }) => {
                 id: editingMechanic?.id,
             });
             await onReload();
-            onNotify(editingMechanic ? 'Mechanic updated successfully!' : 'Mechanic created successfully!');
+            notifySuccess(isEditing ? 'Mechanic updated successfully' : 'Mechanic added successfully');
             setIsOpen(false);
+            resetForm();
+        } catch (error) {
+            const message = formatMechanicError(error, isEditing);
+            setFormError(message);
+            showError(message);
         } finally {
             setIsSaving(false);
         }
     };
 
     const handleDelete = async (mechanicId) => {
-        await deleteMechanic(mechanicId);
-        await onReload();
-        onNotify('Mechanic removed successfully!');
+        try {
+            await deleteMechanic(mechanicId);
+            await onReload();
+            notifySuccess('Mechanic removed successfully');
+        } catch (error) {
+            showError(error?.message || 'Unable to remove mechanic.');
+        }
     };
 
     return (
@@ -201,7 +240,14 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify }) => {
                 </div>
             </Card>
 
-            <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title={editingMechanic ? 'Edit Mechanic' : 'Add Mechanic'} size="md">
+            <Modal
+                isOpen={isOpen}
+                onClose={closeModal}
+                title={editingMechanic ? 'Edit Mechanic' : 'Add Mechanic'}
+                size="md"
+                closeOnBackdrop={!isSaving}
+                closeOnEscape={!isSaving}
+            >
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="flex items-center gap-4 rounded-xl border border-primary-200 bg-primary-50 p-4">
                         <MechanicAvatar mechanic={{ full_name: form.full_name, photo_url: form.photo_url }} size="lg" />
@@ -262,8 +308,8 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify }) => {
                     </label>
                     <textarea value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} placeholder="Mechanic bio" rows={3} className="w-full resize-none rounded-lg border border-primary-200 bg-white px-4 py-3 text-primary-950 shadow-sm placeholder-primary-400 focus:border-accent-blue focus:outline-none focus:ring-1 focus:ring-accent-blue" />
                     <div className="flex gap-3 pt-2">
-                        <Button variant="secondary" fullWidth isDisabled={isSaving} onClick={() => setIsOpen(false)}>Cancel</Button>
-                        <Button variant="primary" fullWidth type="submit" isLoading={isSaving}>{editingMechanic ? 'Update Mechanic' : 'Create Mechanic'}</Button>
+                        <Button variant="secondary" fullWidth isDisabled={isSaving} onClick={closeModal}>Cancel</Button>
+                        <Button variant="primary" fullWidth type="submit" isLoading={isSaving} isDisabled={isSaving}>{editingMechanic ? 'Update Mechanic' : 'Create Mechanic'}</Button>
                     </div>
                 </form>
             </Modal>

@@ -40,8 +40,14 @@ function buildUserForm(user) {
     };
 }
 
-function UserFormModal({ isOpen, editingUser, isSaving, onClose, onSubmit }) {
+function UserFormModal({ isOpen, editingUser, isSaving, submitError, onClose, onSubmit }) {
     const [formData, setFormData] = useState(() => buildUserForm(editingUser));
+
+    const guardedClose = () => {
+        if (!isSaving) {
+            onClose();
+        }
+    };
 
     const updateField = (field, value) => {
         setFormData((current) => ({
@@ -66,15 +72,23 @@ function UserFormModal({ isOpen, editingUser, isSaving, onClose, onSubmit }) {
     return (
         <Modal
             isOpen={isOpen}
-            onClose={onClose}
+            onClose={guardedClose}
             title={editingUser ? 'Edit User' : 'Add New User'}
             size="md"
+            closeOnBackdrop={!isSaving}
+            closeOnEscape={!isSaving}
         >
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600">
                     <p className="font-semibold text-primary-950">Admin panel roles</p>
                     <p>Only Administrator, Cashier, and Clerk accounts can be created from this workspace.</p>
                 </div>
+
+                {submitError && (
+                    <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/5 px-4 py-3 text-sm font-medium text-accent-danger">
+                        {submitError}
+                    </div>
+                )}
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <Input label="First Name" value={formData.firstName} onChange={(e) => updateField('firstName', e.target.value)} required />
@@ -95,10 +109,10 @@ function UserFormModal({ isOpen, editingUser, isSaving, onClose, onSubmit }) {
                 />
 
                 <div className="flex flex-col gap-3 pt-4 sm:flex-row">
-                    <Button variant="secondary" fullWidth isDisabled={isSaving} onClick={onClose}>
+                    <Button variant="secondary" fullWidth isDisabled={isSaving} onClick={guardedClose}>
                         Cancel
                     </Button>
-                    <Button variant="primary" fullWidth type="submit" isLoading={isSaving}>
+                    <Button variant="primary" fullWidth type="submit" isLoading={isSaving} isDisabled={isSaving}>
                         {editingUser ? 'Update User' : 'Create User'}
                     </Button>
                 </div>
@@ -116,6 +130,7 @@ const UserManagement = () => {
     const [usersLoading, setUsersLoading] = useState(true);
     const [usersError, setUsersError] = useState('');
     const [isSavingUser, setIsSavingUser] = useState(false);
+    const [userFormError, setUserFormError] = useState('');
     const [mechanics, setMechanics] = useState([]);
 
     const loadMechanics = async () => {
@@ -153,31 +168,70 @@ const UserManagement = () => {
     ), [searchQuery, users]);
 
     const closeUserModal = () => {
+        if (isSavingUser) {
+            return;
+        }
+
         setShowAddModal(false);
         setEditingUser(null);
+        setUserFormError('');
+    };
+
+    const upsertUserInList = (savedUser) => {
+        if (!savedUser?.id) {
+            return;
+        }
+
+        setUsers((current) => {
+            const withoutSaved = current.filter((user) => user.id !== savedUser.id);
+            return [...withoutSaved, savedUser].sort((left, right) => String(left.email).localeCompare(String(right.email)));
+        });
+    };
+
+    const formatUserError = (error, isEditing) => {
+        const fallback = isEditing
+            ? 'Unable to update user. Please check the details and try again.'
+            : 'Unable to add user. Please check the details and try again.';
+        return error?.message || fallback;
     };
 
     const handleSubmit = async (payload) => {
+        if (isSavingUser) {
+            return;
+        }
+
         setIsSavingUser(true);
+        setUserFormError('');
+        const isEditing = Boolean(editingUser);
         try {
             const saveResult = editingUser
                 ? await updateUser(editingUser.id, payload)
                 : await createUser(payload);
 
+            upsertUserInList(saveResult?.user);
             await loadUsers();
-            success(saveResult?.profileSynced === false
-                ? 'User saved in Supabase Auth. Run the profile sync SQL to mirror it in core.user_profiles.'
-                : (editingUser ? 'User updated in Supabase.' : 'User created in Supabase.'));
-            closeUserModal();
+            setShowAddModal(false);
+            setEditingUser(null);
+            setUserFormError('');
+            success(isEditing ? 'User updated successfully' : 'User added successfully');
         } catch (error) {
-            showError(error.message || 'Unable to save user.');
+            const message = formatUserError(error, isEditing);
+            setUserFormError(message);
+            showError(message);
         } finally {
             setIsSavingUser(false);
         }
     };
 
     const handleEdit = (user) => {
+        setUserFormError('');
         setEditingUser(user);
+        setShowAddModal(true);
+    };
+
+    const handleAddUser = () => {
+        setUserFormError('');
+        setEditingUser(null);
         setShowAddModal(true);
     };
 
@@ -245,7 +299,7 @@ const UserManagement = () => {
                     <h1 className="text-2xl font-display font-bold text-primary-950">User Management</h1>
                     <p className="text-primary-500 font-medium mt-1">Manage staff access, roles, and public mechanic profiles.</p>
                 </div>
-                <Button variant="primary" leftIcon={<Plus className="w-4 h-4" />} onClick={() => { setEditingUser(null); setShowAddModal(true); }}>
+                <Button variant="primary" leftIcon={<Plus className="w-4 h-4" />} onClick={handleAddUser}>
                     Add User
                 </Button>
             </div>
@@ -339,6 +393,7 @@ const UserManagement = () => {
                 isOpen={showAddModal}
                 editingUser={editingUser}
                 isSaving={isSavingUser}
+                submitError={userFormError}
                 onClose={closeUserModal}
                 onSubmit={handleSubmit}
             />
