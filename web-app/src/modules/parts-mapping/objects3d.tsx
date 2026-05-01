@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Text, Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { Lock } from 'lucide-react';
+import { getDefaultObjectSize, normalizeObjectSize } from './usePartsMappingStore';
 import type { LayoutObject } from './usePartsMappingStore';
 
 // ═══════════════════════════════════════════════════════════════
@@ -313,15 +314,15 @@ export const DraggableObject = ({ children, position, rotation = 0, editMode, na
             {children}
             {editMode && (hovered || selected) && (
                 <Html position={[0, 4, 0]} center>
-                    <div style={{ background: selected ? 'rgba(220,38,38,0.95)' : 'rgba(59,130,246,0.9)', color: '#fff', padding: '6px 12px', borderRadius: 6, fontSize: 12, whiteSpace: 'nowrap', boxShadow: '0 2px 10px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ background: selected ? 'rgba(220,38,38,0.95)' : 'rgba(37,99,235,0.92)', color: '#fff', padding: '7px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', boxShadow: '0 10px 24px rgba(15,23,42,0.24)', display: 'flex', alignItems: 'center', gap: 6, border: '1px solid rgba(255,255,255,0.3)' }}>
                         {locked && <Lock size={12} />}{name}
                     </div>
                 </Html>
             )}
             {editMode && (
                 <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                    <ringGeometry args={[0.6, 0.8, 32]} />
-                    <meshBasicMaterial color={selected ? '#DC2626' : dragging ? '#f59e0b' : hovered ? '#3b82f6' : '#6b7280'} transparent opacity={0.6} />
+                    <ringGeometry args={[0.7, 0.9, 48]} />
+                    <meshBasicMaterial color={selected ? '#DC2626' : dragging ? '#f59e0b' : hovered ? '#2563eb' : '#94a3b8'} transparent opacity={selected ? 0.75 : 0.5} />
                 </mesh>
             )}
         </group>
@@ -350,6 +351,10 @@ interface ObjProps {
     onClick?: () => void;
 }
 
+function getSize(type: string, size?: [number, number, number]) {
+    return normalizeObjectSize(type, size || getDefaultObjectSize(type));
+}
+
 // Wrap helper: wraps content in DraggableObject if editMode, otherwise plain group
 function Wrap({ editMode, position, rotation = 0, label = '', selected = false, locked, onSelect, onPositionChange, onDragStart, onDragEnd, children }: ObjProps & { children: React.ReactNode }) {
     if (editMode) {
@@ -366,20 +371,24 @@ function Wrap({ editMode, position, rotation = 0, label = '', selected = false, 
 // ─── 4-Layer Shelf ───────────────────────────────────────────
 export const Shelf4Layer = (p: ObjProps) => {
     const c = p.isHighlighted ? '#DC2626' : '#64748b';
+    const [w, h, d] = getSize('shelf', p.size);
+    const hw = w / 2;
+    const hd = d / 2;
+    const shelfHeights = [0.15, 0.38, 0.61, 0.82].map((ratio) => Math.max(0.25, h * ratio));
     return (
         <Wrap {...p}>
-            {[[-0.9, 0, -0.4], [0.9, 0, -0.4], [-0.9, 0, 0.4], [0.9, 0, 0.4]].map((pos, i) => (
-                <mesh key={i} position={[pos[0], 1.6, pos[2]]}><boxGeometry args={[0.08, 3.2, 0.08]} /><meshStandardMaterial color="#94a3b8" metalness={0.9} roughness={0.1} /></mesh>
+            {[[-hw, -hd], [hw, -hd], [-hw, hd], [hw, hd]].map((pos, i) => (
+                <mesh key={i} position={[pos[0], h / 2, pos[1]]}><boxGeometry args={[0.08, h, 0.08]} /><meshStandardMaterial color="#94a3b8" metalness={0.9} roughness={0.1} /></mesh>
             ))}
-            {[0.4, 1.1, 1.8, 2.5].map((h, b) => (
+            {shelfHeights.map((levelHeight, b) => (
                 <group key={b}>
-                    <mesh position={[0, h, 0]}><boxGeometry args={[1.8, 0.08, 0.9]} /><meshStandardMaterial color={c} emissive={p.isHighlighted ? '#DC2626' : '#000'} emissiveIntensity={p.isHighlighted ? 0.3 : 0} /></mesh>
-                    <Text position={[0.7, h + 0.15, 0]} fontSize={0.12} color="#22c55e" anchorX="center" outlineWidth={0.01} outlineColor="#000">BIN {b + 1}</Text>
+                    <mesh position={[0, levelHeight, 0]}><boxGeometry args={[w, 0.08, d]} /><meshStandardMaterial color={c} emissive={p.isHighlighted ? '#DC2626' : '#000'} emissiveIntensity={p.isHighlighted ? 0.3 : 0} /></mesh>
+                    <Text position={[Math.max(0.25, hw - 0.2), levelHeight + 0.15, 0]} fontSize={0.12} color="#22c55e" anchorX="center" outlineWidth={0.01} outlineColor="#000">BIN {b + 1}</Text>
                 </group>
             ))}
-            <Text position={[0, 3.3, 0]} fontSize={0.25} color="#fbbf24" anchorX="center" fontWeight="bold" outlineWidth={0.02} outlineColor="#000">{p.label || 'SHELF'}</Text>
-            <Text position={[0, 3.0, 0]} fontSize={0.1} color="#94a3b8" anchorX="center">4-LAYER</Text>
-            {p.isHighlighted && <pointLight position={[0, 1.5, 0]} color="#DC2626" intensity={2} distance={3} />}
+            <Text position={[0, h + 0.25, 0]} fontSize={0.25} color="#fbbf24" anchorX="center" fontWeight="bold" outlineWidth={0.02} outlineColor="#000">{p.label || 'SHELF'}</Text>
+            <Text position={[0, h + 0.02, 0]} fontSize={0.1} color="#334155" anchorX="center">4-LAYER</Text>
+            {p.isHighlighted && <pointLight position={[0, h / 2, 0]} color="#DC2626" intensity={2} distance={3} />}
         </Wrap>
     );
 };
@@ -387,7 +396,7 @@ export const Shelf4Layer = (p: ObjProps) => {
 // ─── 2-Layer Shelf (Cabinet) ─────────────────────────────────
 export const Shelf2Layer = (p: ObjProps) => {
     const c = p.isHighlighted ? '#DC2626' : '#64748b';
-    const [w, h, d] = p.size || [1.5, 1.2, 0.8];
+    const [w, h, d] = getSize('shelf2', p.size);
     const hw = w / 2, hd = d / 2;
     return (
         <Wrap {...p}>
@@ -407,43 +416,61 @@ export const Shelf2Layer = (p: ObjProps) => {
 };
 
 // ─── Display Table ───────────────────────────────────────────
-export const DisplayTable = (p: ObjProps) => (
-    <Wrap {...p}>
-        <mesh position={[0, 0.4, 0]}><boxGeometry args={[2, 0.08, 1]} /><meshStandardMaterial color="#8b5cf6" /></mesh>
-        {[[-0.8, 0, -0.4], [0.8, 0, -0.4], [-0.8, 0, 0.4], [0.8, 0, 0.4]].map((v, i) => (
-            <mesh key={i} position={[v[0], 0.2, v[2]]}><cylinderGeometry args={[0.05, 0.05, 0.4]} /><meshStandardMaterial color="#64748b" /></mesh>
-        ))}
-        <Text position={[0, 0.6, 0]} fontSize={0.15} color="#fff" anchorX="center">{p.label}</Text>
-    </Wrap>
-);
+export const DisplayTable = (p: ObjProps) => {
+    const [w, h, d] = getSize('table', p.size);
+    const hw = w / 2;
+    const hd = d / 2;
+
+    return (
+        <Wrap {...p}>
+            <mesh position={[0, h, 0]}><boxGeometry args={[w, 0.08, d]} /><meshStandardMaterial color="#8b5cf6" /></mesh>
+            {[[-hw + 0.18, -hd + 0.18], [hw - 0.18, -hd + 0.18], [-hw + 0.18, hd - 0.18], [hw - 0.18, hd - 0.18]].map((v, i) => (
+                <mesh key={i} position={[v[0], h / 2, v[1]]}><cylinderGeometry args={[0.05, 0.05, h]} /><meshStandardMaterial color="#64748b" /></mesh>
+            ))}
+            <Text position={[0, h + 0.2, 0]} fontSize={0.15} color="#fff" anchorX="center">{p.label}</Text>
+        </Wrap>
+    );
+};
 
 // ─── Display Stand ───────────────────────────────────────────
-export const DisplayStand = (p: ObjProps) => (
-    <Wrap {...p}>
-        <mesh position={[0, 0.75, 0]}><boxGeometry args={[0.8, 1.5, 0.3]} /><meshStandardMaterial color="#f59e0b" /></mesh>
-        <mesh position={[0, 0.05, 0]}><boxGeometry args={[1, 0.1, 0.5]} /><meshStandardMaterial color="#374151" /></mesh>
-        <Text position={[0, 1.6, 0]} fontSize={0.12} color="#fff" anchorX="center">{p.label}</Text>
-    </Wrap>
-);
+export const DisplayStand = (p: ObjProps) => {
+    const [w, h, d] = getSize('stand', p.size);
+
+    return (
+        <Wrap {...p}>
+            <mesh position={[0, h / 2, 0]}><boxGeometry args={[w, h, Math.max(0.1, d * 0.65)]} /><meshStandardMaterial color="#f59e0b" /></mesh>
+            <mesh position={[0, 0.05, 0]}><boxGeometry args={[Math.max(w * 1.2, w + 0.2), 0.1, d]} /><meshStandardMaterial color="#374151" /></mesh>
+            <Text position={[0, h + 0.2, 0]} fontSize={0.12} color="#fff" anchorX="center">{p.label}</Text>
+        </Wrap>
+    );
+};
 
 // ─── Signage ─────────────────────────────────────────────────
-export const Signage = (p: ObjProps) => (
-    <Wrap {...p}>
-        <mesh position={[0, 2, 0]}><boxGeometry args={[2, 0.8, 0.1]} /><meshStandardMaterial color="#dc2626" emissive="#dc2626" emissiveIntensity={0.2} /></mesh>
-        <mesh position={[0, 1, 0]}><cylinderGeometry args={[0.05, 0.05, 2]} /><meshStandardMaterial color="#64748b" /></mesh>
-        <Text position={[0, 2, 0.1]} fontSize={0.2} color="#fff" anchorX="center">{p.label}</Text>
-    </Wrap>
-);
+export const Signage = (p: ObjProps) => {
+    const [w, h, d] = getSize('signage', p.size);
+
+    return (
+        <Wrap {...p}>
+            <mesh position={[0, h, 0]}><boxGeometry args={[w, Math.max(0.35, h * 0.42), d]} /><meshStandardMaterial color="#dc2626" emissive="#dc2626" emissiveIntensity={0.2} /></mesh>
+            <mesh position={[0, h / 2, 0]}><cylinderGeometry args={[0.05, 0.05, h]} /><meshStandardMaterial color="#64748b" /></mesh>
+            <Text position={[0, h, d / 2 + 0.04]} fontSize={Math.min(0.28, Math.max(0.12, w / 10))} color="#fff" anchorX="center">{p.label}</Text>
+        </Wrap>
+    );
+};
 
 // ─── Counter ─────────────────────────────────────────────────
-export const Counter = (p: ObjProps) => (
-    <Wrap {...p}>
-        <mesh position={[0, 0.5, 0]}><boxGeometry args={[3, 1, 1]} /><meshStandardMaterial color="#374151" /></mesh>
-        <mesh position={[0, 1.05, 0]}><boxGeometry args={[3.2, 0.1, 1.2]} /><meshStandardMaterial color="#1f2937" /></mesh>
-        <mesh position={[0, 0.5, 0.51]}><boxGeometry args={[3, 0.8, 0.02]} /><meshStandardMaterial color="#dc2626" emissive="#dc2626" emissiveIntensity={0.2} /></mesh>
-        <Text position={[0, 1.5, 0]} fontSize={0.18} color="#dc2626" anchorX="center">{p.label}</Text>
-    </Wrap>
-);
+export const Counter = (p: ObjProps) => {
+    const [w, h, d] = getSize('counter', p.size);
+
+    return (
+        <Wrap {...p}>
+            <mesh position={[0, h / 2, 0]}><boxGeometry args={[w, h, d]} /><meshStandardMaterial color="#374151" /></mesh>
+            <mesh position={[0, h + 0.05, 0]}><boxGeometry args={[w + 0.2, 0.1, d + 0.2]} /><meshStandardMaterial color="#1f2937" /></mesh>
+            <mesh position={[0, h / 2, d / 2 + 0.015]}><boxGeometry args={[w, Math.max(0.2, h * 0.8), 0.03]} /><meshStandardMaterial color="#dc2626" emissive="#dc2626" emissiveIntensity={0.2} /></mesh>
+            <Text position={[0, h + 0.45, 0]} fontSize={0.18} color="#dc2626" anchorX="center">{p.label}</Text>
+        </Wrap>
+    );
+};
 
 // ─── Stairs (L-Shaped) ───────────────────────────────────────
 export const Stairs = (p: ObjProps) => {
@@ -453,8 +480,10 @@ export const Stairs = (p: ObjProps) => {
         return () => { document.body.style.cursor = 'auto'; };
     }, [hovered, p.editMode]);
     const sc = '#d4a574', se = '#c4956a';
+    const [w, h, d] = getSize('stairs', p.size);
+    const scale: [number, number, number] = [w / 3.5, h / 3.4, d / 4.2];
     const content = (
-        <group>
+        <group scale={scale}>
             {Array.from({ length: 5 }, (_, i) => (
                 <group key={`lo-${i}`}>
                     <mesh position={[0, i * 0.3 + 0.15, i * 0.4]}><boxGeometry args={[2, 0.2, 0.4]} /><meshStandardMaterial color={sc} /></mesh>
@@ -485,13 +514,17 @@ export const Stairs = (p: ObjProps) => {
 };
 
 // ─── Room ────────────────────────────────────────────────────
-export const Room = (p: ObjProps) => (
-    <Wrap {...p}>
-        <mesh position={[0, 1.5, 0]}><boxGeometry args={[2.5, 3, 2.5]} /><meshStandardMaterial color={p.color || '#374151'} transparent opacity={0.85} /></mesh>
-        <mesh position={[0, 1, 1.26]}><boxGeometry args={[0.8, 2, 0.05]} /><meshStandardMaterial color="#1f2937" /></mesh>
-        <Text position={[0, 3.2, 0]} fontSize={0.18} color="#fff" anchorX="center">{p.label}</Text>
-    </Wrap>
-);
+export const Room = (p: ObjProps) => {
+    const [w, h, d] = getSize('room', p.size);
+
+    return (
+        <Wrap {...p}>
+            <mesh position={[0, h / 2, 0]}><boxGeometry args={[w, h, d]} /><meshStandardMaterial color={p.color || '#374151'} transparent opacity={0.78} /></mesh>
+            <mesh position={[0, Math.min(1, h / 2), d / 2 + 0.03]}><boxGeometry args={[Math.min(w * 0.5, 0.9), Math.min(h * 0.75, 2), 0.06]} /><meshStandardMaterial color="#1f2937" /></mesh>
+            <Text position={[0, h + 0.25, 0]} fontSize={0.18} color="#fff" anchorX="center">{p.label}</Text>
+        </Wrap>
+    );
+};
 
 // ─── Entrance (Animated doors) ───────────────────────────────
 export const Entrance = (p: ObjProps) => {
@@ -501,57 +534,68 @@ export const Entrance = (p: ObjProps) => {
         if (left.current) left.current.rotation.y = THREE.MathUtils.lerp(left.current.rotation.y, open ? -Math.PI / 3 : 0, 0.05);
         if (right.current) right.current.rotation.y = THREE.MathUtils.lerp(right.current.rotation.y, open ? Math.PI / 3 : 0, 0.05);
     });
+    const [w, h, d] = getSize('entrance', p.size);
+    const doorWidth = Math.max(0.35, w * 0.32);
+
     return (
         <Wrap {...p}>
-            <mesh position={[0, 1.5, 0]}><boxGeometry args={[3.5, 3, 0.2]} /><meshStandardMaterial color="#1f2937" /></mesh>
-            <mesh position={[0, 1.3, 0]}><boxGeometry args={[2.5, 2.6, 0.3]} /><meshStandardMaterial color="#0f172a" /></mesh>
-            <group ref={left} position={[-0.6, 1.3, 0.1]}><mesh position={[-0.5, 0, 0]}><boxGeometry args={[1, 2.5, 0.08]} /><meshStandardMaterial color="#475569" /></mesh></group>
-            <group ref={right} position={[0.6, 1.3, 0.1]}><mesh position={[0.5, 0, 0]}><boxGeometry args={[1, 2.5, 0.08]} /><meshStandardMaterial color="#475569" /></mesh></group>
-            <mesh position={[0, 0.02, 1]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[2, 1]} /><meshStandardMaterial color="#dc2626" /></mesh>
-            <Text position={[0, 3.3, 0]} fontSize={0.25} color="#10b981" anchorX="center">{p.label}</Text>
+            <mesh position={[0, h / 2, 0]}><boxGeometry args={[w, h, d]} /><meshStandardMaterial color="#1f2937" /></mesh>
+            <mesh position={[0, h * 0.45, d / 2 + 0.03]}><boxGeometry args={[Math.max(w - 0.8, 0.6), Math.max(h - 0.5, 0.8), 0.08]} /><meshStandardMaterial color="#0f172a" /></mesh>
+            <group ref={left} position={[-doorWidth * 0.6, h * 0.45, d / 2 + 0.08]}><mesh position={[-doorWidth / 2, 0, 0]}><boxGeometry args={[doorWidth, Math.max(h - 0.7, 0.8), 0.08]} /><meshStandardMaterial color="#475569" /></mesh></group>
+            <group ref={right} position={[doorWidth * 0.6, h * 0.45, d / 2 + 0.08]}><mesh position={[doorWidth / 2, 0, 0]}><boxGeometry args={[doorWidth, Math.max(h - 0.7, 0.8), 0.08]} /><meshStandardMaterial color="#475569" /></mesh></group>
+            <mesh position={[0, 0.02, d / 2 + 0.7]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[Math.max(1.4, w * 0.55), 1]} /><meshStandardMaterial color="#dc2626" /></mesh>
+            <Text position={[0, h + 0.3, 0]} fontSize={0.25} color="#10b981" anchorX="center">{p.label}</Text>
         </Wrap>
     );
 };
 
 // ─── Parking ─────────────────────────────────────────────────
-export const Parking = (p: ObjProps) => (
-    <Wrap {...p}>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}><planeGeometry args={[6, 8]} /><meshStandardMaterial color="#2d3748" /></mesh>
-        {[0, 1, 2].map(i => <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, -2.5 + i * 2.5]}><planeGeometry args={[5, 0.08]} /><meshStandardMaterial color="#f0f0f0" /></mesh>)}
-        <mesh position={[-3, 1.5, 0]}><boxGeometry args={[0.3, 3, 8]} /><meshStandardMaterial color="#1e293b" /></mesh>
-        <mesh position={[0, 1.5, -4]}><boxGeometry args={[6, 3, 0.3]} /><meshStandardMaterial color="#1e293b" /></mesh>
-        <Text position={[0, 0.1, 2.5]} fontSize={0.4} color="#fff" rotation={[-Math.PI / 2, 0, 0]}>{p.label}</Text>
-    </Wrap>
-);
+export const Parking = (p: ObjProps) => {
+    const [w, h, d] = getSize('parking', p.size);
+
+    return (
+        <Wrap {...p}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}><planeGeometry args={[w, d]} /><meshStandardMaterial color="#2d3748" /></mesh>
+            {[0, 1, 2].map(i => <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, -d / 2 + (i + 1) * (d / 4)]}><planeGeometry args={[Math.max(w - 1, 1), 0.08]} /><meshStandardMaterial color="#f0f0f0" /></mesh>)}
+            <mesh position={[-w / 2, Math.max(1.5, h / 2), 0]}><boxGeometry args={[0.3, Math.max(3, h), d]} /><meshStandardMaterial color="#1e293b" /></mesh>
+            <mesh position={[0, Math.max(1.5, h / 2), -d / 2]}><boxGeometry args={[w, Math.max(3, h), 0.3]} /><meshStandardMaterial color="#1e293b" /></mesh>
+            <Text position={[0, 0.1, d * 0.3]} fontSize={0.4} color="#fff" rotation={[-Math.PI / 2, 0, 0]}>{p.label}</Text>
+        </Wrap>
+    );
+};
 
 // ─── Wall ────────────────────────────────────────────────────
 export const Wall = (p: ObjProps) => {
-    const s = p.size || [10, 3, 0.3];
+    const s = getSize('wall', p.size);
     return (
         <Wrap {...p}>
-            <mesh position={[0, s[1] / 2, 0]}><boxGeometry args={s as [number, number, number]} /><meshStandardMaterial color="#0f172a" /></mesh>
+            <mesh position={[0, s[1] / 2, 0]}><boxGeometry args={s as [number, number, number]} /><meshStandardMaterial color="#1e293b" /></mesh>
             {p.editMode && <Text position={[0, s[1] + 0.3, 0]} fontSize={0.2} color="#fff" anchorX="center">{p.label}</Text>}
         </Wrap>
     );
 };
 
 // ─── Custom Label ────────────────────────────────────────────
-export const CustomLabel = (p: ObjProps) => (
-    <Wrap {...p} label={`Label: ${p.label}`}>
-        <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[3, 0.6]} /><meshStandardMaterial color="#3b82f6" transparent opacity={0.7} /></mesh>
-        <Text position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.3} color="#fff" anchorX="center">{p.label}</Text>
-    </Wrap>
-);
+export const CustomLabel = (p: ObjProps) => {
+    const [w, , d] = getSize('label', p.size);
+
+    return (
+        <Wrap {...p} label={`Label: ${p.label}`}>
+            <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[w, d]} /><meshStandardMaterial color="#3b82f6" transparent opacity={0.7} /></mesh>
+            <Text position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={Math.min(0.3, Math.max(0.14, w / 12))} color="#fff" anchorX="center">{p.label}</Text>
+        </Wrap>
+    );
+};
 
 // ─── Floor ───────────────────────────────────────────────────
 export const FloorObj = (p: ObjProps & { floor?: number; isVisible?: boolean }) => {
     if (p.isVisible === false) return null;
-    const s = p.size || [10, 0.2, 10];
+    const s = getSize('floor', p.size);
     const floor = p.floor || 1;
     return (
         <Wrap {...p} label={`Floor ${floor}`}>
-            <mesh position={[0, -s[1] / 2 - 0.01, 0]}><boxGeometry args={s as [number, number, number]} /><meshStandardMaterial color={p.color || (floor === 1 ? '#1e293b' : '#334155')} /></mesh>
-            {p.editMode && <gridHelper args={[Math.max(s[0], s[2]), Math.max(s[0], s[2]), '#000000', '#000000']} position={[0, s[1] + 0.01, 0]} />}
+            <mesh position={[0, -s[1] / 2 - 0.01, 0]}><boxGeometry args={s as [number, number, number]} /><meshStandardMaterial color={p.color || (floor === 1 ? '#64748b' : '#475569')} /></mesh>
+            {p.editMode && <gridHelper args={[Math.max(s[0], s[2]), Math.max(s[0], s[2]), '#cbd5e1', '#94a3b8']} position={[0, s[1] + 0.01, 0]} />}
         </Wrap>
     );
 };

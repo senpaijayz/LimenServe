@@ -30,6 +30,7 @@ export interface SavedLayout {
     layout_data: string;
     is_default?: boolean;
     created_at?: string;
+    updated_at?: string;
 }
 
 export interface HighlightedPart {
@@ -60,6 +61,74 @@ export const OBJECT_TYPES: Record<string, { label: string; icon: string }> = {
 };
 
 // ─── Default Layout ──────────────────────────────────────────
+export const SIZE_LIMITS = {
+    min: 0.1,
+    objectMax: 30,
+    floorMax: 80,
+    heightMax: 20,
+};
+
+export const OBJECT_SIZE_DEFAULTS: Record<string, [number, number, number]> = {
+    shelf: [1.8, 3.2, 0.9],
+    shelf2: [1.5, 1.2, 0.8],
+    table: [2, 0.8, 1],
+    stand: [0.8, 1.5, 0.5],
+    signage: [2, 2, 0.2],
+    counter: [3.2, 1.1, 1.2],
+    stairs: [3.5, 3.4, 4.2],
+    room: [2.5, 3, 2.5],
+    entrance: [3.5, 3, 0.4],
+    parking: [6, 0.1, 8],
+    wall: [10, 3, 0.3],
+    label: [3, 0.1, 0.6],
+    floor: [24, 0.2, 24],
+};
+
+export function getDefaultObjectSize(type: string): [number, number, number] {
+    return [...(OBJECT_SIZE_DEFAULTS[type] || [1.5, 1.2, 0.8])] as [number, number, number];
+}
+
+function clampDimension(value: unknown, max: number, fallback: number) {
+    const numericValue = Number(value);
+
+    if (!Number.isFinite(numericValue)) {
+        return fallback;
+    }
+
+    return Math.min(Math.max(numericValue, SIZE_LIMITS.min), max);
+}
+
+export function normalizeObjectSize(type: string, size?: [number, number, number] | number[]): [number, number, number] {
+    const fallback = getDefaultObjectSize(type);
+    const widthMax = type === 'floor' ? SIZE_LIMITS.floorMax : SIZE_LIMITS.objectMax;
+    const depthMax = type === 'floor' ? SIZE_LIMITS.floorMax : SIZE_LIMITS.objectMax;
+
+    return [
+        clampDimension(size?.[0], widthMax, fallback[0]),
+        clampDimension(size?.[1], SIZE_LIMITS.heightMax, fallback[1]),
+        clampDimension(size?.[2], depthMax, fallback[2]),
+    ];
+}
+
+function sanitizeLayout(layout: { objects?: LayoutObject[] } | null | undefined): { objects: LayoutObject[] } {
+    const sourceObjects = Array.isArray(layout?.objects) ? layout.objects : [];
+
+    return {
+        objects: sourceObjects
+            .filter((object): object is LayoutObject => Boolean(object && typeof object === 'object' && object.id && object.type))
+            .map((object) => ({
+                ...object,
+                x: Number.isFinite(Number(object.x)) ? Number(object.x) : 0,
+                z: Number.isFinite(Number(object.z)) ? Number(object.z) : 0,
+                rotation: Number.isFinite(Number(object.rotation)) ? Number(object.rotation) : 0,
+                floor: Number(object.floor) === 2 ? 2 : 1,
+                label: object.label || OBJECT_TYPES[object.type]?.label || object.type,
+                size: normalizeObjectSize(object.type, object.size),
+                locked: Boolean(object.locked),
+            })),
+    };
+}
+
 const getDefaultLayout = (): { objects: LayoutObject[] } => ({
     objects: [
         // Floor 1 base
@@ -134,14 +203,12 @@ function parseSavedLayoutData(layoutData?: string | null) {
         throw new Error('The saved stockroom scene is malformed.');
     }
 
-    const objects = parsed.objects.filter((object: LayoutObject | null) => object && typeof object === 'object');
-    if (objects.length === 0) {
+    const sanitizedLayout = sanitizeLayout(parsed);
+    if (sanitizedLayout.objects.length === 0) {
         throw new Error('The selected layout has no 3D objects yet. Showing the safe default shell.');
     }
 
-    return {
-        objects,
-    };
+    return sanitizedLayout;
 }
 
 // ─── Store ───────────────────────────────────────────────────
@@ -160,6 +227,9 @@ interface PartsMappingState {
     selectedId: string | null;
     isDragging: boolean;
     isLoading: boolean;
+    isSaving: boolean;
+    isDirty: boolean;
+    lastSavedAt: string | null;
     initializationError: string | null;
 
     // Pathfinding
@@ -211,6 +281,9 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
     selectedId: null,
     isDragging: false,
     isLoading: true,
+    isSaving: false,
+    isDirty: false,
+    lastSavedAt: null,
     initializationError: null,
     highlightedPart: null,
     pathPoints: [],
@@ -246,15 +319,19 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
                     currentLayoutId: toLoad.id,
                     currentLayoutName: toLoad.name,
                     isLoading: false,
+                    isDirty: false,
+                    lastSavedAt: toLoad.updated_at || toLoad.created_at || null,
                     initializationError: null,
                 });
                 localStorage.setItem('lastUsedLayoutId', String(toLoad.id));
             } catch (error) {
                 set({
-                    layout: getDefaultLayout(),
+                    layout: sanitizeLayout(getDefaultLayout()),
                     currentLayoutId: null,
                     currentLayoutName: 'Default',
                     isLoading: false,
+                    isDirty: false,
+                    lastSavedAt: null,
                     initializationError: error instanceof Error
                         ? error.message
                         : 'Failed to load the live stockroom layout. Showing the safe default shell.',
@@ -286,8 +363,9 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
 
     saveLayout: async () => {
         const { layout, currentLayoutId, currentLayoutName, savedLayouts } = get();
-        const data = JSON.stringify(layout);
-        localStorage.setItem('stockroomLayoutV2', data);
+        const sanitizedLayout = sanitizeLayout(layout);
+        const data = JSON.stringify(sanitizedLayout);
+        set({ isSaving: true, initializationError: null });
         try {
             if (currentLayoutId) {
                 const updatedLayout = await updatePartsMappingLayout(currentLayoutId, {
@@ -295,8 +373,12 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
                 }) as SavedLayout;
 
                 set({
+                    layout: parseSavedLayoutData(updatedLayout.layout_data || data),
                     savedLayouts: savedLayouts.map(l => l.id === currentLayoutId ? updatedLayout : l),
                     currentLayoutName: updatedLayout.name,
+                    isSaving: false,
+                    isDirty: false,
+                    lastSavedAt: updatedLayout.updated_at || new Date().toISOString(),
                 });
                 return;
             }
@@ -313,17 +395,27 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
             }) as SavedLayout;
 
             set({
+                layout: parseSavedLayoutData(insertedLayout.layout_data || data),
                 savedLayouts: [insertedLayout, ...savedLayouts],
                 currentLayoutId: insertedLayout.id,
                 currentLayoutName: insertedLayout.name,
+                isSaving: false,
+                isDirty: false,
+                lastSavedAt: insertedLayout.updated_at || insertedLayout.created_at || new Date().toISOString(),
             });
             localStorage.setItem('lastUsedLayoutId', String(insertedLayout.id));
-        } catch (e) { console.error('Save failed', e); throw e; }
+        } catch (e) {
+            set({ isSaving: false });
+            console.error('Save failed', e);
+            throw e;
+        }
     },
 
     saveLayoutAs: async (name) => {
         const { layout, savedLayouts } = get();
-        const data = JSON.stringify(layout);
+        const sanitizedLayout = sanitizeLayout(layout);
+        const data = JSON.stringify(sanitizedLayout);
+        set({ isSaving: true, initializationError: null });
         try {
             const trimmedName = name.trim();
             if (!trimmedName) {
@@ -336,10 +428,21 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
                 layoutData: data,
                 isDefault: savedLayouts.length === 0,
             }) as SavedLayout;
-            set({ savedLayouts: [result, ...savedLayouts], currentLayoutId: result.id, currentLayoutName: result.name });
-            localStorage.setItem('stockroomLayoutV2', data);
+            set({
+                layout: parseSavedLayoutData(result.layout_data || data),
+                savedLayouts: [result, ...savedLayouts],
+                currentLayoutId: result.id,
+                currentLayoutName: result.name,
+                isSaving: false,
+                isDirty: false,
+                lastSavedAt: result.updated_at || result.created_at || new Date().toISOString(),
+            });
             localStorage.setItem('lastUsedLayoutId', String(result.id));
-        } catch (e) { console.error('Save As failed', e); throw e; }
+        } catch (e) {
+            set({ isSaving: false });
+            console.error('Save As failed', e);
+            throw e;
+        }
     },
 
     loadLayout: (l) => {
@@ -350,16 +453,19 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
                 currentLayoutId: l.id,
                 currentLayoutName: l.name,
                 selectedId: null,
+                isDirty: false,
+                lastSavedAt: l.updated_at || l.created_at || null,
                 initializationError: null,
             });
-            localStorage.setItem('stockroomLayoutV2', l.layout_data);
             localStorage.setItem('lastUsedLayoutId', String(l.id));
         } catch (error) {
             set({
-                layout: getDefaultLayout(),
+                layout: sanitizeLayout(getDefaultLayout()),
                 currentLayoutId: null,
                 currentLayoutName: 'Default',
                 selectedId: null,
+                isDirty: false,
+                lastSavedAt: null,
                 initializationError: error instanceof Error
                     ? error.message
                     : 'The selected stockroom scene could not be opened.',
@@ -374,6 +480,8 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
                 savedLayouts: s.savedLayouts.filter(l => l.id !== id),
                 currentLayoutId: s.currentLayoutId === id ? null : s.currentLayoutId,
                 currentLayoutName: s.currentLayoutId === id ? 'Unsaved' : s.currentLayoutName,
+                isDirty: s.currentLayoutId === id ? true : s.isDirty,
+                lastSavedAt: s.currentLayoutId === id ? null : s.lastSavedAt,
             }));
             if (get().currentLayoutId === null) {
                 localStorage.removeItem('lastUsedLayoutId');
@@ -390,71 +498,89 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
     },
 
     resetLayout: () => {
-        const def = getDefaultLayout();
+        const { currentLayoutId, currentLayoutName } = get();
+        const def = sanitizeLayout(getDefaultLayout());
         set({
             layout: def,
             selectedId: null,
-            currentLayoutId: null,
-            currentLayoutName: 'Default',
+            currentLayoutId,
+            currentLayoutName: currentLayoutId ? currentLayoutName : 'Default',
+            isDirty: true,
+            lastSavedAt: null,
             initializationError: null,
         });
-        localStorage.setItem('stockroomLayoutV2', JSON.stringify(def));
     },
 
     addObject: (type) => {
         const { layout, currentFloor } = get();
         const id = `${type}-${Date.now()}`;
-        const defaults: Record<string, any> = {
-            wall: { size: [10, 3, 0.3] }, shelf2: { size: [1.5, 1.2, 0.8] }, floor: { size: [10, 0.2, 10] },
+        const obj: LayoutObject = {
+            id,
+            type,
+            x: 0,
+            z: 0,
+            rotation: 0,
+            floor: currentFloor,
+            label: `New ${OBJECT_TYPES[type]?.label || type}`,
+            size: getDefaultObjectSize(type),
         };
-        const obj: LayoutObject = { id, type, x: 0, z: 0, rotation: 0, floor: currentFloor, label: `New ${OBJECT_TYPES[type]?.label || type}`, ...defaults[type] };
-        set({ layout: { ...layout, objects: [...layout.objects, obj] }, selectedId: id });
+        set({ layout: { ...layout, objects: [...layout.objects, obj] }, selectedId: id, isDirty: true });
     },
 
     deleteSelected: () => {
         const { layout, selectedId } = get();
         if (!selectedId) return;
-        set({ layout: { ...layout, objects: layout.objects.filter(o => o.id !== selectedId) }, selectedId: null });
+        set({ layout: { ...layout, objects: layout.objects.filter(o => o.id !== selectedId) }, selectedId: null, isDirty: true });
     },
 
     updatePosition: (id, x, z) => set(s => ({
         layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === id ? { ...o, x, z } : o) },
+        isDirty: true,
     })),
 
     updateRotation: (id, rot) => set(s => ({
         layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === id ? { ...o, rotation: rot } : o) },
+        isDirty: true,
     })),
 
     rotateSelected: (delta) => {
         const { selectedId } = get();
         if (!selectedId) return;
-        set(s => ({ layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === selectedId ? { ...o, rotation: (o.rotation || 0) + delta } : o) } }));
+        set(s => ({ layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === selectedId ? { ...o, rotation: (o.rotation || 0) + delta } : o) }, isDirty: true }));
     },
 
     updateLabel: (id, label) => set(s => ({
         layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === id ? { ...o, label } : o) },
+        isDirty: true,
     })),
 
     updateObjectSize: (id, dim, val) => {
         set(s => {
             const obj = s.layout.objects.find(o => o.id === id);
             if (!obj) return s;
-            const defSize: [number, number, number] = obj.type === 'wall' ? [10, 3, 0.3] : obj.type === 'floor' ? [10, 0.2, 10] : [1.5, 1.2, 0.8];
-            const curr = obj.size || defSize;
+            const curr = normalizeObjectSize(obj.type, obj.size);
             const newSize: [number, number, number] = [...curr];
             if (dim === 'width') newSize[0] = val;
             else if (dim === 'height') newSize[1] = val;
             else newSize[2] = val;
-            return { layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === id ? { ...o, size: newSize } : o) } };
+            return {
+                layout: {
+                    ...s.layout,
+                    objects: s.layout.objects.map(o => o.id === id ? { ...o, size: normalizeObjectSize(o.type, newSize) } : o),
+                },
+                isDirty: true,
+            };
         });
     },
 
     updateObjectField: (id, field, value) => set(s => ({
         layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === id ? { ...o, [field]: value } : o) },
+        isDirty: true,
     })),
 
     toggleLock: (id) => set(s => ({
         layout: { ...s.layout, objects: s.layout.objects.map(o => o.id === id ? { ...o, locked: !o.locked } : o) },
+        isDirty: true,
     })),
 
     stats: () => {

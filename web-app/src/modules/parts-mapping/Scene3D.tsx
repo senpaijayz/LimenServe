@@ -1,5 +1,4 @@
 import React, { useRef } from 'react';
-import { useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { usePartsMappingStore } from './usePartsMappingStore';
 import {
@@ -18,7 +17,6 @@ export default function Scene3D() {
         selectedId,
         selectObject,
         updatePosition,
-        updateRotation,
         viewMode,
         isDragging,
         setDragging,
@@ -37,10 +35,12 @@ export default function Scene3D() {
 
     return (
         <>
-            <ambientLight intensity={0.7} />
-            <directionalLight position={[10, 25, 15]} intensity={1.1} castShadow />
-            <directionalLight position={[-10, 20, -10]} intensity={0.4} />
-            <pointLight position={[0, 15, 0]} intensity={0.5} distance={50} />
+            <color attach="background" args={['#dbeafe']} />
+            <ambientLight intensity={0.95} />
+            <hemisphereLight args={['#f8fafc', '#64748b', 0.85]} />
+            <directionalLight position={[10, 25, 15]} intensity={1.15} castShadow />
+            <directionalLight position={[-10, 20, -10]} intensity={0.55} />
+            <pointLight position={[0, 15, 0]} intensity={0.35} distance={50} />
 
             {/* Current Floor Objects */}
             {layout.objects
