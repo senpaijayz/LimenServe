@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/constants';
-import { ensureSessionLoaded, getCachedAccessToken } from './supabase';
+import { getCachedAccessToken, getFreshAccessToken } from './supabase';
 
 export const DEFAULT_API_TIMEOUT_MS = 15000;
 export const STOCKROOM_API_TIMEOUT_MS = 10000;
@@ -25,8 +25,7 @@ apiClient.interceptors.request.use(async (config) => {
 
   if (!token) {
     try {
-      const session = await ensureSessionLoaded();
-      token = session?.access_token ?? null;
+      token = await getFreshAccessToken();
     } catch (error) {
       if (error?.name === 'AbortError') {
         await wait(50);
@@ -44,6 +43,30 @@ apiClient.interceptors.request.use(async (config) => {
 
   return config;
 });
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error?.config;
+    const isAuthFailure = error?.response?.status === 401
+      && String(error?.response?.data?.error || '').toLowerCase().includes('authentication required');
+
+    if (!isAuthFailure || !originalRequest || originalRequest.__limenAuthRetried) {
+      return Promise.reject(error);
+    }
+
+    originalRequest.__limenAuthRetried = true;
+
+    const token = await getFreshAccessToken({ forceRefresh: true });
+    if (!token) {
+      return Promise.reject(error);
+    }
+
+    originalRequest.headers = originalRequest.headers ?? {};
+    originalRequest.headers.Authorization = `Bearer ${token}`;
+    return apiClient(originalRequest);
+  },
+);
 
 export function extractApiError(error, fallbackMessage) {
   if (error?.code === 'ECONNABORTED' || String(error?.message || '').toLowerCase().includes('timeout')) {
@@ -76,6 +99,10 @@ export function getFriendlyApiErrorMessage(message, fallbackMessage = SERVICE_UN
     || /schema must be one of/i.test(text)
     || /not included in the schema cache/i.test(text)) {
     return DATA_SERVICE_CONFIGURATION_MESSAGE;
+  }
+
+  if (/authentication required/i.test(text)) {
+    return 'Your staff session was not attached to this request. Please refresh the page or sign in again.';
   }
 
   return text;

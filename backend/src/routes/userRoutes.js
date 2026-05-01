@@ -49,6 +49,12 @@ function isMissingProfileSyncRpc(error) {
     || message.includes('Could not find the function');
 }
 
+function isAmbiguousProfileSyncRpc(error) {
+  const message = String(error?.message || '');
+  return error?.code === '42702'
+    || (message.includes('user_id') && message.includes('ambiguous'));
+}
+
 function normalizeUserSaveError(error) {
   const message = String(error?.message || '');
   if (message.includes('app.user_profiles') || message.includes('handle_auth_user')) {
@@ -67,8 +73,8 @@ async function syncUserProfile({ userId, email, fullName, role }) {
   });
 
   if (error) {
-    if (isMissingProfileSyncRpc(error)) {
-      console.warn('admin_upsert_user_profile RPC is not installed; using Supabase Auth metadata as the user source.');
+    if (isMissingProfileSyncRpc(error) || isAmbiguousProfileSyncRpc(error)) {
+      console.warn(`admin_upsert_user_profile RPC is unavailable or stale (${error.message}); using Supabase Auth metadata as the user source.`);
       return null;
     }
     throw error;

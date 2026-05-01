@@ -6,11 +6,33 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'mock-key';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+const SESSION_EXPIRY_SKEW_SECONDS = 60;
+
 let cachedSession;
 let sessionPromise = null;
 
 function setCachedSession(session) {
   cachedSession = session ?? null;
+}
+
+function isSessionExpiring(session) {
+  const expiresAt = Number(session?.expires_at ?? 0);
+  if (!expiresAt) {
+    return false;
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  return expiresAt - nowSeconds <= SESSION_EXPIRY_SKEW_SECONDS;
+}
+
+async function loadSessionFromSupabase() {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    throw error;
+  }
+
+  setCachedSession(data.session);
+  return cachedSession;
 }
 
 supabase.auth.onAuthStateChange((_event, session) => {
@@ -31,20 +53,40 @@ export async function ensureSessionLoaded() {
   }
 
   if (!sessionPromise) {
-    sessionPromise = supabase.auth
-      .getSession()
-      .then(({ data, error }) => {
-        if (error) {
-          throw error;
-        }
-
-        setCachedSession(data.session);
-        return cachedSession;
-      })
+    sessionPromise = loadSessionFromSupabase()
       .finally(() => {
         sessionPromise = null;
       });
   }
 
   return sessionPromise;
+}
+
+export async function getFreshAccessToken({ forceRefresh = false } = {}) {
+  let session = await ensureSessionLoaded();
+
+  if (!session && forceRefresh) {
+    session = await loadSessionFromSupabase();
+  }
+
+  if (!session) {
+    return null;
+  }
+
+  if (forceRefresh || isSessionExpiring(session)) {
+    if (session.refresh_token) {
+      const { data, error } = await supabase.auth.refreshSession({
+        refresh_token: session.refresh_token,
+      });
+
+      if (!error) {
+        setCachedSession(data.session);
+        return cachedSession?.access_token ?? null;
+      }
+    }
+
+    session = await loadSessionFromSupabase();
+  }
+
+  return session?.access_token ?? null;
 }
