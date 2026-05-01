@@ -115,6 +115,10 @@ const PublicCatalogView = () => {
     compatibility: [product.model || 'Universal'],
     description: `Genuine Mitsubishi ${product.name} for ${product.model || vehicle.displayLabel || 'Universal'}. Engineered for exact fitment.`,
   })), [products, vehicle.displayLabel]);
+  const selectedCategoryOption = useMemo(
+    () => categories.find((category) => category.value === selectedCategory),
+    [categories, selectedCategory],
+  );
 
   const totalCount = pagination.totalCount || 0;
   const totalPages = pagination.totalPages || 1;
@@ -253,25 +257,43 @@ const PublicCatalogView = () => {
             </div>
           )}
 
-          <Motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="custom-scrollbar mt-5 flex gap-2 overflow-x-auto pb-3">
-            {categories.map((category) => (
-              <button
-                key={category.value}
-                onClick={() => handleCategoryChange(category.value)}
-                className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-xl border px-4 py-2 text-xs font-bold uppercase tracking-wide transition-all duration-300 ${
-                  selectedCategory === category.value
-                    ? 'border-accent-primary bg-white text-accent-primary shadow-sm'
-                    : 'border-primary-200 bg-white/70 text-primary-500 hover:bg-white hover:text-primary-900'
-                }`}
-              >
-                {category.label}
-                <span className={`text-[10px] px-2 py-0.5 rounded-sm font-mono ${
-                  selectedCategory === category.value ? 'bg-accent-primary/10 text-accent-primary' : 'bg-primary-100 text-primary-600'
-                }`}>
-                  {category.count}
-                </span>
-              </button>
-            ))}
+          <Motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="mt-5 rounded-2xl border border-primary-200 bg-white/90 p-3 shadow-sm"
+          >
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+              <label htmlFor="catalog-category-filter" className="min-w-0">
+                <span className="mb-2 block text-xs font-bold uppercase tracking-[0.24em] text-primary-500">Category</span>
+                <div className="relative">
+                  <LayoutGrid className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
+                  <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
+                  <select
+                    id="catalog-category-filter"
+                    value={selectedCategory}
+                    onChange={(event) => handleCategoryChange(event.target.value)}
+                    className="min-h-12 w-full appearance-none rounded-xl border border-primary-200 bg-primary-50 py-3 pl-11 pr-11 text-sm font-semibold text-primary-950 outline-none transition focus:border-accent-blue focus:bg-white focus:ring-2 focus:ring-accent-blue/15"
+                  >
+                    {categories.map((category) => (
+                      <option key={category.value} value={category.value}>
+                        {category.label}{Number.isFinite(Number(category.count)) ? ` (${category.count})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600 lg:min-w-[220px]">
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-primary-400">Showing Category</p>
+                <p className="mt-1 truncate font-semibold text-primary-950">
+                  {selectedCategoryOption?.label || 'All categories'}
+                </p>
+                <p className="mt-1 text-xs text-primary-500">
+                  {selectedCategoryOption?.count ?? totalCount} matching parts
+                </p>
+              </div>
+            </div>
           </Motion.div>
         </div>
       </section>
