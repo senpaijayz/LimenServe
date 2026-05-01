@@ -161,6 +161,7 @@ function SearchBar({ onPartSelect, disabled }: { onPartSelect: (part: any) => Pr
 
 export default function PartsMapping() {
     const store = usePartsMappingStore();
+    const initializePartsMapping = usePartsMappingStore((state) => state.initialize);
     const { success, error: showError } = useToast();
     const [addMenuOpen, setAddMenuOpen] = useState(false);
     const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
@@ -176,8 +177,8 @@ export default function PartsMapping() {
     const layoutMenuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        void store.initialize();
-    }, [store]);
+        void initializePartsMapping();
+    }, [initializePartsMapping]);
 
     useEffect(() => {
         const media = window.matchMedia('(min-width: 1024px)');

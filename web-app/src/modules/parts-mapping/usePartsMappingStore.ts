@@ -105,6 +105,25 @@ const getDefaultLayout = (): { objects: LayoutObject[] } => ({
     ],
 });
 
+const INITIALIZATION_TIMEOUT_MS = 12000;
+let initializationPromise: Promise<void> | null = null;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+            reject(new Error(message));
+        }, timeoutMs);
+    });
+
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+    }) as Promise<T>;
+}
+
 function parseSavedLayoutData(layoutData?: string | null) {
     if (typeof layoutData !== 'string' || !layoutData.trim()) {
         throw new Error('The selected layout does not contain a scene payload.');
@@ -115,8 +134,13 @@ function parseSavedLayoutData(layoutData?: string | null) {
         throw new Error('The saved stockroom scene is malformed.');
     }
 
+    const objects = parsed.objects.filter((object: LayoutObject | null) => object && typeof object === 'object');
+    if (objects.length === 0) {
+        throw new Error('The selected layout has no 3D objects yet. Showing the safe default shell.');
+    }
+
     return {
-        objects: parsed.objects.filter((object: LayoutObject | null) => object && typeof object === 'object'),
+        objects,
     };
 }
 
@@ -192,17 +216,30 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
     pathPoints: [],
 
     initialize: async () => {
-        set({ isLoading: true, initializationError: null });
-        try {
-            const layouts = await getPartsMappingLayouts() as SavedLayout[];
-            set({ savedLayouts: layouts });
+        if (initializationPromise) {
+            return initializationPromise;
+        }
 
-            // Try last-used from localStorage
-            const lastId = localStorage.getItem('lastUsedLayoutId');
-            let toLoad = lastId ? layouts.find(l => l.id === lastId) : null;
-            if (!toLoad) toLoad = layouts.find(l => l.is_default) || null;
+        initializationPromise = (async () => {
+            set({ isLoading: true, initializationError: null });
+            try {
+                const layouts = await withTimeout(
+                    getPartsMappingLayouts() as Promise<SavedLayout[]>,
+                    INITIALIZATION_TIMEOUT_MS,
+                    'The stockroom layout request timed out. Showing the safe default shell.'
+                );
+                const safeLayouts = Array.isArray(layouts) ? layouts : [];
+                set({ savedLayouts: safeLayouts });
 
-            if (toLoad?.layout_data) {
+                // Try last-used from localStorage
+                const lastId = localStorage.getItem('lastUsedLayoutId');
+                let toLoad = lastId ? safeLayouts.find(l => l.id === lastId) : null;
+                if (!toLoad) toLoad = safeLayouts.find(l => l.is_default) || null;
+
+                if (!toLoad) {
+                    throw new Error('No published stockroom layout is available. Showing the safe default shell.');
+                }
+
                 const parsed = parseSavedLayoutData(toLoad.layout_data);
                 set({
                     layout: parsed,
@@ -212,25 +249,22 @@ export const usePartsMappingStore = create<PartsMappingState>((set, get) => ({
                     initializationError: null,
                 });
                 localStorage.setItem('lastUsedLayoutId', String(toLoad.id));
-            } else {
+            } catch (error) {
                 set({
                     layout: getDefaultLayout(),
+                    currentLayoutId: null,
                     currentLayoutName: 'Default',
                     isLoading: false,
-                    initializationError: layouts.length > 0 ? 'No active stockroom scene was found. Showing the safe default shell.' : null,
+                    initializationError: error instanceof Error
+                        ? error.message
+                        : 'Failed to load the live stockroom layout. Showing the safe default shell.',
                 });
             }
-        } catch (error) {
-            set({
-                layout: getDefaultLayout(),
-                currentLayoutId: null,
-                currentLayoutName: 'Default',
-                isLoading: false,
-                initializationError: error instanceof Error
-                    ? error.message
-                    : 'Failed to load the live stockroom layout. Showing the safe default shell.',
-            });
-        }
+        })().finally(() => {
+            initializationPromise = null;
+        });
+
+        return initializationPromise;
     },
 
     setFloor: (floor) => {
