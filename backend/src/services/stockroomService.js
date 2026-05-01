@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { buildRouteResponse } from './stockroomRouting.js';
+import { callRpc } from './supabaseRpc.js';
 import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
@@ -31,6 +32,13 @@ function stockroomDb() {
 
 function catalogDb() {
   return supabaseAdmin.schema('catalog');
+}
+
+function isPrivateSchemaAccessError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('invalid schema')
+    || message.includes('schema must be one of')
+    || message.includes('not included in the schema cache');
 }
 
 function dbForTable(table) {
@@ -569,23 +577,35 @@ export function buildBootstrapResponse(snapshot, user) {
 }
 
 export async function searchLocatorItems(query) {
-  const snapshot = await getStockroomSnapshot();
-  const maps = buildEntityMaps(snapshot);
+  try {
+    const snapshot = await getStockroomSnapshot();
+    const maps = buildEntityMaps(snapshot);
 
-  return snapshot.itemLocations
-    .map((itemLocation) => buildSearchRecord({ snapshot, maps, itemLocation }))
-    .filter(Boolean)
-    .map((record) => ({
-      ...record,
-      matchedBy: matchRecord(query, record),
-    }))
-    .filter((record) => Boolean(record.matchedBy))
-    .sort((left, right) => {
-      if (left.matchedBy !== right.matchedBy) {
-        return left.matchedBy.localeCompare(right.matchedBy);
-      }
-      return left.name.localeCompare(right.name);
+    return snapshot.itemLocations
+      .map((itemLocation) => buildSearchRecord({ snapshot, maps, itemLocation }))
+      .filter(Boolean)
+      .map((record) => ({
+        ...record,
+        matchedBy: matchRecord(query, record),
+      }))
+      .filter((record) => Boolean(record.matchedBy))
+      .sort((left, right) => {
+        if (left.matchedBy !== right.matchedBy) {
+          return left.matchedBy.localeCompare(right.matchedBy);
+        }
+        return left.name.localeCompare(right.name);
+      });
+  } catch (error) {
+    if (!isPrivateSchemaAccessError(error)) {
+      throw error;
+    }
+
+    const results = await callRpc('limen_stockroom_search_items', {
+      p_query: query,
+      p_limit: 25,
     });
+    return Array.isArray(results) ? results : [];
+  }
 }
 
 function buildTargetLocation(snapshot, productId) {
@@ -623,8 +643,22 @@ function buildTargetLocation(snapshot, productId) {
 }
 
 export async function getItemRouteDetails(productId, currentFloor = 1) {
-  const snapshot = await getStockroomSnapshot();
-  const targetLocation = buildTargetLocation(snapshot, productId);
+  let snapshot;
+  let targetLocation;
+
+  try {
+    snapshot = await getStockroomSnapshot();
+    targetLocation = buildTargetLocation(snapshot, productId);
+  } catch (error) {
+    if (!isPrivateSchemaAccessError(error)) {
+      throw error;
+    }
+
+    return callRpc('limen_stockroom_item_details', {
+      p_product_id: productId,
+      p_current_floor: Number(currentFloor) || 1,
+    });
+  }
 
   if (!targetLocation) {
     return null;

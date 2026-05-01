@@ -4,6 +4,7 @@ import {
   invalidateStockroomCache,
   publishLayout,
 } from './stockroomService.js';
+import { callRpc } from './supabaseRpc.js';
 
 const DEFAULT_PARTS_MAPPING_SCENE = {
   objects: [],
@@ -28,6 +29,13 @@ const KIND_TO_PARTS_MAPPING_TYPE = {
 
 function stockroomDb() {
   return supabaseAdmin.schema('stockroom');
+}
+
+function isPrivateSchemaAccessError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('invalid schema')
+    || message.includes('schema must be one of')
+    || message.includes('not included in the schema cache');
 }
 
 function normalizeScenePayload(layoutData) {
@@ -476,9 +484,18 @@ async function deleteLayoutChildren(layoutId) {
 }
 
 export async function listPartsMappingLayouts() {
-  const rows = await listLayoutRows();
-  const structuredRows = await getStructuredRowsByLayoutId(rows.map((row) => row.id));
-  return rows.map((row) => mapLayout(row, structuredRows.get(row.id)));
+  try {
+    const rows = await listLayoutRows();
+    const structuredRows = await getStructuredRowsByLayoutId(rows.map((row) => row.id));
+    return rows.map((row) => mapLayout(row, structuredRows.get(row.id)));
+  } catch (error) {
+    if (!isPrivateSchemaAccessError(error)) {
+      throw error;
+    }
+
+    const layouts = await callRpc('limen_list_parts_mapping_layouts');
+    return Array.isArray(layouts) ? layouts : [];
+  }
 }
 
 export async function createPartsMappingLayout({ name, description, layoutData, isDefault = false }) {

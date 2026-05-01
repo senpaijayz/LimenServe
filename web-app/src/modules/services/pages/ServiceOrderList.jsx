@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, Search, Clock, CheckCircle, AlertCircle, RefreshCw, Wrench } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { StatusBadge } from '../../../components/ui/Badge';
@@ -22,6 +22,7 @@ const ServiceOrderList = () => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
+    const [reloadNonce, setReloadNonce] = useState(0);
 
     useEffect(() => {
         const timer = window.setTimeout(() => {
@@ -48,7 +49,7 @@ const ServiceOrderList = () => {
         }, 180);
 
         return () => window.clearTimeout(timer);
-    }, [searchQuery]);
+    }, [searchQuery, reloadNonce]);
 
     // Filter orders
     const filteredOrders = useMemo(() => orders.filter((order) => {
@@ -64,6 +65,12 @@ const ServiceOrderList = () => {
     const pendingOrders = filteredOrders.filter(o => o.status === 'pending');
     const inProgressOrders = filteredOrders.filter(o => o.status === 'in_progress');
     const completedOrders = filteredOrders.filter(o => o.status === 'completed');
+    const statusCounts = useMemo(() => ({
+        all: orders.length,
+        pending: orders.filter((order) => order.status === 'pending').length,
+        inProgress: orders.filter((order) => order.status === 'in_progress').length,
+        completed: orders.filter((order) => order.status === 'completed').length,
+    }), [orders]);
 
     // Handle status update
     const handleStatusUpdate = async (orderId, newStatus) => {
@@ -130,6 +137,39 @@ const ServiceOrderList = () => {
         </div>
     );
 
+    const StatusMetric = ({ label, value, helper, icon }) => (
+        <Card padding="sm" className="border-primary-200 bg-white">
+            <div className="flex items-center justify-between gap-4">
+                <div>
+                    <p className="text-xs font-mono font-semibold uppercase tracking-[0.22em] text-primary-400">{label}</p>
+                    <p className="mt-1 text-2xl font-display font-bold text-primary-950">{value}</p>
+                    <p className="mt-1 text-xs text-primary-500">{helper}</p>
+                </div>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary-200 bg-primary-50 text-primary-600">
+                    {icon}
+                </span>
+            </div>
+        </Card>
+    );
+
+    const OrderSkeleton = () => (
+        <div className="animate-pulse rounded-xl border border-primary-200 bg-white p-5 shadow-sm">
+            <div className="mb-5 flex items-start justify-between gap-4">
+                <div className="space-y-2">
+                    <div className="h-3 w-28 rounded bg-primary-100" />
+                    <div className="h-5 w-40 rounded bg-primary-100" />
+                </div>
+                <div className="h-7 w-20 rounded-full bg-primary-100" />
+            </div>
+            <div className="space-y-3 rounded-lg border border-primary-100 bg-primary-50 p-4">
+                <div className="h-4 rounded bg-primary-100" />
+                <div className="h-4 w-2/3 rounded bg-primary-100" />
+                <div className="h-12 rounded bg-primary-100" />
+            </div>
+            <div className="mt-5 h-5 w-28 rounded bg-primary-100" />
+        </div>
+    );
+
     // Status tabs
     const tabs = [
         {
@@ -193,12 +233,12 @@ const ServiceOrderList = () => {
                 <div className="relative z-10">
                     <h1 className="flex items-center gap-3 text-2xl font-display font-bold uppercase tracking-wider text-primary-950 sm:text-3xl sm:tracking-widest">
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-primary-200 bg-primary-100">
-                            <Plus className="w-4 h-4 text-primary-700" />
+                            <Wrench className="w-4 h-4 text-primary-700" />
                         </span>
                         Service Orders
                     </h1>
                     <p className="text-primary-500 mt-2 font-mono text-sm max-w-2xl leading-relaxed">
-                        {'>> LIVE WORKSHOP DATA. TRACK AND MANAGE CUSTOMER SERVICE REQUESTS. <<'}
+                        Live workshop queue for customer repairs, labor tracking, and service follow-through.
                     </p>
                 </div>
                 <div className="relative z-10 w-full sm:w-auto">
@@ -208,14 +248,30 @@ const ServiceOrderList = () => {
                 </div>
             </div>
 
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <StatusMetric label="All Orders" value={statusCounts.all} helper="Visible service queue" icon={<Wrench className="h-5 w-5" />} />
+                <StatusMetric label="Pending" value={statusCounts.pending} helper="Needs workshop review" icon={<Clock className="h-5 w-5" />} />
+                <StatusMetric label="In Progress" value={statusCounts.inProgress} helper="Currently being handled" icon={<AlertCircle className="h-5 w-5" />} />
+                <StatusMetric label="Completed" value={statusCounts.completed} helper="Ready for release/history" icon={<CheckCircle className="h-5 w-5" />} />
+            </div>
+
             {loadError && (
                 <Card className="border border-accent-danger/20 bg-accent-danger/5" padding="sm">
-                    <div className="flex items-start gap-3 text-sm text-accent-danger">
+                    <div className="flex flex-col gap-3 text-sm text-accent-danger sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex items-start gap-3">
                         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                         <div>
                             <p className="font-semibold">Service orders unavailable</p>
                             <p>{loadError}</p>
                         </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setReloadNonce((value) => value + 1)}
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-accent-danger/30 bg-white px-3 text-xs font-semibold uppercase tracking-wide text-accent-danger"
+                        >
+                            <RefreshCw className="h-3.5 w-3.5" /> Retry
+                        </button>
                     </div>
                 </Card>
             )}
@@ -223,8 +279,12 @@ const ServiceOrderList = () => {
             {/* Content Area */}
             <div className="surface p-4 sm:p-6">
                 {/* Search */}
-                <div className="mb-8">
-                    <div className="relative w-full max-w-xl">
+                <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="w-full max-w-xl">
+                        <label className="mb-2 block text-xs font-mono font-semibold uppercase tracking-[0.2em] text-primary-500">
+                            Find a service order
+                        </label>
+                        <div className="relative">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary-500" />
                         <input
                             type="text"
@@ -233,6 +293,12 @@ const ServiceOrderList = () => {
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full bg-white border border-primary-200 rounded-xl px-12 py-4 text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all font-mono text-sm tracking-wide shadow-sm"
                         />
+                        </div>
+                    </div>
+
+                    <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600">
+                        <p className="font-semibold text-primary-900">Showing {filteredOrders.length} of {orders.length}</p>
+                        <p className="text-xs">Search by customer, order number, plate, vehicle, or job notes.</p>
                     </div>
                 </div>
 
@@ -249,10 +315,13 @@ const ServiceOrderList = () => {
                     ))}
                 </div>
 
+                {!loading && (
                 <div className="hidden sm:block">
                     <Tabs tabs={tabs} defaultTab="all" variant="pills" onChange={setStatusFilter} />
                 </div>
+                )}
 
+                {!loading && (
                 <div className="sm:hidden">
                     <div className="grid grid-cols-1 gap-4 mt-6">
                         {filteredOrders.map((order) => (
@@ -260,19 +329,25 @@ const ServiceOrderList = () => {
                         ))}
                     </div>
                 </div>
+                )}
 
                 {loading && (
-                    <div className="text-center py-12 text-primary-500">
-                        Loading service orders...
+                    <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {Array.from({ length: 6 }).map((_, index) => (
+                            <OrderSkeleton key={index} />
+                        ))}
                     </div>
                 )}
 
                 {/* Empty State */}
                 {!loading && filteredOrders.length === 0 && (
-                    <div className="text-center py-20 bg-primary-50 border border-primary-200 rounded-2xl">
+                    <div className="text-center py-16 bg-primary-50 border border-primary-200 rounded-2xl">
                         <AlertCircle className="w-16 h-16 text-primary-300 mx-auto mb-6" />
                         <h3 className="text-xl font-display font-semibold text-primary-900 mb-2 tracking-wide uppercase">No orders found</h3>
-                        <p className="text-primary-500 font-mono text-sm uppercase tracking-widest">Adjust search parameters</p>
+                        <p className="mx-auto max-w-md text-primary-500 text-sm">Adjust the search/filter or create a new service order for a customer repair job.</p>
+                        <Button className="mt-6" variant="primary" leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowCreateModal(true)}>
+                            Create Service Order
+                        </Button>
                     </div>
                 )}
 
