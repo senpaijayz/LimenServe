@@ -79,6 +79,7 @@ const ProductPackageSuggestions = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [highlightedTiers, setHighlightedTiers] = useState({});
+  const [activePackageKey, setActivePackageKey] = useState('');
 
   const activeVehicleLabel = vehicleContext?.displayLabel || formatVehicleDisplayLabel({
     model: vehicleModelId || product?.model || product?.vehicleModelName || '',
@@ -153,13 +154,21 @@ const ProductPackageSuggestions = ({
     setHighlightedTiers(next);
   }, [groupedPackages, product?.id]);
 
-  const primaryPackage = groupedPackages[0] || null;
+  const defaultPackageKey = (
+    highlightedPackageKey
+      ? groupedPackages.find((pkg) => pkg.packageKey === highlightedPackageKey)?.packageKey
+      : null
+  ) || groupedPackages[0]?.packageKey || '';
+  const resolvedActivePackageKey = groupedPackages.some((pkg) => pkg.packageKey === activePackageKey)
+    ? activePackageKey
+    : defaultPackageKey;
+  const primaryPackage = groupedPackages.find((pkg) => pkg.packageKey === resolvedActivePackageKey) || groupedPackages[0] || null;
   const activeTierKey = primaryPackage
     ? (highlightedTiers[primaryPackage.packageKey] ?? getDefaultHighlightedTier(buildPackageTiers(primaryPackage)))
     : null;
   const smartQuoteModel = buildSmartQuoteModel({
     selectedProduct: product,
-    packages: groupedPackages,
+    packages: primaryPackage ? [primaryPackage] : groupedPackages,
     recommendations,
     activeTierKey,
   });
@@ -222,25 +231,25 @@ const ProductPackageSuggestions = ({
     const bundleCtaLabel = activeTierAdded ? 'Bundle Added' : activeTier ? `Add ${activeTier.badgeLabel} Bundle` : 'Add Bundle';
 
     return (
-      <div className="overflow-hidden rounded-[34px] border border-primary-200 bg-white shadow-[0_26px_80px_rgba(15,23,42,0.10)]">
-        <div className="bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800 px-5 py-6 text-white sm:px-6 lg:px-7">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+      <div className="overflow-hidden rounded-[28px] border border-primary-200 bg-white shadow-[0_18px_54px_rgba(15,23,42,0.10)]">
+        <div className="bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800 px-4 py-4 text-white sm:px-5 lg:px-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[0.68rem] font-bold uppercase tracking-[0.22em] text-white/75">
                 <Sparkles className="h-3.5 w-3.5" />
                 Recommended based on selected product
               </div>
-              <h4 className="mt-4 text-2xl font-display font-bold tracking-tight text-white sm:text-3xl">
+              <h4 className="mt-3 text-xl font-display font-bold tracking-tight text-white sm:text-2xl">
                 {title}
               </h4>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/70">
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/70">
                 {subtitle}
               </p>
             </div>
-            <div className="rounded-[26px] border border-white/10 bg-white/10 px-4 py-4 lg:min-w-[230px]">
+            <div className="rounded-[22px] border border-white/10 bg-white/10 px-4 py-3 lg:min-w-[230px]">
               <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-white/50">Selected product</p>
-              <p className="mt-2 text-lg font-display font-semibold text-white">{product.name}</p>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-white/65">
+              <p className="mt-2 line-clamp-2 text-base font-display font-semibold text-white">{product.name}</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-white/65">
                 {product.sku && <span className="rounded-full bg-white/10 px-3 py-1">{product.sku}</span>}
                 <span className="rounded-full bg-white/10 px-3 py-1">{formatCurrency(Number(product.price ?? 0))}</span>
                 <span className="rounded-full bg-white/10 px-3 py-1">Qty {anchorQuantity}</span>
@@ -249,7 +258,7 @@ const ProductPackageSuggestions = ({
           </div>
         </div>
 
-        <div className="space-y-5 p-5 sm:p-6 lg:p-7">
+        <div className="space-y-4 p-4 sm:p-5 lg:p-6">
           {loading ? (
             <div className="flex items-center gap-3 rounded-[24px] border border-primary-200 bg-primary-50 p-5 text-sm text-primary-500">
               <Loader2 className="h-4 w-4 animate-spin text-accent-primary" />
@@ -267,24 +276,53 @@ const ProductPackageSuggestions = ({
             </div>
           ) : (
             <>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 {smartQuoteModel.badges.map((badge) => (
-                  <div key={badge} className="rounded-2xl border border-primary-200 bg-primary-50/80 px-4 py-3">
+                  <div key={badge} className="rounded-2xl border border-primary-200 bg-primary-50/80 px-3 py-2.5">
                     <span className="block text-[0.65rem] font-bold uppercase tracking-[0.22em] text-primary-400">Smart badge</span>
                     <span className="mt-1 block text-sm font-semibold text-primary-950">{badge}</span>
                   </div>
                 ))}
               </div>
 
-              <div className="overflow-hidden rounded-[28px] border border-accent-blue/25 bg-accent-blue/5">
-                <div className="border-b border-accent-blue/15 bg-white/80 px-5 py-5">
+              {groupedPackages.length > 1 && (
+                <div className="rounded-[22px] border border-primary-200 bg-primary-50/80 p-2">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    {groupedPackages.slice(0, 4).map((pkg, index) => {
+                      const isActivePackage = pkg.packageKey === primaryPackage?.packageKey;
+
+                      return (
+                        <button
+                          key={`${pkg.packageKey}-package-tab`}
+                          type="button"
+                          onClick={() => setActivePackageKey(pkg.packageKey)}
+                          className={`min-h-[68px] rounded-2xl px-3 py-2 text-left transition ${
+                            isActivePackage
+                              ? 'bg-primary-950 text-white shadow-sm'
+                              : 'bg-white text-primary-600 hover:text-primary-950'
+                          }`}
+                          aria-pressed={isActivePackage}
+                        >
+                          <span className={`block text-[0.62rem] font-bold uppercase tracking-[0.2em] ${isActivePackage ? 'text-white/55' : 'text-primary-400'}`}>
+                            Bundle {index + 1}
+                          </span>
+                          <span className="mt-1 line-clamp-1 block text-sm font-semibold">{pkg.packageName}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="overflow-hidden rounded-[24px] border border-accent-blue/25 bg-accent-blue/5">
+                <div className="border-b border-accent-blue/15 bg-white/80 px-4 py-4 sm:px-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <p className="text-[0.68rem] font-bold uppercase tracking-[0.24em] text-accent-blue">Best recommended bundle</p>
-                      <h5 className="mt-2 text-2xl font-display font-bold text-primary-950">{smartQuoteModel.bestPackage.packageName}</h5>
+                      <h5 className="mt-2 text-xl font-display font-bold text-primary-950 sm:text-2xl">{smartQuoteModel.bestPackage.packageName}</h5>
                       <p className="mt-2 max-w-3xl text-sm leading-6 text-primary-600">{smartQuoteModel.bestPackage.packageDescription}</p>
                     </div>
-                    <div className="rounded-[24px] bg-primary-950 px-4 py-4 text-white lg:min-w-[220px]">
+                    <div className="rounded-[20px] bg-primary-950 px-4 py-3 text-white lg:min-w-[200px]">
                       <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-white/50">Package impact</p>
                       <p className="mt-2 text-2xl font-display font-bold">{formatCurrency(smartQuoteModel.totals.bundleSubtotal)}</p>
                       {smartQuoteModel.totals.bundleSavings > 0 && (
@@ -294,8 +332,8 @@ const ProductPackageSuggestions = ({
                   </div>
                 </div>
 
-                <div className="p-5">
-                  <div className="mb-5 grid grid-cols-3 gap-2 rounded-2xl border border-primary-200 bg-white p-1.5">
+                <div className="p-4 sm:p-5">
+                  <div className="mb-4 grid grid-cols-3 gap-2 rounded-2xl border border-primary-200 bg-white p-1.5">
                     {smartQuoteModel.tiers.map((tier) => {
                       const isActive = tier.tierKey === activeTier?.tierKey;
 
@@ -321,7 +359,7 @@ const ProductPackageSuggestions = ({
                   </div>
 
                   {activeTier && (
-                    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
+                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
                       <div className="rounded-[24px] border border-primary-200 bg-white p-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div>
@@ -343,7 +381,7 @@ const ProductPackageSuggestions = ({
                           </button>
                         </div>
 
-                        <div className="mt-5 grid gap-3 md:grid-cols-2">
+                        <div className="mt-4 grid gap-3 md:grid-cols-2">
                           <div className="rounded-2xl border border-primary-200 bg-primary-50/70 p-4">
                             <span className="block text-[0.65rem] font-bold uppercase tracking-[0.22em] text-primary-400">Included materials</span>
                             <div className="mt-3 space-y-2">
@@ -403,7 +441,7 @@ const ProductPackageSuggestions = ({
                 </div>
               </div>
 
-              <div className="rounded-[28px] border border-primary-200 bg-primary-50/80 p-5">
+              <div className="rounded-[24px] border border-primary-200 bg-primary-50/80 p-4 sm:p-5">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <p className="text-[0.68rem] font-bold uppercase tracking-[0.24em] text-primary-400">Optional upgrades</p>
@@ -412,7 +450,7 @@ const ProductPackageSuggestions = ({
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
                   {smartQuoteModel.optionalAddOns.length === 0 ? (
                     <div className="md:col-span-2 rounded-2xl border border-dashed border-primary-300 bg-white p-5 text-sm text-primary-500">
                       No optional add-ons beyond the selected tier are available yet.

@@ -290,11 +290,12 @@ const PublicEstimate = () => {
         error: partsError,
     } = useProductCatalog({
         page: currentPage,
-        pageSize: 12,
+        pageSize: 8,
         searchQuery: partSearch,
         sortBy,
         vehicleModel: vehicle.model,
         vehicleYear: vehicle.year,
+        includeCategories: false,
     });
     const { services: availableServices, loading: servicesLoading, error: servicesError } = useServiceCatalog();
 
@@ -697,6 +698,9 @@ const PublicEstimate = () => {
 
     const handleVehicleChange = (patch) => {
         setSavedDraftQuote(null);
+        if (Object.prototype.hasOwnProperty.call(patch, 'model') || Object.prototype.hasOwnProperty.call(patch, 'year')) {
+            setFocusedProduct(null);
+        }
         updateVehicle(patch);
     };
 
@@ -1297,13 +1301,14 @@ const PublicEstimate = () => {
                                         subtitle="Visual package cards for the vehicle you selected, complete with included parts, included labor, normal total, package total, and savings."
                                         emptyLabel={`No featured packages are ready for ${vehicle.displayLabel} yet.`}
                                         highlightPackageKey={highlightedVehiclePackageKey}
+                                        compactTabs
                                     />
                                 </div>
                             )}
 
                             {estimatePhase === 'catalog' && (
-                            <div className="surface p-6">
-                                <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-end lg:justify-between">
+                            <div className="surface p-4 sm:p-5">
+                                <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                                     <div className="flex items-start gap-3">
                                         <div className="w-10 h-10 rounded-lg bg-accent-primary/5 border border-accent-primary/20 flex items-center justify-center">
                                             <Package className="w-5 h-5 text-accent-primary" />
@@ -1342,7 +1347,7 @@ const PublicEstimate = () => {
                                     </div>
                                 </div>
 
-                                <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-primary-200 bg-white/90 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                                <div className="mb-3 flex flex-col gap-3 rounded-2xl border border-primary-200 bg-white/90 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                                     <div className="text-sm text-primary-600">
                                         <span>
                                             Showing <strong className="text-primary-950">{rangeStart}-{rangeEnd}</strong> of <strong className="text-primary-950">{totalCount}</strong> priced items
@@ -1354,7 +1359,7 @@ const PublicEstimate = () => {
                                     </button>
                                 </div>
 
-                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:max-h-[640px] lg:overflow-y-auto lg:pr-2 lg:custom-scrollbar">
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:max-h-[520px] lg:overflow-y-auto lg:pr-2 lg:custom-scrollbar">
                                     {loading ? (
                                         <div className="sm:col-span-2 rounded-xl border border-primary-200 bg-white p-6 text-sm text-primary-500">
                                             Loading the current pricelist...
@@ -1373,14 +1378,14 @@ const PublicEstimate = () => {
                                             <button
                                                 key={product.catalogEntryId || product.id}
                                                 onClick={() => addPart(product)}
-                                                className={`p-4 text-left rounded-xl border flex flex-col gap-2 transition-all duration-300 ${isSelected
+                                                className={`min-h-[112px] rounded-xl border p-3 text-left flex flex-col gap-1.5 transition-all duration-300 ${isSelected
                                                     ? 'bg-accent-primary/5 border-accent-primary/30 ring-1 ring-accent-primary/30'
                                                     : 'bg-white border-primary-200 hover:border-accent-primary hover:bg-primary-50 shadow-sm'
                                                     }`}
                                             >
                                                 <span className="text-xs font-semibold text-primary-500">{product.sku}</span>
                                                 <span className="text-base font-display font-medium text-primary-950 line-clamp-1">{product.name}</span>
-                                                <span className="text-xs text-primary-400">{product.model || 'Universal fitment'}</span>
+                                                <span className="line-clamp-1 text-xs text-primary-400">{product.model || 'Universal fitment'}</span>
                                                 <span className="text-sm font-bold text-accent-blue mt-auto">{formatCurrency(product.price)}</span>
                                             </button>
                                         );
@@ -1444,27 +1449,34 @@ const PublicEstimate = () => {
                             )}
 
                             {estimatePhase === 'catalog' && (
-                            <div className="surface p-6">
-                                <div className="flex items-start gap-3 mb-6">
+                            <div className="surface p-4 sm:p-5">
+                                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                                  <div className="flex items-start gap-3">
                                     <div className="w-10 h-10 rounded-lg bg-accent-primary/5 border border-accent-primary/20 flex items-center justify-center">
                                         <Wrench className="w-5 h-5 text-accent-primary" />
                                     </div>
                                     <div>
                                         <h3 className="text-xl font-display font-semibold text-primary-950">Service Catalog</h3>
-                                        <p className="text-sm text-primary-500">Live maintenance services from the database.</p>
+                                        <p className="text-sm text-primary-500">Compact labor and maintenance options from the live service catalog.</p>
                                     </div>
+                                  </div>
+                                  {selectedServices.length > 0 && (
+                                    <span className="rounded-full border border-accent-primary/20 bg-accent-primary/5 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-accent-primary">
+                                      {selectedServices.length} selected
+                                    </span>
+                                  )}
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                                     {servicesLoading ? (
-                                        <div className="sm:col-span-2 rounded-xl border border-primary-200 bg-white p-6 text-sm text-primary-500">
+                                        <div className="rounded-xl border border-primary-200 bg-white p-5 text-sm text-primary-500 sm:col-span-2 xl:col-span-3">
                                             Loading services from Supabase...
                                         </div>
                                     ) : servicesError ? (
-                                        <div className="sm:col-span-2 rounded-xl border border-accent-danger/20 bg-accent-danger/5 p-6 text-sm text-accent-danger">
+                                        <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/5 p-5 text-sm text-accent-danger sm:col-span-2 xl:col-span-3">
                                             {servicesError}
                                         </div>
                                     ) : availableServices.length === 0 ? (
-                                        <div className="sm:col-span-2 rounded-xl border border-primary-200 bg-white p-6 text-sm text-primary-500">
+                                        <div className="rounded-xl border border-primary-200 bg-white p-5 text-sm text-primary-500 sm:col-span-2 xl:col-span-3">
                                             No active services are available in the database.
                                         </div>
                                     ) : availableServices.map((service) => {
@@ -1473,14 +1485,21 @@ const PublicEstimate = () => {
                                             <button
                                                 key={service.id}
                                                 onClick={() => toggleService(service)}
-                                                className={`p-4 text-left rounded-xl border flex items-center justify-between transition-all duration-300 ${isSelected
+                                                className={`min-h-[76px] rounded-xl border p-3 text-left transition-all duration-300 ${isSelected
                                                     ? 'bg-accent-primary/5 border-accent-primary/30 ring-1 ring-accent-primary/30 text-primary-950'
                                                     : 'bg-white border-primary-200 text-primary-600 hover:border-accent-primary hover:text-primary-950 shadow-sm'
                                                     }`}
                                             >
-                                                <span className="text-sm font-medium pr-4">{service.name}</span>
-                                                <span className={`text-sm font-bold ${isSelected ? 'text-accent-primary' : 'text-primary-500'}`}>
-                                                    {formatCurrency(service.price)}
+                                                <span className="flex items-start justify-between gap-3">
+                                                    <span className="min-w-0">
+                                                        <span className="line-clamp-2 block text-sm font-semibold">{service.name}</span>
+                                                        <span className="mt-1 block text-[0.68rem] font-bold uppercase tracking-[0.16em] text-primary-400">
+                                                            {isSelected ? 'Selected labor' : 'Tap to add'}
+                                                        </span>
+                                                    </span>
+                                                    <span className={`shrink-0 text-sm font-bold ${isSelected ? 'text-accent-primary' : 'text-primary-500'}`}>
+                                                        {formatCurrency(service.price)}
+                                                    </span>
                                                 </span>
                                             </button>
                                         );

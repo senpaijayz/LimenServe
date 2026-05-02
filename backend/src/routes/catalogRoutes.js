@@ -69,6 +69,12 @@ const SERVICE_GROUP_CONFIG = {
     packageDescription: 'Upsell bundle of tire, wheel, balancing, and alignment services for this Mitsubishi model.',
     serviceKeywords: ['tire', 'wheel alignment', 'wheel balancing', 'installation', 'alignment', 'balancing'],
   },
+  general_service: {
+    packageKey: 'general-service-package',
+    packageName: 'Smart Inspection Bundle',
+    packageDescription: 'General diagnostic and service labor for Mitsubishi parts that do not have a specific learned bundle yet.',
+    serviceKeywords: ['diagnostic', 'inspection', 'service', 'installation', 'tuning', 'maintenance'],
+  },
 };
 
 const VEHICLE_PACKAGE_ORDER = [
@@ -79,6 +85,7 @@ const VEHICLE_PACKAGE_ORDER = [
   'cooling_service',
   'battery_service',
   'tire_service',
+  'general_service',
 ];
 
 const PART_FUNCTION_RULES = [
@@ -651,6 +658,7 @@ function extractCatalogVehicleYears(product) {
 function buildVehicleFitmentOptions(products = [], selectedModel = '') {
   const modelMap = new Map();
   const yearMap = new Map();
+  const normalizedSelectedModel = cleanVehicleModelLabel(selectedModel);
 
   products.forEach((product) => {
     if (!isCatalogVehicleModel(product?.model)) {
@@ -680,13 +688,18 @@ function buildVehicleFitmentOptions(products = [], selectedModel = '') {
     .sort((left, right) => Number(right.count ?? 0) - Number(left.count ?? 0) || left.label.localeCompare(right.label))
     .map(({ count, ...model }) => model);
 
-  const years = selectedModel && yearMap.has(selectedModel)
-    ? Array.from(yearMap.get(selectedModel))
+  const modelYears = Array.from(yearMap.entries()).reduce((result, [modelLabel, yearsForModel]) => {
+    result[modelLabel] = Array.from(yearsForModel)
       .sort((left, right) => right - left)
-      .map((year) => ({ value: String(year), label: String(year) }))
+      .map((year) => ({ value: String(year), label: String(year) }));
+    return result;
+  }, {});
+
+  const years = normalizedSelectedModel && modelYears[normalizedSelectedModel]
+    ? modelYears[normalizedSelectedModel]
     : [];
 
-  return { models, years };
+  return { models, years, modelYears };
 }
 
 function buildVehiclePackageCopy(serviceGroup, fallbackName) {
@@ -1171,14 +1184,41 @@ function pickCompanionProducts({ clickedProduct, catalog, clickedProfile, limitC
   })).slice(0, limitCount);
 }
 
-function buildVehicleMatchedRecommendations({ clickedProduct, catalog, serviceCatalog, partLimit, serviceLimit }) {
-  const clickedProfile = inferProductProfile(clickedProduct);
-
-  if (!clickedProfile.modelName) {
-    return [];
+function pickFallbackServiceGroup(clickedProduct, clickedProfile) {
+  if (clickedProfile.serviceGroup) {
+    return clickedProfile.serviceGroup;
   }
 
-  const directFunctionRecommendations = clickedProfile.partFunction
+  const text = buildProductSearchText(clickedProduct);
+  const category = normalizeText(clickedProduct?.category);
+
+  if (category.includes('tire') || category.includes('wheel')) {
+    return 'tire_service';
+  }
+  if (category.includes('brake')) {
+    return 'brake_service';
+  }
+  if (category.includes('battery') || category.includes('electrical')) {
+    return 'battery_service';
+  }
+  if (category.includes('cooling') || category.includes('radiator')) {
+    return 'cooling_service';
+  }
+  if (category.includes('filter')) {
+    return 'filter_service';
+  }
+  if (category.includes('oil') || category.includes('lubricant')) {
+    return 'oil_change';
+  }
+
+  return inferHeuristicServiceGroup(text) || 'general_service';
+}
+
+function buildVehicleMatchedRecommendations({ clickedProduct, catalog, serviceCatalog, partLimit, serviceLimit }) {
+  const clickedProfile = inferProductProfile(clickedProduct);
+  const fallbackServiceGroup = pickFallbackServiceGroup(clickedProduct, clickedProfile);
+
+  const directFunctionRecommendations = clickedProfile.modelName && clickedProfile.partFunction
     ? pickCompanionProducts({
         clickedProduct,
         catalog,
@@ -1187,7 +1227,7 @@ function buildVehicleMatchedRecommendations({ clickedProduct, catalog, serviceCa
       })
     : [];
 
-  const keywordClusterRecommendations = directFunctionRecommendations.length === 0
+  const keywordClusterRecommendations = clickedProfile.modelName && directFunctionRecommendations.length === 0
     ? pickKeywordClusterProducts({
         clickedProduct,
         catalog,
@@ -1198,10 +1238,10 @@ function buildVehicleMatchedRecommendations({ clickedProduct, catalog, serviceCa
 
   const partRecommendations = [...directFunctionRecommendations, ...keywordClusterRecommendations].slice(0, partLimit);
 
-  const services = clickedProfile.serviceGroup
+  const services = fallbackServiceGroup
     ? findMatchingServices({
         serviceCatalog,
-        serviceGroup: clickedProfile.serviceGroup,
+        serviceGroup: fallbackServiceGroup,
         limitCount: serviceLimit,
       })
     : [];
@@ -1220,15 +1260,15 @@ function buildVehicleMatchedRecommendations({ clickedProduct, catalog, serviceCa
     sampleCount: null,
     reasonLabel: clickedProfile.partFunction
       ? 'Smart service bundle for ' + clickedProfile.partFunction.replace(/_/g, ' ')
-      : 'Smart service bundle based on this Mitsubishi part and vehicle',
-    packageKey: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageKey || 'vehicle-service-package',
-    packageName: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageName || 'Smart Mitsubishi Service Bundle',
-    packageDescription: SERVICE_GROUP_CONFIG[clickedProfile.serviceGroup]?.packageDescription || DEFAULT_PACKAGE_DESCRIPTION,
+      : 'Recommended service labor based on this Mitsubishi part',
+    packageKey: SERVICE_GROUP_CONFIG[fallbackServiceGroup]?.packageKey || 'vehicle-service-package',
+    packageName: SERVICE_GROUP_CONFIG[fallbackServiceGroup]?.packageName || 'Smart Mitsubishi Service Bundle',
+    packageDescription: SERVICE_GROUP_CONFIG[fallbackServiceGroup]?.packageDescription || DEFAULT_PACKAGE_DESCRIPTION,
     matchLevel: 'service_bundle',
     vehicleModelName: clickedProfile.modelName,
     vehicleFamily: clickedProfile.vehicleFamily,
-    serviceGroup: clickedProfile.serviceGroup,
-    minAnchorQuantity: clickedProfile.serviceGroup === 'oil_change' && clickedProfile.partFunction === 'engine_oil' ? 4 : 1,
+    serviceGroup: fallbackServiceGroup,
+    minAnchorQuantity: fallbackServiceGroup === 'oil_change' && clickedProfile.partFunction === 'engine_oil' ? 4 : 1,
   }));
 
   return [...partRecommendations, ...serviceRecommendations];
@@ -2070,14 +2110,18 @@ router.get('/products/:productId/recommendations', async (req, res, next) => {
     const packageRows = await getOptionalPackageRecommendationRows(req.params.productId, vehicleModelId, partLimit, serviceLimit);
 
     if (packageRows.length > 0) {
-      return res.json(buildPackageResponse({
+      const packageResponse = buildPackageResponse({
         recommendationRows: packageRows,
         clickedProduct,
         productMap,
         serviceMap,
         partLimit,
         serviceLimit,
-      }));
+      });
+
+      if (packageResponse.packages.length > 0) {
+        return res.json(packageResponse);
+      }
     }
 
     const mergedLimit = Math.min(partLimit + serviceLimit, 24);

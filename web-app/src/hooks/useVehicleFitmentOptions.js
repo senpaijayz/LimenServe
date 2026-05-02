@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getVehicleFitmentOptions } from '../services/catalogApi';
 
-const EMPTY_OPTIONS = { models: [], years: [] };
-const fitmentOptionsCache = new Map();
-const fitmentOptionsRequests = new Map();
+const EMPTY_OPTIONS = { models: [], years: [], modelYears: {} };
+let fitmentOptionsCache = null;
+let fitmentOptionsRequest = null;
 
 function normalizeCacheKey(model = '') {
   return String(model || '').trim().toLowerCase();
@@ -11,16 +11,15 @@ function normalizeCacheKey(model = '') {
 
 export default function useVehicleFitmentOptions(model = '') {
   const cacheKey = normalizeCacheKey(model);
-  const [options, setOptions] = useState(() => fitmentOptionsCache.get(cacheKey) ?? fitmentOptionsCache.get('') ?? EMPTY_OPTIONS);
+  const [options, setOptions] = useState(() => fitmentOptionsCache ?? EMPTY_OPTIONS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let active = true;
-    const cachedOptions = fitmentOptionsCache.get(cacheKey);
 
-    if (cachedOptions) {
-      setOptions(cachedOptions);
+    if (fitmentOptionsCache) {
+      setOptions(fitmentOptionsCache);
       setLoading(false);
       setError(null);
       return () => {
@@ -28,37 +27,27 @@ export default function useVehicleFitmentOptions(model = '') {
       };
     }
 
-    const baseOptions = fitmentOptionsCache.get('');
-    setOptions((currentOptions) => ({
-      models: currentOptions.models?.length ? currentOptions.models : baseOptions?.models ?? [],
-      years: [],
-    }));
-
     const loadOptions = async () => {
-      setLoading(!(baseOptions?.models?.length));
+      setLoading(true);
       setError(null);
 
       try {
-        let request = fitmentOptionsRequests.get(cacheKey);
-        if (!request) {
-          request = getVehicleFitmentOptions({ model });
-          fitmentOptionsRequests.set(cacheKey, request);
+        if (!fitmentOptionsRequest) {
+          fitmentOptionsRequest = getVehicleFitmentOptions();
         }
 
-        const data = await request;
+        const data = await fitmentOptionsRequest;
         if (!active) {
           return;
         }
 
         const nextOptions = {
-          models: data.models?.length ? data.models : baseOptions?.models ?? [],
+          models: data.models ?? [],
           years: data.years ?? [],
+          modelYears: data.modelYears ?? {},
         };
 
-        fitmentOptionsCache.set(cacheKey, nextOptions);
-        if (cacheKey === '') {
-          fitmentOptionsCache.set('', nextOptions);
-        }
+        fitmentOptionsCache = nextOptions;
 
         setOptions(nextOptions);
       } catch (loadError) {
@@ -66,10 +55,10 @@ export default function useVehicleFitmentOptions(model = '') {
           return;
         }
 
-        setOptions(baseOptions ?? EMPTY_OPTIONS);
+        setOptions(EMPTY_OPTIONS);
         setError(loadError.message || 'Failed to load vehicle fitment options.');
       } finally {
-        fitmentOptionsRequests.delete(cacheKey);
+        fitmentOptionsRequest = null;
         if (active) {
           setLoading(false);
         }
@@ -81,10 +70,26 @@ export default function useVehicleFitmentOptions(model = '') {
     return () => {
       active = false;
     };
-  }, [cacheKey, model]);
+  }, []);
+
+  const years = useMemo(() => {
+    if (!model) {
+      return [];
+    }
+
+    const directYears = options.modelYears?.[model];
+    if (directYears) {
+      return directYears;
+    }
+
+    const matchedModel = options.models.find((item) => normalizeCacheKey(item.value) === cacheKey)?.value;
+    return matchedModel ? (options.modelYears?.[matchedModel] ?? []) : [];
+  }, [cacheKey, model, options.modelYears, options.models]);
 
   return {
-    ...options,
+    models: options.models,
+    years,
+    modelYears: options.modelYears,
     loading,
     error,
   };

@@ -278,15 +278,18 @@ function getFallbackVehicleFitmentOptions(model = '') {
       value: item,
       label: item,
     }));
+  const modelYears = [...yearMap.entries()].reduce((result, [modelName, yearsForModel]) => {
+    result[modelName] = [...yearsForModel.values()].sort((left, right) => Number(right.value) - Number(left.value));
+    return result;
+  }, {});
 
   const selectedModel = models.find((item) => normalizeText(item.value) === normalizedModel)?.value || cleanVehicleModelLabel(model);
-  const fallbackYears = selectedModel && yearMap.has(selectedModel)
-    ? [...yearMap.get(selectedModel).values()].sort((left, right) => Number(right.value) - Number(left.value))
-    : [];
+  const fallbackYears = selectedModel && modelYears[selectedModel] ? modelYears[selectedModel] : [];
 
   return {
     models,
     years: fallbackYears,
+    modelYears,
   };
 }
 
@@ -337,6 +340,7 @@ export async function getVehicleFitmentOptions(params = {}) {
       return {
         models: data.models ?? [],
         years: data.years ?? [],
+        modelYears: data.modelYears ?? {},
       };
     });
   } catch (error) {

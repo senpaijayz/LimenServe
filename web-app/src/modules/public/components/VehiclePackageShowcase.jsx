@@ -1,5 +1,5 @@
 import { BatteryCharging, Droplets, Gauge, ShieldCheck, Sparkles, Thermometer, Wrench, ArrowRight, Filter } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatCurrency } from '../../../utils/formatters';
 import {
@@ -58,9 +58,23 @@ export default function VehiclePackageShowcase({
   subtitle = 'Visual Mitsubishi service-led bundles tuned to the vehicle you selected.',
   emptyLabel = 'Choose a vehicle to unlock recommended packages.',
   highlightPackageKey = '',
+  compactTabs = false,
 }) {
   const [activeTierByPackage, setActiveTierByPackage] = useState({});
-  const normalizedPackages = packages.map((pkg, index) => normalizePackage(pkg, index));
+  const [activePackageKey, setActivePackageKey] = useState('');
+  const normalizedPackages = useMemo(() => packages.map((pkg, index) => normalizePackage(pkg, index)), [packages]);
+  const defaultPackageKey = (
+    highlightPackageKey
+      ? normalizedPackages.find((pkg) => pkg.packageKey === highlightPackageKey)?.packageKey
+      : null
+  ) || normalizedPackages[0]?.packageKey || '';
+  const resolvedActivePackageKey = normalizedPackages.some((pkg) => pkg.packageKey === activePackageKey)
+    ? activePackageKey
+    : defaultPackageKey;
+
+  const displayedPackages = compactTabs
+    ? normalizedPackages.filter((pkg) => pkg.packageKey === resolvedActivePackageKey)
+    : normalizedPackages;
 
   return (
     <div className="surface p-5 md:p-6">
@@ -85,8 +99,37 @@ export default function VehiclePackageShowcase({
       ) : normalizedPackages.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-primary-200 bg-white p-5 text-sm text-primary-500">{emptyLabel}</div>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {normalizedPackages.map((pkg) => {
+        <div className="space-y-4">
+          {compactTabs && normalizedPackages.length > 1 && (
+            <div className="rounded-[22px] border border-primary-200 bg-primary-50/80 p-2">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {normalizedPackages.slice(0, 4).map((pkg, index) => {
+                  const isActive = pkg.packageKey === resolvedActivePackageKey;
+                  return (
+                    <button
+                      key={`${pkg.packageKey}-vehicle-tab`}
+                      type="button"
+                      onClick={() => setActivePackageKey(pkg.packageKey)}
+                      className={`min-h-[68px] rounded-2xl px-3 py-2 text-left transition ${
+                        isActive
+                          ? 'bg-primary-950 text-white shadow-sm'
+                          : 'bg-white text-primary-600 hover:text-primary-950'
+                      }`}
+                      aria-pressed={isActive}
+                    >
+                      <span className={`block text-[0.62rem] font-bold uppercase tracking-[0.2em] ${isActive ? 'text-white/55' : 'text-primary-400'}`}>
+                        Bundle {index + 1}
+                      </span>
+                      <span className="mt-1 line-clamp-1 block text-sm font-semibold">{pkg.packageName}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className={`grid gap-4 ${compactTabs ? 'grid-cols-1' : 'xl:grid-cols-2'}`}>
+          {displayedPackages.map((pkg) => {
             const Icon = serviceGroupIconMap[pkg.serviceGroup] || Sparkles;
             const tiers = buildPackageTiers(pkg);
             const highlightedTierKey = getDefaultHighlightedTier(tiers);
@@ -223,6 +266,7 @@ export default function VehiclePackageShowcase({
               </div>
             );
           })}
+          </div>
         </div>
       )}
     </div>
