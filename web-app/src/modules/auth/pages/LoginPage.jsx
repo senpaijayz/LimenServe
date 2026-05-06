@@ -136,12 +136,11 @@ const LoginPage = () => {
 
                     <div className="mt-6 pt-6 border-t border-primary-200">
                         <p className="text-xs font-bold text-primary-500 text-center mb-3 uppercase tracking-widest">
-                            Supabase Authentication
+                            Contact Admin
                         </p>
                         <div className="rounded-xl border border-primary-100 bg-primary-50 px-4 py-3 text-xs text-primary-500">
                             <p className="text-center">
-                                Sign in with a user created in Supabase Auth. Access level is controlled by Auth app metadata
-                                and mirrored to the core user profile.
+                                To forgot password contact administration.
                             </p>
                         </div>
                     </div>

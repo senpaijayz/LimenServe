@@ -106,7 +106,7 @@ const PublicAbout = () => {
                             The shop operates in a two-floor commercial space, with the first floor serving as the main sales area and the second floor serving as the stockroom. Daily operations involve sales, customer service, stock management, and quotation preparation for both parts and service-related requests.
                         </p>
                         <p className="text-primary-700 leading-relaxed">
-                            Through **LimenServe**, the business is transitioning from manual, paper-based processes to a more organized digital workflow that supports stock visibility, faster transaction handling, structured quotations, and improved customer service.
+                            Through LimenServe, the business is transitioning from manual, paper-based processes to a more organized digital workflow that supports stock visibility, faster transaction handling, structured quotations, and improved customer service.
                         </p>
                     </Motion.div>
 
@@ -202,8 +202,7 @@ const PublicAbout = () => {
                 <div className="mb-16">
                     <div className="text-center mb-12">
                         <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">Meet Our Mechanics</h2>
-                        <p className="text-primary-600 max-w-2xl mx-auto">Customers can view the service team currently connected to the shop, what they specialize in, and whether they are available.</p>
-                    </div>
+                        </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                         {mechanicsLoading ? (
