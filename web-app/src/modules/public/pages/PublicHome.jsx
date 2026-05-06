@@ -293,9 +293,6 @@ const PublicHome = () => {
                         <div className="max-w-2xl">
                             <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-danger">Best Sellers</p>
                             <h2 className="mt-2 text-4xl font-bold text-primary-950">Featured parts anchored to real Mitsubishi vehicle lines</h2>
-                            <p className="mt-3 text-base leading-relaxed text-primary-600">
-                                The lineup now uses your actual vehicle photos and keeps the cards cleaner, more trustworthy, and easier to scan before a quote request.
-                            </p>
                         </div>
                     </div>
 
@@ -347,10 +344,6 @@ const PublicHome = () => {
                     <div>
                         <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-primary">Why customers trust Limen</p>
                         <h2 className="mt-2 text-4xl font-bold text-primary-950">Built to look credible before the customer even asks for a quote.</h2>
-                        <p className="mt-4 max-w-2xl text-base leading-relaxed text-primary-600">
-                            The storefront now keeps the search bar obvious, product information readable, and the store identity visible across the browsing and inquiry flow.
-                        </p>
-
                         <div className="mt-8 space-y-4">
                             {trustSignals.map((signal) => {
                                 const Icon = signal.icon;
@@ -373,8 +366,7 @@ const PublicHome = () => {
                         <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-danger">Customer confidence</p>
                         <h3 className="mt-3 text-3xl font-bold text-primary-950">"Fast responses, correct fitment help, and a better quote process."</h3>
                         <p className="mt-5 text-base leading-relaxed text-primary-600">
-                            Customers shopping for vehicle parts need clarity first. The homepage now uses your actual store and vehicle images, stronger white surfaces, higher-contrast text, and clearer calls to action without the clutter.
-                        </p>
+                            Customers shopping for vehicle parts need clarity first.</p>
 
                         <div className="mt-8 grid gap-4 border-t border-primary-200 pt-6 sm:grid-cols-3">
                             {quickStats.map((item) => (
@@ -402,9 +394,6 @@ const PublicHome = () => {
                     <div className="max-w-3xl">
                         <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/60">Ready to order</p>
                         <h2 className="mt-3 text-4xl font-bold text-white">Search parts now or move straight into a quote request.</h2>
-                        <p className="mt-4 text-base leading-relaxed text-white/80">
-                            Keep the buying path short: browse by category, search by part or vehicle, then open a quotation request once the customer is ready.
-                        </p>
                     </div>
                     <div className="flex flex-col gap-3 sm:flex-row">
                         <Link to="/catalog" className="btn bg-white text-primary-950 hover:bg-primary-100">

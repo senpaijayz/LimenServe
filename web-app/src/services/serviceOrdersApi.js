@@ -35,3 +35,12 @@ export async function updateServiceOrder(orderId, payload) {
     extractApiError(error, 'Failed to update the service order.');
   }
 }
+
+export async function completeServiceOrder(orderId) {
+  try {
+    const { data } = await apiClient.post(`/service-orders/${orderId}/complete`);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Failed to complete and archive the service order.');
+  }
+}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Clock, CheckCircle, AlertCircle, RefreshCw, Wrench } from 'lucide-react';
+import { Plus, Search, Clock, AlertCircle, RefreshCw, Wrench, Archive } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { StatusBadge } from '../../../components/ui/Badge';
@@ -7,7 +7,7 @@ import Tabs from '../../../components/ui/Tabs';
 import { formatCurrency, formatRelativeTime } from '../../../utils/formatters';
 import { CreateServiceOrderModal, ServiceOrderDetailModal } from '../components/ServiceOrderModals';
 import { useToast } from '../../../components/ui/Toast';
-import { createServiceOrder, listServiceOrders, updateServiceOrder } from '../../../services/serviceOrdersApi';
+import { completeServiceOrder, createServiceOrder, listServiceOrders, updateServiceOrder } from '../../../services/serviceOrdersApi';
 
 /**
  * Service Order List Page
@@ -35,6 +35,7 @@ const ServiceOrderList = () => {
                         search: searchQuery || null,
                         status: 'all',
                         limit: 100,
+                        includeArchived: true,
                     });
                     setOrders(rows);
                 } catch (error) {
@@ -52,24 +53,30 @@ const ServiceOrderList = () => {
     }, [searchQuery, reloadNonce]);
 
     // Filter orders
-    const filteredOrders = useMemo(() => orders.filter((order) => {
+    const searchedOrders = useMemo(() => orders.filter((order) => {
         const matchesSearch =
             String(order.customerName || '').toLowerCase().includes(searchQuery.toLowerCase())
             || String(order.orderNumber || order.id).toLowerCase().includes(searchQuery.toLowerCase())
-            || String(order.vehicle?.plate || '').toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-        return matchesSearch && matchesStatus;
-    }), [orders, searchQuery, statusFilter]);
+            || String(order.vehicle?.plate || '').toLowerCase().includes(searchQuery.toLowerCase())
+            || String(order.description || '').toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesSearch;
+    }), [orders, searchQuery]);
 
     // Group by status
-    const pendingOrders = filteredOrders.filter(o => o.status === 'pending');
-    const inProgressOrders = filteredOrders.filter(o => o.status === 'in_progress');
-    const completedOrders = filteredOrders.filter(o => o.status === 'completed');
+    const activeOrders = searchedOrders.filter(o => o.status !== 'completed');
+    const pendingOrders = searchedOrders.filter(o => o.status === 'pending');
+    const inProgressOrders = searchedOrders.filter(o => o.status === 'in_progress');
+    const archivedOrders = searchedOrders.filter(o => o.status === 'completed');
+    const visibleMobileOrders = statusFilter === 'archive'
+        ? archivedOrders
+        : statusFilter === 'all'
+            ? activeOrders
+            : searchedOrders.filter((order) => order.status === statusFilter && order.status !== 'completed');
     const statusCounts = useMemo(() => ({
-        all: orders.length,
+        all: orders.filter((order) => order.status !== 'completed').length,
         pending: orders.filter((order) => order.status === 'pending').length,
         inProgress: orders.filter((order) => order.status === 'in_progress').length,
-        completed: orders.filter((order) => order.status === 'completed').length,
+        archived: orders.filter((order) => order.status === 'completed').length,
     }), [orders]);
 
     // Handle status update
@@ -85,6 +92,29 @@ const ServiceOrderList = () => {
         }
     };
 
+    const handleCompleteOrder = async (orderId) => {
+        try {
+            const result = await completeServiceOrder(orderId);
+            const completedOrder = result?.order;
+
+            if (completedOrder) {
+                setOrders(prev => prev.map(o => o.id === orderId ? completedOrder : o));
+                setSelectedOrder(completedOrder);
+            } else {
+                setReloadNonce((value) => value + 1);
+                setSelectedOrder(null);
+            }
+
+            if (result?.saleCreated) {
+                success('Sales record added successfully');
+            }
+            success('Service order completed and archived successfully');
+        } catch (error) {
+            showError(error.message || 'Unable to finish, archive, and post the service order to Sales.');
+            throw error;
+        }
+    };
+
     // Handle new order creation
     const handleCreateOrder = async (payload) => {
         const newOrder = await createServiceOrder(payload);
@@ -93,12 +123,16 @@ const ServiceOrderList = () => {
     };
 
     // Order card component
-    const OrderCard = ({ order }) => (
+    const OrderCard = ({ order }) => {
+        const isArchived = order.status === 'completed';
+        const itemCount = Array.isArray(order.items) ? order.items.length : 0;
+
+        return (
         <div
-            className="group relative bg-white border border-primary-200 rounded-xl overflow-hidden cursor-pointer hover:border-red-500/50 transition-all duration-300 shadow-sm hover:shadow-md"
+            className={`group relative overflow-hidden rounded-xl border bg-white cursor-pointer transition-all duration-300 shadow-sm hover:shadow-md ${isArchived ? 'border-accent-success/25 hover:border-accent-success/50' : 'border-primary-200 hover:border-red-500/50'}`}
             onClick={() => setSelectedOrder(order)}
         >
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-500/0 to-transparent group-hover:via-red-500/50 transition-all duration-500" />
+            <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent to-transparent transition-all duration-500 ${isArchived ? 'via-accent-success/30 group-hover:via-accent-success/70' : 'via-red-500/0 group-hover:via-red-500/50'}`} />
 
             <div className="p-5">
                 <div className="flex items-start justify-between mb-4">
@@ -123,6 +157,12 @@ const ServiceOrderList = () => {
                     <div className="pt-1">
                         <p className="text-sm text-primary-700 line-clamp-2 leading-relaxed">{order.description}</p>
                     </div>
+                    {itemCount > 0 && (
+                        <div className="flex justify-between items-center border-t border-primary-200 pt-2">
+                            <span className="text-xs font-mono text-primary-500">LINES</span>
+                            <span className="text-sm font-medium text-primary-900">{itemCount} item{itemCount === 1 ? '' : 's'}</span>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex items-center justify-between mt-5 pt-4 border-t border-primary-100">
@@ -133,9 +173,15 @@ const ServiceOrderList = () => {
                         {formatRelativeTime(order.createdAt)}
                     </p>
                 </div>
+                {isArchived && (
+                    <div className="mt-3 rounded-lg border border-accent-success/20 bg-accent-success/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-accent-success">
+                        Archived and posted to Sales
+                    </div>
+                )}
             </div>
         </div>
-    );
+        );
+    };
 
     const StatusMetric = ({ label, value, helper, icon }) => (
         <Card padding="sm" className="border-primary-200 bg-white">
@@ -174,11 +220,11 @@ const ServiceOrderList = () => {
     const tabs = [
         {
             id: 'all',
-            label: 'All Orders',
-            badge: orders.length,
+            label: 'Active Queue',
+            badge: activeOrders.length,
             content: (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                    {filteredOrders.map((order) => (
+                    {activeOrders.map((order) => (
                         <OrderCard key={order.id} order={order} />
                     ))}
                 </div>
@@ -211,13 +257,13 @@ const ServiceOrderList = () => {
             ),
         },
         {
-            id: 'completed',
-            label: 'Completed',
-            badge: completedOrders.length,
-            icon: <CheckCircle className="w-4 h-4" />,
+            id: 'archive',
+            label: 'Archive',
+            badge: archivedOrders.length,
+            icon: <Archive className="w-4 h-4" />,
             content: (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                    {completedOrders.map((order) => (
+                    {archivedOrders.map((order) => (
                         <OrderCard key={order.id} order={order} />
                     ))}
                 </div>
@@ -249,10 +295,10 @@ const ServiceOrderList = () => {
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <StatusMetric label="All Orders" value={statusCounts.all} helper="Visible service queue" icon={<Wrench className="h-5 w-5" />} />
+                <StatusMetric label="Active Queue" value={statusCounts.all} helper="Pending and in-progress only" icon={<Wrench className="h-5 w-5" />} />
                 <StatusMetric label="Pending" value={statusCounts.pending} helper="Needs workshop review" icon={<Clock className="h-5 w-5" />} />
                 <StatusMetric label="In Progress" value={statusCounts.inProgress} helper="Currently being handled" icon={<AlertCircle className="h-5 w-5" />} />
-                <StatusMetric label="Completed" value={statusCounts.completed} helper="Ready for release/history" icon={<CheckCircle className="h-5 w-5" />} />
+                <StatusMetric label="Archive" value={statusCounts.archived} helper="Completed and posted to Sales" icon={<Archive className="h-5 w-5" />} />
             </div>
 
             {loadError && (
@@ -297,20 +343,20 @@ const ServiceOrderList = () => {
                     </div>
 
                     <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600">
-                        <p className="font-semibold text-primary-900">Showing {filteredOrders.length} of {orders.length}</p>
-                        <p className="text-xs">Search by customer, order number, plate, vehicle, or job notes.</p>
+                        <p className="font-semibold text-primary-900">Showing {visibleMobileOrders.length} active/archive matches</p>
+                        <p className="text-xs">Completed jobs move to Archive and are removed from the active queue.</p>
                     </div>
                 </div>
 
                 <div className="mb-4 flex flex-wrap gap-2 sm:hidden">
-                    {['all', 'pending', 'in_progress', 'completed'].map((status) => (
+                    {['all', 'pending', 'in_progress', 'archive'].map((status) => (
                         <button
                             key={status}
                             type="button"
                             onClick={() => setStatusFilter(status)}
                             className={`min-h-10 rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide ${statusFilter === status ? 'border-accent-blue bg-accent-blue text-white' : 'border-primary-200 bg-white text-primary-600'}`}
                         >
-                            {status === 'all' ? 'All' : status.replace('_', ' ')}
+                            {status === 'all' ? 'Active' : status.replace('_', ' ')}
                         </button>
                     ))}
                 </div>
@@ -324,7 +370,7 @@ const ServiceOrderList = () => {
                 {!loading && (
                 <div className="sm:hidden">
                     <div className="grid grid-cols-1 gap-4 mt-6">
-                        {filteredOrders.map((order) => (
+                        {visibleMobileOrders.map((order) => (
                             <OrderCard key={order.id} order={order} />
                         ))}
                     </div>
@@ -340,11 +386,11 @@ const ServiceOrderList = () => {
                 )}
 
                 {/* Empty State */}
-                {!loading && filteredOrders.length === 0 && (
+                {!loading && visibleMobileOrders.length === 0 && (
                     <div className="text-center py-16 bg-primary-50 border border-primary-200 rounded-2xl">
                         <AlertCircle className="w-16 h-16 text-primary-300 mx-auto mb-6" />
                         <h3 className="text-xl font-display font-semibold text-primary-900 mb-2 tracking-wide uppercase">No orders found</h3>
-                        <p className="mx-auto max-w-md text-primary-500 text-sm">Adjust the search/filter or create a new service order for a customer repair job.</p>
+                        <p className="mx-auto max-w-md text-primary-500 text-sm">Adjust the search/filter or create a new service order for a customer repair job. Completed jobs are stored in Archive.</p>
                         <Button className="mt-6" variant="primary" leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowCreateModal(true)}>
                             Create Service Order
                         </Button>
@@ -366,6 +412,7 @@ const ServiceOrderList = () => {
                 onClose={() => setSelectedOrder(null)}
                 order={selectedOrder}
                 onStatusUpdate={handleStatusUpdate}
+                onComplete={handleCompleteOrder}
             />
         </div>
     );
