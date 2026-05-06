@@ -3,6 +3,7 @@ import { Plus, Search, Trash2 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import { PAYMENT_LABELS, PAYMENT_METHODS } from '../../../utils/constants';
+import { formatCurrency } from '../../../utils/formatters';
 import { createHistoricalPosSale, updateHistoricalPosSale } from '../../../services/posApi';
 import { getProductCatalog, getServiceCatalog } from '../../../services/catalogApi';
 
@@ -209,7 +210,7 @@ function HistoricalSaleLineItemEditor({
                                                 <div className="font-semibold text-primary-950">{product.sku}</div>
                                                 <div className="text-primary-600">{product.name}</div>
                                             </div>
-                                            <div className="text-accent-blue">\u20B1{Number(product.price ?? 0).toFixed(2)}</div>
+                                            <div className="text-accent-blue">{formatCurrency(Number(product.price ?? 0))}</div>
                                         </button>
                                     ))}
                                 </div>
@@ -287,7 +288,9 @@ function HistoricalSaleLineItemEditor({
 
                 <div className="flex items-center justify-end gap-3">
                     <div className="text-right text-sm">
-                        <div className="font-semibold text-primary-950">\u20B1{(Number(line.quantity ?? 0) * Number(line.unitPrice ?? 0)).toFixed(2)}</div>
+                        <div className="font-semibold text-primary-950">
+                            {formatCurrency(Number(line.quantity ?? 0) * Number(line.unitPrice ?? 0))}
+                        </div>
                         <div className="text-primary-500">Line total</div>
                     </div>
                     <Button variant="ghost" size="icon" onClick={onRemove}>
@@ -569,23 +572,23 @@ export default function HistoricalSaleEditorModal({
                 <div className="grid gap-4 rounded-2xl border border-primary-100 bg-primary-50 p-4 md:grid-cols-2 xl:grid-cols-5">
                     <div>
                         <div className="text-xs uppercase tracking-wide text-primary-500">Subtotal</div>
-                        <div className="text-lg font-semibold text-primary-950">\u20B1{computedTotals.rawSubtotal.toFixed(2)}</div>
+                        <div className="text-lg font-semibold text-primary-950">{formatCurrency(computedTotals.rawSubtotal)}</div>
                     </div>
                     <div>
                         <div className="text-xs uppercase tracking-wide text-primary-500">Discount</div>
-                        <div className="text-lg font-semibold text-primary-950">\u20B1{computedTotals.discountAmount.toFixed(2)}</div>
+                        <div className="text-lg font-semibold text-primary-950">{formatCurrency(computedTotals.discountAmount)}</div>
                     </div>
                     <div>
                         <div className="text-xs uppercase tracking-wide text-primary-500">Tax</div>
-                        <div className="text-lg font-semibold text-primary-950">\u20B1{computedTotals.tax.toFixed(2)}</div>
+                        <div className="text-lg font-semibold text-primary-950">{formatCurrency(computedTotals.tax)}</div>
                     </div>
                     <div>
                         <div className="text-xs uppercase tracking-wide text-primary-500">Total</div>
-                        <div className="text-lg font-semibold text-accent-blue">\u20B1{computedTotals.total.toFixed(2)}</div>
+                        <div className="text-lg font-semibold text-accent-blue">{formatCurrency(computedTotals.total)}</div>
                     </div>
                     <div>
                         <div className="text-xs uppercase tracking-wide text-primary-500">Change due</div>
-                        <div className="text-lg font-semibold text-primary-950">\u20B1{computedTotals.changeDue.toFixed(2)}</div>
+                        <div className="text-lg font-semibold text-primary-950">{formatCurrency(computedTotals.changeDue)}</div>
                     </div>
                 </div>
 

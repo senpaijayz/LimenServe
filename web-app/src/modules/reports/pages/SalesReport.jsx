@@ -18,6 +18,38 @@ import { useAuth } from '../../../context/useAuth';
 import SaleReceiptPreview from '../../pos/components/SaleReceiptPreview.jsx';
 import HistoricalSaleEditorModal from '../components/HistoricalSaleEditorModal.jsx';
 
+function escapeCsvCell(value) {
+    const normalized = value === null || value === undefined ? '' : String(value);
+    return `"${normalized.replace(/"/g, '""')}"`;
+}
+
+function downloadCsv(filename, rows) {
+    const csv = rows.map((row) => row.map(escapeCsvCell).join(',')).join('\n');
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+}
+
+function appendSection(rows, title, headers, dataRows) {
+    rows.push([]);
+    rows.push([title]);
+    rows.push(headers);
+
+    if (dataRows.length === 0) {
+        rows.push(['No records']);
+        return;
+    }
+
+    rows.push(...dataRows);
+}
+
 const SalesReport = () => {
     const { isAdmin } = useAuth();
     const [filters, setFilters] = useState({
@@ -43,6 +75,7 @@ const SalesReport = () => {
     const [loadingSaleDetail, setLoadingSaleDetail] = useState(false);
     const [isHistoricalEditorOpen, setIsHistoricalEditorOpen] = useState(false);
     const [editingHistoricalSale, setEditingHistoricalSale] = useState(null);
+    const [isExporting, setIsExporting] = useState(false);
     const activeSaleRequestRef = useRef(null);
 
     const loadAnalytics = useCallback(async () => {
@@ -150,6 +183,116 @@ const SalesReport = () => {
         }
     };
 
+    const handleExport = useCallback(async () => {
+        setIsExporting(true);
+        setError('');
+
+        try {
+            const exportedSales = [];
+            let page = 1;
+            let hasMore = true;
+
+            while (hasMore && page <= 20) {
+                const { sales, pagination } = await listPosSales({
+                    startDate: filters.startDate,
+                    endDate: filters.endDate,
+                    search: historySearch || null,
+                    limit: 100,
+                    page,
+                });
+
+                exportedSales.push(...(sales ?? []));
+                hasMore = Boolean(pagination?.hasMore);
+                page += 1;
+            }
+
+            const rows = [
+                ['LimenServe Sales Analytics Report'],
+                ['Generated at', formatDateTime(new Date())],
+                ['Start date', filters.startDate],
+                ['End date', filters.endDate],
+                ['Category', filters.category || 'All'],
+                ['Product ID', filters.productId || 'All'],
+                ['Location', filters.location || 'All'],
+                ['Granularity', filters.granularity],
+                ['Sales search', historySearch || 'All'],
+            ];
+
+            appendSection(
+                rows,
+                'Top-Selling Items',
+                ['Product', 'SKU', 'Category', 'Units', 'Revenue'],
+                topSellingItems.map((item) => [
+                    item.product_name,
+                    item.sku,
+                    item.category,
+                    Number(item.quantity ?? 0),
+                    Number(item.revenue ?? 0).toFixed(2),
+                ]),
+            );
+
+            appendSection(
+                rows,
+                'Item Sales Trend',
+                ['Period', 'Units', 'Revenue'],
+                itemTrend.map((item) => [
+                    item.period_label || item.period || item.bucket || item.month || item.sale_period || '',
+                    Number(item.quantity ?? item.units ?? 0),
+                    Number(item.revenue ?? 0).toFixed(2),
+                ]),
+            );
+
+            appendSection(
+                rows,
+                'Peak Periods',
+                ['Product', 'SKU', 'Peak Month', 'Peak Units', 'Peak Revenue'],
+                peakPeriods.map((item) => [
+                    item.product_name,
+                    item.sku,
+                    item.peak_month ? new Date(item.peak_month).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' }) : '',
+                    Number(item.peak_quantity ?? 0),
+                    Number(item.peak_revenue ?? 0).toFixed(2),
+                ]),
+            );
+
+            appendSection(
+                rows,
+                'Sales Ledger',
+                ['Receipt', 'Date / Time', 'Customer', 'Cashier', 'Source', 'Items', 'Payment', 'Status', 'Original Reference', 'Total'],
+                exportedSales.map((sale) => [
+                    sale.transaction_number,
+                    formatDateTime(sale.saleAt || sale.sale_at || sale.created_at),
+                    sale.customer_name,
+                    sale.cashier_name,
+                    sale.sourceType === 'historical_encoded' || sale.source_type === 'historical_encoded' ? 'Historical' : 'POS',
+                    Number(sale.item_count ?? 0),
+                    PAYMENT_LABELS[sale.payment_method] || sale.payment_method,
+                    sale.status,
+                    sale.originalReference || sale.original_reference || '',
+                    Number(sale.total_amount ?? 0).toFixed(2),
+                ]),
+            );
+
+            const stamp = new Date().toISOString().slice(0, 10);
+            downloadCsv(`limenserve-sales-report-${stamp}.csv`, rows);
+        } catch (exportError) {
+            setError(exportError.message || 'Unable to export the report.');
+        } finally {
+            setIsExporting(false);
+        }
+    }, [
+        filters.category,
+        filters.endDate,
+        filters.granularity,
+        filters.location,
+        filters.productId,
+        filters.startDate,
+        historySearch,
+        itemTrend,
+        peakPeriods,
+        topSellingItems,
+    ]);
+
     const topLeader = topSellingItems[0];
     const peakLeader = peakPeriods[0];
     const trendRevenue = useMemo(() => itemTrend.reduce((sum, item) => sum + Number(item.revenue ?? 0), 0), [itemTrend]);
@@ -176,7 +319,14 @@ const SalesReport = () => {
                         </Button>
                     )}
                     <Button variant="secondary" leftIcon={<RefreshCw className="w-4 h-4" />} isLoading={refreshing} onClick={handleRefresh}>Refresh Analytics</Button>
-                    <Button variant="outline" leftIcon={<Download className="w-4 h-4" />}>Export</Button>
+                    <Button
+                        variant="outline"
+                        leftIcon={<Download className="w-4 h-4" />}
+                        isLoading={isExporting}
+                        onClick={handleExport}
+                    >
+                        Export
+                    </Button>
                 </div>
             </div>
 
