@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion as Motion } from 'framer-motion';
 import { CarFront, Clock, MapPin, Menu, Phone, ShieldCheck, X } from 'lucide-react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
@@ -48,11 +48,11 @@ const PublicLayout = () => {
                     <div className="flex flex-wrap items-center gap-4 text-white/80">
                         <span className="inline-flex items-center gap-2">
                             <Phone className="h-3.5 w-3.5 text-red-400" />
-                            +63 917 123 4567
+                            (0915) 522 5629 | 02 8551 3518
                         </span>
                         <span className="hidden items-center gap-2 sm:inline-flex">
                             <Clock className="h-3.5 w-3.5 text-red-400" />
-                            Mon-Sat 8:00 AM-6:00 PM
+                            Mon-Sat 8:00 AM-5:00 PM | Sun 8:00 AM-12:00 PM
                         </span>
                     </div>
                 </div>
@@ -107,7 +107,7 @@ const PublicLayout = () => {
 
             <AnimatePresence>
                 {mobileMenuOpen && (
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0, y: -20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
@@ -130,7 +130,7 @@ const PublicLayout = () => {
                                 </Link>
                             </div>
                         </div>
-                    </motion.div>
+                    </Motion.div>
                 )}
             </AnimatePresence>
 
@@ -198,11 +198,15 @@ const PublicLayout = () => {
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <Phone className="h-4 w-4 text-accent-danger" />
-                                    <span>+63 917 123 4567</span>
+                                    <span>(0915) 522 5629</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <Phone className="h-4 w-4 text-accent-danger" />
+                                    <span>Landline: 02 8551 3518</span>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <Clock className="h-4 w-4 text-accent-danger" />
-                                    <span>Mon-Sat: 8:00 AM-6:00 PM</span>
+                                    <span>Mon-Sat: 8:00 AM-5:00 PM | Sun: 8:00 AM-12:00 PM</span>
                                 </div>
                             </div>
                         </div>

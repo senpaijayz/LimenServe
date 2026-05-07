@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
     ArrowRight,
@@ -51,7 +51,7 @@ const PublicServiceOrders = () => {
 
             <section className="relative pt-32 pb-16 px-4 md:px-8 xl:px-12 z-10">
                 <div className="max-w-[1600px] mx-auto">
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.6 }}
@@ -71,13 +71,13 @@ const PublicServiceOrders = () => {
                         <p className="text-lg md:text-xl text-primary-600 max-w-3xl mt-8 leading-relaxed font-light">
                             LimenServe supports service-order handling for repair and installation requests, from customer intake and cost estimation to status tracking and completion.
                         </p>
-                    </motion.div>
+                    </Motion.div>
                 </div>
             </section>
 
             <section className="relative z-10 px-4 md:px-8 xl:px-12">
                 <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0, y: 24 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
@@ -114,9 +114,9 @@ const PublicServiceOrders = () => {
                                 );
                             })}
                         </div>
-                    </motion.div>
+                    </Motion.div>
 
-                    <motion.aside
+                    <Motion.aside
                         initial={{ opacity: 0, y: 24 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
@@ -152,7 +152,9 @@ const PublicServiceOrders = () => {
 
                             <div className="rounded-2xl border border-primary-200 bg-primary-50 p-5 mb-6">
                                 <p className="text-xs font-semibold tracking-[0.2em] text-primary-500 uppercase mb-2">Contact</p>
-                                <p className="text-lg font-semibold text-primary-950">+63 917 123 4567</p>
+                                <p className="text-lg font-semibold text-primary-950">(0915) 522 5629</p>
+                                <p className="text-sm font-semibold text-primary-800 mt-1">Landline: 02 8551 3518</p>
+                                <p className="text-sm text-primary-600 mt-3">Mon-Sat: 8:00 AM-5:00 PM | Sun: 8:00 AM-12:00 PM</p>
                                 <p className="text-sm text-primary-600 mt-1">1308, 264 Epifanio de los Santos Ave, Pasay City, Metro Manila</p>
                             </div>
 
@@ -166,7 +168,7 @@ const PublicServiceOrders = () => {
                                 </Link>
                             </div>
                         </div>
-                    </motion.aside>
+                    </Motion.aside>
                 </div>
             </section>
         </div>

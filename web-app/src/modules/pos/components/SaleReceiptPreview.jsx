@@ -31,7 +31,7 @@ const SaleReceiptPreview = ({ receipt, printId = 'pos-receipt' }) => {
                 <img src="/LogoLimen.jpg" alt="Limen Logo" style={{ height: '48px', margin: '0 auto 6px', display: 'block', filter: 'grayscale(1) contrast(1.3)' }} />
                 <h2 style={{ fontSize: '16px', fontWeight: '800', margin: 0, letterSpacing: '-0.5px' }}>LIMEN AUTO PARTS CENTER</h2>
                 <p style={{ fontSize: '11px', margin: '2px 0 0', color: '#555' }}>1308, 264 Epifanio de los Santos Ave, Pasay City, 1308 Metro Manila</p>
-                <p style={{ fontSize: '11px', margin: '1px 0 0', color: '#555' }}>Tel: +63 917 123 4567 | TIN: 000-123-456-000</p>
+                <p style={{ fontSize: '11px', margin: '1px 0 0', color: '#555' }}>Tel: (0915) 522 5629 | Landline: 02 8551 3518 | TIN: 000-123-456-000</p>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', gap: '12px' }}>
