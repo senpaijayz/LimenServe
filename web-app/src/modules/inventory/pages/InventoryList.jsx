@@ -7,18 +7,27 @@ import { StockBadge } from '../../../components/ui/Badge';
 import Dropdown from '../../../components/ui/Dropdown';
 import ProductCard from '../components/ProductCard';
 import AddStockModal from '../components/AddStockModal';
-import { formatCurrency, formatNumber } from '../../../utils/formatters';
+import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
 import { useToast } from '../../../components/ui/Toast';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
 import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
-import { getCatalogSummary } from '../../../services/catalogApi';
+import { getCatalogSummary, getInventoryMovements, receiveInventoryStock } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
 import { productMatchesIdentifier } from '../../../utils/barcode';
 
 const PAGE_SIZE = 12;
+const MOVEMENT_LABELS = {
+    stock_in: 'Stock In',
+    stock_out: 'Stock Out',
+    adjustment: 'Adjustment',
+    reservation: 'Reservation',
+    release: 'Release',
+    sale: 'Sale',
+    service_usage: 'Service Usage',
+};
 
 function formatCatalogProduct(product) {
     return {
@@ -57,6 +66,8 @@ const InventoryList = () => {
     const [refreshKey, setRefreshKey] = useState(0);
     const [productOverrides, setProductOverrides] = useState({});
     const [selectedPreviewProduct, setSelectedPreviewProduct] = useState(null);
+    const [stockMovements, setStockMovements] = useState([]);
+    const [movementError, setMovementError] = useState('');
     const {
         products,
         categories: catalogCategories,
@@ -77,14 +88,20 @@ const InventoryList = () => {
 
         void (async () => {
             try {
-                const summary = await getCatalogSummary();
+                const [summary, movements] = await Promise.all([
+                    getCatalogSummary(),
+                    getInventoryMovements(8),
+                ]);
                 if (active) {
                     setCatalogSummary(summary);
+                    setStockMovements(movements);
                     setSummaryError('');
+                    setMovementError('');
                 }
             } catch (loadError) {
                 if (active) {
                     setSummaryError(loadError.message || 'Unable to load catalog summary.');
+                    setMovementError(loadError.message || 'Unable to load movement history.');
                 }
             }
         })();
@@ -93,6 +110,17 @@ const InventoryList = () => {
             active = false;
         };
     }, []);
+
+    const refreshInventoryMeta = async () => {
+        const [summary, movements] = await Promise.all([
+            getCatalogSummary(),
+            getInventoryMovements(8),
+        ]);
+        setCatalogSummary(summary);
+        setStockMovements(movements);
+        setSummaryError('');
+        setMovementError('');
+    };
 
     const visibleProducts = useMemo(() => (
         products.map((product) => productOverrides[product.id] ?? formatCatalogProduct(product))
@@ -273,9 +301,7 @@ const InventoryList = () => {
                         <PriceListManager onUpdated={async () => {
                             setRefreshKey((value) => value + 1);
                             try {
-                                const summary = await getCatalogSummary();
-                                setCatalogSummary(summary);
-                                setSummaryError('');
+                                await refreshInventoryMeta();
                             } catch (loadError) {
                                 setSummaryError(loadError.message || 'Unable to refresh catalog summary.');
                             }
@@ -309,6 +335,42 @@ const InventoryList = () => {
                     </Button>
                 </div>
             </div>
+
+            <Card
+                title="Recent Stock Activity"
+                subtitle="Audit trail for stock receiving and inventory movement actions."
+            >
+                {movementError ? (
+                    <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/5 px-4 py-3 text-sm text-accent-danger">
+                        {movementError}
+                    </div>
+                ) : stockMovements.length === 0 ? (
+                    <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-6 text-center text-sm text-primary-500">
+                        No inventory movement history has been recorded yet.
+                    </div>
+                ) : (
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        {stockMovements.map((movement) => (
+                            <div key={movement.id} className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="truncate text-sm font-bold text-primary-950">{movement.productName}</p>
+                                        <p className="mt-1 font-mono text-xs text-primary-500">{movement.sku || 'NO SKU'}</p>
+                                    </div>
+                                    <span className="rounded-full border border-accent-success/20 bg-accent-success/10 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-accent-success">
+                                        +{formatNumber(movement.quantity)}
+                                    </span>
+                                </div>
+                                <div className="mt-3 space-y-1 text-xs text-primary-500">
+                                    <p><span className="font-semibold text-primary-700">{MOVEMENT_LABELS[movement.movementType] || movement.movementType}</span> by {movement.performedBy}</p>
+                                    <p>{formatDateTime(movement.createdAt)}</p>
+                                    {movement.notes && <p className="line-clamp-2">{movement.notes}</p>}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </Card>
 
             {loading ? (
                 <Card className="text-center py-12">
@@ -417,12 +479,27 @@ const InventoryList = () => {
             <AddStockModal
                 isOpen={showAddModal}
                 onClose={() => setShowAddModal(false)}
-                onSave={(updatedProduct) => {
+                onSave={async ({ product, quantity, supplierName, referenceNumber, reason }) => {
+                    const result = await receiveInventoryStock({
+                        productId: product.id,
+                        quantity,
+                        supplierName,
+                        referenceNumber,
+                        reason,
+                    });
+                    const updatedProduct = {
+                        ...product,
+                        stock: result.updatedStock,
+                        quantity: result.updatedStock,
+                    };
+
                     setProductOverrides((current) => ({
                         ...current,
                         [updatedProduct.id]: updatedProduct,
                     }));
-                    success(`Added stock! ${updatedProduct.name} now has ${updatedProduct.quantity} units.`);
+                    setRefreshKey((value) => value + 1);
+                    await refreshInventoryMeta();
+                    success(`Received ${formatNumber(result.quantityAdded)} units. ${updatedProduct.name} now has ${formatNumber(result.updatedStock)} units.`);
                     setShowAddModal(false);
                 }}
             />

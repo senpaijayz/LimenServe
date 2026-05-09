@@ -345,6 +345,24 @@ function invalidateProductCatalogCache() {
   productCatalogCachePromise = null;
 }
 
+function parsePositiveStockQuantity(value) {
+  const quantity = Number(value);
+
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return null;
+  }
+
+  return Number(quantity.toFixed(2));
+}
+
+function buildStockReceiveNotes({ supplierName, referenceNumber, reason }) {
+  return [
+    supplierName ? `Supplier: ${supplierName}` : null,
+    referenceNumber ? `Reference: ${referenceNumber}` : null,
+    reason ? `Reason: ${reason}` : 'Reason: Stock receiving',
+  ].filter(Boolean).join(' | ');
+}
+
 function mapCatalogRow(row) {
   const sourceCategory = row.source_category
     ?? row.sourceCategory
@@ -2026,6 +2044,184 @@ router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, ne
         uniqueProducts: totalProducts,
         currentPrices: totalProducts,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
+  try {
+    const productId = String(req.body?.productId || '').trim();
+    const quantity = parsePositiveStockQuantity(req.body?.quantity);
+    const supplierName = String(req.body?.supplierName || '').trim();
+    const referenceNumber = String(req.body?.referenceNumber || '').trim();
+    const reason = String(req.body?.reason || '').trim();
+
+    if (!productId) {
+      res.status(400).json({ error: 'Product is required.' });
+      return;
+    }
+
+    if (quantity === null) {
+      res.status(400).json({ error: 'Quantity must be greater than zero.' });
+      return;
+    }
+
+    if (!supplierName) {
+      res.status(400).json({ error: 'Supplier name is required for stock receiving.' });
+      return;
+    }
+
+    const { data: product, error: productError } = await supabaseAdmin
+      .schema('catalog')
+      .from('products')
+      .select('id, sku, name')
+      .eq('id', productId)
+      .maybeSingle();
+
+    if (productError) {
+      throw productError;
+    }
+
+    if (!product) {
+      res.status(404).json({ error: 'Product was not found in the catalog.' });
+      return;
+    }
+
+    const { data: currentBalance, error: balanceError } = await supabaseAdmin
+      .schema('catalog')
+      .from('inventory_balances')
+      .select('product_id, on_hand, reserved, reorder_point, reorder_quantity, location')
+      .eq('product_id', productId)
+      .maybeSingle();
+
+    if (balanceError) {
+      throw balanceError;
+    }
+
+    const previousStock = Number(currentBalance?.on_hand ?? 0);
+    const updatedStock = Number((previousStock + quantity).toFixed(2));
+    const nowIso = new Date().toISOString();
+
+    const { error: upsertError } = await supabaseAdmin
+      .schema('catalog')
+      .from('inventory_balances')
+      .upsert({
+        product_id: productId,
+        on_hand: updatedStock,
+        reserved: Number(currentBalance?.reserved ?? 0),
+        reorder_point: Number(currentBalance?.reorder_point ?? 0),
+        reorder_quantity: Number(currentBalance?.reorder_quantity ?? 0),
+        location: currentBalance?.location ?? {},
+        as_of_date: nowIso.slice(0, 10),
+        business_date: nowIso.slice(0, 10),
+        updated_at: nowIso,
+      }, { onConflict: 'product_id' });
+
+    if (upsertError) {
+      throw upsertError;
+    }
+
+    const { data: movement, error: movementError } = await supabaseAdmin
+      .schema('catalog')
+      .from('inventory_movements')
+      .insert({
+        product_id: productId,
+        movement_type: 'stock_in',
+        quantity,
+        reference_type: 'supplier_receipt',
+        reference_id: null,
+        notes: buildStockReceiveNotes({ supplierName, referenceNumber, reason }),
+        performed_by: req.user?.id || null,
+        business_date: nowIso.slice(0, 10),
+      })
+      .select('id, created_at')
+      .single();
+
+    if (movementError) {
+      throw movementError;
+    }
+
+    invalidateProductCatalogCache();
+
+    res.status(201).json({
+      product: {
+        id: product.id,
+        sku: product.sku,
+        name: product.name,
+      },
+      movement: {
+        id: movement.id,
+        createdAt: movement.created_at,
+      },
+      previousStock,
+      quantityAdded: quantity,
+      updatedStock,
+      supplierName,
+      referenceNumber,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/stock/movements', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
+  try {
+    const limit = parsePositiveInteger(req.query.limit, 12, 100);
+    const { data: movements, error: movementsError } = await supabaseAdmin
+      .schema('catalog')
+      .from('inventory_movements')
+      .select('id, product_id, movement_type, quantity, reference_type, notes, performed_by, business_date, created_at')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (movementsError) {
+      throw movementsError;
+    }
+
+    const productIds = [...new Set((movements ?? []).map((movement) => movement.product_id).filter(Boolean))];
+    const userIds = [...new Set((movements ?? []).map((movement) => movement.performed_by).filter(Boolean))];
+
+    const [{ data: products, error: productsError }, { data: profiles, error: profilesError }] = await Promise.all([
+      productIds.length > 0
+        ? supabaseAdmin.schema('catalog').from('products').select('id, sku, name').in('id', productIds)
+        : Promise.resolve({ data: [], error: null }),
+      userIds.length > 0
+        ? supabaseAdmin.schema('core').from('user_profiles').select('user_id, full_name, email').in('user_id', userIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (productsError) {
+      throw productsError;
+    }
+
+    if (profilesError) {
+      throw profilesError;
+    }
+
+    const productMap = new Map((products ?? []).map((product) => [product.id, product]));
+    const profileMap = new Map((profiles ?? []).map((profile) => [profile.user_id, profile]));
+
+    res.json({
+      movements: (movements ?? []).map((movement) => {
+        const product = productMap.get(movement.product_id) ?? {};
+        const profile = profileMap.get(movement.performed_by) ?? {};
+
+        return {
+          id: movement.id,
+          productId: movement.product_id,
+          sku: product.sku ?? '',
+          productName: product.name ?? 'Unknown product',
+          movementType: movement.movement_type,
+          quantity: Number(movement.quantity ?? 0),
+          referenceType: movement.reference_type,
+          notes: movement.notes,
+          performedBy: profile.full_name || profile.email || 'System',
+          businessDate: movement.business_date,
+          createdAt: movement.created_at,
+        };
+      }),
     });
   } catch (error) {
     next(error);

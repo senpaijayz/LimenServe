@@ -5,6 +5,7 @@ import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import useDataStore from '../../../store/useDataStore';
+import { formatNumber } from '../../../utils/formatters';
 
 /**
  * Add Stock Modal
@@ -17,32 +18,58 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
     const [showCameraScanner, setShowCameraScanner] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [quantityToAdd, setQuantityToAdd] = useState('');
+    const [supplierName, setSupplierName] = useState('');
+    const [referenceNumber, setReferenceNumber] = useState('');
+    const [reason, setReason] = useState('Stock receiving');
     const [error, setError] = useState('');
     const [isSearching, setIsSearching] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        if (isOpen) {
+        if (!isOpen) {
+            return undefined;
+        }
+
+        const resetTimer = window.setTimeout(() => {
             setSearchQuery('');
             setSelectedProduct(null);
             setQuantityToAdd('');
+            setSupplierName('');
+            setReferenceNumber('');
+            setReason('Stock receiving');
             setError('');
             setIsSearching(false);
-        }
+            setIsSubmitting(false);
+        }, 0);
+
+        return () => {
+            window.clearTimeout(resetTimer);
+        };
     }, [isOpen]);
 
     useEffect(() => {
         const identifier = searchQuery.trim();
         if (!identifier) {
-            setSelectedProduct(null);
-            setError('');
-            setIsSearching(false);
-            return;
+            const resetTimer = window.setTimeout(() => {
+                setSelectedProduct(null);
+                setError('');
+                setIsSearching(false);
+            }, 0);
+
+            return () => {
+                window.clearTimeout(resetTimer);
+            };
         }
 
         let active = true;
-        setIsSearching(true);
 
         void (async () => {
+            await Promise.resolve();
+            if (!active) {
+                return;
+            }
+
+            setIsSearching(true);
             const found = await findProduct(identifier);
             if (!active) {
                 return;
@@ -70,24 +97,44 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
         }
     };
 
-    const handleSave = () => {
-        const qty = parseInt(quantityToAdd, 10);
+    const handleSave = async () => {
+        const qty = Number(quantityToAdd);
         if (!selectedProduct) {
             setError('Please scan a valid Part Number first.');
             return;
         }
-        if (isNaN(qty) || qty <= 0) {
+        if (!Number.isFinite(qty) || qty <= 0) {
             setError('Please enter a valid quantity greater than 0.');
             return;
         }
+        if (!supplierName.trim()) {
+            setError('Supplier name is required for stock receiving.');
+            return;
+        }
 
-        const updatedProduct = {
-            ...selectedProduct,
-            quantity: selectedProduct.quantity + qty,
-        };
+        setIsSubmitting(true);
+        setError('');
 
-        onSave(updatedProduct);
+        try {
+            await onSave({
+                product: selectedProduct,
+                quantity: qty,
+                supplierName: supplierName.trim(),
+                referenceNumber: referenceNumber.trim(),
+                reason: reason.trim(),
+            });
+        } catch (saveError) {
+            setError(saveError.message || 'Failed to receive stock.');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
+
+    const currentQuantity = Number(selectedProduct?.quantity ?? selectedProduct?.stock ?? 0);
+    const quantityNumber = Number(quantityToAdd);
+    const projectedQuantity = selectedProduct && Number.isFinite(quantityNumber) && quantityNumber > 0
+        ? currentQuantity + quantityNumber
+        : currentQuantity;
 
     if (!isOpen) return null;
 
@@ -157,20 +204,52 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                             </div>
                             <div>
                                 <span className="text-xs text-primary-500 font-semibold uppercase block mb-0.5">Current Stock</span>
-                                <span className="text-sm font-bold text-primary-900">{selectedProduct.quantity} units</span>
+                                <span className="text-sm font-bold text-primary-900">{formatNumber(currentQuantity)} units</span>
+                            </div>
+                            <div>
+                                <span className="text-xs text-primary-500 font-semibold uppercase block mb-0.5">After Receiving</span>
+                                <span className="text-sm font-bold text-accent-blue">{formatNumber(projectedQuantity)} units</span>
                             </div>
                         </div>
                     </div>
                 )}
 
-                <div>
+                <div className="grid gap-4 sm:grid-cols-2">
                     <Input
                         label="Quantity to Add"
                         type="number"
                         min="1"
+                        step="1"
                         placeholder="Enter amount received"
                         value={quantityToAdd}
                         onChange={(e) => setQuantityToAdd(e.target.value)}
+                        disabled={!selectedProduct}
+                        className={!selectedProduct ? 'opacity-50 cursor-not-allowed' : ''}
+                    />
+                    <Input
+                        label="Supplier"
+                        type="text"
+                        placeholder="Supplier or delivery source"
+                        value={supplierName}
+                        onChange={(e) => setSupplierName(e.target.value)}
+                        disabled={!selectedProduct}
+                        className={!selectedProduct ? 'opacity-50 cursor-not-allowed' : ''}
+                    />
+                    <Input
+                        label="Reference No."
+                        type="text"
+                        placeholder="DR / invoice / receipt no."
+                        value={referenceNumber}
+                        onChange={(e) => setReferenceNumber(e.target.value)}
+                        disabled={!selectedProduct}
+                        className={!selectedProduct ? 'opacity-50 cursor-not-allowed' : ''}
+                    />
+                    <Input
+                        label="Reason"
+                        type="text"
+                        placeholder="Stock receiving"
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
                         disabled={!selectedProduct}
                         className={!selectedProduct ? 'opacity-50 cursor-not-allowed' : ''}
                     />
@@ -183,11 +262,12 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                     <Button
                         variant="primary"
                         onClick={handleSave}
-                        disabled={!selectedProduct || !quantityToAdd || quantityToAdd <= 0}
+                        disabled={!selectedProduct || !quantityToAdd || quantityToAdd <= 0 || !supplierName.trim() || isSubmitting}
+                        isLoading={isSubmitting}
                         leftIcon={<Plus className="w-4 h-4" />}
                         type="button"
                     >
-                        Add to Inventory
+                        Receive Stock
                     </Button>
                 </div>
             </div>

@@ -399,6 +399,26 @@ export async function getCatalogSummary() {
   }
 }
 
+export async function receiveInventoryStock(payload) {
+  try {
+    const { data } = await apiClient.post('/catalog/stock/receive', payload);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Failed to receive stock.');
+  }
+}
+
+export async function getInventoryMovements(limit = 12) {
+  try {
+    const { data } = await apiClient.get('/catalog/stock/movements', {
+      params: { limit },
+    });
+    return data.movements ?? [];
+  } catch (error) {
+    extractApiError(error, 'Failed to load inventory movement history.');
+  }
+}
+
 export async function getServiceCatalog() {
   try {
     const { data } = await apiClient.get('/catalog/services');
