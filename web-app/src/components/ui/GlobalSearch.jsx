@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import {
     Search, X, Package, ShoppingCart, Wrench, FileText,
     BarChart3, Users, Box, LayoutDashboard, ArrowRight, Command
@@ -22,6 +22,7 @@ const searchablePages = [
     { id: 'nav-svc', name: 'Service Orders', path: '/services', icon: Wrench, type: 'page' },
     { id: 'nav-stock', name: '3D Stockroom Viewer', path: '/stockroom', icon: Box, type: 'page' },
     { id: 'nav-reports', name: 'Reports & Analytics', path: '/reports', icon: BarChart3, type: 'page' },
+    { id: 'nav-inventory-report', name: 'Inventory Report', path: '/reports/inventory', icon: BarChart3, type: 'page' },
     { id: 'nav-users', name: 'User Management', path: '/users', icon: Users, type: 'page' },
 ];
 
@@ -49,6 +50,21 @@ const GlobalSearch = () => {
     const [selectedIndex, setSelectedIndex] = useState(0);
     const inputRef = useRef(null);
     const containerRef = useRef(null);
+
+    const openSearch = () => {
+        setQuery('');
+        setSelectedIndex(0);
+        setIsOpen(true);
+    };
+
+    const closeSearch = () => {
+        setIsOpen(false);
+    };
+
+    const updateQuery = (value) => {
+        setQuery(value);
+        setSelectedIndex(0);
+    };
 
     // Filtered results
     const results = useMemo(() => {
@@ -78,13 +94,15 @@ const GlobalSearch = () => {
         ).slice(0, 4);
 
         return [...pages, ...products, ...orders];
-    }, [query]);
+    }, [query, storeProducts]);
 
     // Keyboard shortcut to open (Ctrl+K)
     useEffect(() => {
         const handleKey = (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
                 e.preventDefault();
+                setQuery('');
+                setSelectedIndex(0);
                 setIsOpen(true);
             }
             if (e.key === 'Escape') {
@@ -99,8 +117,6 @@ const GlobalSearch = () => {
     useEffect(() => {
         if (isOpen) {
             setTimeout(() => inputRef.current?.focus(), 50);
-            setQuery('');
-            setSelectedIndex(0);
         }
     }, [isOpen]);
 
@@ -119,7 +135,7 @@ const GlobalSearch = () => {
 
     // Handle selection
     const handleSelect = (item) => {
-        setIsOpen(false);
+        closeSearch();
         if (item.type === 'page') {
             navigate(item.path);
         } else if (item.type === 'product') {
@@ -128,11 +144,6 @@ const GlobalSearch = () => {
             navigate('/services');
         }
     };
-
-    // Reset selectedIndex when results change
-    useEffect(() => {
-        setSelectedIndex(0);
-    }, [query]);
 
     // Group results by type
     const groupedResults = useMemo(() => {
@@ -148,7 +159,7 @@ const GlobalSearch = () => {
         <>
             {/* Search Trigger */}
             <button
-                onClick={() => setIsOpen(true)}
+                onClick={openSearch}
                 className="relative flex items-center gap-2 w-64 pl-10 pr-4 py-2 bg-primary-800 border border-primary-600 rounded-lg text-sm text-primary-500 hover:border-primary-500 transition-colors cursor-pointer"
             >
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-500" />
@@ -161,14 +172,14 @@ const GlobalSearch = () => {
             {/* Search Overlay */}
             <AnimatePresence>
                 {isOpen && (
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-start justify-center pt-[15vh]"
-                        onClick={() => setIsOpen(false)}
+                        onClick={closeSearch}
                     >
-                        <motion.div
+                        <Motion.div
                             initial={{ opacity: 0, scale: 0.95, y: -20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: -20 }}
@@ -184,13 +195,13 @@ const GlobalSearch = () => {
                                     ref={inputRef}
                                     type="text"
                                     value={query}
-                                    onChange={(e) => setQuery(e.target.value)}
+                                    onChange={(e) => updateQuery(e.target.value)}
                                     onKeyDown={handleKeyDown}
                                     placeholder="Search products, orders, pages..."
                                     className="flex-1 py-4 bg-transparent text-primary-100 placeholder-primary-500 text-base focus:outline-none"
                                 />
                                 {query && (
-                                    <button onClick={() => setQuery('')} className="p-1 rounded-md hover:bg-primary-700 text-primary-500">
+                                    <button onClick={() => updateQuery('')} className="p-1 rounded-md hover:bg-primary-700 text-primary-500">
                                         <X className="w-4 h-4" />
                                     </button>
                                 )}
@@ -283,8 +294,8 @@ const GlobalSearch = () => {
                                     <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 bg-primary-800 rounded border border-primary-700 font-mono">Esc</kbd> Close</span>
                                 </div>
                             )}
-                        </motion.div>
-                    </motion.div>
+                        </Motion.div>
+                    </Motion.div>
                 )}
             </AnimatePresence>
         </>
