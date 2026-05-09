@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AlertTriangle, Download, FilePlus2, Filter, Receipt, RefreshCw, TrendingUp } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
@@ -581,6 +582,22 @@ const SalesReport = () => {
                         Print PDF
                     </Button>
                 </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-accent-blue/30 bg-accent-blue/10 p-4">
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent-blue">Current Report</p>
+                    <p className="mt-1 text-lg font-display font-bold text-primary-950">Sales Analytics</p>
+                    <p className="mt-1 text-sm text-primary-600">Revenue, item movement, encoded historical sales, and printable sales reports.</p>
+                </div>
+                <Link
+                    to="/reports/inventory"
+                    className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm transition hover:border-accent-blue/40 hover:shadow-md"
+                >
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-500">Switch Report</p>
+                    <p className="mt-1 text-lg font-display font-bold text-primary-950">Inventory Summary</p>
+                    <p className="mt-1 text-sm text-primary-600">Catalog totals, movement ledger, archived items, and inventory audit PDF.</p>
+                </Link>
             </div>
 
             {error && (
