@@ -2297,6 +2297,71 @@ router.patch('/products/:productId/archive', requireRole('admin'), async (req, r
   }
 });
 
+router.get('/products/archived', requireRole('admin'), async (req, res, next) => {
+  try {
+    const limit = parsePositiveInteger(req.query.limit, 8, 50);
+    const { data: products, error: productsError } = await supabaseAdmin
+      .schema('catalog')
+      .from('products')
+      .select('id, sku, name, category, model_name, brand, uom, updated_at')
+      .eq('is_active', false)
+      .order('updated_at', { ascending: false })
+      .limit(limit);
+
+    if (productsError) {
+      throw productsError;
+    }
+
+    const productIds = (products ?? []).map((product) => product.id);
+    const [{ data: prices, error: pricesError }, { data: balances, error: balancesError }] = await Promise.all([
+      productIds.length > 0
+        ? supabaseAdmin
+          .schema('catalog')
+          .from('product_prices')
+          .select('product_id, amount')
+          .eq('price_type', 'retail')
+          .eq('is_current', true)
+          .in('product_id', productIds)
+        : Promise.resolve({ data: [], error: null }),
+      productIds.length > 0
+        ? supabaseAdmin
+          .schema('catalog')
+          .from('inventory_balances')
+          .select('product_id, on_hand')
+          .in('product_id', productIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (pricesError) {
+      throw pricesError;
+    }
+
+    if (balancesError) {
+      throw balancesError;
+    }
+
+    const priceMap = new Map((prices ?? []).map((price) => [price.product_id, Number(price.amount ?? 0)]));
+    const balanceMap = new Map((balances ?? []).map((balance) => [balance.product_id, Number(balance.on_hand ?? 0)]));
+
+    res.json({
+      products: (products ?? []).map((product) => ({
+        id: product.id,
+        sku: product.sku,
+        name: product.name,
+        model: product.model_name,
+        category: product.category,
+        brand: product.brand,
+        uom: product.uom,
+        price: priceMap.get(product.id) ?? 0,
+        stock: balanceMap.get(product.id) ?? 0,
+        archivedAt: product.updated_at,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/stock/movements', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
     const limit = parsePositiveInteger(req.query.limit, 12, 100);

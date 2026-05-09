@@ -431,6 +431,17 @@ export async function archiveCatalogProduct(productId, { archive = true, reason 
   }
 }
 
+export async function getArchivedCatalogProducts(limit = 8) {
+  try {
+    const { data } = await apiClient.get('/catalog/products/archived', {
+      params: { limit },
+    });
+    return data.products ?? [];
+  } catch (error) {
+    extractApiError(error, 'Failed to load archived products.');
+  }
+}
+
 export async function getServiceCatalog() {
   try {
     const { data } = await apiClient.get('/catalog/services');

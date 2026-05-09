@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion as Motion } from 'framer-motion';
-import { Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArchiveRestore, Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { StockBadge } from '../../../components/ui/Badge';
@@ -13,7 +13,7 @@ import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
 import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
-import { archiveCatalogProduct, getCatalogSummary, getInventoryMovements, receiveInventoryStock } from '../../../services/catalogApi';
+import { archiveCatalogProduct, getArchivedCatalogProducts, getCatalogSummary, getInventoryMovements, receiveInventoryStock } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
 import { productMatchesIdentifier } from '../../../utils/barcode';
@@ -67,6 +67,9 @@ const InventoryList = () => {
     const [productOverrides, setProductOverrides] = useState({});
     const [selectedPreviewProduct, setSelectedPreviewProduct] = useState(null);
     const [archivingProductId, setArchivingProductId] = useState(null);
+    const [restoringProductId, setRestoringProductId] = useState(null);
+    const [archivedProducts, setArchivedProducts] = useState([]);
+    const [archiveError, setArchiveError] = useState('');
     const [stockMovements, setStockMovements] = useState([]);
     const [movementError, setMovementError] = useState('');
     const {
@@ -89,20 +92,24 @@ const InventoryList = () => {
 
         void (async () => {
             try {
-                const [summary, movements] = await Promise.all([
+                const [summary, movements, archives] = await Promise.all([
                     getCatalogSummary(),
                     getInventoryMovements(8),
+                    isAdmin ? getArchivedCatalogProducts(8) : Promise.resolve([]),
                 ]);
                 if (active) {
                     setCatalogSummary(summary);
                     setStockMovements(movements);
+                    setArchivedProducts(archives);
                     setSummaryError('');
                     setMovementError('');
+                    setArchiveError('');
                 }
             } catch (loadError) {
                 if (active) {
                     setSummaryError(loadError.message || 'Unable to load catalog summary.');
                     setMovementError(loadError.message || 'Unable to load movement history.');
+                    setArchiveError(loadError.message || 'Unable to load archived products.');
                 }
             }
         })();
@@ -110,17 +117,20 @@ const InventoryList = () => {
         return () => {
             active = false;
         };
-    }, []);
+    }, [isAdmin]);
 
     const refreshInventoryMeta = async () => {
-        const [summary, movements] = await Promise.all([
+        const [summary, movements, archives] = await Promise.all([
             getCatalogSummary(),
             getInventoryMovements(8),
+            isAdmin ? getArchivedCatalogProducts(8) : Promise.resolve([]),
         ]);
         setCatalogSummary(summary);
         setStockMovements(movements);
+        setArchivedProducts(archives);
         setSummaryError('');
         setMovementError('');
+        setArchiveError('');
     };
 
     const visibleProducts = useMemo(() => (
@@ -246,6 +256,28 @@ const InventoryList = () => {
             showError(archiveError.message || 'Unable to archive this product.');
         } finally {
             setArchivingProductId(null);
+        }
+    };
+
+    const handleRestoreProduct = async (product) => {
+        if (!product?.id) {
+            return;
+        }
+
+        setRestoringProductId(product.id);
+        try {
+            await archiveCatalogProduct(product.id, {
+                archive: false,
+                reason: 'Restored from inventory archive',
+            });
+            setArchivedProducts((current) => current.filter((item) => item.id !== product.id));
+            setRefreshKey((value) => value + 1);
+            await refreshInventoryMeta();
+            success(`${product.name} was restored to active inventory.`);
+        } catch (restoreError) {
+            showError(restoreError.message || 'Unable to restore this product.');
+        } finally {
+            setRestoringProductId(null);
         }
     };
 
@@ -404,6 +436,53 @@ const InventoryList = () => {
                     </div>
                 )}
             </Card>
+
+            {isAdmin && (
+                <Card
+                    title="Archived Products"
+                    subtitle="Soft-deleted inventory items hidden from active catalog, POS, and quotation flows."
+                >
+                    {archiveError ? (
+                        <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/5 px-4 py-3 text-sm text-accent-danger">
+                            {archiveError}
+                        </div>
+                    ) : archivedProducts.length === 0 ? (
+                        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-6 text-center text-sm text-primary-500">
+                            No archived products yet.
+                        </div>
+                    ) : (
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                            {archivedProducts.map((product) => (
+                                <div key={product.id} className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-bold text-primary-950">{product.name}</p>
+                                            <p className="mt-1 font-mono text-xs text-primary-500">{product.sku || 'NO SKU'}</p>
+                                        </div>
+                                        <span className="rounded-full border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-primary-500">
+                                            Archived
+                                        </span>
+                                    </div>
+                                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-primary-500">
+                                        <p><span className="font-semibold text-primary-700">Qty:</span> {formatNumber(product.stock ?? 0)}</p>
+                                        <p><span className="font-semibold text-primary-700">Price:</span> {formatCurrency(product.price ?? 0)}</p>
+                                        <p className="col-span-2"><span className="font-semibold text-primary-700">Archived:</span> {formatDateTime(product.archivedAt)}</p>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        className="mt-4 w-full"
+                                        leftIcon={<ArchiveRestore className="h-4 w-4" />}
+                                        isLoading={restoringProductId === product.id}
+                                        onClick={() => void handleRestoreProduct(product)}
+                                    >
+                                        Restore
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </Card>
+            )}
 
             {loading ? (
                 <Card className="text-center py-12">
