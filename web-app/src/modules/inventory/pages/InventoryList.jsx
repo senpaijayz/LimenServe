@@ -13,7 +13,7 @@ import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
 import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
-import { getCatalogSummary, getInventoryMovements, receiveInventoryStock } from '../../../services/catalogApi';
+import { archiveCatalogProduct, getCatalogSummary, getInventoryMovements, receiveInventoryStock } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
 import { productMatchesIdentifier } from '../../../utils/barcode';
@@ -66,6 +66,7 @@ const InventoryList = () => {
     const [refreshKey, setRefreshKey] = useState(0);
     const [productOverrides, setProductOverrides] = useState({});
     const [selectedPreviewProduct, setSelectedPreviewProduct] = useState(null);
+    const [archivingProductId, setArchivingProductId] = useState(null);
     const [stockMovements, setStockMovements] = useState([]);
     const [movementError, setMovementError] = useState('');
     const {
@@ -214,6 +215,38 @@ const InventoryList = () => {
 
         showError(`No inventory item matched ${trimmedIdentifier}.`);
         return null;
+    };
+
+    const handleArchiveProduct = async () => {
+        if (!selectedPreviewProduct?.id) {
+            return;
+        }
+
+        const confirmed = window.confirm(`Archive ${selectedPreviewProduct.name}? It will be removed from active catalog, POS, and quote selection after refresh.`);
+        if (!confirmed) {
+            return;
+        }
+
+        setArchivingProductId(selectedPreviewProduct.id);
+        try {
+            await archiveCatalogProduct(selectedPreviewProduct.id, {
+                archive: true,
+                reason: 'Archived from inventory management',
+            });
+            setSelectedPreviewProduct(null);
+            setProductOverrides((current) => {
+                const next = { ...current };
+                delete next[selectedPreviewProduct.id];
+                return next;
+            });
+            setRefreshKey((value) => value + 1);
+            await refreshInventoryMeta();
+            success(`${selectedPreviewProduct.name} was archived and removed from active inventory.`);
+        } catch (archiveError) {
+            showError(archiveError.message || 'Unable to archive this product.');
+        } finally {
+            setArchivingProductId(null);
+        }
     };
 
     return (
@@ -524,6 +557,11 @@ const InventoryList = () => {
                 onClose={() => setSelectedPreviewProduct(null)}
                 product={selectedPreviewProduct}
                 title="Inventory Label Preview"
+                archiveAction={isAdmin ? {
+                    label: 'Archive Product',
+                    isLoading: archivingProductId === selectedPreviewProduct?.id,
+                    onClick: handleArchiveProduct,
+                } : null}
             />
         </div>
     );

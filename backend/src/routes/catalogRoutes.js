@@ -176,10 +176,15 @@ let vehicleFitmentCache = {
   data: null,
   fetchedAt: 0,
 };
+let archivedProductIdsCache = {
+  data: null,
+  fetchedAt: 0,
+};
 
 let productCatalogCachePromise = null;
 let serviceCatalogCachePromise = null;
 let vehicleFitmentCachePromise = null;
+let archivedProductIdsPromise = null;
 
 function parsePrice(value) {
   const numeric = Number(value);
@@ -343,6 +348,11 @@ function invalidateProductCatalogCache() {
     fetchedAt: 0,
   };
   productCatalogCachePromise = null;
+  archivedProductIdsCache = {
+    data: null,
+    fetchedAt: 0,
+  };
+  archivedProductIdsPromise = null;
 }
 
 function parsePositiveStockQuantity(value) {
@@ -1600,6 +1610,56 @@ async function fetchProductCatalogPage({ page, pageSize, searchQuery = null, sel
   });
 }
 
+async function getArchivedProductIds() {
+  const now = Date.now();
+  if (archivedProductIdsCache.data && (now - archivedProductIdsCache.fetchedAt) < PRODUCT_CATALOG_CACHE_TTL_MS) {
+    return archivedProductIdsCache.data;
+  }
+
+  if (archivedProductIdsPromise) {
+    return archivedProductIdsPromise;
+  }
+
+  archivedProductIdsPromise = (async () => {
+    try {
+      const { data, error } = await supabaseAdmin
+        .schema('catalog')
+        .from('products')
+        .select('id')
+        .eq('is_active', false);
+
+      if (error) {
+        if (isPrivateSchemaAccessError(error) || String(error.message || '').includes('is_active')) {
+          archivedProductIdsCache = {
+            data: new Set(),
+            fetchedAt: Date.now(),
+          };
+          return archivedProductIdsCache.data;
+        }
+        throw error;
+      }
+
+      archivedProductIdsCache = {
+        data: new Set((data ?? []).map((product) => product.id).filter(Boolean)),
+        fetchedAt: Date.now(),
+      };
+      return archivedProductIdsCache.data;
+    } finally {
+      archivedProductIdsPromise = null;
+    }
+  })();
+
+  return archivedProductIdsPromise;
+}
+
+async function filterActiveCatalogProducts(products = []) {
+  const archivedProductIds = await getArchivedProductIds();
+  if (!archivedProductIds.size) {
+    return products;
+  }
+  return products.filter((product) => !archivedProductIds.has(product.id));
+}
+
 async function fetchProductCatalogCategories({ searchQuery = null }) {
   return callRpc('get_product_catalog_categories', {
     p_search: searchQuery || null,
@@ -1796,7 +1856,7 @@ async function getCachedProductCatalog() {
         allRows = allRows.concat(remainingRows);
       }
 
-      const products = allRows.map(mapCatalogRow);
+      const products = await filterActiveCatalogProducts(allRows.map(mapCatalogRow));
       productCatalogCache = {
         data: products,
         fetchedAt: Date.now(),
@@ -1942,7 +2002,7 @@ router.get('/products', async (req, res, next) => {
           selectedCategory,
           sortBy,
         });
-        products = (pageRows ?? []).map(mapCatalogRow);
+        products = await filterActiveCatalogProducts((pageRows ?? []).map(mapCatalogRow));
         totalCount = Number(pageRows?.[0]?.total_count ?? 0);
       }
 
@@ -2160,6 +2220,77 @@ router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, r
       updatedStock,
       supplierName,
       referenceNumber,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/products/:productId/archive', requireRole('admin'), async (req, res, next) => {
+  try {
+    const productId = String(req.params.productId || '').trim();
+    const archive = req.body?.archive !== false;
+    const reason = String(req.body?.reason || '').trim();
+
+    if (!productId) {
+      res.status(400).json({ error: 'Product is required.' });
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const { data: product, error: updateError } = await supabaseAdmin
+      .schema('catalog')
+      .from('products')
+      .update({
+        is_active: !archive,
+        updated_at: nowIso,
+      })
+      .eq('id', productId)
+      .select('id, sku, name, is_active')
+      .maybeSingle();
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    if (!product) {
+      res.status(404).json({ error: 'Product was not found in the catalog.' });
+      return;
+    }
+
+    const notes = [
+      archive ? 'Reason: Product archived' : 'Reason: Product restored',
+      reason ? `Details: ${reason}` : null,
+    ].filter(Boolean).join(' | ');
+
+    const { error: movementError } = await supabaseAdmin
+      .schema('catalog')
+      .from('inventory_movements')
+      .insert({
+        product_id: productId,
+        movement_type: 'adjustment',
+        quantity: 0,
+        reference_type: archive ? 'product_archive' : 'product_restore',
+        reference_id: null,
+        notes,
+        performed_by: req.user?.id || null,
+        business_date: nowIso.slice(0, 10),
+      });
+
+    if (movementError) {
+      throw movementError;
+    }
+
+    invalidateProductCatalogCache();
+
+    res.json({
+      product: {
+        id: product.id,
+        sku: product.sku,
+        name: product.name,
+        isActive: Boolean(product.is_active),
+      },
+      archived: archive,
     });
   } catch (error) {
     next(error);

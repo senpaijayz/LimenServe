@@ -419,6 +419,18 @@ export async function getInventoryMovements(limit = 12) {
   }
 }
 
+export async function archiveCatalogProduct(productId, { archive = true, reason = '' } = {}) {
+  try {
+    const { data } = await apiClient.patch(`/catalog/products/${productId}/archive`, {
+      archive,
+      reason,
+    });
+    return data;
+  } catch (error) {
+    extractApiError(error, archive ? 'Failed to archive product.' : 'Failed to restore product.');
+  }
+}
+
 export async function getServiceCatalog() {
   try {
     const { data } = await apiClient.get('/catalog/services');

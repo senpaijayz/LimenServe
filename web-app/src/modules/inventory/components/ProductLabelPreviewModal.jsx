@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import { Printer, Package2, MapPin, ScanLine } from 'lucide-react';
+import { Archive, Printer, Package2, MapPin, ScanLine } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
 import Button from '../../../components/ui/Button';
 import MitsubishiGenuinePartsLabel from './MitsubishiGenuinePartsLabel';
@@ -34,7 +34,7 @@ function formatRouteLocation(details) {
     return parts.join(' / ');
 }
 
-const InfoPill = ({ icon: Icon, label, value }) => (
+const InfoPill = ({ icon, label, value }) => (
     <div
         style={{
             display: 'flex',
@@ -59,7 +59,7 @@ const InfoPill = ({ icon: Icon, label, value }) => (
                 flexShrink: 0,
             }}
         >
-            <Icon className="h-4 w-4" />
+            {icon}
         </div>
         <div>
             <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.12em', color: '#64748b', textTransform: 'uppercase' }}>{label}</div>
@@ -76,6 +76,7 @@ const ProductLabelPreviewModal = ({
     locationLabel = '',
     routeDetails = null,
     quantity = 1,
+    archiveAction = null,
 }) => {
     const labelRef = useRef(null);
 
@@ -140,11 +141,11 @@ const ProductLabelPreviewModal = ({
                             </div>
 
                             <div className="grid gap-3 md:grid-cols-2">
-                                <InfoPill icon={Package2} label="Part" value={product.name} />
-                                <InfoPill icon={ScanLine} label="Part Number" value={product.sku} />
-                                <InfoPill icon={MapPin} label="Location" value={effectiveLocationLabel || 'Unassigned'} />
+                                <InfoPill icon={<Package2 className="h-4 w-4" />} label="Part" value={product.name} />
+                                <InfoPill icon={<ScanLine className="h-4 w-4" />} label="Part Number" value={product.sku} />
+                                <InfoPill icon={<MapPin className="h-4 w-4" />} label="Location" value={effectiveLocationLabel || 'Unassigned'} />
                                 <InfoPill
-                                    icon={Package2}
+                                    icon={<Package2 className="h-4 w-4" />}
                                     label="Classification"
                                     value={product.classification?.ruleKey || 'Runtime normalization'}
                                 />
@@ -170,6 +171,17 @@ const ProductLabelPreviewModal = ({
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
+                    {archiveAction && (
+                        <Button
+                            variant="outline"
+                            fullWidth
+                            leftIcon={<Archive className="h-4 w-4" />}
+                            isLoading={archiveAction.isLoading}
+                            onClick={archiveAction.onClick}
+                        >
+                            {archiveAction.label || 'Archive Product'}
+                        </Button>
+                    )}
                     <Button variant="secondary" fullWidth onClick={onClose}>
                         Close
                     </Button>
