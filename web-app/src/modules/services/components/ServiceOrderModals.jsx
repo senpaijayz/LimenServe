@@ -1,10 +1,149 @@
 import { useState } from 'react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
-import { X, Wrench, User, Phone, Car, FileText, Save, CheckCircle, ArrowRight, Archive, CreditCard, Package, CalendarDays, UserCheck } from 'lucide-react';
+import { X, Wrench, User, Phone, Car, FileText, Save, CheckCircle, ArrowRight, Archive, CreditCard, Package, CalendarDays, UserCheck, Printer } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
-import { formatCurrency, formatRelativeTime } from '../../../utils/formatters';
+import { formatCurrency, formatDateTime, formatRelativeTime } from '../../../utils/formatters';
 import { StatusBadge } from '../../../components/ui/Badge';
+
+const escapeHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const getLineItemDisplay = (item, index) => {
+    const name = item.itemName ?? item.item_name ?? item.displayName ?? item.display_name ?? item.name ?? `Line ${index + 1}`;
+    const code = item.itemSku ?? item.item_sku ?? item.sku ?? item.code ?? '';
+    const quantity = Number(item.quantity ?? 1);
+    const unitPrice = Number(item.unitPrice ?? item.unit_price ?? item.price ?? 0);
+    const lineTotal = Number(item.lineTotal ?? item.line_total ?? (quantity * unitPrice));
+
+    return { name, code, quantity, unitPrice, lineTotal };
+};
+
+const buildPrintRows = (items, emptyLabel) => {
+    if (!items.length) {
+        return `<tr><td colspan="5" class="empty">${escapeHtml(emptyLabel)}</td></tr>`;
+    }
+
+    return items.map((item, index) => {
+        const line = getLineItemDisplay(item, index);
+        return `
+            <tr>
+                <td>${index + 1}</td>
+                <td>
+                    <strong>${escapeHtml(line.name)}</strong>
+                    ${line.code ? `<span>${escapeHtml(line.code)}</span>` : ''}
+                </td>
+                <td>${line.quantity}</td>
+                <td>${escapeHtml(formatCurrency(line.unitPrice))}</td>
+                <td>${escapeHtml(formatCurrency(line.lineTotal))}</td>
+            </tr>
+        `;
+    }).join('');
+};
+
+const printServiceOrderDocument = ({ order, serviceItems, partItems, orderTotal, completedAt, mechanicName }) => {
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=960,height=720');
+    if (!printWindow) return;
+
+    const vehicleLabel = [order.vehicle?.year, order.vehicle?.make, order.vehicle?.model].filter(Boolean).join(' ') || 'Vehicle not recorded';
+    const createdAt = order.createdAt ?? order.created_at;
+    const orderNumber = order.orderNumber ?? order.order_number ?? order.id;
+    const status = order.status ? order.status.replace(/_/g, ' ') : 'pending';
+    const paymentStatus = order.paymentStatus || order.payment_status || (order.status === 'completed' ? 'Paid / posted' : 'Pending completion');
+
+    const html = `
+        <!doctype html>
+        <html>
+            <head>
+                <meta charset="utf-8" />
+                <title>Service Order ${escapeHtml(orderNumber)}</title>
+                <style>
+                    @page { size: A4; margin: 14mm; }
+                    * { box-sizing: border-box; }
+                    body { margin: 0; color: #0f172a; font-family: Arial, Helvetica, sans-serif; background: #fff; font-size: 12px; }
+                    .sheet { width: 100%; }
+                    .header { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #0f172a; padding-bottom: 14px; }
+                    .brand h1 { margin: 0; font-size: 22px; letter-spacing: -0.02em; }
+                    .brand p { margin: 4px 0 0; color: #475569; line-height: 1.45; }
+                    .doc-title { text-align: right; }
+                    .doc-title h2 { margin: 0; font-size: 20px; text-transform: uppercase; }
+                    .doc-title p { margin: 5px 0 0; color: #475569; }
+                    .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 18px; }
+                    .box { border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px; min-height: 64px; }
+                    .label { display: block; color: #64748b; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 5px; }
+                    .value { font-weight: 700; color: #0f172a; line-height: 1.35; }
+                    .muted { color: #64748b; font-weight: 400; }
+                    .section { margin-top: 18px; }
+                    .section h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: #0f172a; }
+                    .notes { border: 1px solid #cbd5e1; border-radius: 10px; padding: 11px; min-height: 54px; line-height: 1.55; color: #334155; }
+                    table { width: 100%; border-collapse: collapse; overflow: hidden; border: 1px solid #cbd5e1; border-radius: 10px; }
+                    th { background: #f1f5f9; color: #475569; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; text-align: left; padding: 9px; border-bottom: 1px solid #cbd5e1; }
+                    td { padding: 9px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+                    td span { display: block; margin-top: 3px; color: #64748b; font-size: 10px; }
+                    tr:last-child td { border-bottom: 0; }
+                    .empty { color: #64748b; font-style: italic; text-align: center; }
+                    .summary { display: flex; justify-content: flex-end; margin-top: 18px; }
+                    .summary-card { width: 280px; border: 1px solid #0f172a; border-radius: 12px; overflow: hidden; }
+                    .summary-row { display: flex; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #cbd5e1; }
+                    .summary-row.total { background: #0f172a; color: white; font-size: 16px; font-weight: 800; border-bottom: 0; }
+                    .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 44px; }
+                    .signature { border-top: 1px solid #0f172a; padding-top: 7px; text-align: center; color: #475569; font-size: 10px; }
+                    .footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #cbd5e1; color: #64748b; font-size: 10px; text-align: center; }
+                    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+                </style>
+            </head>
+            <body>
+                <main class="sheet">
+                    <section class="header">
+                        <div class="brand">
+                            <h1>Limen Auto Supply and Services</h1>
+                            <p>Service order, workshop record, and invoice-ready customer copy.</p>
+                            <p>Contact: (0915) 522 5629 | Landline: 0285513518</p>
+                        </div>
+                        <div class="doc-title">
+                            <h2>Service Order</h2>
+                            <p><strong>${escapeHtml(orderNumber)}</strong></p>
+                            <p>Generated ${escapeHtml(formatDateTime(new Date()))}</p>
+                        </div>
+                    </section>
+                    <section class="meta-grid">
+                        <div class="box"><span class="label">Customer</span><div class="value">${escapeHtml(order.customerName || 'Walk-in customer')}</div><div class="muted">${escapeHtml(order.customerPhone || 'No phone recorded')}</div></div>
+                        <div class="box"><span class="label">Vehicle</span><div class="value">${escapeHtml(vehicleLabel)}</div><div class="muted">${escapeHtml(order.vehicle?.plate || 'No plate recorded')}</div></div>
+                        <div class="box"><span class="label">Status</span><div class="value">${escapeHtml(status.toUpperCase())}</div><div class="muted">${escapeHtml(paymentStatus)}</div></div>
+                        <div class="box"><span class="label">Mechanic</span><div class="value">${escapeHtml(mechanicName || 'Not assigned')}</div><div class="muted">${completedAt ? `Completed ${escapeHtml(formatDateTime(completedAt))}` : `Created ${escapeHtml(formatDateTime(createdAt))}`}</div></div>
+                    </section>
+                    <section class="section"><h3>Job Notes</h3><div class="notes">${escapeHtml(order.description || order.note || 'No service notes recorded.')}</div></section>
+                    <section class="section">
+                        <h3>Services</h3>
+                        <table><thead><tr><th style="width: 42px;">#</th><th>Service</th><th style="width: 80px;">Qty</th><th style="width: 120px;">Unit</th><th style="width: 120px;">Total</th></tr></thead><tbody>${buildPrintRows(serviceItems, 'No itemized services recorded. Job notes are used as the service reference.')}</tbody></table>
+                    </section>
+                    <section class="section">
+                        <h3>Parts Used</h3>
+                        <table><thead><tr><th style="width: 42px;">#</th><th>Part</th><th style="width: 80px;">Qty</th><th style="width: 120px;">Unit</th><th style="width: 120px;">Total</th></tr></thead><tbody>${buildPrintRows(partItems, 'No parts were attached to this service order.')}</tbody></table>
+                    </section>
+                    <section class="summary">
+                        <div class="summary-card">
+                            <div class="summary-row"><span>Service / parts total</span><strong>${escapeHtml(formatCurrency(orderTotal))}</strong></div>
+                            <div class="summary-row"><span>Payment status</span><strong>${escapeHtml(paymentStatus)}</strong></div>
+                            <div class="summary-row total"><span>Final amount</span><span>${escapeHtml(formatCurrency(orderTotal))}</span></div>
+                        </div>
+                    </section>
+                    <section class="signatures"><div class="signature">Prepared By</div><div class="signature">Customer Approval</div><div class="signature">Authorized Signature</div></section>
+                    <p class="footer">This document is generated from LimenServe service order records. Final prices may be subject to confirmation by authorized staff.</p>
+                </main>
+                <script>window.onload = () => { window.focus(); window.print(); };</script>
+            </body>
+        </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+};
 
 /**
  * CreateServiceOrderModal
@@ -267,19 +406,26 @@ export const ServiceOrderDetailModal = ({ isOpen, onClose, order, onStatusUpdate
         }
     };
 
+    const handlePrint = () => {
+        printServiceOrderDocument({
+            order,
+            serviceItems,
+            partItems,
+            orderTotal,
+            completedAt,
+            mechanicName,
+        });
+    };
+
     const renderItemRow = (item, index) => {
-        const name = item.itemName ?? item.item_name ?? item.displayName ?? item.display_name ?? item.name ?? `Line ${index + 1}`;
-        const code = item.itemSku ?? item.item_sku ?? item.sku ?? item.code ?? '';
-        const quantity = Number(item.quantity ?? 1);
-        const unitPrice = Number(item.unitPrice ?? item.unit_price ?? item.price ?? 0);
-        const lineTotal = Number(item.lineTotal ?? item.line_total ?? (quantity * unitPrice));
+        const { name, code, quantity, unitPrice, lineTotal } = getLineItemDisplay(item, index);
 
         return (
             <div key={item.id ?? `${name}-${index}`} className="flex items-start justify-between gap-3 rounded-xl border border-primary-100 bg-white px-3 py-2.5">
                 <div className="min-w-0">
                     <p className="line-clamp-1 text-sm font-semibold text-primary-950">{name}</p>
                     <p className="text-xs text-primary-500">
-                        {code || 'No code'} · Qty {quantity} · {formatCurrency(unitPrice)}
+                        {code || 'No code'} - Qty {quantity} - {formatCurrency(unitPrice)}
                     </p>
                 </div>
                 <p className="shrink-0 text-sm font-bold text-accent-blue">{formatCurrency(lineTotal)}</p>
@@ -421,6 +567,9 @@ export const ServiceOrderDetailModal = ({ isOpen, onClose, order, onStatusUpdate
                         </div>
 
                         <div className="mt-5 flex flex-col gap-3 border-t border-primary-100 pt-4 sm:flex-row sm:justify-end">
+                            <Button variant="outline" leftIcon={<Printer className="w-4 h-4" />} onClick={handlePrint}>
+                                Print / Save PDF
+                            </Button>
                             <Button variant="secondary" onClick={onClose}>Close</Button>
                             {nextStatus === 'in_progress' && (
                                 <Button
