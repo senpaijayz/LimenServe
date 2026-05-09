@@ -702,6 +702,57 @@ function buildVehicleFitmentOptions(products = [], selectedModel = '') {
   return { models, years, modelYears };
 }
 
+function buildVehicleFitmentOptionsFromFitments(fitments = [], selectedModel = '') {
+  const modelMap = new Map();
+  const yearMap = new Map();
+  const normalizedSelectedModel = cleanVehicleModelLabel(selectedModel);
+
+  fitments.forEach((fitment) => {
+    const modelLabel = cleanVehicleModelLabel(fitment.modelName || fitment.vehicleFamily);
+
+    if (!modelLabel) {
+      return;
+    }
+
+    const existing = modelMap.get(modelLabel) || {
+      value: modelLabel,
+      label: modelLabel,
+      count: 0,
+      sortOrder: Number(fitment.sortOrder ?? 100),
+    };
+
+    existing.count += 1;
+    existing.sortOrder = Math.min(existing.sortOrder, Number(fitment.sortOrder ?? 100));
+    modelMap.set(modelLabel, existing);
+
+    if (!yearMap.has(modelLabel)) {
+      yearMap.set(modelLabel, new Set());
+    }
+
+    const year = Number(fitment.year ?? 0);
+    if (Number.isFinite(year) && year > 0) {
+      yearMap.get(modelLabel).add(year);
+    }
+  });
+
+  const models = Array.from(modelMap.values())
+    .sort((left, right) => Number(left.sortOrder ?? 100) - Number(right.sortOrder ?? 100) || left.label.localeCompare(right.label))
+    .map(({ count: _count, sortOrder: _sortOrder, ...model }) => model);
+
+  const modelYears = Array.from(yearMap.entries()).reduce((result, [modelLabel, yearsForModel]) => {
+    result[modelLabel] = Array.from(yearsForModel)
+      .sort((left, right) => right - left)
+      .map((year) => ({ value: String(year), label: String(year) }));
+    return result;
+  }, {});
+
+  const years = normalizedSelectedModel && modelYears[normalizedSelectedModel]
+    ? modelYears[normalizedSelectedModel]
+    : [];
+
+  return { models, years, modelYears };
+}
+
 function buildVehiclePackageCopy(serviceGroup, fallbackName) {
   switch (serviceGroup) {
     case 'oil_change':
@@ -1773,9 +1824,17 @@ async function getCachedServiceCatalog() {
 
 router.get('/vehicle-fitment/options', async (req, res, next) => {
   try {
-    const catalog = await getCachedProductCatalog();
     const selectedModel = String(req.query.model || '').trim();
+    const fitments = await getCachedVehicleFitments();
 
+    if (fitments.length > 0) {
+      res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=900');
+      res.json(buildVehicleFitmentOptionsFromFitments(fitments, selectedModel));
+      return;
+    }
+
+    const catalog = await getCachedProductCatalog();
+    res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=900');
     res.json(buildVehicleFitmentOptions(catalog, selectedModel));
   } catch (error) {
     next(error);

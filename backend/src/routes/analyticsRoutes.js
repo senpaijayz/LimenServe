@@ -3,6 +3,34 @@ import { requireRole } from '../middleware/auth.js';
 import { callRpc, querySchemaTable } from '../services/supabaseRpc.js';
 
 const router = Router();
+const DASHBOARD_CACHE_TTL_MS = 2 * 60 * 1000;
+const dashboardCache = new Map();
+
+function getDashboardCacheKey(query = {}) {
+  return JSON.stringify({
+    startDate: query.startDate || null,
+    endDate: query.endDate || null,
+    category: query.category || null,
+    productId: query.productId || null,
+  });
+}
+
+function getCachedDashboardSnapshot(cacheKey) {
+  const cached = dashboardCache.get(cacheKey);
+
+  if (!cached || Date.now() - cached.fetchedAt > DASHBOARD_CACHE_TTL_MS) {
+    return null;
+  }
+
+  return cached.data;
+}
+
+function setCachedDashboardSnapshot(cacheKey, data) {
+  dashboardCache.set(cacheKey, {
+    data,
+    fetchedAt: Date.now(),
+  });
+}
 
 function isMissingItemAnalyticsRpcError(error) {
   const message = String(error?.message || error || '');
@@ -135,6 +163,15 @@ async function loadAnalyticsDashboardSnapshot() {
 
 router.get('/dashboard', async (req, res, next) => {
   try {
+    const cacheKey = getDashboardCacheKey(req.query);
+    const cached = getCachedDashboardSnapshot(cacheKey);
+
+    if (cached) {
+      res.set('Cache-Control', 'private, max-age=60');
+      res.json(cached);
+      return;
+    }
+
     const [snapshot, itemSnapshot] = await Promise.all([
       loadAnalyticsDashboardSnapshot(),
       callOptionalItemAnalyticsRpc(
@@ -153,10 +190,14 @@ router.get('/dashboard', async (req, res, next) => {
       ),
     ]);
 
-    res.json({
+    const response = {
       ...(snapshot ?? {}),
       ...(itemSnapshot ?? {}),
-    });
+    };
+
+    setCachedDashboardSnapshot(cacheKey, response);
+    res.set('Cache-Control', 'private, max-age=60');
+    res.json(response);
   } catch (error) {
     next(error);
   }

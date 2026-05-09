@@ -4,7 +4,7 @@ import { ROLES } from '../utils/constants';
 import { ensureSessionLoaded, supabase } from '../services/supabase';
 import { getCurrentUserProfile } from '../services/authApi';
 
-const PROFILE_TIMEOUT_MS = 3000;
+const PROFILE_TIMEOUT_MS = 8000;
 
 function normalizeRole(role, email) {
     if (role === 'staff') {

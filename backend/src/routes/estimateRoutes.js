@@ -21,6 +21,13 @@ async function createEstimatePersisted(payload) {
   return callRpc('create_estimate', { payload });
 }
 
+function isDemoEstimate(estimate) {
+  const estimateNumber = normalizeQuoteNumber(estimate?.estimate_number);
+  const customerName = String(estimate?.customer_name || estimate?.customer?.name || '').toLowerCase();
+
+  return estimateNumber.startsWith('EST-DEMO-') || customerName.includes('demo customer');
+}
+
 async function loadEstimateSnapshot(estimateId) {
   return callRpc('get_estimate_detail', {
     p_estimate_id: estimateId,
@@ -31,10 +38,11 @@ router.get('/', requireRole('admin', 'cashier'), async (req, res, next) => {
   try {
     const estimates = await callRpc('list_estimates', {
       p_search: req.query.search || null,
-      p_limit_count: Number(req.query.limit || 20),
+      p_limit_count: Math.max(Number(req.query.limit || 20) * 3, 20),
     });
 
-    res.json({ estimates: estimates ?? [] });
+    const limit = Number(req.query.limit || 20);
+    res.json({ estimates: (estimates ?? []).filter((estimate) => !isDemoEstimate(estimate)).slice(0, limit) });
   } catch (error) {
     next(error);
   }

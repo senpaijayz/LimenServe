@@ -7,13 +7,16 @@ import { CURRENCY, DATE_FORMATS } from './constants';
  */
 export const formatCurrency = (amount) => {
     if (amount === null || amount === undefined) return `${CURRENCY.SYMBOL}0.00`;
+    const normalizedAmount = typeof amount === 'string'
+        ? Number(amount.replace(/\\u20B1|₱|PHP|,/gi, '').trim())
+        : amount;
 
     return new Intl.NumberFormat(CURRENCY.LOCALE, {
         style: 'currency',
         currency: CURRENCY.CODE,
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-    }).format(amount);
+    }).format(Number.isFinite(normalizedAmount) ? normalizedAmount : 0);
 };
 
 /**
