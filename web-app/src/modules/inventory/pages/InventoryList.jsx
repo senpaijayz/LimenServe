@@ -29,6 +29,11 @@ const MOVEMENT_LABELS = {
     service_usage: 'Service Usage',
 };
 
+const MOVEMENT_FILTER_OPTIONS = [
+    { value: 'all', label: 'All movement types' },
+    ...Object.entries(MOVEMENT_LABELS).map(([value, label]) => ({ value, label })),
+];
+
 const escapeHtml = (value) => String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -194,6 +199,8 @@ const InventoryList = () => {
     const [stockMovements, setStockMovements] = useState([]);
     const [movementError, setMovementError] = useState('');
     const [printingMovements, setPrintingMovements] = useState(false);
+    const [movementSearchQuery, setMovementSearchQuery] = useState('');
+    const [selectedMovementType, setSelectedMovementType] = useState('all');
     const {
         products,
         categories: catalogCategories,
@@ -216,7 +223,7 @@ const InventoryList = () => {
             try {
                 const [summary, movements, archives] = await Promise.all([
                     getCatalogSummary(),
-                    getInventoryMovements(8),
+                    getInventoryMovements(24),
                     isAdmin ? getArchivedCatalogProducts(8) : Promise.resolve([]),
                 ]);
                 if (active) {
@@ -244,7 +251,7 @@ const InventoryList = () => {
     const refreshInventoryMeta = async () => {
         const [summary, movements, archives] = await Promise.all([
             getCatalogSummary(),
-            getInventoryMovements(8),
+            getInventoryMovements(24),
             isAdmin ? getArchivedCatalogProducts(8) : Promise.resolve([]),
         ]);
         setCatalogSummary(summary);
@@ -292,6 +299,24 @@ const InventoryList = () => {
             return matchesStock;
         })
     ), [selectedStockFilter, visibleProducts]);
+
+    const filteredStockMovements = useMemo(() => {
+        const normalizedSearch = movementSearchQuery.trim().toLowerCase();
+
+        return stockMovements.filter((movement) => {
+            const matchesType = selectedMovementType === 'all' || movement.movementType === selectedMovementType;
+            const searchable = [
+                movement.productName,
+                movement.sku,
+                MOVEMENT_LABELS[movement.movementType] || movement.movementType,
+                movement.referenceType,
+                movement.performedBy,
+                movement.notes,
+            ].filter(Boolean).join(' ').toLowerCase();
+
+            return matchesType && (!normalizedSearch || searchable.includes(normalizedSearch));
+        });
+    }, [movementSearchQuery, selectedMovementType, stockMovements]);
 
     const totalProducts = catalogSummary?.totalProducts ?? pagination.totalCount ?? visibleProducts.length;
     const uniqueProducts = catalogSummary?.uniqueProducts ?? pagination.totalCount ?? visibleProducts.length;
@@ -539,8 +564,8 @@ const InventoryList = () => {
             </div>
 
             <Card
-                title="Recent Stock Activity"
-                subtitle="Audit trail for stock receiving and inventory movement actions."
+                title="Inventory Movement Ledger"
+                subtitle="Searchable audit trail for stock receiving, sales usage, archive, restore, and adjustments."
                 headerAction={(
                     <Button
                         variant="outline"
@@ -562,25 +587,90 @@ const InventoryList = () => {
                         No inventory movement history has been recorded yet.
                     </div>
                 ) : (
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                        {stockMovements.map((movement) => (
-                            <div key={movement.id} className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                        <p className="truncate text-sm font-bold text-primary-950">{movement.productName}</p>
-                                        <p className="mt-1 font-mono text-xs text-primary-500">{movement.sku || 'NO SKU'}</p>
-                                    </div>
-                                    <span className="rounded-full border border-accent-success/20 bg-accent-success/10 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-accent-success">
-                                        +{formatNumber(movement.quantity)}
-                                    </span>
-                                </div>
-                                <div className="mt-3 space-y-1 text-xs text-primary-500">
-                                    <p><span className="font-semibold text-primary-700">{MOVEMENT_LABELS[movement.movementType] || movement.movementType}</span> by {movement.performedBy}</p>
-                                    <p>{formatDateTime(movement.createdAt)}</p>
-                                    {movement.notes && <p className="line-clamp-2">{movement.notes}</p>}
-                                </div>
+                    <div className="space-y-4">
+                        <div className="grid gap-3 lg:grid-cols-[1fr_220px]">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
+                                <input
+                                    type="text"
+                                    value={movementSearchQuery}
+                                    onChange={(event) => setMovementSearchQuery(event.target.value)}
+                                    placeholder="Search movement by product, SKU, action, staff, or notes..."
+                                    className="w-full rounded-lg border border-primary-200 bg-white py-2.5 pl-10 pr-4 text-primary-950 shadow-sm placeholder-primary-400 focus:border-accent-blue focus:outline-none focus:ring-1 focus:ring-accent-blue"
+                                />
                             </div>
-                        ))}
+                            <Dropdown
+                                options={MOVEMENT_FILTER_OPTIONS}
+                                value={selectedMovementType}
+                                onChange={setSelectedMovementType}
+                                className="w-full"
+                            />
+                        </div>
+
+                        {filteredStockMovements.length === 0 ? (
+                            <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-6 text-center text-sm text-primary-500">
+                                No stock movement matches the current search or filter.
+                            </div>
+                        ) : (
+                            <>
+                                <div className="hidden overflow-x-auto rounded-2xl border border-primary-200 lg:block">
+                                    <table className="min-w-full divide-y divide-primary-100 bg-white text-sm">
+                                        <thead className="bg-primary-50">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Product</th>
+                                                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Action</th>
+                                                <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Qty</th>
+                                                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Reference</th>
+                                                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Performed By</th>
+                                                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-primary-100">
+                                            {filteredStockMovements.map((movement) => (
+                                                <tr key={movement.id} className="hover:bg-primary-50/60">
+                                                    <td className="px-4 py-3">
+                                                        <p className="font-bold text-primary-950">{movement.productName}</p>
+                                                        <p className="mt-0.5 font-mono text-xs text-primary-500">{movement.sku || 'NO SKU'}</p>
+                                                        {movement.notes && <p className="mt-1 line-clamp-1 text-xs text-primary-500">{movement.notes}</p>}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2.5 py-1 text-xs font-bold text-accent-blue">
+                                                            {MOVEMENT_LABELS[movement.movementType] || movement.movementType}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-bold text-primary-950">{formatNumber(movement.quantity)}</td>
+                                                    <td className="px-4 py-3 text-primary-600">{movement.referenceType || '-'}</td>
+                                                    <td className="px-4 py-3 text-primary-700">{movement.performedBy}</td>
+                                                    <td className="px-4 py-3 text-primary-600">{formatDateTime(movement.createdAt)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div className="grid gap-3 lg:hidden">
+                                    {filteredStockMovements.map((movement) => (
+                                        <div key={movement.id} className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-bold text-primary-950">{movement.productName}</p>
+                                                    <p className="mt-1 font-mono text-xs text-primary-500">{movement.sku || 'NO SKU'}</p>
+                                                </div>
+                                                <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2.5 py-1 text-xs font-bold text-accent-blue">
+                                                    {formatNumber(movement.quantity)}
+                                                </span>
+                                            </div>
+                                            <div className="mt-3 space-y-1 text-xs text-primary-500">
+                                                <p><span className="font-semibold text-primary-700">{MOVEMENT_LABELS[movement.movementType] || movement.movementType}</span> by {movement.performedBy}</p>
+                                                <p>{formatDateTime(movement.createdAt)}</p>
+                                                <p>Reference: {movement.referenceType || '-'}</p>
+                                                {movement.notes && <p className="line-clamp-2">{movement.notes}</p>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
             </Card>
