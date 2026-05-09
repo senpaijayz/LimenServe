@@ -37,12 +37,313 @@ function isDemoSale(sale) {
         || originalReference.toUpperCase().startsWith('DEMO-');
 }
 
-function createWorksheet(XLSX, rows, columnWidths = []) {
-    const sheet = XLSX.utils.aoa_to_sheet(rows);
-    if (columnWidths.length > 0) {
-        sheet['!cols'] = columnWidths.map((width) => ({ wch: width }));
-    }
-    return sheet;
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function renderReportTable(headers, rows, emptyMessage = 'No records') {
+    const safeRows = rows.length > 0 ? rows : [[emptyMessage, ...Array(Math.max(headers.length - 1, 0)).fill('')]];
+
+    return `
+        <table>
+            <thead>
+                <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>
+            </thead>
+            <tbody>
+                ${safeRows.map((row) => `
+                    <tr>${headers.map((_, index) => `<td>${escapeHtml(row[index] ?? '')}</td>`).join('')}</tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function buildPrintableSalesReport({
+    filters,
+    generatedAt,
+    generatedBy,
+    historySearch,
+    topSellingItems,
+    itemTrend,
+    peakPeriods,
+    exportedSales,
+    trendRevenue,
+    lowStockRiskCount,
+}) {
+    const topLeader = topSellingItems[0];
+    const peakLeader = peakPeriods[0];
+    const topItemRows = topSellingItems.map((item) => [
+        item.product_name || '',
+        item.sku || '',
+        item.category || '',
+        formatNumber(toReportNumber(item.quantity)),
+        formatCurrency(toReportNumber(item.revenue)),
+    ]);
+    const trendRows = itemTrend.map((item) => [
+        item.period_label || item.period || item.bucket || item.month || item.sale_period || '',
+        formatNumber(toReportNumber(item.quantity ?? item.units)),
+        formatCurrency(toReportNumber(item.revenue)),
+    ]);
+    const peakRows = peakPeriods.map((item) => [
+        item.product_name || '',
+        item.sku || '',
+        item.peak_month ? new Date(item.peak_month).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' }) : '',
+        formatNumber(toReportNumber(item.peak_quantity)),
+        formatCurrency(toReportNumber(item.peak_revenue)),
+    ]);
+    const ledgerRows = exportedSales.map((sale) => [
+        sale.transaction_number || '',
+        formatDateTime(sale.saleAt || sale.sale_at || sale.created_at),
+        sale.customer_name || '',
+        sale.cashier_name || '',
+        sale.sourceType === 'historical_encoded' || sale.source_type === 'historical_encoded' ? 'Historical' : 'POS',
+        formatNumber(toReportNumber(sale.item_count)),
+        PAYMENT_LABELS[sale.payment_method] || sale.payment_method || '',
+        sale.status || '',
+        sale.originalReference || sale.original_reference || '',
+        formatCurrency(toReportNumber(sale.total_amount)),
+    ]);
+
+    return `<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>LimenServe Sales Report ${escapeHtml(filters.startDate)} to ${escapeHtml(filters.endDate)}</title>
+    <style>
+        @page { size: A4; margin: 14mm; }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            color: #101828;
+            background: #ffffff;
+            font-family: "Segoe UI", Arial, sans-serif;
+            font-size: 10.5px;
+            line-height: 1.45;
+        }
+        .report-shell { width: 100%; }
+        .report-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            border-bottom: 2px solid #172554;
+            padding-bottom: 12px;
+            margin-bottom: 14px;
+        }
+        .brand-kicker {
+            color: #1d4ed8;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+        }
+        h1 {
+            margin: 3px 0 0;
+            color: #0f172a;
+            font-size: 22px;
+            line-height: 1.1;
+        }
+        .company {
+            margin-top: 4px;
+            color: #475569;
+            font-size: 10.5px;
+        }
+        .meta-box {
+            min-width: 170px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 10px;
+            text-align: right;
+        }
+        .meta-box strong {
+            display: block;
+            color: #0f172a;
+            font-size: 12px;
+        }
+        .meta-box span {
+            display: block;
+            margin-top: 2px;
+            color: #64748b;
+        }
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .filter-card, .kpi-card {
+            border: 1px solid #dbe3ef;
+            border-radius: 10px;
+            padding: 8px 10px;
+            background: #f8fafc;
+            break-inside: avoid;
+        }
+        .label {
+            color: #64748b;
+            font-size: 8px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .value {
+            margin-top: 3px;
+            color: #0f172a;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .kpi-card {
+            background: #ffffff;
+        }
+        .kpi-card .value {
+            font-size: 12px;
+        }
+        section {
+            margin-top: 14px;
+            break-inside: avoid;
+        }
+        h2 {
+            margin: 0 0 7px;
+            color: #0f172a;
+            font-size: 13px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            border: 1px solid #cbd5e1;
+        }
+        th {
+            background: #eaf0f8;
+            color: #334155;
+            font-size: 8.5px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-align: left;
+            text-transform: uppercase;
+        }
+        th, td {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 5px 6px;
+            vertical-align: top;
+            overflow-wrap: anywhere;
+        }
+        tr:nth-child(even) td {
+            background: #fbfdff;
+        }
+        .signatures {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 40px;
+            margin-top: 28px;
+            page-break-inside: avoid;
+        }
+        .signature-line {
+            border-top: 1px solid #334155;
+            padding-top: 7px;
+            text-align: center;
+            color: #475569;
+            font-weight: 700;
+        }
+        .print-actions {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 10px 0;
+            background: #ffffff;
+        }
+        .print-actions button {
+            border: 1px solid #cbd5e1;
+            border-radius: 999px;
+            background: #172554;
+            color: #ffffff;
+            cursor: pointer;
+            font-weight: 800;
+            padding: 8px 14px;
+        }
+        .print-actions button.secondary {
+            background: #ffffff;
+            color: #172554;
+        }
+        @media print {
+            .print-actions { display: none; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-actions">
+        <button class="secondary" onclick="window.close()">Close</button>
+        <button onclick="window.print()">Print / Save PDF</button>
+    </div>
+    <main class="report-shell">
+        <header class="report-header">
+            <div>
+                <div class="brand-kicker">LimenServe</div>
+                <h1>Sales Analytics Report</h1>
+                <div class="company">Limen Auto Supply and Services</div>
+            </div>
+            <div class="meta-box">
+                <strong>${escapeHtml(filters.startDate)} to ${escapeHtml(filters.endDate)}</strong>
+                <span>Generated ${escapeHtml(formatDateTime(generatedAt))}</span>
+                <span>By ${escapeHtml(generatedBy)}</span>
+            </div>
+        </header>
+
+        <div class="filter-grid">
+            <div class="filter-card"><div class="label">Category</div><div class="value">${escapeHtml(filters.category || 'All')}</div></div>
+            <div class="filter-card"><div class="label">Product ID</div><div class="value">${escapeHtml(filters.productId || 'All')}</div></div>
+            <div class="filter-card"><div class="label">Location</div><div class="value">${escapeHtml(filters.location || 'All')}</div></div>
+            <div class="filter-card"><div class="label">Search</div><div class="value">${escapeHtml(historySearch || 'All')}</div></div>
+        </div>
+
+        <div class="kpi-grid">
+            <div class="kpi-card"><div class="label">Top Item</div><div class="value">${escapeHtml(topLeader?.product_name || 'N/A')}</div></div>
+            <div class="kpi-card"><div class="label">Trend Revenue</div><div class="value">${escapeHtml(formatCurrency(trendRevenue))}</div></div>
+            <div class="kpi-card"><div class="label">Peak Leader</div><div class="value">${escapeHtml(peakLeader?.product_name || 'N/A')}</div></div>
+            <div class="kpi-card"><div class="label">Low Stock Risks</div><div class="value">${escapeHtml(formatNumber(lowStockRiskCount))}</div></div>
+        </div>
+
+        <section>
+            <h2>Top-Selling Items</h2>
+            ${renderReportTable(['Product', 'SKU', 'Category', 'Units', 'Revenue'], topItemRows)}
+        </section>
+
+        <section>
+            <h2>Item Sales Trend</h2>
+            ${renderReportTable(['Period', 'Units', 'Revenue'], trendRows)}
+        </section>
+
+        <section>
+            <h2>Peak Periods</h2>
+            ${renderReportTable(['Product', 'SKU', 'Peak Month', 'Peak Units', 'Peak Revenue'], peakRows)}
+        </section>
+
+        <section>
+            <h2>Sales Ledger</h2>
+            ${renderReportTable(['Receipt', 'Date / Time', 'Customer', 'Cashier', 'Source', 'Items', 'Payment', 'Status', 'Original Reference', 'Total'], ledgerRows)}
+        </section>
+
+        <div class="signatures">
+            <div class="signature-line">Prepared by</div>
+            <div class="signature-line">Checked by</div>
+        </div>
+    </main>
+</body>
+</html>`;
 }
 
 const SalesReport = () => {
@@ -183,7 +484,12 @@ const SalesReport = () => {
         setError('');
 
         try {
-            const XLSX = await import('xlsx');
+            const reportWindow = window.open('', '_blank');
+            if (!reportWindow) {
+                throw new Error('Please allow pop-ups to print or save the PDF report.');
+            }
+
+            reportWindow.document.write('<p style="font-family:Arial,sans-serif;padding:24px;">Preparing LimenServe report...</p>');
             const exportedSales = [];
             let page = 1;
             let hasMore = true;
@@ -204,118 +510,32 @@ const SalesReport = () => {
 
             const generatedAt = new Date();
             const generatedBy = user?.fullName || user?.email || 'LimenServe user';
-            const workbook = XLSX.utils.book_new();
+            const reportHtml = buildPrintableSalesReport({
+                filters,
+                generatedAt,
+                generatedBy,
+                historySearch,
+                topSellingItems,
+                itemTrend,
+                peakPeriods,
+                exportedSales,
+                trendRevenue,
+                lowStockRiskCount: toReportNumber(dashboardSnapshot?.predictedLowStockRisk?.length),
+            });
 
-            const summaryRows = [
-                ['LimenServe Sales Analytics Report'],
-                ['Company', 'Limen Auto Supply and Services'],
-                ['Generated at', formatDateTime(generatedAt)],
-                ['Generated by', generatedBy],
-                ['Start date', filters.startDate],
-                ['End date', filters.endDate],
-                ['Category', filters.category || 'All'],
-                ['Product ID', filters.productId || 'All'],
-                ['Location', filters.location || 'All'],
-                ['Granularity', filters.granularity],
-                ['Sales search', historySearch || 'All'],
-                [],
-                ['Summary'],
-                ['Metric', 'Value'],
-                ['Top selling item', topSellingItems[0]?.product_name || 'N/A'],
-                ['Top item units', toReportNumber(topSellingItems[0]?.quantity)],
-                ['Trend revenue', trendRevenue],
-                ['Peak month leader', peakPeriods[0]?.product_name || 'N/A'],
-                ['Low stock risks', toReportNumber(dashboardSnapshot?.predictedLowStockRisk?.length)],
-                ['Exported ledger rows', exportedSales.length],
-            ];
-
-            const topSellingRows = [
-                ['Product', 'SKU', 'Category', 'Units', 'Revenue'],
-                ...topSellingItems.map((item) => [
-                    item.product_name || '',
-                    item.sku || '',
-                    item.category || '',
-                    toReportNumber(item.quantity),
-                    toReportNumber(item.revenue),
-                ]),
-            ];
-
-            const trendRows = [
-                ['Period', 'Units', 'Revenue'],
-                ...itemTrend.map((item) => [
-                    item.period_label || item.period || item.bucket || item.month || item.sale_period || '',
-                    toReportNumber(item.quantity ?? item.units),
-                    toReportNumber(item.revenue),
-                ]),
-            ];
-
-            const peakRows = [
-                ['Product', 'SKU', 'Peak Month', 'Peak Units', 'Peak Revenue'],
-                ...peakPeriods.map((item) => [
-                    item.product_name || '',
-                    item.sku || '',
-                    item.peak_month ? new Date(item.peak_month).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' }) : '',
-                    toReportNumber(item.peak_quantity),
-                    toReportNumber(item.peak_revenue),
-                ]),
-            ];
-
-            const ledgerRows = [
-                ['Receipt', 'Date / Time', 'Customer', 'Cashier', 'Source', 'Items', 'Payment', 'Status', 'Original Reference', 'Total'],
-                ...exportedSales.map((sale) => [
-                    sale.transaction_number,
-                    formatDateTime(sale.saleAt || sale.sale_at || sale.created_at),
-                    sale.customer_name || '',
-                    sale.cashier_name || '',
-                    sale.sourceType === 'historical_encoded' || sale.source_type === 'historical_encoded' ? 'Historical' : 'POS',
-                    toReportNumber(sale.item_count),
-                    PAYMENT_LABELS[sale.payment_method] || sale.payment_method,
-                    sale.status,
-                    sale.originalReference || sale.original_reference || '',
-                    toReportNumber(sale.total_amount),
-                ]),
-            ];
-
-            if (topSellingItems.length === 0) {
-                topSellingRows.push(['No records', '', '', '', '']);
-            }
-            if (itemTrend.length === 0) {
-                trendRows.push(['No records', '', '']);
-            }
-            if (peakPeriods.length === 0) {
-                peakRows.push(['No records', '', '', '', '']);
-            }
-            if (exportedSales.length === 0) {
-                ledgerRows.push(['No records', '', '', '', '', '', '', '', '', '']);
-            }
-
-            XLSX.utils.book_append_sheet(workbook, createWorksheet(XLSX, summaryRows, [28, 32]), 'Summary');
-            XLSX.utils.book_append_sheet(workbook, createWorksheet(XLSX, topSellingRows, [34, 18, 22, 12, 16]), 'Top Items');
-            XLSX.utils.book_append_sheet(workbook, createWorksheet(XLSX, trendRows, [20, 12, 16]), 'Trend');
-            XLSX.utils.book_append_sheet(workbook, createWorksheet(XLSX, peakRows, [34, 18, 18, 14, 16]), 'Peak Periods');
-            XLSX.utils.book_append_sheet(workbook, createWorksheet(XLSX, ledgerRows, [20, 24, 28, 22, 14, 10, 16, 14, 24, 16]), 'Sales Ledger');
-
-            workbook.Props = {
-                Title: 'LimenServe Sales Analytics Report',
-                Subject: `${filters.startDate} to ${filters.endDate}`,
-                Author: generatedBy,
-                Company: 'Limen Auto Supply and Services',
-                CreatedDate: generatedAt,
-            };
-
-            XLSX.writeFile(workbook, `limenserve-sales-report-${filters.startDate}-to-${filters.endDate}-${buildReportStamp(generatedAt)}.xlsx`);
+            reportWindow.document.open();
+            reportWindow.document.write(reportHtml);
+            reportWindow.document.close();
+            reportWindow.document.title = `limenserve-sales-report-${filters.startDate}-to-${filters.endDate}-${buildReportStamp(generatedAt)}`;
+            reportWindow.focus();
+            window.setTimeout(() => reportWindow.print(), 400);
         } catch (exportError) {
             setError(exportError.message || 'Unable to export the report.');
         } finally {
             setIsExporting(false);
         }
     }, [
-        filters.category,
-        filters.endDate,
-        filters.granularity,
-        filters.location,
-        filters.productId,
-        filters.startDate,
+        filters,
         historySearch,
         itemTrend,
         peakPeriods,
@@ -358,7 +578,7 @@ const SalesReport = () => {
                         isLoading={isExporting}
                         onClick={handleExport}
                     >
-                        Export
+                        Print PDF
                     </Button>
                 </div>
             </div>
