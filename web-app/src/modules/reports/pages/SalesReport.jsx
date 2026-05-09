@@ -480,6 +480,10 @@ const SalesReport = () => {
         }
     };
 
+    const topLeader = topSellingItems[0];
+    const peakLeader = peakPeriods[0];
+    const trendRevenue = useMemo(() => itemTrend.reduce((sum, item) => sum + Number(item.revenue ?? 0), 0), [itemTrend]);
+
     const handleExport = useCallback(async () => {
         setIsExporting(true);
         setError('');
@@ -546,10 +550,6 @@ const SalesReport = () => {
         user?.fullName,
         dashboardSnapshot?.predictedLowStockRisk?.length,
     ]);
-
-    const topLeader = topSellingItems[0];
-    const peakLeader = peakPeriods[0];
-    const trendRevenue = useMemo(() => itemTrend.reduce((sum, item) => sum + Number(item.revenue ?? 0), 0), [itemTrend]);
 
     return (
         <div className="space-y-6">

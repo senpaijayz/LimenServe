@@ -20,10 +20,19 @@ const SMART_SERVICE_DISCOUNT_RATE = 0.03;
 const SMART_RECOMMENDATION_LABEL = 'Smart Recommendation';
 
 function isPrivateSchemaAccessError(error) {
-  const message = String(error?.message || '').toLowerCase();
+  const message = [
+    error?.message,
+    error?.details,
+    error?.hint,
+    error?.code,
+  ].filter(Boolean).join(' ').toLowerCase();
+
   return message.includes('invalid schema')
     || message.includes('schema must be one of')
-    || message.includes('not included in the schema cache');
+    || message.includes('not included in the schema cache')
+    || message.includes('relation "app.')
+    || message.includes('relation app.')
+    || (message.includes('relation "') && message.includes('" does not exist'));
 }
 
 const SERVICE_GROUP_CONFIG = {
@@ -2089,7 +2098,7 @@ router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, ne
       return;
     } catch (error) {
       const message = String(error?.message || error || '');
-      if (!message.includes('get_catalog_summary') && !message.includes('schema cache')) {
+      if (!message.includes('get_catalog_summary') && !isPrivateSchemaAccessError(error)) {
         throw error;
       }
     }
@@ -2309,6 +2318,10 @@ router.get('/products/archived', requireRole('admin'), async (req, res, next) =>
       .limit(limit);
 
     if (productsError) {
+      if (isPrivateSchemaAccessError(productsError)) {
+        res.json({ products: [] });
+        return;
+      }
       throw productsError;
     }
 
@@ -2333,10 +2346,18 @@ router.get('/products/archived', requireRole('admin'), async (req, res, next) =>
     ]);
 
     if (pricesError) {
+      if (isPrivateSchemaAccessError(pricesError)) {
+        res.json({ products: [] });
+        return;
+      }
       throw pricesError;
     }
 
     if (balancesError) {
+      if (isPrivateSchemaAccessError(balancesError)) {
+        res.json({ products: [] });
+        return;
+      }
       throw balancesError;
     }
 
@@ -2373,6 +2394,10 @@ router.get('/stock/movements', requireRole('admin', 'stock_clerk'), async (req, 
       .limit(limit);
 
     if (movementsError) {
+      if (isPrivateSchemaAccessError(movementsError)) {
+        res.json({ movements: [] });
+        return;
+      }
       throw movementsError;
     }
 
@@ -2389,15 +2414,19 @@ router.get('/stock/movements', requireRole('admin', 'stock_clerk'), async (req, 
     ]);
 
     if (productsError) {
+      if (isPrivateSchemaAccessError(productsError)) {
+        res.json({ movements: [] });
+        return;
+      }
       throw productsError;
     }
 
-    if (profilesError) {
+    if (profilesError && !isPrivateSchemaAccessError(profilesError)) {
       throw profilesError;
     }
 
     const productMap = new Map((products ?? []).map((product) => [product.id, product]));
-    const profileMap = new Map((profiles ?? []).map((profile) => [profile.user_id, profile]));
+    const profileMap = new Map((profilesError ? [] : (profiles ?? [])).map((profile) => [profile.user_id, profile]));
 
     res.json({
       movements: (movements ?? []).map((movement) => {
