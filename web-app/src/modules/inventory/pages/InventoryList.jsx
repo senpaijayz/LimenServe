@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion as Motion } from 'framer-motion';
-import { ArchiveRestore, Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArchiveRestore, Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, Printer } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { StockBadge } from '../../../components/ui/Badge';
@@ -27,6 +27,127 @@ const MOVEMENT_LABELS = {
     release: 'Release',
     sale: 'Sale',
     service_usage: 'Service Usage',
+};
+
+const escapeHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const buildMovementPrintRows = (movements) => {
+    if (!movements.length) {
+        return '<tr><td colspan="8" class="empty">No inventory movement history found for this report.</td></tr>';
+    }
+
+    return movements.map((movement, index) => `
+        <tr>
+            <td>${index + 1}</td>
+            <td>
+                <strong>${escapeHtml(movement.productName || 'Unknown product')}</strong>
+                <span>${escapeHtml(movement.sku || 'NO SKU')}</span>
+            </td>
+            <td>${escapeHtml(MOVEMENT_LABELS[movement.movementType] || movement.movementType || 'Movement')}</td>
+            <td>${escapeHtml(formatNumber(movement.quantity ?? 0))}</td>
+            <td>${escapeHtml(movement.referenceType || '-')}</td>
+            <td>${escapeHtml(movement.performedBy || 'System')}</td>
+            <td>${escapeHtml(formatDateTime(movement.createdAt))}</td>
+            <td>${escapeHtml(movement.notes || '-')}</td>
+        </tr>
+    `).join('');
+};
+
+const printInventoryMovementReport = ({ movements, catalogSummary }) => {
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1100,height=760');
+    if (!printWindow) return;
+
+    const generatedAt = formatDateTime(new Date());
+    const totalQuantity = movements.reduce((sum, movement) => sum + Number(movement.quantity ?? 0), 0);
+    const uniqueProducts = new Set(movements.map((movement) => movement.productId).filter(Boolean)).size;
+
+    const html = `
+        <!doctype html>
+        <html>
+            <head>
+                <meta charset="utf-8" />
+                <title>Inventory Movement Audit Report</title>
+                <style>
+                    @page { size: A4 landscape; margin: 12mm; }
+                    * { box-sizing: border-box; }
+                    body { margin: 0; color: #0f172a; font-family: Arial, Helvetica, sans-serif; background: #fff; font-size: 10px; }
+                    .header { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #0f172a; padding-bottom: 12px; }
+                    h1 { margin: 0; font-size: 22px; letter-spacing: -0.02em; }
+                    h2 { margin: 0; font-size: 18px; text-transform: uppercase; text-align: right; }
+                    p { margin: 4px 0 0; color: #475569; line-height: 1.45; }
+                    .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; }
+                    .box { border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px; }
+                    .label { display: block; color: #64748b; font-size: 8px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 5px; }
+                    .value { font-size: 16px; font-weight: 800; color: #0f172a; }
+                    table { width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; }
+                    th { background: #f1f5f9; color: #475569; font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; text-align: left; padding: 7px; border-bottom: 1px solid #cbd5e1; }
+                    td { padding: 7px; border-bottom: 1px solid #e2e8f0; vertical-align: top; line-height: 1.35; }
+                    td span { display: block; margin-top: 2px; color: #64748b; font-size: 9px; }
+                    tr:last-child td { border-bottom: 0; }
+                    .empty { color: #64748b; font-style: italic; text-align: center; }
+                    .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 34px; }
+                    .signature { border-top: 1px solid #0f172a; padding-top: 7px; text-align: center; color: #475569; font-size: 9px; }
+                    .footer { margin-top: 14px; padding-top: 9px; border-top: 1px solid #cbd5e1; color: #64748b; font-size: 9px; text-align: center; }
+                    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+                </style>
+            </head>
+            <body>
+                <section class="header">
+                    <div>
+                        <h1>Limen Auto Supply and Services</h1>
+                        <p>Inventory movement audit trail for stock receiving, adjustments, archive, restore, sales, and service usage.</p>
+                        <p>Contact: (0915) 522 5629 | Landline: 0285513518</p>
+                    </div>
+                    <div>
+                        <h2>Inventory Audit Report</h2>
+                        <p>Generated ${escapeHtml(generatedAt)}</p>
+                        <p>Prepared from LimenServe live movement records</p>
+                    </div>
+                </section>
+
+                <section class="meta">
+                    <div class="box"><span class="label">Movement Rows</span><div class="value">${escapeHtml(formatNumber(movements.length))}</div></div>
+                    <div class="box"><span class="label">Unique Products</span><div class="value">${escapeHtml(formatNumber(uniqueProducts))}</div></div>
+                    <div class="box"><span class="label">Total Quantity Moved</span><div class="value">${escapeHtml(formatNumber(totalQuantity))}</div></div>
+                    <div class="box"><span class="label">Catalog Products</span><div class="value">${escapeHtml(formatNumber(catalogSummary?.totalProducts ?? 0))}</div></div>
+                </section>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 34px;">#</th>
+                            <th style="width: 180px;">Product</th>
+                            <th style="width: 96px;">Action</th>
+                            <th style="width: 64px;">Qty</th>
+                            <th style="width: 98px;">Reference</th>
+                            <th style="width: 120px;">Performed By</th>
+                            <th style="width: 110px;">Date</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>${buildMovementPrintRows(movements)}</tbody>
+                </table>
+
+                <section class="signatures">
+                    <div class="signature">Prepared By</div>
+                    <div class="signature">Checked By</div>
+                    <div class="signature">Approved By</div>
+                </section>
+
+                <p class="footer">This report is generated from LimenServe inventory movement records and should be reconciled with physical stock counts during audit.</p>
+                <script>window.onload = () => { window.focus(); window.print(); };</script>
+            </body>
+        </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
 };
 
 function formatCatalogProduct(product) {
@@ -72,6 +193,7 @@ const InventoryList = () => {
     const [archiveError, setArchiveError] = useState('');
     const [stockMovements, setStockMovements] = useState([]);
     const [movementError, setMovementError] = useState('');
+    const [printingMovements, setPrintingMovements] = useState(false);
     const {
         products,
         categories: catalogCategories,
@@ -281,6 +403,21 @@ const InventoryList = () => {
         }
     };
 
+    const handlePrintMovementReport = async () => {
+        setPrintingMovements(true);
+        try {
+            const movements = await getInventoryMovements(100);
+            printInventoryMovementReport({
+                movements,
+                catalogSummary,
+            });
+        } catch (printError) {
+            showError(printError.message || 'Unable to prepare inventory movement report.');
+        } finally {
+            setPrintingMovements(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -404,6 +541,17 @@ const InventoryList = () => {
             <Card
                 title="Recent Stock Activity"
                 subtitle="Audit trail for stock receiving and inventory movement actions."
+                headerAction={(
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        leftIcon={<Printer className="h-4 w-4" />}
+                        isLoading={printingMovements}
+                        onClick={handlePrintMovementReport}
+                    >
+                        Print Audit PDF
+                    </Button>
+                )}
             >
                 {movementError ? (
                     <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/5 px-4 py-3 text-sm text-accent-danger">
