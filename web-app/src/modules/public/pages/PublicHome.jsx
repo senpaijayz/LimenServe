@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
+import { motion as Motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import {
     ArrowRight,
@@ -21,6 +21,8 @@ import monteroImage from '../../../assets/homepage/montero-trimmed.png';
 import tritonImage from '../../../assets/homepage/triton-trimmed.png';
 import xforceImage from '../../../assets/homepage/xforce-trimmed.png';
 import xpanderImage from '../../../assets/homepage/xpander-trimmed.png';
+import { getPublicCmsPage } from '../../../services/cmsApi';
+import DynamicPageRenderer from '../components/DynamicPageRenderer';
 
 const categoryCards = [
     { title: 'Engine Parts', description: 'Filters, timing components, gaskets, and cooling parts.', icon: Cog, query: 'engine' },
@@ -98,19 +100,47 @@ const supportedVehicles = ['Montero Sport', 'Triton', 'Xforce', 'Xpander', 'Mira
 
 const PublicHome = () => {
     const [searchQuery, setSearchQuery] = useState('');
+    const [cmsPage, setCmsPage] = useState(null);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        let active = true;
+
+        async function loadCmsPage() {
+            try {
+                const page = await getPublicCmsPage('home');
+                if (active) {
+                    setCmsPage(page);
+                }
+            } catch {
+                if (active) {
+                    setCmsPage(null);
+                }
+            }
+        }
+
+        void loadCmsPage();
+
+        return () => {
+            active = false;
+        };
+    }, []);
 
     const handleSearch = () => {
         const query = searchQuery.trim();
         navigate(query ? `/catalog?q=${encodeURIComponent(query)}` : '/catalog');
     };
 
+    if (cmsPage?.sections?.length) {
+        return <DynamicPageRenderer page={cmsPage} />;
+    }
+
     return (
         <div className="bg-white text-primary-900">
             <section className="relative overflow-hidden border-b border-primary-200 bg-[radial-gradient(circle_at_top_left,_rgba(30,58,138,0.08),_transparent_32%),radial-gradient(circle_at_top_right,_rgba(220,38,38,0.10),_transparent_28%),linear-gradient(to_bottom,_#ffffff,_#f8fafc_42%,_#ffffff)] px-4 pb-16 pt-12 md:px-8 xl:px-12">
                 <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[linear-gradient(90deg,rgba(30,58,138,0.04),transparent_24%,rgba(220,38,38,0.05))]" />
                 <div className="mx-auto grid max-w-[1600px] items-stretch gap-10 xl:grid-cols-[1.02fr_0.98fr]">
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0, y: 24 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.45 }}
@@ -188,9 +218,9 @@ const PublicHome = () => {
                                 Request a Quote
                             </Link>
                         </div>
-                    </motion.div>
+                    </Motion.div>
 
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0, x: 24 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.45, delay: 0.1 }}
@@ -235,7 +265,7 @@ const PublicHome = () => {
                                 </div>
                             </div>
                         </div>
-                    </motion.div>
+                    </Motion.div>
                 </div>
             </section>
 
@@ -258,7 +288,7 @@ const PublicHome = () => {
                         {categoryCards.map((category, index) => {
                             const Icon = category.icon;
                             return (
-                                <motion.div
+                                <Motion.div
                                     key={category.title}
                                     initial={{ opacity: 0, y: 20 }}
                                     whileInView={{ opacity: 1, y: 0 }}
@@ -279,7 +309,7 @@ const PublicHome = () => {
                                             <ArrowRight className="h-4 w-4" />
                                         </div>
                                     </Link>
-                                </motion.div>
+                                </Motion.div>
                             );
                         })}
                     </div>
@@ -298,7 +328,7 @@ const PublicHome = () => {
 
                     <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
                         {featuredParts.map((part, index) => (
-                            <motion.article
+                            <Motion.article
                                 key={part.name}
                                 initial={{ opacity: 0, y: 22 }}
                                 whileInView={{ opacity: 1, y: 0 }}
@@ -333,7 +363,7 @@ const PublicHome = () => {
                                         </Link>
                                     </div>
                                 </div>
-                            </motion.article>
+                            </Motion.article>
                         ))}
                     </div>
                 </div>

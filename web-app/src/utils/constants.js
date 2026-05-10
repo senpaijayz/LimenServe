@@ -92,6 +92,7 @@ export const NAV_ITEMS = {
     admin: [
         { path: '/reports', label: 'Reports', icon: 'BarChart3', roles: [ROLES.ADMIN] },
         { path: '/users', label: 'User Management', icon: 'Users', roles: [ROLES.ADMIN] },
+        { path: '/cms', label: 'Content CMS', icon: 'FileText', roles: [ROLES.ADMIN] },
     ],
 };
 

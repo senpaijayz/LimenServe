@@ -5,6 +5,7 @@ import { attachUser } from './middleware/auth.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import catalogRoutes from './routes/catalogRoutes.js';
+import cmsRoutes from './routes/cmsRoutes.js';
 import estimateRoutes from './routes/estimateRoutes.js';
 import mechanicsRoutes from './routes/mechanicsRoutes.js';
 import partsMappingRoutes from './routes/partsMappingRoutes.js';
@@ -71,6 +72,7 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/cms', cmsRoutes);
 app.use('/api/catalog', catalogRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/pos', posRoutes);

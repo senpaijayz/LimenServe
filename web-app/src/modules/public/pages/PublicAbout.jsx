@@ -1,24 +1,32 @@
 ﻿import { useEffect, useState } from 'react';
 import { motion as Motion } from 'framer-motion';
 import { CalendarDays, Package, Phone, Shield, Settings, Zap, MapPin, Building, Wrench, UserRound } from 'lucide-react';
+import { getPublicCmsPage } from '../../../services/cmsApi';
 import { getPublicMechanics } from '../../../services/mechanicsApi';
+import DynamicPageRenderer from '../components/DynamicPageRenderer';
 
 const PublicAbout = () => {
     const [mechanics, setMechanics] = useState([]);
     const [mechanicsLoading, setMechanicsLoading] = useState(true);
+    const [cmsPage, setCmsPage] = useState(null);
 
     useEffect(() => {
         let active = true;
 
-        const loadMechanics = async () => {
+        const loadPublicData = async () => {
             try {
-                const rows = await getPublicMechanics();
+                const [rows, page] = await Promise.all([
+                    getPublicMechanics(),
+                    getPublicCmsPage('about').catch(() => null),
+                ]);
                 if (active) {
                     setMechanics(rows);
+                    setCmsPage(page);
                 }
             } catch {
                 if (active) {
                     setMechanics([]);
+                    setCmsPage(null);
                 }
             } finally {
                 if (active) {
@@ -27,7 +35,7 @@ const PublicAbout = () => {
             }
         };
 
-        void loadMechanics();
+        void loadPublicData();
 
         return () => {
             active = false;
@@ -49,6 +57,68 @@ const PublicAbout = () => {
         if (status === 'booked') return 'bg-accent-warning/10 text-accent-warning';
         return 'bg-primary-100 text-primary-500';
     };
+
+    if (cmsPage?.sections?.length) {
+        return (
+            <div className="bg-primary-50 min-h-screen pb-20 text-primary-900">
+                <DynamicPageRenderer page={cmsPage} />
+                <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+                    <div className="text-center mb-12">
+                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">Meet Our Mechanics</h2>
+                        <p className="text-primary-600">Published mechanic profiles are still sourced from the live service team database.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                        {mechanicsLoading ? (
+                            <div className="surface p-8 bg-white border border-primary-200 shadow-sm md:col-span-2 xl:col-span-3">
+                                <p className="text-sm text-primary-500">Loading mechanics from the database...</p>
+                            </div>
+                        ) : mechanics.length === 0 ? (
+                            <div className="surface p-8 bg-white border border-primary-200 shadow-sm md:col-span-2 xl:col-span-3">
+                                <p className="text-sm text-primary-500">No public mechanic profiles have been published yet.</p>
+                            </div>
+                        ) : mechanics.map((mechanic) => (
+                            <div key={mechanic.id} className="surface overflow-hidden bg-white border border-primary-200 shadow-sm">
+                                <div className="h-2 bg-gradient-to-r from-accent-primary via-accent-danger to-primary-950" />
+                                <div className="p-6">
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="flex min-w-0 items-start gap-4">
+                                            {mechanic.photo_url ? (
+                                                <img src={mechanic.photo_url} alt={mechanic.full_name} className="h-16 w-16 shrink-0 rounded-2xl border border-primary-200 object-cover shadow-sm" loading="lazy" />
+                                            ) : (
+                                                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-primary-200 bg-primary-50 text-primary-400 shadow-sm">
+                                                    <UserRound className="h-8 w-8" />
+                                                </div>
+                                            )}
+                                            <div className="min-w-0">
+                                                <p className="text-xs uppercase tracking-[0.22em] text-primary-400">Limen service team</p>
+                                                <h3 className="mt-2 text-xl font-display font-semibold text-primary-950">{mechanic.full_name}</h3>
+                                                <p className="mt-2 text-sm font-medium text-accent-primary">{mechanic.specialization}</p>
+                                            </div>
+                                        </div>
+                                        <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${statusClass(mechanic.availability_status)}`}>
+                                            {String(mechanic.availability_status || 'available').replace('_', ' ')}
+                                        </span>
+                                    </div>
+                                    <p className="mt-4 text-sm leading-relaxed text-primary-600">{mechanic.bio || 'Experienced Mitsubishi service technician.'}</p>
+                                    <div className="mt-5 grid gap-3 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600">
+                                        <p className="flex items-start gap-2">
+                                            <CalendarDays className="mt-0.5 h-4 w-4 text-accent-primary" />
+                                            <span><span className="font-semibold text-primary-950">Schedule:</span> {shiftLabel(mechanic)}</span>
+                                        </p>
+                                        <p className="flex items-start gap-2">
+                                            <Phone className="mt-0.5 h-4 w-4 text-accent-primary" />
+                                            <span><span className="font-semibold text-primary-950">Contact:</span> {mechanic.contact_number || 'Contact shop for assignment'}</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-primary-50 min-h-screen relative font-sans text-primary-900 pb-20 overflow-hidden">

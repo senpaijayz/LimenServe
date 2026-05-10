@@ -3,6 +3,7 @@ import { AnimatePresence, motion as Motion } from 'framer-motion';
 import { CarFront, Clock, MapPin, Menu, Phone, ShieldCheck, X } from 'lucide-react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
+import usePublicCmsSite from '../../hooks/usePublicCmsSite';
 
 const primaryNav = [
     { label: 'Home', to: '/' },
@@ -17,6 +18,7 @@ const PublicLayout = () => {
     const location = useLocation();
     const [scrolled, setScrolled] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const { settings, navigation } = usePublicCmsSite();
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -35,6 +37,32 @@ const PublicLayout = () => {
         return location.pathname === to;
     };
 
+    const getSetting = (key, fallback) => {
+        const value = settings?.[key];
+        if (typeof value === 'string' || typeof value === 'number') {
+            return String(value);
+        }
+        return fallback;
+    };
+
+    const logoUrl = getSetting('logo_url', '/LogoLimen.jpg');
+    const brandKicker = getSetting('brand_kicker', 'Limen');
+    const brandTitle = getSetting('brand_title', 'Genuine Auto Parts');
+    const companyName = getSetting('company_name', 'Limen Auto Parts Center');
+    const primaryPhone = getSetting('primary_phone', '(0915) 522 5629');
+    const landline = getSetting('landline', '02 8551 3518');
+    const businessHours = getSetting('business_hours', 'Mon-Sat 8:00 AM-5:00 PM | Sun 8:00 AM-12:00 PM');
+    const address = getSetting('address', '1308, 264 Epifanio de los Santos Ave, Pasay City, Metro Manila');
+    const footerNote = getSetting('footer_note', 'Trusted local auto parts seller in Pasay City');
+    const visibleNavigation = Array.isArray(navigation) ? navigation : [];
+    const cmsPrimaryNav = visibleNavigation
+        .filter((item) => item.groupKey === 'primary')
+        .sort((a, b) => Number(a.sortOrder ?? 100) - Number(b.sortOrder ?? 100))
+        .map((item) => ({ label: item.label, to: item.href }));
+    const navItems = cmsPrimaryNav.length ? cmsPrimaryNav : primaryNav;
+    const footerShopLinks = visibleNavigation.filter((item) => item.groupKey === 'footer_shop');
+    const footerCompanyLinks = visibleNavigation.filter((item) => item.groupKey === 'footer_company');
+
     return (
         <div className="min-h-screen overflow-x-hidden bg-white font-sans text-primary-900 print:block print:min-h-0 print:bg-white">
             <div className="border-b border-primary-200 bg-primary-950 text-white print:hidden">
@@ -48,11 +76,11 @@ const PublicLayout = () => {
                     <div className="flex flex-wrap items-center gap-4 text-white/80">
                         <span className="inline-flex items-center gap-2">
                             <Phone className="h-3.5 w-3.5 text-red-400" />
-                            (0915) 522 5629 | 02 8551 3518
+                            {primaryPhone} | {landline}
                         </span>
                         <span className="hidden items-center gap-2 sm:inline-flex">
                             <Clock className="h-3.5 w-3.5 text-red-400" />
-                            Mon-Sat 8:00 AM-5:00 PM | Sun 8:00 AM-12:00 PM
+                            {businessHours}
                         </span>
                     </div>
                 </div>
@@ -66,16 +94,16 @@ const PublicLayout = () => {
                 <div className="mx-auto max-w-[1600px] px-4 md:px-8 xl:px-12">
                     <div className="flex items-center justify-between gap-4 py-4">
                         <Link to="/" className="flex items-center gap-3">
-                            <img src="/LogoLimen.jpg" alt="Limen logo" className="h-11 w-11 rounded-lg border border-primary-200 bg-white p-1 shadow-sm" />
+                            <img src={logoUrl} alt={`${companyName} logo`} className="h-11 w-11 rounded-lg border border-primary-200 bg-white p-1 shadow-sm" />
                             <div>
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent-primary">Limen</p>
-                                <h1 className="text-xl font-bold text-primary-950">Genuine Auto Parts</h1>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent-primary">{brandKicker}</p>
+                                <h1 className="text-xl font-bold text-primary-950">{brandTitle}</h1>
                             </div>
                         </Link>
 
                         <div className="hidden flex-1 items-center justify-end gap-6 xl:flex">
                             <nav className="flex items-center gap-5">
-                                {primaryNav.map((item) => (
+                                {navItems.map((item) => (
                                     <Link
                                         key={item.label}
                                         to={item.to}
@@ -115,7 +143,7 @@ const PublicLayout = () => {
                     >
                         <div className="mx-auto max-w-xl space-y-4">
                             <div className="rounded-2xl border border-primary-200 bg-white">
-                                {primaryNav.map((item) => (
+                                {navItems.map((item) => (
                                     <Link
                                         key={item.label}
                                         to={item.to}
@@ -159,10 +187,10 @@ const PublicLayout = () => {
                     <div className="grid gap-12 pb-12 md:grid-cols-2 lg:grid-cols-4">
                         <div className="lg:col-span-1">
                             <div className="flex items-center gap-3">
-                                <img src="/LogoLimen.jpg" alt="Limen logo" className="h-11 w-11 rounded-lg border border-primary-200 bg-white p-1 shadow-sm" />
+                                <img src={logoUrl} alt={`${companyName} logo`} className="h-11 w-11 rounded-lg border border-primary-200 bg-white p-1 shadow-sm" />
                                 <div>
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent-primary">Limen</p>
-                                    <p className="text-lg font-bold text-primary-950">Genuine Auto Parts</p>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent-primary">{brandKicker}</p>
+                                    <p className="text-lg font-bold text-primary-950">{brandTitle}</p>
                                 </div>
                             </div>
                             <p className="mt-5 text-sm leading-relaxed text-primary-600">
@@ -173,19 +201,26 @@ const PublicLayout = () => {
                         <div>
                             <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-primary-500">Shop</h4>
                             <div className="mt-5 space-y-3 text-sm text-primary-600">
-                                <Link to="/catalog" className="block hover:text-accent-primary">Shop by Category</Link>
-                                <Link to="/catalog" className="block hover:text-accent-primary">Brands</Link>
-                                <Link to="/estimate" className="block hover:text-accent-primary">Vehicle Search</Link>
-                                <Link to="/service-orders" className="block hover:text-accent-primary">Service Orders</Link>
+                                {(footerShopLinks.length ? footerShopLinks : [
+                                    { label: 'Shop by Category', href: '/catalog' },
+                                    { label: 'Vehicle Search', href: '/estimate' },
+                                    { label: 'Service Orders', href: '/service-orders' },
+                                ]).map((item) => (
+                                    <Link key={`${item.label}-${item.href}`} to={item.href} className="block hover:text-accent-primary">{item.label}</Link>
+                                ))}
                             </div>
                         </div>
 
                         <div>
                             <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-primary-500">Company</h4>
                             <div className="mt-5 space-y-3 text-sm text-primary-600">
-                                <Link to="/about" className="block hover:text-accent-primary">About Limen</Link>
-                                <Link to="/estimate" className="block hover:text-accent-primary">Get a Quote</Link>
-                                <Link to="/login" className="block hover:text-accent-primary">Staff Portal</Link>
+                                {(footerCompanyLinks.length ? footerCompanyLinks : [
+                                    { label: 'About Limen', href: '/about' },
+                                    { label: 'Get a Quote', href: '/estimate' },
+                                    { label: 'Staff Portal', href: '/login' },
+                                ]).map((item) => (
+                                    <Link key={`${item.label}-${item.href}`} to={item.href} className="block hover:text-accent-primary">{item.label}</Link>
+                                ))}
                             </div>
                         </div>
 
@@ -194,28 +229,28 @@ const PublicLayout = () => {
                             <div className="mt-5 space-y-4 text-sm text-primary-600">
                                 <div className="flex items-start gap-3">
                                     <MapPin className="mt-0.5 h-4 w-4 text-accent-danger" />
-                                    <span>1308, 264 Epifanio de los Santos Ave, Pasay City, Metro Manila</span>
+                                    <span>{address}</span>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <Phone className="h-4 w-4 text-accent-danger" />
-                                    <span>(0915) 522 5629</span>
+                                    <span>{primaryPhone}</span>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <Phone className="h-4 w-4 text-accent-danger" />
-                                    <span>Landline: 02 8551 3518</span>
+                                    <span>Landline: {landline}</span>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <Clock className="h-4 w-4 text-accent-danger" />
-                                    <span>Mon-Sat: 8:00 AM-5:00 PM | Sun: 8:00 AM-12:00 PM</span>
+                                    <span>{businessHours}</span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <div className="flex flex-col gap-3 border-t border-primary-200 py-6 text-xs text-primary-500 sm:flex-row sm:items-center sm:justify-between">
-                        <p>(c) {new Date().getFullYear()} Limen Auto Parts Center. All rights reserved.</p>
+                        <p>(c) {new Date().getFullYear()} {companyName}. All rights reserved.</p>
                         <div className="flex gap-4">
-                            <span>Trusted local auto parts seller in Pasay City</span>
+                            <span>{footerNote}</span>
                         </div>
                     </div>
                 </div>

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { callRpc } from '../services/supabaseRpc.js';
+import { getPublishedCmsPage, getPublishedCmsSite } from '../services/cmsService.js';
 
 const router = Router();
 
@@ -79,6 +80,30 @@ router.get('/mechanics', async (_req, res, next) => {
       }
     }
 
+    next(error);
+  }
+});
+
+router.get('/cms/site', async (_req, res, next) => {
+  try {
+    const site = await getPublishedCmsSite();
+    res.json({ site });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/cms/pages/:slug', async (req, res, next) => {
+  try {
+    const page = await getPublishedCmsPage(req.params.slug);
+
+    if (!page) {
+      res.status(404).json({ error: 'Published CMS page was not found.' });
+      return;
+    }
+
+    res.json({ page });
+  } catch (error) {
     next(error);
   }
 });
