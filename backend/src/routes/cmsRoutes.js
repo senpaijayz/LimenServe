@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireRole } from '../middleware/auth.js';
+import { clearPublicResponseCache } from '../middleware/cache.js';
 import {
   getCmsPage,
   listCmsPages,
@@ -50,6 +51,7 @@ router.post('/pages', requireRole('admin'), async (req, res, next) => {
     }
 
     const page = await saveCmsPage(req.body, req.user?.id);
+    clearPublicResponseCache();
     res.status(201).json({ page });
   } catch (error) {
     next(error);
@@ -67,6 +69,7 @@ router.put('/pages/:slug', requireRole('admin'), async (req, res, next) => {
       slug: req.params.slug,
     }, req.user?.id);
 
+    clearPublicResponseCache();
     res.json({ page });
   } catch (error) {
     next(error);
@@ -80,6 +83,7 @@ router.put('/site-settings', requireRole('admin'), async (req, res, next) => {
     }
 
     const site = await saveCmsSiteSettings(req.body, req.user?.id);
+    clearPublicResponseCache();
     res.json({ site });
   } catch (error) {
     next(error);
@@ -94,6 +98,7 @@ router.put('/navigation', requireRole('admin'), async (req, res, next) => {
     }
 
     const site = await saveCmsNavigation(req.body.navigation, req.user?.id);
+    clearPublicResponseCache();
     res.json({ site });
   } catch (error) {
     next(error);

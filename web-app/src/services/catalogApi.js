@@ -1,4 +1,4 @@
-import apiClient, { extractApiError } from './apiClient';
+import apiClient, { cachedApiGet, extractApiError } from './apiClient';
 import { ALL_VEHICLE_MODELS, products as fallbackProducts } from '../data/productData';
 import inventoryClassifier from '../lib/inventoryClassifier';
 
@@ -317,7 +317,7 @@ export async function getProductCatalog(params = {}) {
   try {
     const cacheKey = buildRequestKey('catalog-products', params);
     return await withCachedRequest(cacheKey, CATALOG_CACHE_TTL_MS, async () => {
-      const { data } = await apiClient.get('/catalog/products', { params });
+      const { data } = await cachedApiGet('/catalog/products', { params });
       return {
         products: data.products ?? [],
         pagination: data.pagination ?? { page: 1, pageSize: 12, totalCount: 0, totalPages: 1 },
@@ -336,7 +336,7 @@ export async function getVehicleFitmentOptions(params = {}) {
   try {
     const cacheKey = buildRequestKey('vehicle-fitment-options', params);
     return await withCachedRequest(cacheKey, FITMENT_CACHE_TTL_MS, async () => {
-      const { data } = await apiClient.get('/catalog/vehicle-fitment/options', { params });
+      const { data } = await cachedApiGet('/catalog/vehicle-fitment/options', { params });
       return {
         models: data.models ?? [],
         years: data.years ?? [],
@@ -356,7 +356,7 @@ export async function getVehiclePackages(params = {}) {
     const requestParams = normalizeVehiclePackageParams(params);
     const cacheKey = buildRequestKey('vehicle-packages', requestParams);
     return await withCachedRequest(cacheKey, PACKAGE_CACHE_TTL_MS, async () => {
-      const { data } = await apiClient.get('/catalog/vehicle-packages', { params: requestParams });
+      const { data } = await cachedApiGet('/catalog/vehicle-packages', { params: requestParams });
       return {
         vehicleContext: data.vehicleContext ?? null,
         packages: data.packages ?? [],
@@ -444,8 +444,11 @@ export async function getArchivedCatalogProducts(limit = 8) {
 
 export async function getServiceCatalog() {
   try {
-    const { data } = await apiClient.get('/catalog/services');
-    return data.services ?? [];
+    const cacheKey = buildRequestKey('service-catalog');
+    return await withCachedRequest(cacheKey, PACKAGE_CACHE_TTL_MS, async () => {
+      const { data } = await cachedApiGet('/catalog/services');
+      return data.services ?? [];
+    });
   } catch (error) {
     extractApiError(error, 'Failed to load service catalog.');
   }

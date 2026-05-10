@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireRole } from '../middleware/auth.js';
+import { clearPublicResponseCache } from '../middleware/cache.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import { supabaseAdmin } from '../config/supabase.js';
 
@@ -209,6 +210,7 @@ router.post('/', async (req, res, next) => {
     const mechanicId = await callRpc('upsert_mechanic', {
       p_payload: payload,
     });
+    clearPublicResponseCache();
     res.status(201).json({ mechanicId });
   } catch (error) {
     if (isMissingLegacyMechanicsError(error)) {
@@ -229,6 +231,7 @@ router.patch('/:mechanicId', async (req, res, next) => {
     const mechanicId = await callRpc('upsert_mechanic', {
       p_payload: payload,
     });
+    clearPublicResponseCache();
     res.json({ mechanicId });
   } catch (error) {
     if (isMissingLegacyMechanicsError(error)) {
@@ -245,6 +248,7 @@ router.delete('/:mechanicId', async (req, res, next) => {
     const deleted = await callRpc('delete_mechanic', {
       p_mechanic_id: req.params.mechanicId,
     });
+    clearPublicResponseCache();
     res.json({ deleted: Boolean(deleted) });
   } catch (error) {
     if (isMissingLegacyMechanicsError(error)) {

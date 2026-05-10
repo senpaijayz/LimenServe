@@ -31,6 +31,10 @@ export async function attachUser(req, _res, next) {
     req.authToken = token;
     req.user = null;
 
+    if (req.skipUserAttachment) {
+      return next();
+    }
+
     if (!token) {
       return next();
     }

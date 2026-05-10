@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireRole } from '../middleware/auth.js';
+import { clearPublicResponseCache } from '../middleware/cache.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 
@@ -362,6 +363,7 @@ function invalidateProductCatalogCache() {
     fetchedAt: 0,
   };
   archivedProductIdsPromise = null;
+  clearPublicResponseCache();
 }
 
 function parsePositiveStockQuantity(value) {

@@ -14,6 +14,152 @@ const apiClient = axios.create({
 export const SERVICE_UNAVAILABLE_MESSAGE = 'Server temporarily unavailable. The backend service is not responding right now. Please try again in a few minutes.';
 export const DATA_SERVICE_CONFIGURATION_MESSAGE = 'This live data area is being updated. Please refresh in a moment or try again after deployment finishes.';
 
+const CLIENT_GET_CACHE_MAX_ENTRIES = 120;
+const publicGetCacheRules = [
+  { pattern: /^\/public\/cms\/site$/, ttlMs: 60_000 },
+  { pattern: /^\/public\/cms\/pages\/[^/]+$/, ttlMs: 60_000 },
+  { pattern: /^\/public\/mechanics$/, ttlMs: 120_000 },
+  { pattern: /^\/catalog\/vehicle-fitment\/options$/, ttlMs: 10 * 60_000 },
+  { pattern: /^\/catalog\/vehicle-packages$/, ttlMs: 5 * 60_000 },
+  { pattern: /^\/catalog\/services$/, ttlMs: 5 * 60_000 },
+  { pattern: /^\/catalog\/products$/, ttlMs: 45_000 },
+  { pattern: /^\/catalog\/products\/[^/]+\/recommendations$/, ttlMs: 5 * 60_000 },
+];
+
+const getResponseCache = new Map();
+const getInflightRequests = new Map();
+
+function normalizeRequestPath(url = '') {
+  const value = String(url || '');
+
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const parsed = new URL(value);
+      return parsed.pathname.replace(/^\/api(?=\/)/, '') || '/';
+    } catch {
+      return value.split('?')[0];
+    }
+  }
+
+  return value.split('?')[0].replace(/^\/api(?=\/)/, '') || '/';
+}
+
+function getPublicGetCacheRule(config = {}) {
+  if (String(config.method || 'get').toLowerCase() !== 'get') {
+    return null;
+  }
+
+  const path = normalizeRequestPath(config.url);
+  return publicGetCacheRules.find((rule) => rule.pattern.test(path)) ?? null;
+}
+
+function normalizeParams(params = {}) {
+  return Object.keys(params || {})
+    .sort()
+    .reduce((result, key) => {
+      const value = params[key];
+      if (value !== undefined && value !== null && value !== '') {
+        result[key] = value;
+      }
+      return result;
+    }, {});
+}
+
+function buildClientCacheKey(url, config = {}) {
+  return `${normalizeRequestPath(url)}:${JSON.stringify(normalizeParams(config.params))}`;
+}
+
+function trimClientGetCache() {
+  while (getResponseCache.size > CLIENT_GET_CACHE_MAX_ENTRIES) {
+    const oldestKey = getResponseCache.keys().next().value;
+    getResponseCache.delete(oldestKey);
+  }
+}
+
+function isPublicGetWithoutAuth(config = {}) {
+  return Boolean(getPublicGetCacheRule({
+    ...config,
+    method: String(config.method || 'get').toLowerCase(),
+  }));
+}
+
+export function clearApiClientCache(matcher = null) {
+  if (!matcher) {
+    getResponseCache.clear();
+    getInflightRequests.clear();
+    return;
+  }
+
+  for (const key of getResponseCache.keys()) {
+    if (typeof matcher === 'function' ? matcher(key) : key.includes(String(matcher))) {
+      getResponseCache.delete(key);
+    }
+  }
+
+  for (const key of getInflightRequests.keys()) {
+    if (typeof matcher === 'function' ? matcher(key) : key.includes(String(matcher))) {
+      getInflightRequests.delete(key);
+    }
+  }
+}
+
+export async function cachedApiGet(url, config = {}) {
+  const requestConfig = {
+    ...config,
+    method: 'get',
+    url,
+  };
+  const rule = getPublicGetCacheRule(requestConfig);
+
+  if (!rule || config.skipClientCache) {
+    return apiClient.get(url, config);
+  }
+
+  const cacheKey = buildClientCacheKey(url, config);
+  const cached = getResponseCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.timestamp < rule.ttlMs) {
+    return {
+      ...cached.response,
+      headers: {
+        ...(cached.response.headers ?? {}),
+        'x-limen-client-cache': 'HIT',
+      },
+    };
+  }
+
+  const inflight = getInflightRequests.get(cacheKey);
+  if (inflight) {
+    return inflight;
+  }
+
+  const request = apiClient.get(url, {
+    ...config,
+    headers: {
+      ...(config.headers ?? {}),
+      'X-Limen-Client-Cache': '1',
+    },
+  }).then((response) => {
+    getResponseCache.set(cacheKey, {
+      timestamp: Date.now(),
+      response: {
+        data: response.data,
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        config: response.config,
+      },
+    });
+    trimClientGetCache();
+    return response;
+  }).finally(() => {
+    getInflightRequests.delete(cacheKey);
+  });
+
+  getInflightRequests.set(cacheKey, request);
+  return request;
+}
+
 function wait(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -21,6 +167,10 @@ function wait(ms) {
 }
 
 apiClient.interceptors.request.use(async (config) => {
+  if (isPublicGetWithoutAuth(config)) {
+    return config;
+  }
+
   let token = getCachedAccessToken();
 
   if (!token) {

@@ -1,4 +1,4 @@
-import apiClient, { extractApiError } from './apiClient';
+import apiClient, { cachedApiGet, extractApiError } from './apiClient';
 
 function isNetworkFailure(error) {
   return !error?.response;
@@ -15,7 +15,7 @@ export async function runFullAnalyticsRefresh(notes = null) {
 
 export async function getProductRecommendationPackages(productId, vehicleModelId = null, partLimit = 6, serviceLimit = 4) {
   try {
-    const { data } = await apiClient.get(`/catalog/products/${productId}/recommendations`, {
+    const { data } = await cachedApiGet(`/catalog/products/${productId}/recommendations`, {
       params: {
         vehicleModelId,
         partLimit,

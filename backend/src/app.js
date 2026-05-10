@@ -2,6 +2,7 @@ import cors from 'cors';
 import express from 'express';
 import { env } from './config/env.js';
 import { attachUser } from './middleware/auth.js';
+import { publicResponseCache } from './middleware/cache.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import catalogRoutes from './routes/catalogRoutes.js';
@@ -60,6 +61,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: '1mb' }));
+app.use(publicResponseCache);
 app.use(attachUser);
 
 app.get('/api/health', (_req, res) => {
