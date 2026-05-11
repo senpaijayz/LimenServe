@@ -1,4 +1,4 @@
-import apiClient, { cachedApiGet, extractApiError } from './apiClient';
+import apiClient, { cachedApiGet, clearApiClientCache, extractApiError } from './apiClient';
 import { ALL_VEHICLE_MODELS, products as fallbackProducts } from '../data/productData';
 import inventoryClassifier from '../lib/inventoryClassifier';
 
@@ -6,7 +6,7 @@ const { OPERATIONAL_CATEGORIES, classifyInventoryItem } = inventoryClassifier;
 
 const CURRENT_YEAR = new Date().getFullYear();
 const FITMENT_CACHE_TTL_MS = 10 * 60 * 1000;
-const CATALOG_CACHE_TTL_MS = 45 * 1000;
+const CATALOG_CACHE_TTL_MS = 2 * 60 * 1000;
 const PACKAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const requestCache = new Map();
@@ -402,6 +402,7 @@ export async function getCatalogSummary() {
 export async function receiveInventoryStock(payload) {
   try {
     const { data } = await apiClient.post('/catalog/stock/receive', payload);
+    clearApiClientCache('/catalog/products');
     return data;
   } catch (error) {
     extractApiError(error, 'Failed to receive stock.');
@@ -425,6 +426,7 @@ export async function archiveCatalogProduct(productId, { archive = true, reason 
       archive,
       reason,
     });
+    clearApiClientCache('/catalog/products');
     return data;
   } catch (error) {
     extractApiError(error, archive ? 'Failed to archive product.' : 'Failed to restore product.');
@@ -434,6 +436,7 @@ export async function archiveCatalogProduct(productId, { archive = true, reason 
 export async function updateCatalogProduct(productId, payload) {
   try {
     const { data } = await apiClient.patch(`/catalog/products/${productId}`, payload);
+    clearApiClientCache('/catalog/products');
     return data.product;
   } catch (error) {
     extractApiError(error, 'Failed to update product details.');

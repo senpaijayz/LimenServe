@@ -36,6 +36,7 @@ const useProductCatalog = ({
           vehicleModel,
           vehicleYear,
           includeCategories,
+          cacheBust: refreshKey,
         });
 
         if (!active) {

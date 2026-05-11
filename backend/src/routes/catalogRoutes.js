@@ -8,11 +8,11 @@ import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
 const router = Router();
-const PRODUCT_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
+const PRODUCT_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const FULL_CATALOG_PAGE_SIZE = 250;
 const FULL_CATALOG_PAGE_BATCH_SIZE = 3;
-const SERVICE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
-const VEHICLE_FITMENT_CACHE_TTL_MS = 5 * 60 * 1000;
+const SERVICE_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
+const VEHICLE_FITMENT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const DEFAULT_PART_LIMIT = 6;
 const DEFAULT_SERVICE_LIMIT = 4;
 const DEFAULT_PACKAGE_DESCRIPTION = 'Smart upsell bundle of Mitsubishi-matched parts and services for this vehicle.';
@@ -1986,6 +1986,7 @@ router.get('/products', async (req, res, next) => {
     const vehicleModel = String(req.query.vehicleModel || '').trim();
     const vehicleYear = String(req.query.vehicleYear || '').trim();
     const includeCategories = String(req.query.includeCategories || 'true').trim().toLowerCase() !== 'false';
+    const useStagingCatalog = String(req.query.source || '').trim().toLowerCase() === 'staging';
     const vehicleContext = vehicleModel
       ? buildVehicleFilterContext({
         vehicleModel,
@@ -1999,30 +2000,32 @@ router.get('/products', async (req, res, next) => {
     let totalPages = 1;
 
     if (!vehicleContext) {
-      const [pricelistPage, categoryRows] = await Promise.all([
-        fetchPricelistCatalogPage({
-          page,
-          pageSize,
-          searchQuery,
-          selectedCategory,
-          sortBy,
-        }),
+      const [catalogPage, categoryRows] = await Promise.all([
+        useStagingCatalog
+          ? fetchPricelistCatalogPage({
+            page,
+            pageSize,
+            searchQuery,
+            selectedCategory,
+            sortBy,
+          })
+          : fetchProductCatalogPage({
+            page,
+            pageSize,
+            searchQuery,
+            selectedCategory,
+            sortBy,
+          }),
         includeCategories
           ? fetchProductCatalogCategories({ searchQuery })
           : Promise.resolve([]),
       ]);
 
-      if (pricelistPage?.sourceAvailable) {
-        products = pricelistPage.products;
-        totalCount = pricelistPage.totalCount;
+      if (useStagingCatalog && catalogPage?.sourceAvailable) {
+        products = catalogPage.products;
+        totalCount = catalogPage.totalCount;
       } else {
-        const pageRows = await fetchProductCatalogPage({
-          page,
-          pageSize,
-          searchQuery,
-          selectedCategory,
-          sortBy,
-        });
+        const pageRows = Array.isArray(catalogPage) ? catalogPage : [];
         products = await filterActiveCatalogProducts((pageRows ?? []).map(mapCatalogRow));
         totalCount = Number(pageRows?.[0]?.total_count ?? 0);
       }

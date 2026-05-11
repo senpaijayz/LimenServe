@@ -22,7 +22,7 @@ const publicGetCacheRules = [
   { pattern: /^\/catalog\/vehicle-fitment\/options$/, ttlMs: 10 * 60_000 },
   { pattern: /^\/catalog\/vehicle-packages$/, ttlMs: 5 * 60_000 },
   { pattern: /^\/catalog\/services$/, ttlMs: 5 * 60_000 },
-  { pattern: /^\/catalog\/products$/, ttlMs: 45_000 },
+  { pattern: /^\/catalog\/products$/, ttlMs: 2 * 60_000 },
   { pattern: /^\/catalog\/products\/[^/]+\/recommendations$/, ttlMs: 5 * 60_000 },
 ];
 
