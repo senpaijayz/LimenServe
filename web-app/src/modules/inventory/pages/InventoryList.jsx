@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion as Motion } from 'framer-motion';
-import { ArchiveRestore, Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, Printer } from 'lucide-react';
+import { ArchiveRestore, Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, Printer, Edit2 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { StockBadge } from '../../../components/ui/Badge';
 import Dropdown from '../../../components/ui/Dropdown';
+import Modal from '../../../components/ui/Modal';
 import ProductCard from '../components/ProductCard';
 import AddStockModal from '../components/AddStockModal';
 import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
@@ -13,7 +14,7 @@ import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
 import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
-import { archiveCatalogProduct, getArchivedCatalogProducts, getCatalogSummary, getInventoryMovements, receiveInventoryStock } from '../../../services/catalogApi';
+import { archiveCatalogProduct, getArchivedCatalogProducts, getCatalogSummary, getInventoryMovements, receiveInventoryStock, updateCatalogProduct } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
 import { productMatchesIdentifier } from '../../../utils/barcode';
@@ -33,6 +34,28 @@ const MOVEMENT_FILTER_OPTIONS = [
     { value: 'all', label: 'All movement types' },
     ...Object.entries(MOVEMENT_LABELS).map(([value, label]) => ({ value, label })),
 ];
+
+const PRODUCT_STATUS_OPTIONS = [
+    { value: 'in_stock', label: 'In Stock' },
+    { value: 'low_stock', label: 'Low Stock' },
+    { value: 'out_of_stock', label: 'Out of Stock' },
+    { value: 'discontinued', label: 'Discontinued' },
+];
+
+const INVENTORY_CATEGORY_OPTIONS = [
+    'Engine System',
+    'Electrical & Lighting',
+    'Suspension & Steering',
+    'Brake System',
+    'Cooling System',
+    'Transmission & Drivetrain',
+    'Body & Exterior',
+    'Interior & Cabin',
+    'Filters & Maintenance',
+    'Tires & Wheels',
+    'Fluids & Chemicals',
+    'General Parts & Accessories',
+].map((category) => ({ value: category, label: category }));
 
 const escapeHtml = (value) => String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -155,6 +178,22 @@ const printInventoryMovementReport = ({ movements, catalogSummary }) => {
     printWindow.document.close();
 };
 
+function getReadableClassification(product = {}) {
+    const category = product.category || 'General Parts & Accessories';
+    const strategy = product.classification?.strategy;
+    const confidence = product.classification?.confidence;
+
+    if (strategy === 'fallback') {
+        return `${category} (default category)`;
+    }
+
+    if (confidence) {
+        return `${category} (${confidence} confidence)`;
+    }
+
+    return category;
+}
+
 function formatCatalogProduct(product) {
     return {
         id: product.id,
@@ -176,6 +215,124 @@ function formatCatalogProduct(product) {
     };
 }
 
+const inputClassName = 'w-full rounded-xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-950 shadow-sm outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15';
+
+function buildEditProductForm(product = {}) {
+    return {
+        sku: product.sku || '',
+        name: product.name || '',
+        model: product.model || '',
+        category: product.category || 'General Parts & Accessories',
+        sourceCategory: product.sourceCategory || '',
+        brand: product.brand || 'Mitsubishi',
+        uom: product.uom || 'PC',
+        status: product.status || (Number(product.quantity ?? product.stock ?? 0) <= 0 ? 'out_of_stock' : 'in_stock'),
+        price: String(product.price ?? 0),
+    };
+}
+
+function EditProductModal({ isOpen, product, isSaving, onClose, onSave }) {
+    if (!product) {
+        return null;
+    }
+
+    return (
+        <EditProductModalContent
+            key={product.id}
+            isOpen={isOpen}
+            product={product}
+            isSaving={isSaving}
+            onClose={onClose}
+            onSave={onSave}
+        />
+    );
+}
+
+function EditProductModalContent({ isOpen, product, isSaving, onClose, onSave }) {
+    const [form, setForm] = useState(() => buildEditProductForm(product));
+
+    const updateForm = (field, value) => {
+        setForm((current) => ({ ...current, [field]: value }));
+    };
+
+    const handleSubmit = (event) => {
+        event.preventDefault();
+        onSave(form);
+    };
+
+    return (
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            title="Edit Inventory Details"
+            size="xl"
+            footer={(
+                <>
+                    <Button variant="secondary" onClick={onClose} disabled={isSaving}>Cancel</Button>
+                    <Button variant="primary" type="submit" form="inventory-product-edit-form" isLoading={isSaving} leftIcon={<Edit2 className="h-4 w-4" />}>
+                        Save Details
+                    </Button>
+                </>
+            )}
+        >
+            <form id="inventory-product-edit-form" onSubmit={handleSubmit} className="space-y-5">
+                <div className="rounded-2xl border border-primary-200 bg-primary-50 px-4 py-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-500">Current classification</p>
+                    <p className="mt-1 text-sm font-semibold text-primary-950">{getReadableClassification(product)}</p>
+                    <p className="mt-1 text-xs text-primary-500">Change the category below to replace internal fallback labels with a clear inventory category.</p>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                    <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Part number</span>
+                        <input className={`${inputClassName} mt-2`} value={form.sku} onChange={(event) => updateForm('sku', event.target.value)} required />
+                    </label>
+                    <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Retail price</span>
+                        <input className={`${inputClassName} mt-2`} type="number" min="0" step="0.01" value={form.price} onChange={(event) => updateForm('price', event.target.value)} required />
+                    </label>
+                    <label className="block md:col-span-2">
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Product name</span>
+                        <input className={`${inputClassName} mt-2`} value={form.name} onChange={(event) => updateForm('name', event.target.value)} required />
+                    </label>
+                    <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Category</span>
+                        <select className={`${inputClassName} mt-2`} value={form.category} onChange={(event) => updateForm('category', event.target.value)} required>
+                            {INVENTORY_CATEGORY_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                        </select>
+                    </label>
+                    <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Status</span>
+                        <select className={`${inputClassName} mt-2`} value={form.status} onChange={(event) => updateForm('status', event.target.value)} required>
+                            {PRODUCT_STATUS_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                        </select>
+                    </label>
+                    <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Vehicle model</span>
+                        <input className={`${inputClassName} mt-2`} value={form.model} onChange={(event) => updateForm('model', event.target.value)} placeholder="Example: MONTERO CR45" />
+                    </label>
+                    <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Source category</span>
+                        <input className={`${inputClassName} mt-2`} value={form.sourceCategory} onChange={(event) => updateForm('sourceCategory', event.target.value)} placeholder="Original pricelist/category label" />
+                    </label>
+                    <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Brand</span>
+                        <input className={`${inputClassName} mt-2`} value={form.brand} onChange={(event) => updateForm('brand', event.target.value)} />
+                    </label>
+                    <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Unit</span>
+                        <input className={`${inputClassName} mt-2`} value={form.uom} onChange={(event) => updateForm('uom', event.target.value)} placeholder="PC" />
+                    </label>
+                </div>
+            </form>
+        </Modal>
+    );
+}
+
 const InventoryList = () => {
     const { success, error: showError } = useToast();
     const { isAdmin } = useAuth();
@@ -192,6 +349,8 @@ const InventoryList = () => {
     const [refreshKey, setRefreshKey] = useState(0);
     const [productOverrides, setProductOverrides] = useState({});
     const [selectedPreviewProduct, setSelectedPreviewProduct] = useState(null);
+    const [editingProduct, setEditingProduct] = useState(null);
+    const [savingProductDetails, setSavingProductDetails] = useState(false);
     const [archivingProductId, setArchivingProductId] = useState(null);
     const [restoringProductId, setRestoringProductId] = useState(null);
     const [archivedProducts, setArchivedProducts] = useState([]);
@@ -349,6 +508,46 @@ const InventoryList = () => {
     const handleStockFilterChange = (value) => {
         setSelectedStockFilter(value);
         setCurrentPage(1);
+    };
+
+    const openEditProduct = (product) => {
+        setEditingProduct(productOverrides[product.id] ?? formatCatalogProduct(product));
+    };
+
+    const handleSaveProductDetails = async (form) => {
+        if (!editingProduct?.id) {
+            return;
+        }
+
+        setSavingProductDetails(true);
+        try {
+            const updatedProduct = await updateCatalogProduct(editingProduct.id, {
+                ...form,
+                price: Number(form.price ?? 0),
+                stock: editingProduct.quantity ?? editingProduct.stock ?? 0,
+            });
+            const normalizedProduct = {
+                ...editingProduct,
+                ...formatCatalogProduct({
+                    ...updatedProduct,
+                    stock: editingProduct.quantity ?? editingProduct.stock ?? updatedProduct?.stock ?? 0,
+                    location: editingProduct.location,
+                }),
+            };
+
+            setProductOverrides((current) => ({
+                ...current,
+                [editingProduct.id]: normalizedProduct,
+            }));
+            setSelectedPreviewProduct((current) => (current?.id === editingProduct.id ? normalizedProduct : current));
+            setEditingProduct(null);
+            setRefreshKey((value) => value + 1);
+            success('Inventory details updated successfully.');
+        } catch (saveError) {
+            showError(saveError.message || 'Unable to update inventory details.');
+        } finally {
+            setSavingProductDetails(false);
+        }
     };
 
     const lookupAndPreviewProduct = async (identifier) => {
@@ -750,6 +949,7 @@ const InventoryList = () => {
                         <ProductCard
                             key={product.catalogEntryId || product.id}
                             product={product}
+                            onEdit={isAdmin ? openEditProduct : null}
                             onSelect={openPreview}
                         />
                     ))}
@@ -767,6 +967,7 @@ const InventoryList = () => {
                                     <th className="text-right">Qty</th>
                                     <th>Status</th>
                                     <th>Location</th>
+                                    {isAdmin && <th>Actions</th>}
                                 </tr>
                             </thead>
                             <tbody>
@@ -785,6 +986,21 @@ const InventoryList = () => {
                                         <td className="text-primary-500 border-b border-primary-100 py-3 font-medium">
                                             F{product.location.floor}-{product.location.section}{product.location.shelf}
                                         </td>
+                                        {isAdmin && (
+                                            <td className="border-b border-primary-100 py-3">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    leftIcon={<Edit2 className="h-4 w-4" />}
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        openEditProduct(product);
+                                                    }}
+                                                >
+                                                    Edit
+                                                </Button>
+                                            </td>
+                                        )}
                                     </tr>
                                 ))}
                             </tbody>
@@ -874,11 +1090,28 @@ const InventoryList = () => {
                 onClose={() => setSelectedPreviewProduct(null)}
                 product={selectedPreviewProduct}
                 title="Inventory Label Preview"
+                editAction={isAdmin ? {
+                    label: 'Edit Details',
+                    icon: <Edit2 className="h-4 w-4" />,
+                    onClick: () => {
+                        if (selectedPreviewProduct) {
+                            openEditProduct(selectedPreviewProduct);
+                        }
+                    },
+                } : null}
                 archiveAction={isAdmin ? {
                     label: 'Archive Product',
                     isLoading: archivingProductId === selectedPreviewProduct?.id,
                     onClick: handleArchiveProduct,
                 } : null}
+            />
+
+            <EditProductModal
+                isOpen={Boolean(editingProduct)}
+                product={editingProduct}
+                isSaving={savingProductDetails}
+                onClose={() => setEditingProduct(null)}
+                onSave={handleSaveProductDetails}
             />
         </div>
     );

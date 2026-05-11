@@ -230,6 +230,16 @@ function roundCurrency(value, fallback = 0) {
   return parsed === null ? fallback : parsed;
 }
 
+function normalizeOptionalText(value, maxLength = 160) {
+  const text = String(value ?? '').trim();
+  return text ? text.slice(0, maxLength) : null;
+}
+
+function normalizeRequiredText(value, maxLength = 160) {
+  const text = normalizeOptionalText(value, maxLength);
+  return text || null;
+}
+
 function shouldUseSmartPackageCopy(value) {
   const normalized = normalizeText(value);
   return !normalized
@@ -2231,6 +2241,138 @@ router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, r
       updatedStock,
       supplierName,
       referenceNumber,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/products/:productId', requireRole('admin'), async (req, res, next) => {
+  try {
+    const productId = String(req.params.productId || '').trim();
+    const name = normalizeRequiredText(req.body?.name, 220);
+    const sku = normalizeRequiredText(req.body?.sku, 80)?.toUpperCase();
+    const category = normalizeRequiredText(req.body?.category, 140);
+    const modelName = normalizeOptionalText(req.body?.model, 140);
+    const brand = normalizeOptionalText(req.body?.brand, 80) || 'Mitsubishi';
+    const uom = normalizeOptionalText(req.body?.uom, 20) || 'PC';
+    const status = normalizeOptionalText(req.body?.status, 40) || 'in_stock';
+    const sourceCategory = normalizeOptionalText(req.body?.sourceCategory, 140);
+    const price = parsePrice(req.body?.price);
+
+    if (!productId) {
+      res.status(400).json({ error: 'Product is required.' });
+      return;
+    }
+
+    if (!name || !sku || !category) {
+      res.status(400).json({ error: 'Part number, product name, and category are required.' });
+      return;
+    }
+
+    if (!['in_stock', 'low_stock', 'out_of_stock', 'discontinued'].includes(status)) {
+      res.status(400).json({ error: 'Invalid product status.' });
+      return;
+    }
+
+    if (price === null) {
+      res.status(400).json({ error: 'Retail price must be zero or greater.' });
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const businessDate = nowIso.slice(0, 10);
+    const classification = classifyInventoryItem({
+      sku,
+      name,
+      model_name: modelName,
+      category,
+      sourceCategory,
+      metadata: { sourceCategory },
+    });
+
+    const { data: product, error: productError } = await supabaseAdmin
+      .schema('catalog')
+      .from('products')
+      .update({
+        sku,
+        name,
+        model_name: modelName,
+        category: classification.category,
+        brand,
+        uom,
+        status,
+        source_category: sourceCategory,
+        metadata: {
+          sourceCategory,
+          classification: classification.trace,
+        },
+        updated_at: nowIso,
+      })
+      .eq('id', productId)
+      .select('id, sku, name, model_name, category, brand, uom, status, source_category, metadata')
+      .maybeSingle();
+
+    if (productError) {
+      throw productError;
+    }
+
+    if (!product) {
+      res.status(404).json({ error: 'Product was not found in the catalog.' });
+      return;
+    }
+
+    const { error: closePriceError } = await supabaseAdmin
+      .schema('catalog')
+      .from('product_prices')
+      .update({
+        is_current: false,
+        effective_to: businessDate,
+        updated_at: nowIso,
+      })
+      .eq('product_id', productId)
+      .eq('price_type', 'retail')
+      .eq('is_current', true);
+
+    if (closePriceError) {
+      throw closePriceError;
+    }
+
+    const { error: priceError } = await supabaseAdmin
+      .schema('catalog')
+      .from('product_prices')
+      .insert({
+        product_id: productId,
+        price_type: 'retail',
+        amount: price,
+        currency: 'PHP',
+        effective_from: businessDate,
+        effective_to: null,
+        is_current: true,
+        business_date: businessDate,
+      });
+
+    if (priceError) {
+      throw priceError;
+    }
+
+    invalidateProductCatalogCache();
+
+    res.json({
+      product: mapCatalogRow({
+        id: product.id,
+        sku: product.sku,
+        name: product.name,
+        model: product.model_name,
+        category: product.category,
+        source_category: product.source_category,
+        price,
+        stock: Number(req.body?.stock ?? 0),
+        status: product.status,
+        uom: product.uom,
+        brand: product.brand,
+        metadata: product.metadata ?? {},
+      }),
     });
   } catch (error) {
     next(error);

@@ -15,11 +15,11 @@ const Badge = ({
 }) => {
     // Variant classes
     const variants = {
-        success: 'badge-success',
-        warning: 'badge-warning',
-        danger: 'badge-danger',
-        info: 'badge-info',
-        neutral: 'badge-neutral',
+        success: 'border border-emerald-200 bg-emerald-50 text-emerald-700',
+        warning: 'border border-amber-200 bg-amber-50 text-amber-700',
+        danger: 'border border-red-200 bg-red-50 text-red-700',
+        info: 'border border-blue-200 bg-blue-50 text-blue-700',
+        neutral: 'border border-primary-200 bg-primary-50 text-primary-600',
     };
 
     // Size classes
@@ -39,7 +39,7 @@ const Badge = ({
     };
 
     return (
-        <span className={`badge ${variants[variant]} ${sizes[size]} ${className}`}>
+        <span className={`inline-flex items-center gap-1.5 rounded-full font-bold ${variants[variant]} ${sizes[size]} ${className}`}>
             {dot && (
                 <span className={`w-1.5 h-1.5 rounded-full ${dotColors[variant]}`} />
             )}
@@ -95,16 +95,17 @@ export const StatusBadge = ({ status }) => {
  * Shows stock status based on quantity
  */
 export const StockBadge = ({ quantity, lowThreshold = 10, criticalThreshold = 5 }) => {
+    const stockQuantity = Number(quantity ?? 0);
     let variant = 'success';
     let label = 'In Stock';
 
-    if (quantity === 0) {
+    if (stockQuantity <= 0) {
         variant = 'danger';
         label = 'Out of Stock';
-    } else if (quantity <= criticalThreshold) {
+    } else if (stockQuantity <= criticalThreshold) {
         variant = 'danger';
         label = 'Critical';
-    } else if (quantity <= lowThreshold) {
+    } else if (stockQuantity <= lowThreshold) {
         variant = 'warning';
         label = 'Low Stock';
     }

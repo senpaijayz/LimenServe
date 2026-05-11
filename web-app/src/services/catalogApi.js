@@ -431,6 +431,15 @@ export async function archiveCatalogProduct(productId, { archive = true, reason 
   }
 }
 
+export async function updateCatalogProduct(productId, payload) {
+  try {
+    const { data } = await apiClient.patch(`/catalog/products/${productId}`, payload);
+    return data.product;
+  } catch (error) {
+    extractApiError(error, 'Failed to update product details.');
+  }
+}
+
 export async function getArchivedCatalogProducts(limit = 8) {
   try {
     const { data } = await apiClient.get('/catalog/products/archived', {

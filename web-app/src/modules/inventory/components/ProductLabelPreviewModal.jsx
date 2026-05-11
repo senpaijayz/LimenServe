@@ -34,6 +34,22 @@ function formatRouteLocation(details) {
     return parts.join(' / ');
 }
 
+function formatClassificationLabel(product = {}) {
+    const category = product.category || 'General Parts & Accessories';
+    const strategy = product.classification?.strategy;
+    const confidence = product.classification?.confidence;
+
+    if (strategy === 'fallback') {
+        return `${category} (default category)`;
+    }
+
+    if (confidence) {
+        return `${category} (${confidence} confidence)`;
+    }
+
+    return category;
+}
+
 const InfoPill = ({ icon, label, value }) => (
     <div
         style={{
@@ -76,6 +92,7 @@ const ProductLabelPreviewModal = ({
     locationLabel = '',
     routeDetails = null,
     quantity = 1,
+    editAction = null,
     archiveAction = null,
 }) => {
     const labelRef = useRef(null);
@@ -147,7 +164,7 @@ const ProductLabelPreviewModal = ({
                                 <InfoPill
                                     icon={<Package2 className="h-4 w-4" />}
                                     label="Classification"
-                                    value={product.classification?.ruleKey || 'Runtime normalization'}
+                                    value={formatClassificationLabel(product)}
                                 />
                             </div>
 
@@ -171,6 +188,16 @@ const ProductLabelPreviewModal = ({
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
+                    {editAction && (
+                        <Button
+                            variant="outline"
+                            fullWidth
+                            leftIcon={editAction.icon}
+                            onClick={editAction.onClick}
+                        >
+                            {editAction.label || 'Edit Details'}
+                        </Button>
+                    )}
                     {archiveAction && (
                         <Button
                             variant="outline"
