@@ -10,6 +10,7 @@ import {
   Save,
   Settings,
   Trash2,
+  Upload,
 } from 'lucide-react';
 import { useToast } from '../../../components/ui/Toast';
 import {
@@ -19,6 +20,7 @@ import {
   saveCmsNavigation,
   saveCmsPage,
   saveCmsSiteSettings,
+  uploadCmsImage,
 } from '../../../services/cmsApi';
 
 const SECTION_TYPES = [
@@ -273,6 +275,15 @@ function normalizeBeforeSave(pageDraft) {
   };
 }
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Failed to read selected image.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function StatusBadge({ status }) {
   const styles = {
     published: 'bg-accent-success/10 text-accent-success',
@@ -301,6 +312,71 @@ function Field({ label, value, onChange, placeholder = '', helper = '', type = '
       />
       {helper && <span className="mt-2 block text-xs text-primary-500">{helper}</span>}
     </label>
+  );
+}
+
+function ImageUploadField({
+  label,
+  value,
+  onChange,
+  onUpload,
+  uploadKey,
+  uploadingKey,
+  helper = 'Upload JPG, PNG, WEBP, or SVG up to 5MB.',
+}) {
+  const isUploading = uploadingKey === uploadKey;
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    await onUpload(file, uploadKey, onChange);
+  };
+
+  return (
+    <div className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
+      <div className="grid gap-4 md:grid-cols-[140px_1fr]">
+        <div className="flex h-32 items-center justify-center overflow-hidden rounded-2xl border border-primary-200 bg-white">
+          {value ? (
+            <img src={value} alt={label} className="h-full w-full object-contain p-2" loading="lazy" />
+          ) : (
+            <div className="px-4 text-center text-xs font-semibold uppercase tracking-[0.18em] text-primary-400">
+              No image
+            </div>
+          )}
+        </div>
+        <div className="min-w-0 space-y-3">
+          <Field label={label} value={value} onChange={onChange} placeholder="/LogoLimen.jpg or uploaded image URL" />
+          <div className="flex flex-wrap items-center gap-3">
+            <label className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-primary-200 bg-white px-4 text-sm font-semibold text-accent-primary shadow-sm transition hover:bg-primary-100 ${isUploading ? 'pointer-events-none opacity-70' : ''}`}>
+              {isUploading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {isUploading ? 'Uploading...' : 'Upload image'}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                className="sr-only"
+                onChange={handleFileChange}
+                disabled={isUploading}
+              />
+            </label>
+            {value && (
+              <button
+                type="button"
+                onClick={() => onChange('')}
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-semibold text-accent-danger hover:bg-red-100"
+              >
+                Clear image
+              </button>
+            )}
+          </div>
+          <p className="text-xs leading-5 text-primary-500">{helper}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -399,7 +475,7 @@ function RepeatableRows({ title, items, emptyItem, renderItem, onChange }) {
   );
 }
 
-function SectionContentEditor({ section, onContentChange }) {
+function SectionContentEditor({ section, onContentChange, onImageUpload, uploadingKey }) {
   const content = section.content && typeof section.content === 'object' ? section.content : {};
   const updateContent = (patch) => onContentChange({ ...content, ...patch });
   const updatePrimaryCta = (patch) => updateContent({ primaryCta: { ...(content.primaryCta ?? {}), ...patch } });
@@ -410,10 +486,17 @@ function SectionContentEditor({ section, onContentChange }) {
       <div className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Small label" value={content.eyebrow} onChange={(value) => updateContent({ eyebrow: value })} />
-          <Field label="Image URL" value={content.imageUrl} onChange={(value) => updateContent({ imageUrl: value })} placeholder="/LogoLimen.jpg" />
         </div>
         <Field label="Headline" value={content.title} onChange={(value) => updateContent({ title: value })} />
         <TextAreaField label="Subtitle" value={content.subtitle} rows={3} onChange={(value) => updateContent({ subtitle: value })} />
+        <ImageUploadField
+          label="Hero image"
+          value={content.imageUrl}
+          onChange={(value) => updateContent({ imageUrl: value })}
+          onUpload={onImageUpload}
+          uploadKey={`section-${section.sectionKey || section.id || 'hero'}-image`}
+          uploadingKey={uploadingKey}
+        />
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Primary button label" value={content.primaryCta?.label} onChange={(value) => updatePrimaryCta({ label: value })} />
           <Field label="Primary button link" value={content.primaryCta?.href} onChange={(value) => updatePrimaryCta({ href: value })} />
@@ -516,7 +599,7 @@ function SectionContentEditor({ section, onContentChange }) {
   );
 }
 
-function SectionEditor({ section, index, total, onChange, onMove, onRemove }) {
+function SectionEditor({ section, index, total, onChange, onMove, onRemove, onImageUpload, uploadingKey }) {
   const updateSection = (patch) => onChange({ ...section, ...patch });
 
   return (
@@ -564,7 +647,12 @@ function SectionEditor({ section, index, total, onChange, onMove, onRemove }) {
           <SelectField label="Status" value={section.status} options={SECTION_STATUS_OPTIONS} onChange={(value) => updateSection({ status: value })} />
           <Field label="Order" type="number" value={section.sortOrder} onChange={(value) => updateSection({ sortOrder: value })} />
         </div>
-        <SectionContentEditor section={section} onContentChange={(content) => updateSection({ content })} />
+        <SectionContentEditor
+          section={section}
+          onContentChange={(content) => updateSection({ content })}
+          onImageUpload={onImageUpload}
+          uploadingKey={uploadingKey}
+        />
       </div>
     </div>
   );
@@ -581,6 +669,7 @@ export default function CmsAdmin() {
   const [activeTab, setActiveTab] = useState('pages');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingKey, setUploadingKey] = useState('');
   const [pages, setPages] = useState([]);
   const [selectedSlug, setSelectedSlug] = useState('');
   const [pageDraft, setPageDraft] = useState(createPageDraft());
@@ -716,6 +805,41 @@ export default function CmsAdmin() {
       ...draft,
       sections: [...draft.sections, createDefaultSection(sectionType, draft.sections.length)],
     }));
+  };
+
+  const handleImageUpload = async (file, uploadKey, onUrlReady) => {
+    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']);
+
+    if (!allowedTypes.has(file.type)) {
+      showError('Upload a JPG, PNG, WEBP, or SVG image.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showError('Image must be 5MB or smaller.');
+      return;
+    }
+
+    setUploadingKey(uploadKey);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const asset = await uploadCmsImage({
+        dataUrl,
+        fileName: file.name,
+        folder: uploadKey.includes('logo') ? 'logos' : `pages/${pageDraft.slug || 'draft'}`,
+      });
+
+      if (!asset?.publicUrl) {
+        throw new Error('Upload finished but no image URL was returned.');
+      }
+
+      onUrlReady(asset.publicUrl);
+      success('Image uploaded successfully');
+    } catch (uploadError) {
+      showError(uploadError.message || 'Failed to upload image.');
+    } finally {
+      setUploadingKey('');
+    }
   };
 
   const handleCreatePage = () => {
@@ -918,6 +1042,8 @@ export default function CmsAdmin() {
                     onChange={(nextSection) => updateSection(index, nextSection)}
                     onMove={moveSection}
                     onRemove={() => removeSection(index)}
+                    onImageUpload={handleImageUpload}
+                    uploadingKey={uploadingKey}
                   />
                 ))}
                 {selectedPage && <p className="text-xs text-primary-500">Last saved page: {selectedPage.updatedAt || 'not available'}</p>}
@@ -933,7 +1059,17 @@ export default function CmsAdmin() {
                 <Field label="Company name" value={settingsDraft.company_name} onChange={(value) => setSettingsDraft((draft) => ({ ...draft, company_name: value }))} />
                 <Field label="Brand kicker" value={settingsDraft.brand_kicker} onChange={(value) => setSettingsDraft((draft) => ({ ...draft, brand_kicker: value }))} />
                 <Field label="Brand title" value={settingsDraft.brand_title} onChange={(value) => setSettingsDraft((draft) => ({ ...draft, brand_title: value }))} />
-                <Field label="Logo URL" value={settingsDraft.logo_url} onChange={(value) => setSettingsDraft((draft) => ({ ...draft, logo_url: value }))} />
+                <div className="md:col-span-2">
+                  <ImageUploadField
+                    label="Logo image"
+                    value={settingsDraft.logo_url}
+                    onChange={(value) => setSettingsDraft((draft) => ({ ...draft, logo_url: value }))}
+                    onUpload={handleImageUpload}
+                    uploadKey="site-logo"
+                    uploadingKey={uploadingKey}
+                    helper="This controls the public website logo. Save Settings after uploading to publish the new logo."
+                  />
+                </div>
                 <Field label="Mobile number" value={settingsDraft.primary_phone} onChange={(value) => setSettingsDraft((draft) => ({ ...draft, primary_phone: value }))} />
                 <Field label="Landline" value={settingsDraft.landline} onChange={(value) => setSettingsDraft((draft) => ({ ...draft, landline: value }))} />
                 <Field label="Business hours" value={settingsDraft.business_hours} onChange={(value) => setSettingsDraft((draft) => ({ ...draft, business_hours: value }))} />

@@ -71,3 +71,17 @@ export async function saveCmsNavigation(navigation) {
     extractApiError(error, 'Failed to save navigation.');
   }
 }
+
+export async function uploadCmsImage({ dataUrl, fileName, folder = 'general' }) {
+  try {
+    const { data } = await apiClient.post('/cms/media', {
+      dataUrl,
+      fileName,
+      folder,
+    });
+
+    return data.asset;
+  } catch (error) {
+    extractApiError(error, 'Failed to upload image.');
+  }
+}
