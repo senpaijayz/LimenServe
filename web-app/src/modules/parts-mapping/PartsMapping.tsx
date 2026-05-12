@@ -567,211 +567,136 @@ export default function PartsMapping() {
             )}
 
             {store.editMode && (
-                <div className="relative z-[100] mb-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-                    <div className="rounded-3xl border border-slate-700/50 bg-[#1e293b] p-4 shadow-sm">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                            <div className="min-w-0">
-                                <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Design workspace</p>
-                                <h2 className="mt-1 text-lg font-bold text-white">{store.currentLayoutName}</h2>
-                                <p className="mt-1 text-sm text-slate-500">
-                                    {store.isDirty ? 'Unsaved edits are waiting to be saved to Supabase.' : formatLastSaved(store.lastSavedAt)}
-                                </p>
-                            </div>
+                <div className="relative z-[100] mb-4">
+                    <div className="rounded-2xl border border-slate-700/50 bg-[#1e293b] p-3 shadow-sm flex flex-wrap items-center gap-4">
+                        <div style={{ position: 'relative' }}>
+                            <button className="btn btn-secondary btn-sm" onClick={() => setAddMenuOpen((value) => !value)}>
+                                <Plus size={16} /> Add Object
+                            </button>
 
-                            <div className="flex flex-wrap items-center gap-2">
-                                <div style={{ position: 'relative' }}>
-                                    <button className="btn btn-secondary" onClick={() => setAddMenuOpen((value) => !value)}>
-                                        <Plus size={18} /> Add Object
-                                    </button>
+                            {addMenuOpen && (
+                                <div className="absolute left-0 top-full z-[9999] mt-2 w-[300px] overflow-hidden rounded-2xl border border-slate-700/50 bg-[#1e293b] shadow-2xl">
+                                    {OBJECT_GROUPS.map((group) => (
+                                        <div key={group.label} className="border-b border-slate-700/50 last:border-b-0">
+                                            <div className="bg-[#0f172a] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{group.label}</div>
+                                            <div className="grid grid-cols-1">
+                                                {group.items.map((key) => {
+                                                    const value = OBJECT_TYPES[key];
+                                                    if (!value) return null;
 
-                                    {addMenuOpen && (
-                                        <div className="absolute left-0 top-full z-[9999] mt-2 w-[300px] overflow-hidden rounded-2xl border border-slate-700/50 bg-[#1e293b] shadow-2xl">
-                                            {OBJECT_GROUPS.map((group) => (
-                                                <div key={group.label} className="border-b border-slate-100 last:border-b-0">
-                                                    <div className="bg-slate-50 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{group.label}</div>
-                                                    <div className="grid grid-cols-1">
-                                                        {group.items.map((key) => {
-                                                            const value = OBJECT_TYPES[key];
-                                                            if (!value) return null;
-
-                                                            return (
-                                                                <button
-                                                                    key={key}
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        store.addObject(key);
-                                                                        setAddMenuOpen(false);
-                                                                    }}
-                                                                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700"
-                                                                >
-                                                                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-base">{value.icon}</span>
-                                                                    {value.label}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div ref={layoutMenuRef} style={{ position: 'relative' }}>
-                                    <button className="btn btn-outline" onClick={() => setLayoutMenuOpen((value) => !value)}>
-                                        <FolderOpen size={18} /> Load
-                                    </button>
-
-                                    {layoutMenuOpen && (
-                                        <div className="absolute right-0 top-full z-[9999] mt-2 max-h-[320px] w-[340px] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
-                                            {store.savedLayouts.length === 0 ? (
-                                                <div className="p-5 text-center text-sm font-semibold text-slate-500">No layouts found</div>
-                                            ) : (
-                                                store.savedLayouts.map((layout) => (
-                                                    <div
-                                                        key={layout.id}
-                                                        className="flex items-center justify-between gap-3 border-b border-slate-100 p-3 transition hover:bg-slate-50"
-                                                        style={{
-                                                            borderLeft: layout.is_default ? '4px solid #DC2626' : '4px solid transparent',
-                                                            background: store.currentLayoutId === layout.id ? '#eff6ff' : undefined,
-                                                        }}
-                                                    >
+                                                    return (
                                                         <button
+                                                            key={key}
                                                             type="button"
-                                                            className="min-w-0 flex-1 text-left"
                                                             onClick={() => {
-                                                                store.loadLayout(layout);
-                                                                setLayoutMenuOpen(false);
-                                                                success(`Loaded "${layout.name}".`);
+                                                                store.addObject(key);
+                                                                setAddMenuOpen(false);
                                                             }}
+                                                            className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white"
                                                         >
-                                                            <div className="flex items-center gap-2 text-sm font-bold text-slate-950">
-                                                                {layout.name}
-                                                                {layout.is_default && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600">PRIORITY</span>}
-                                                            </div>
-                                                            <div className="mt-1 truncate text-xs text-slate-500">{layout.description || formatLastSaved(layout.updated_at || layout.created_at || null)}</div>
+                                                            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0f172a] text-base">{value.icon}</span>
+                                                            {value.label}
                                                         </button>
-
-                                                        <div className="flex gap-1">
-                                                            <button
-                                                                type="button"
-                                                                className="rounded-lg p-2 text-slate-400 transition hover:bg-blue-50 hover:text-blue-700"
-                                                                onClick={() => void handleSetPriorityLayout(layout.id, layout.name)}
-                                                                title="Set Priority"
-                                                            >
-                                                                <Star size={14} fill={layout.is_default ? '#DC2626' : 'none'} color={layout.is_default ? '#DC2626' : 'currentColor'} />
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                className="rounded-lg p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
-                                                                onClick={() => {
-                                                                    if (!layout.is_default && window.confirm(`Delete ${layout.name}?`)) {
-                                                                        void handleDeleteLayout(layout.id, layout.name);
-                                                                    }
-                                                                }}
-                                                                title="Delete"
-                                                                disabled={layout.is_default}
-                                                            >
-                                                                <Trash2 size={14} />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                ))
-                                            )}
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
-                                    )}
+                                    ))}
                                 </div>
-
-                                <button className="btn btn-secondary" disabled={store.isSaving} onClick={() => void handleSaveLayout()}>
-                                    {store.isSaving ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <Save size={18} />}
-                                    {store.isSaving ? 'Saving' : 'Save'}
-                                </button>
-                                <button className="btn btn-outline" disabled={store.isSaving} onClick={() => setSaveAsModal(true)}><Plus size={18} /> Save As</button>
-                                <button
-                                    className="btn btn-outline"
-                                    onClick={() => {
-                                        if (window.confirm('Reset layout to the default shell? Save afterward to persist the reset.')) {
-                                            store.resetLayout();
-                                            success('Layout reset. Save to persist this change.');
-                                        }
-                                    }}
-                                    title="Reset layout"
-                                >
-                                    <Home size={18} /> Reset
-                                </button>
-                            </div>
+                            )}
                         </div>
-                    </div>
 
-                    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                        {selectedObj && selectedSize ? (
-                            <div className="space-y-4">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Selected object</p>
-                                        <h3 className="mt-1 truncate text-lg font-bold text-slate-950">{selectedObj.label}</h3>
-                                        <p className="text-sm text-slate-500">{OBJECT_TYPES[selectedObj.type]?.label || selectedObj.type} on Floor {selectedObj.floor}</p>
-                                    </div>
-                                    <button className={`btn btn-sm ${selectedObj.locked ? 'btn-primary' : 'btn-outline'}`} onClick={() => store.toggleLock(selectedObj.id)} title="Lock Object">
-                                        {selectedObj.locked ? <Lock size={16} /> : <Unlock size={16} />}
-                                        {selectedObj.locked ? 'Locked' : 'Unlocked'}
-                                    </button>
-                                </div>
-
-                                <label>
-                                    <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Label</span>
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-                                            value={labelInput}
-                                            onChange={(event) => setLabelInput(event.target.value)}
-                                            onBlur={() => store.updateLabel(selectedObj.id, labelInput)}
-                                            onKeyDown={(event) => {
-                                                if (event.key === 'Enter') {
-                                                    store.updateLabel(selectedObj.id, labelInput);
-                                                }
-                                            }}
-                                            placeholder="Object label"
-                                        />
-                                        <button className="btn btn-outline btn-sm" onClick={() => store.updateLabel(selectedObj.id, labelInput)}><Type size={16} /></button>
-                                    </div>
-                                </label>
-
-                                <div>
-                                    <div className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-900">
-                                        <Ruler size={16} /> Size
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        <ValidatedNumberInput label="W" value={selectedSize[0]} max={selectedSizeMax} onValidChange={(value) => store.updateObjectSize(selectedObj.id, 'width', value)} />
-                                        <ValidatedNumberInput label="H" value={selectedSize[1]} max={SIZE_LIMITS.heightMax} onValidChange={(value) => store.updateObjectSize(selectedObj.id, 'height', value)} />
-                                        <ValidatedNumberInput label="D" value={selectedSize[2]} max={selectedSizeMax} onValidChange={(value) => store.updateObjectSize(selectedObj.id, 'depth', value)} />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <div className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-900">
-                                        <Move size={16} /> Position and rotation
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <ValidatedNumberInput label="X" value={selectedObj.x} min={-80} max={80} step={0.5} onValidChange={(value) => store.updatePosition(selectedObj.id, value, selectedObj.z)} />
-                                        <ValidatedNumberInput label="Z" value={selectedObj.z} min={-80} max={80} step={0.5} onValidChange={(value) => store.updatePosition(selectedObj.id, selectedObj.x, value)} />
-                                    </div>
-                                    <div className="mt-3 flex flex-wrap gap-2">
-                                        <button className="btn btn-outline btn-sm" onClick={() => store.rotateSelected(-Math.PI / 4)} title="Rotate Left"><RotateCcw size={16} /> -45</button>
-                                        <button className="btn btn-outline btn-sm" onClick={() => store.rotateSelected(Math.PI / 4)} title="Rotate Right"><RotateCw size={16} /> +45</button>
-                                        <button className="btn btn-outline btn-sm text-error border-error/50 hover:bg-error hover:text-white" onClick={() => store.deleteSelected()}>
-                                            <Trash2 size={16} /> Delete
-                                        </button>
-                                    </div>
-                                </div>
+                        {selectedObj ? (
+                            <div className="flex items-center gap-3 border-l border-slate-600 pl-4">
+                                <span className="text-sm font-semibold text-white">
+                                    {OBJECT_TYPES[selectedObj.type]?.icon} {selectedObj.label || selectedObj.type}
+                                </span>
+                                <input
+                                    type="text"
+                                    className="h-8 w-32 rounded-lg border border-slate-600 bg-[#0f172a] px-2 text-xs font-semibold text-white outline-none focus:border-red-500"
+                                    value={labelInput}
+                                    onChange={(e) => setLabelInput(e.target.value)}
+                                    onBlur={() => store.updateLabel(selectedObj.id, labelInput)}
+                                    onKeyDown={(e) => e.key === 'Enter' && store.updateLabel(selectedObj.id, labelInput)}
+                                    placeholder="Label"
+                                />
+                                <button className={`btn btn-ghost btn-sm btn-icon ${selectedObj.locked ? 'text-red-400' : 'text-slate-400'}`} onClick={() => store.toggleLock(selectedObj.id)} title="Lock">
+                                    {selectedObj.locked ? <Lock size={16} /> : <Unlock size={16} />}
+                                </button>
+                                <button className="btn btn-ghost btn-sm btn-icon text-slate-400" onClick={() => store.rotateSelected(-Math.PI / 4)} title="Rotate Left"><RotateCcw size={16} /></button>
+                                <button className="btn btn-ghost btn-sm btn-icon text-slate-400" onClick={() => store.rotateSelected(Math.PI / 4)} title="Rotate Right"><RotateCw size={16} /></button>
+                                <button className="btn btn-ghost btn-sm btn-icon text-red-400 hover:text-red-300" onClick={() => store.deleteSelected()} title="Delete"><Trash2 size={16} /></button>
                             </div>
                         ) : (
-                            <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
-                                <Box size={32} className="text-slate-400" />
-                                <h3 className="mt-3 text-base font-bold text-slate-950">Select an object to edit</h3>
-                                <p className="mt-2 text-sm text-slate-500">Click any shelf, floor, room, wall, counter, or label in the scene to adjust label, W, H, D, position, rotation, lock, or delete.</p>
-                            </div>
+                            <span className="text-sm text-slate-400 border-l border-slate-600 pl-4">Click an object to select it</span>
                         )}
+
+                        <div className="flex-1" />
+
+                        <div className="flex items-center gap-2 text-sm text-slate-400 mr-2">
+                            <Database size={14} />
+                            <span className="max-w-[120px] truncate">{store.currentLayoutName}</span>
+                            {store.isDirty && <span className="h-2 w-2 rounded-full bg-red-500" title="Unsaved changes" />}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <div ref={layoutMenuRef} style={{ position: 'relative' }}>
+                                <button className="btn btn-outline btn-sm" onClick={() => setLayoutMenuOpen((value) => !value)}>
+                                    <FolderOpen size={16} /> Load ▼
+                                </button>
+                                {layoutMenuOpen && (
+                                    <div className="absolute right-0 top-full z-[9999] mt-2 max-h-[320px] w-[340px] overflow-y-auto rounded-2xl border border-slate-700/50 bg-[#1e293b] shadow-2xl">
+                                        {store.savedLayouts.length === 0 ? (
+                                            <div className="p-5 text-center text-sm font-semibold text-slate-400">No layouts found</div>
+                                        ) : (
+                                            store.savedLayouts.map((layout) => (
+                                                <div
+                                                    key={layout.id}
+                                                    className="flex items-center justify-between gap-3 border-b border-slate-700/50 p-3 transition hover:bg-slate-700"
+                                                    style={{
+                                                        borderLeft: layout.is_default ? '4px solid #DC2626' : '4px solid transparent',
+                                                        background: store.currentLayoutId === layout.id ? '#0f172a' : undefined,
+                                                    }}
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        className="min-w-0 flex-1 text-left"
+                                                        onClick={() => {
+                                                            store.loadLayout(layout);
+                                                            setLayoutMenuOpen(false);
+                                                            success(`Loaded "${layout.name}".`);
+                                                        }}
+                                                    >
+                                                        <div className="flex items-center gap-2 text-sm font-bold text-white">
+                                                            {layout.name}
+                                                            {layout.is_default && <span className="rounded-full bg-red-900/30 px-2 py-0.5 text-[10px] font-bold text-red-400">PRIORITY</span>}
+                                                        </div>
+                                                        <div className="mt-1 truncate text-xs text-slate-400">{layout.description || formatLastSaved(layout.updated_at || layout.created_at || null)}</div>
+                                                    </button>
+                                                    <div className="flex gap-1">
+                                                        <button type="button" className="rounded-lg p-2 text-slate-400 hover:text-red-400" onClick={() => void handleSetPriorityLayout(layout.id, layout.name)}>
+                                                            <Star size={14} fill={layout.is_default ? '#DC2626' : 'none'} color={layout.is_default ? '#DC2626' : 'currentColor'} />
+                                                        </button>
+                                                        <button type="button" className="rounded-lg p-2 text-slate-400 hover:text-red-400 disabled:opacity-30" disabled={layout.is_default} onClick={() => { if (!layout.is_default && window.confirm(`Delete ${layout.name}?`)) void handleDeleteLayout(layout.id, layout.name); }}>
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            <button className="btn btn-secondary btn-sm" disabled={store.isSaving} onClick={() => void handleSaveLayout()}>
+                                {store.isSaving ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <Save size={16} />} Save
+                            </button>
+                            <button className="btn btn-outline btn-sm" disabled={store.isSaving} onClick={() => setSaveAsModal(true)}>
+                                <Plus size={16} /> Save As
+                            </button>
+                            <button className="btn btn-outline btn-sm" onClick={() => { if (window.confirm('Reset layout?')) store.resetLayout(); }}>
+                                <Home size={16} /> Reset
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
