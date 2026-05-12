@@ -234,7 +234,7 @@ async function upsertCatalogBalanceLocation(productId, location) {
 }
 
 async function fetchProductLocations() {
-  const rows = await safeAppQuery(
+  const bridgeRows = await safeAppQuery(
     'product location list',
     () => appDb()
       .from('product_locations')
@@ -244,7 +244,39 @@ async function fetchProductLocations() {
     [],
   );
 
-  return (rows ?? []).map(mapProductLocation);
+  const { data: balanceRows, error: balanceError } = await catalogDb()
+    .from('inventory_balances')
+    .select('product_id, location, updated_at')
+    .contains('location', { source: 'inventory-stockroom' })
+    .order('updated_at', { ascending: false })
+    .limit(1000);
+
+  if (balanceError) {
+    throw balanceError;
+  }
+
+  const merged = new Map();
+  (balanceRows ?? []).forEach((row) => {
+    const location = row.location ?? {};
+    merged.set(row.product_id, {
+      product_id: row.product_id,
+      layout_id: null,
+      shelf_id: null,
+      aisle: location.aisle,
+      shelf_number: location.shelfNumber ?? location.shelf,
+      level: location.level,
+      bin: location.bin,
+      bin_number: location.binNumber,
+      metadata: { label: location.label },
+      updated_at: row.updated_at,
+    });
+  });
+
+  (bridgeRows ?? []).forEach((row) => {
+    merged.set(row.product_id, row);
+  });
+
+  return [...merged.values()].map(mapProductLocation);
 }
 
 router.get('/active', requireRole('admin', 'stock_clerk'), async (_req, res, next) => {
