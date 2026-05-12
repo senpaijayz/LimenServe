@@ -93,7 +93,6 @@ export const NAV_ITEMS = {
         { path: '/inventory', label: 'Inventory', icon: 'Package', roles: [ROLES.ADMIN, ROLES.STOCK_CLERK] },
         { path: '/quotation', label: 'Quotation', icon: 'FileText', roles: [ROLES.ADMIN, ROLES.CASHIER] },
         { path: '/services', label: 'Service Orders', icon: 'Wrench', roles: [ROLES.ADMIN, ROLES.CASHIER, ROLES.STOCK_CLERK] },
-        { path: '/stockroom', label: '3D Stockroom', icon: 'Box', roles: [ROLES.ADMIN, ROLES.STOCK_CLERK] },
     ],
     admin: [
         { path: '/reports', label: 'Reports', icon: 'BarChart3', roles: [ROLES.ADMIN] },
