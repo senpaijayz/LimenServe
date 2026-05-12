@@ -217,7 +217,8 @@ function formatCatalogProduct(product) {
     };
 }
 
-function normalizeLocationForDisplay(location = {}) {
+function normalizeLocationForDisplay(rawLocation) {
+    const location = rawLocation && typeof rawLocation === 'object' ? rawLocation : {};
     const aisle = location.aisle
         ? String(location.aisle).replace(/^aisle\s+/i, '').toUpperCase()
         : '';
@@ -248,7 +249,10 @@ function normalizeLocationForDisplay(location = {}) {
 }
 
 function buildLocationForm(product = {}) {
-    const location = product.location ?? {};
+    const safeProduct = product && typeof product === 'object' ? product : {};
+    const location = safeProduct.location && typeof safeProduct.location === 'object'
+        ? safeProduct.location
+        : {};
     return {
         aisle: String(location.aisle || 'A').replace(/^aisle\s+/i, '').toUpperCase().slice(0, 1) || 'A',
         shelfNumber: String(location.shelfNumber ?? location.shelf_number ?? location.shelf ?? 1),
