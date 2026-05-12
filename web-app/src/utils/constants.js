@@ -98,6 +98,7 @@ export const NAV_ITEMS = {
         { path: '/reports', label: 'Reports', icon: 'BarChart3', roles: [ROLES.ADMIN] },
         { path: '/users', label: 'User Management', icon: 'Users', roles: [ROLES.ADMIN] },
         { path: '/cms', label: 'Content CMS', icon: 'FileText', roles: [ROLES.ADMIN] },
+        { path: '/locator-3d', label: '3D Locator', icon: 'Box', roles: [ROLES.ADMIN] },
     ],
 };
 

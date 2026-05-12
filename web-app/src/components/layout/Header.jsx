@@ -22,6 +22,7 @@ const Header = () => {
             '/services': 'Service Orders',
             '/reports': 'Reports & Analytics',
             '/users': 'User Management',
+            '/locator-3d': '3D Locator',
         };
 
         const basePath = '/' + location.pathname.split('/')[1];

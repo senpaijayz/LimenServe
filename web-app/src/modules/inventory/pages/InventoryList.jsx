@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion as Motion } from 'framer-motion';
 import { ArchiveRestore, Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, Printer, Edit2, Crosshair } from 'lucide-react';
 import Button from '../../../components/ui/Button';
@@ -18,6 +19,7 @@ import { archiveCatalogProduct, getArchivedCatalogProducts, getCatalogSummary, g
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
 import { productMatchesIdentifier } from '../../../utils/barcode';
+import { buildLocator3DUrl } from '../../locator3d/utils/locatorNavigation';
 
 const PAGE_SIZE = 12;
 const MOVEMENT_LABELS = {
@@ -246,19 +248,6 @@ function normalizeLocationForDisplay(rawLocation) {
     return legacy || 'Unassigned';
 }
 
-function buildLocationForm(product = {}) {
-    const safeProduct = product && typeof product === 'object' ? product : {};
-    const location = safeProduct.location && typeof safeProduct.location === 'object'
-        ? safeProduct.location
-        : {};
-    return {
-        aisle: String(location.aisle || 'A').replace(/^aisle\s+/i, '').toUpperCase().slice(0, 1) || 'A',
-        shelfNumber: String(location.shelfNumber ?? location.shelf_number ?? location.shelf ?? 1),
-        level: String(location.level ?? 1),
-        bin: String(location.bin || 'Left'),
-    };
-}
-
 const inputClassName = 'w-full rounded-xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-950 shadow-sm outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15';
 
 function buildEditProductForm(product = {}) {
@@ -378,6 +367,7 @@ function EditProductModalContent({ isOpen, product, isSaving, onClose, onSave })
 }
 
 const InventoryList = () => {
+    const navigate = useNavigate();
     const { success, error: showError } = useToast();
     const { isAdmin } = useAuth();    const findProduct = useDataStore((state) => state.findProduct);
     const [catalogSummary, setCatalogSummary] = useState(null);
@@ -393,9 +383,7 @@ const InventoryList = () => {
     const [productOverrides, setProductOverrides] = useState({});
     const [selectedPreviewProduct, setSelectedPreviewProduct] = useState(null);
     const [editingProduct, setEditingProduct] = useState(null);
-    const [editingLocationProduct, setEditingLocationProduct] = useState(null);
     const [savingProductDetails, setSavingProductDetails] = useState(false);
-    const [savingLocation, setSavingLocation] = useState(false);
     const [archivingProductId, setArchivingProductId] = useState(null);
     const [restoringProductId, setRestoringProductId] = useState(null);
     const [archivedProducts, setArchivedProducts] = useState([]);
@@ -557,6 +545,17 @@ const InventoryList = () => {
 
     const openEditProduct = (product) => {
         setEditingProduct(productOverrides[product.id] ?? formatCatalogProduct(product));
+    };
+
+    const handleLocateIn3D = (product) => {
+        if (!product) {
+            return;
+        }
+
+        const normalizedProduct = productOverrides[product.id] ?? formatCatalogProduct(product);
+
+        setSelectedPreviewProduct(null);
+        navigate(buildLocator3DUrl(normalizedProduct));
     };
 
     const handleSaveProductDetails = async (form) => {
@@ -1146,7 +1145,10 @@ const InventoryList = () => {
                 product={selectedPreviewProduct}
                 title="Inventory Label Preview"
                 locationEditAction={null}
-                locateAction={null}
+                locateAction={selectedPreviewProduct ? {
+                    label: 'Locate in 3D',
+                    onClick: () => handleLocateIn3D(selectedPreviewProduct),
+                } : null}
                 editAction={isAdmin ? {
                     label: 'Edit Details',
                     icon: <Edit2 className="h-4 w-4" />,

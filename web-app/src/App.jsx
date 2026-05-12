@@ -18,6 +18,7 @@ const SalesReport = lazy(() => import('./modules/reports/pages/SalesReport'));
 const InventoryReport = lazy(() => import('./modules/reports/pages/InventoryReport'));
 const UserManagement = lazy(() => import('./modules/users/pages/UserManagement'));
 const CmsAdmin = lazy(() => import('./modules/cms/pages/CmsAdmin'));
+const Locator3DAdmin = lazy(() => import('./modules/locator3d/pages/Locator3DAdmin'));
 
 const PublicHome = lazy(() => import('./modules/public/pages/PublicHome'));
 const PublicCatalog = lazy(() => import('./modules/public/pages/PublicCatalog'));
@@ -84,6 +85,7 @@ function App() {
                   <Route path="/reports/inventory" element={renderRoute(InventoryReport, <WorkspaceRouteFallback title="Loading inventory report" />)} />
                   <Route path="/users" element={renderRoute(UserManagement, <WorkspaceRouteFallback title="Loading user management" />)} />
                   <Route path="/cms" element={renderRoute(CmsAdmin, <WorkspaceRouteFallback title="Loading CMS workspace" />)} />
+                  <Route path="/locator-3d" element={renderRoute(Locator3DAdmin, <WorkspaceRouteFallback title="Loading 3D locator" />)} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />
