@@ -29,12 +29,12 @@ export default function WarehouseEnvironment() {
             <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
                 <planeGeometry args={[100, 100]} />
                 <meshStandardMaterial
-                    color="#1e293b"
-                    roughness={0.4}
-                    metalness={0.1}
+                    color="#243b5a"
+                    roughness={0.48}
+                    metalness={0.08}
                 />
                 {/* Clean white grid over the floor */}
-                <gridHelper args={[100, 100, '#e2e8f0', '#334155']} rotation={[Math.PI / 2, 0, 0]} position={[0, 0.05, 0]} />
+                <gridHelper args={[100, 100, '#bae6fd', '#4b6584']} rotation={[Math.PI / 2, 0, 0]} position={[0, 0.05, 0]} />
             </mesh>
 
             {/* Ceiling hanging signs */}
@@ -43,7 +43,7 @@ export default function WarehouseEnvironment() {
                     {/* Sign Board */}
                     <mesh position={[0, 0, 0]} castShadow>
                         <boxGeometry args={[4, 1, 0.1]} />
-                        <meshStandardMaterial color="#0f172a" roughness={0.6} metalness={0.5} />
+                        <meshStandardMaterial color="#111827" roughness={0.6} metalness={0.5} />
                     </mesh>
                     <Text
                         position={[0, 0, 0.06]}
@@ -71,7 +71,7 @@ export default function WarehouseEnvironment() {
             {/* Distant warehouse walls framing */}
             <mesh position={[0, 10, -25]} receiveShadow>
                 <planeGeometry args={[100, 20]} />
-                <meshStandardMaterial color="#0b1120" roughness={0.9} />
+                <meshStandardMaterial color="#14243a" roughness={0.9} />
             </mesh>
 
             {/* Basic HDRI reflection for slick metals */}

@@ -159,3 +159,47 @@ export async function deleteStockroomItemLocation(productId: string, layoutId?: 
     extractApiError(error, 'Failed to delete item location.');
   }
 }
+
+export interface InventoryStockroomLocationPayload {
+  aisle: string | number;
+  shelfNumber: string | number;
+  level?: string | number;
+  bin?: string | number;
+  binNumber?: string | number;
+}
+
+export async function getInventoryStockroomActiveLayout() {
+  try {
+    const { data } = await apiClient.get('/inventory/stockroom/active', STOCKROOM_REQUEST_CONFIG);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Failed to load inventory stockroom layout.');
+  }
+}
+
+export async function saveInventoryStockroomLayout(payload: Record<string, unknown>) {
+  try {
+    const { data } = await apiClient.post('/inventory/stockroom/layouts', payload, STOCKROOM_REQUEST_CONFIG);
+    return data.layout;
+  } catch (error) {
+    extractApiError(error, 'Failed to save stockroom layout.');
+  }
+}
+
+export async function saveInventoryStockroomShelf(shelfId: string, payload: Record<string, unknown>) {
+  try {
+    const { data } = await apiClient.put(`/inventory/stockroom/shelves/${shelfId}`, payload, STOCKROOM_REQUEST_CONFIG);
+    return data.shelf;
+  } catch (error) {
+    extractApiError(error, 'Failed to save stockroom shelf.');
+  }
+}
+
+export async function saveInventoryProductLocation(productId: string, payload: InventoryStockroomLocationPayload) {
+  try {
+    const { data } = await apiClient.post(`/inventory/stockroom/products/${productId}/location`, payload, STOCKROOM_REQUEST_CONFIG);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Failed to save stockroom product location.');
+  }
+}

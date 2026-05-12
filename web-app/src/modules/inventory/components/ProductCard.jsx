@@ -1,26 +1,35 @@
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 import { MapPin, Edit2, Trash2 } from 'lucide-react';
 import { StockBadge } from '../../../components/ui/Badge';
 import { formatCurrency } from '../../../utils/formatters';
 import MitsubishiGenuinePartsLabel from './MitsubishiGenuinePartsLabel';
 
-/**
- * Product Card Component
- * Displays product info in a card format for grid view
- */
 function formatLocation(location = {}) {
-    const parts = [
-        location?.floor ? `Floor ${location.floor}` : null,
-        location?.section ? `Section ${location.section}` : null,
-        location?.shelf ? `Shelf ${location.shelf}` : null,
-    ].filter(Boolean);
+    if (location?.label) {
+        return location.label;
+    }
+
+    const aisle = location?.aisle ? String(location.aisle).replace(/^aisle\s+/i, '').toUpperCase() : '';
+    const shelfNumber = location?.shelfNumber ?? location?.shelf_number ?? location?.shelf;
+    const bin = location?.bin || location?.slot;
+    const parts = aisle || shelfNumber || bin
+        ? [
+            aisle ? `Aisle ${aisle}` : null,
+            shelfNumber ? `Shelf ${shelfNumber}` : null,
+            bin ? `Bin ${bin}` : null,
+        ].filter(Boolean)
+        : [
+            location?.floor ? `Floor ${location.floor}` : null,
+            location?.section ? `Section ${location.section}` : null,
+            location?.shelf ? `Shelf ${location.shelf}` : null,
+        ].filter(Boolean);
 
     return parts.length > 0 ? parts.join(' • ') : 'Unassigned';
 }
 
 const ProductCard = ({ product, onEdit, onDelete, onSelect }) => {
     return (
-        <motion.div
+        <Motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             whileHover={{ y: -4 }}
@@ -36,16 +45,20 @@ const ProductCard = ({ product, onEdit, onDelete, onSelect }) => {
                     <div className="absolute inset-0 bg-white/92 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 z-10">
                         {onEdit && (
                             <button
-                                onClick={(e) => { e.stopPropagation(); onEdit(product); }}
+                                type="button"
+                                onClick={(event) => { event.stopPropagation(); onEdit(product); }}
                                 className="p-2 rounded-lg bg-accent-info/20 text-accent-info hover:bg-accent-info/30 transition-colors"
+                                aria-label={`Edit ${product.name}`}
                             >
                                 <Edit2 className="w-4 h-4" />
                             </button>
                         )}
                         {onDelete && (
                             <button
-                                onClick={(e) => { e.stopPropagation(); onDelete(product); }}
+                                type="button"
+                                onClick={(event) => { event.stopPropagation(); onDelete(product); }}
                                 className="p-2 rounded-lg bg-accent-danger/20 text-accent-danger hover:bg-accent-danger/30 transition-colors"
+                                aria-label={`Delete ${product.name}`}
                             >
                                 <Trash2 className="w-4 h-4" />
                             </button>
@@ -55,7 +68,6 @@ const ProductCard = ({ product, onEdit, onDelete, onSelect }) => {
             </div>
 
             <div className="space-y-3">
-                {/* Name and SKU */}
                 <div>
                     <h3 className="font-semibold text-primary-950 line-clamp-2 mb-1">
                         {product.name}
@@ -63,14 +75,12 @@ const ProductCard = ({ product, onEdit, onDelete, onSelect }) => {
                     <p className="text-xs font-mono text-primary-500">{product.sku}</p>
                 </div>
 
-                {/* Price */}
                 <div className="flex items-baseline gap-2">
                     <span className="text-xl font-bold font-display text-accent-blue">
                         {formatCurrency(product.price)}
                     </span>
                 </div>
 
-                {/* Stock and Location */}
                 <div className="flex items-center justify-between pt-3 border-t border-primary-100">
                     <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-primary-500 uppercase tracking-widest">Qty:</span>
@@ -79,13 +89,12 @@ const ProductCard = ({ product, onEdit, onDelete, onSelect }) => {
                     </div>
                 </div>
 
-                {/* Location */}
-                <div className="flex items-center gap-1 text-xs text-primary-500">
+                <div className="flex items-center gap-1 text-xs font-semibold text-primary-500">
                     <MapPin className="w-3 h-3" />
                     <span>{formatLocation(product.location)}</span>
                 </div>
             </div>
-        </motion.div>
+        </Motion.div>
     );
 };
 

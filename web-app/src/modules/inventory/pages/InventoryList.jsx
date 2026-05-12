@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion as Motion } from 'framer-motion';
-import { ArchiveRestore, Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, Printer, Edit2 } from 'lucide-react';
+import { ArchiveRestore, Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, Printer, Edit2, Crosshair, MapPinned } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { StockBadge } from '../../../components/ui/Badge';
@@ -15,6 +16,7 @@ import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
 import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
 import { archiveCatalogProduct, getArchivedCatalogProducts, getCatalogSummary, getInventoryMovements, receiveInventoryStock, updateCatalogProduct } from '../../../services/catalogApi';
+import { saveInventoryProductLocation } from '../../../services/stockroomApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
 import { productMatchesIdentifier } from '../../../utils/barcode';
@@ -215,6 +217,46 @@ function formatCatalogProduct(product) {
     };
 }
 
+function normalizeLocationForDisplay(location = {}) {
+    const aisle = location.aisle
+        ? String(location.aisle).replace(/^aisle\s+/i, '').toUpperCase()
+        : '';
+    const shelfNumber = location.shelfNumber ?? location.shelf_number ?? location.shelf;
+    const level = location.level;
+    const bin = location.bin || location.binLabel || location.slot;
+
+    if (location.label) {
+        return location.label;
+    }
+
+    if (aisle || shelfNumber || bin) {
+        return [
+            aisle ? `Aisle ${aisle}` : null,
+            shelfNumber ? `Shelf ${shelfNumber}` : null,
+            level ? `Level ${level}` : null,
+            bin ? `Bin ${bin}` : null,
+        ].filter(Boolean).join(' • ');
+    }
+
+    const legacy = [
+        location.floor ? `F${location.floor}` : null,
+        location.section ? `${location.section}` : null,
+        location.shelf ? `Shelf ${location.shelf}` : null,
+    ].filter(Boolean).join('-');
+
+    return legacy || 'Unassigned';
+}
+
+function buildLocationForm(product = {}) {
+    const location = product.location ?? {};
+    return {
+        aisle: String(location.aisle || 'A').replace(/^aisle\s+/i, '').toUpperCase().slice(0, 1) || 'A',
+        shelfNumber: String(location.shelfNumber ?? location.shelf_number ?? location.shelf ?? 1),
+        level: String(location.level ?? 1),
+        bin: String(location.bin || 'Left'),
+    };
+}
+
 const inputClassName = 'w-full rounded-xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-950 shadow-sm outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15';
 
 function buildEditProductForm(product = {}) {
@@ -333,9 +375,81 @@ function EditProductModalContent({ isOpen, product, isSaving, onClose, onSave })
     );
 }
 
+function EditLocationModal({ isOpen, product, isSaving, onClose, onSave }) {
+    const [form, setForm] = useState(() => buildLocationForm(product));
+
+    if (!product) {
+        return null;
+    }
+
+    const updateForm = (field, value) => {
+        setForm((current) => ({ ...current, [field]: value }));
+    };
+
+    const handleSubmit = (event) => {
+        event.preventDefault();
+        onSave(form);
+    };
+
+    return (
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            title="Edit Stockroom Location"
+            size="lg"
+            footer={(
+                <>
+                    <Button variant="secondary" onClick={onClose} disabled={isSaving}>Cancel</Button>
+                    <Button variant="primary" type="submit" form="stockroom-location-edit-form" isLoading={isSaving} leftIcon={<MapPinned className="h-4 w-4" />}>
+                        Save Location
+                    </Button>
+                </>
+            )}
+        >
+            <form id="stockroom-location-edit-form" onSubmit={handleSubmit} className="space-y-5">
+                <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4">
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-primary-500">Product</p>
+                    <p className="mt-2 text-base font-black text-primary-950">{product.name}</p>
+                    <p className="mt-1 font-mono text-xs text-primary-500">{product.sku}</p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Aisle</span>
+                        <select className={`${inputClassName} mt-2`} value={form.aisle} onChange={(event) => updateForm('aisle', event.target.value)}>
+                            {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0, 6).split('').map((aisle) => (
+                                <option key={aisle} value={aisle}>Aisle {aisle}</option>
+                            ))}
+                        </select>
+                    </label>
+                    <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Shelf Number</span>
+                        <input className={`${inputClassName} mt-2`} type="number" min="1" max="60" value={form.shelfNumber} onChange={(event) => updateForm('shelfNumber', event.target.value)} required />
+                    </label>
+                    <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Level</span>
+                        <input className={`${inputClassName} mt-2`} type="number" min="1" max="12" value={form.level} onChange={(event) => updateForm('level', event.target.value)} required />
+                    </label>
+                    <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Bin</span>
+                        <select className={`${inputClassName} mt-2`} value={form.bin} onChange={(event) => updateForm('bin', event.target.value)}>
+                            {['Left', 'Center', 'Right'].map((bin) => (
+                                <option key={bin} value={bin}>Bin {bin}</option>
+                            ))}
+                        </select>
+                    </label>
+                </div>
+                <div className="rounded-2xl border border-accent-blue/20 bg-accent-blue/10 px-4 py-3 text-sm font-bold text-accent-blue">
+                    Preview: Aisle {form.aisle} • Shelf {form.shelfNumber || 1} • Level {form.level || 1} • Bin {form.bin}
+                </div>
+            </form>
+        </Modal>
+    );
+}
+
 const InventoryList = () => {
     const { success, error: showError } = useToast();
     const { isAdmin } = useAuth();
+    const navigate = useNavigate();
     const findProduct = useDataStore((state) => state.findProduct);
     const [catalogSummary, setCatalogSummary] = useState(null);
     const [summaryError, setSummaryError] = useState('');
@@ -350,7 +464,9 @@ const InventoryList = () => {
     const [productOverrides, setProductOverrides] = useState({});
     const [selectedPreviewProduct, setSelectedPreviewProduct] = useState(null);
     const [editingProduct, setEditingProduct] = useState(null);
+    const [editingLocationProduct, setEditingLocationProduct] = useState(null);
     const [savingProductDetails, setSavingProductDetails] = useState(false);
+    const [savingLocation, setSavingLocation] = useState(false);
     const [archivingProductId, setArchivingProductId] = useState(null);
     const [restoringProductId, setRestoringProductId] = useState(null);
     const [archivedProducts, setArchivedProducts] = useState([]);
@@ -514,6 +630,18 @@ const InventoryList = () => {
         setEditingProduct(productOverrides[product.id] ?? formatCatalogProduct(product));
     };
 
+    const openEditLocation = (product) => {
+        if (!product) return;
+        setEditingLocationProduct(productOverrides[product.id] ?? formatCatalogProduct(product));
+    };
+
+    const handleLocateInStockroom = (product) => {
+        if (!product?.id) return;
+        window.sessionStorage.setItem('limen:stockroom:locateProductId', product.id);
+        setSelectedPreviewProduct(null);
+        navigate('/stockroom');
+    };
+
     const handleSaveProductDetails = async (form) => {
         if (!editingProduct?.id) {
             return;
@@ -547,6 +675,49 @@ const InventoryList = () => {
             showError(saveError.message || 'Unable to update inventory details.');
         } finally {
             setSavingProductDetails(false);
+        }
+    };
+
+    const handleSaveProductLocation = async (form) => {
+        if (!editingLocationProduct?.id) {
+            return;
+        }
+
+        setSavingLocation(true);
+        try {
+            const result = await saveInventoryProductLocation(editingLocationProduct.id, {
+                aisle: form.aisle,
+                shelfNumber: Number(form.shelfNumber || 1),
+                level: Number(form.level || 1),
+                bin: form.bin,
+            });
+            const nextLocation = {
+                ...(editingLocationProduct.location ?? {}),
+                ...(result?.catalogLocation ?? {}),
+                aisle: form.aisle,
+                shelfNumber: Number(form.shelfNumber || 1),
+                shelf: Number(form.shelfNumber || 1),
+                level: Number(form.level || 1),
+                bin: form.bin,
+                label: result?.location?.label || `Aisle ${form.aisle} • Shelf ${form.shelfNumber || 1} • Level ${form.level || 1} • Bin ${form.bin}`,
+            };
+            const updatedProduct = {
+                ...editingLocationProduct,
+                location: nextLocation,
+            };
+
+            setProductOverrides((current) => ({
+                ...current,
+                [editingLocationProduct.id]: updatedProduct,
+            }));
+            setSelectedPreviewProduct((current) => (current?.id === editingLocationProduct.id ? updatedProduct : current));
+            setEditingLocationProduct(null);
+            setRefreshKey((value) => value + 1);
+            success('Stockroom location updated successfully.');
+        } catch (saveError) {
+            showError(saveError.message || 'Unable to update stockroom location.');
+        } finally {
+            setSavingLocation(false);
         }
     };
 
@@ -983,11 +1154,32 @@ const InventoryList = () => {
                                         <td className="text-right border-b border-primary-100 py-3 font-semibold text-accent-blue">{formatCurrency(product.price)}</td>
                                         <td className="text-right border-b border-primary-100 py-3 text-primary-900 font-bold">{product.quantity}</td>
                                         <td className="border-b border-primary-100 py-3"><StockBadge quantity={product.quantity} /></td>
-                                        <td className="text-primary-500 border-b border-primary-100 py-3 font-medium">
-                                            F{product.location.floor}-{product.location.section}{product.location.shelf}
+                                        <td className="border-b border-primary-100 py-3">
+                                            <button
+                                                type="button"
+                                                className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-3 py-1.5 text-xs font-bold text-accent-blue transition hover:border-accent-blue/50 hover:bg-accent-blue/15"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    openPreview(product);
+                                                }}
+                                            >
+                                                {normalizeLocationForDisplay(product.location)}
+                                            </button>
                                         </td>
                                         {isAdmin && (
                                             <td className="border-b border-primary-100 py-3">
+                                                <div className="flex flex-wrap gap-2">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        leftIcon={<MapPinned className="h-4 w-4" />}
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            openEditLocation(product);
+                                                        }}
+                                                    >
+                                                        Location
+                                                    </Button>
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
@@ -999,6 +1191,7 @@ const InventoryList = () => {
                                                 >
                                                     Edit
                                                 </Button>
+                                                </div>
                                             </td>
                                         )}
                                     </tr>
@@ -1090,6 +1283,18 @@ const InventoryList = () => {
                 onClose={() => setSelectedPreviewProduct(null)}
                 product={selectedPreviewProduct}
                 title="Inventory Label Preview"
+                locationEditAction={isAdmin ? {
+                    label: 'Edit Location',
+                    onClick: () => {
+                        if (selectedPreviewProduct) {
+                            openEditLocation(selectedPreviewProduct);
+                        }
+                    },
+                } : null}
+                locateAction={{
+                    label: 'Locate in 3D Stockroom',
+                    onClick: () => handleLocateInStockroom(selectedPreviewProduct),
+                }}
                 editAction={isAdmin ? {
                     label: 'Edit Details',
                     icon: <Edit2 className="h-4 w-4" />,
@@ -1112,6 +1317,15 @@ const InventoryList = () => {
                 isSaving={savingProductDetails}
                 onClose={() => setEditingProduct(null)}
                 onSave={handleSaveProductDetails}
+            />
+
+            <EditLocationModal
+                key={editingLocationProduct?.id || 'location-editor'}
+                isOpen={Boolean(editingLocationProduct)}
+                product={editingLocationProduct}
+                isSaving={savingLocation}
+                onClose={() => setEditingLocationProduct(null)}
+                onSave={handleSaveProductLocation}
             />
         </div>
     );

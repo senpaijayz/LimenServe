@@ -8,6 +8,7 @@ import authRoutes from './routes/authRoutes.js';
 import catalogRoutes from './routes/catalogRoutes.js';
 import cmsRoutes from './routes/cmsRoutes.js';
 import estimateRoutes from './routes/estimateRoutes.js';
+import inventoryStockroomRoutes from './routes/inventoryStockroomRoutes.js';
 import mechanicsRoutes from './routes/mechanicsRoutes.js';
 import partsMappingRoutes from './routes/partsMappingRoutes.js';
 import posRoutes from './routes/posRoutes.js';
@@ -82,6 +83,7 @@ app.use('/api/estimates', estimateRoutes);
 app.use('/api/mechanics', mechanicsRoutes);
 app.use('/api/service-orders', serviceOrderRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/inventory/stockroom', inventoryStockroomRoutes);
 app.use('/api/parts-mapping', partsMappingRoutes);
 app.use('/api/stockroom', stockroomRoutes);
 

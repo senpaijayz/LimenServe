@@ -5,6 +5,7 @@ import WarehouseEnvironment from './WarehouseEnvironment';
 import ShelvingSystem from './ShelvingSystem';
 import ProductsLayer from './ProductsLayer';
 import StockroomCameraControls from './StockroomCameraControls';
+import PathVisualizer from './PathVisualizer';
 
 export default function StockroomSceneV2() {
     return (
@@ -13,8 +14,8 @@ export default function StockroomSceneV2() {
             camera={{ position: [0, 10, 25], fov: 45 }}
             gl={{ antialias: false, powerPreference: "high-performance" }}
         >
-            <color attach="background" args={['#0f172a']} />
-            <fog attach="fog" args={['#0f172a', 15, 60]} />
+            <color attach="background" args={['#10233d']} />
+            <fog attach="fog" args={['#10233d', 18, 70]} />
 
             <Suspense fallback={null}>
                 {/* Lights, Floors, Walls, Atmosphere */}
@@ -25,6 +26,9 @@ export default function StockroomSceneV2() {
 
                 {/* Dynamic products mapped to bins */}
                 <ProductsLayer />
+
+                {/* Premium animated counter-to-shelf route */}
+                <PathVisualizer />
             </Suspense>
 
             {/* Fly-to controls mapped to double-click and state changes */}

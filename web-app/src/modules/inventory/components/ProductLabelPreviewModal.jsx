@@ -1,11 +1,26 @@
 import { useMemo, useRef } from 'react';
-import { Archive, Printer, Package2, MapPin, ScanLine } from 'lucide-react';
+import { Archive, Printer, Package2, MapPin, ScanLine, Crosshair, PencilLine } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
 import Button from '../../../components/ui/Button';
 import MitsubishiGenuinePartsLabel from './MitsubishiGenuinePartsLabel';
 import { printProductLabelNode } from '../utils/printProductLabel';
 
 function formatLocation(location = {}) {
+    if (location?.label) {
+        return location.label;
+    }
+
+    const stockroomParts = [
+        location?.aisle ? `Aisle ${String(location.aisle).replace(/^aisle\s+/i, '').toUpperCase()}` : null,
+        (location?.shelfNumber ?? location?.shelf_number ?? null) ? `Shelf ${location.shelfNumber ?? location.shelf_number}` : null,
+        location?.level ? `Level ${location.level}` : null,
+        location?.bin ? `Bin ${location.bin}` : null,
+    ].filter(Boolean);
+
+    if (stockroomParts.length > 0) {
+        return stockroomParts.join(' • ');
+    }
+
     const segments = [
         location?.floor ? `Floor ${location.floor}` : null,
         location?.section ? `Section ${location.section}` : null,
@@ -94,6 +109,8 @@ const ProductLabelPreviewModal = ({
     quantity = 1,
     editAction = null,
     archiveAction = null,
+    locationEditAction = null,
+    locateAction = null,
 }) => {
     const labelRef = useRef(null);
 
@@ -183,11 +200,44 @@ const ProductLabelPreviewModal = ({
                                     </div>
                                 </div>
                             )}
+
+                            <div className="rounded-2xl border border-primary-200 bg-white/85 p-4">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-primary-500">Quick Stock</div>
+                                        <p className="mt-1 text-2xl font-black text-primary-950">{product.quantity ?? product.stock ?? 0}</p>
+                                        <p className="text-xs font-semibold text-primary-500">Available quantity from live inventory balance</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-accent-blue/20 bg-accent-blue/10 px-4 py-3 text-sm font-black text-accent-blue">
+                                        {effectiveLocationLabel || 'Unassigned'}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
+                    {locateAction && (
+                        <Button
+                            variant="primary"
+                            fullWidth
+                            leftIcon={<Crosshair className="h-4 w-4" />}
+                            onClick={locateAction.onClick}
+                        >
+                            {locateAction.label || 'Locate in 3D Stockroom'}
+                        </Button>
+                    )}
+                    {locationEditAction && (
+                        <Button
+                            variant="outline"
+                            fullWidth
+                            leftIcon={<PencilLine className="h-4 w-4" />}
+                            onClick={locationEditAction.onClick}
+                        >
+                            {locationEditAction.label || 'Edit Location'}
+                        </Button>
+                    )}
                     {editAction && (
                         <Button
                             variant="outline"

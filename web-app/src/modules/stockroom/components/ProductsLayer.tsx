@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html, PivotControls } from '@react-three/drei';
 import { useStockroomStore } from '../store/useStockroomStoreV2';
-import { getCoordinatesFromLocation, AISLE_SPACING, SHELF_SPACING, LEVEL_HEIGHT } from './ShelvingSystem';
+import { getCoordinatesFromLocation, AISLE_SPACING, SHELF_SPACING, LEVEL_HEIGHT } from '../utils/stockroomGeometry';
 import * as THREE from 'three';
 
 export function ProductGeometry({ product, isSelected }: { product: any, isSelected: boolean }) {
@@ -56,6 +56,10 @@ export function ProductGeometry({ product, isSelected }: { product: any, isSelec
             onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
             onPointerOut={(e) => { e.stopPropagation(); setHovered(false); }}
             onClick={(e) => { e.stopPropagation(); selectProduct(product.id); }}
+            onDoubleClick={(e) => {
+                e.stopPropagation();
+                window.dispatchEvent(new CustomEvent('limen:stockroom-product-preview', { detail: { productId: product.id } }));
+            }}
         >
             {isSelected && isAdminMode ? (
                 <PivotControls

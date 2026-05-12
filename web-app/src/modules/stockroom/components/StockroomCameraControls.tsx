@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { CameraControls } from '@react-three/drei';
 import { useStockroomStore } from '../store/useStockroomStoreV2';
-import { getCoordinatesFromLocation } from './ShelvingSystem';
+import { getCoordinatesFromLocation } from '../utils/stockroomGeometry';
 
 export default function StockroomCameraControls() {
     const controlsRef = useRef<any>(null);
