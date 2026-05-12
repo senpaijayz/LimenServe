@@ -9,6 +9,13 @@ import {
 } from '../services/partsMappingService.js';
 
 const router = Router();
+const DISABLED_STOCKROOM_RESPONSE = {
+  error: '3D stockroom and parts-mapping are permanently disabled for this project.',
+};
+
+router.use((_req, res) => {
+  res.status(410).json(DISABLED_STOCKROOM_RESPONSE);
+});
 
 router.get('/layouts', requireRole('admin', 'stock_clerk'), async (_req, res, next) => {
   try {

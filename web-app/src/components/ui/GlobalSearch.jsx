@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import {
     Search, X, Package, ShoppingCart, Wrench, FileText,
-    BarChart3, Users, Box, LayoutDashboard, ArrowRight, Command
+    BarChart3, Users, LayoutDashboard, ArrowRight, Command
 } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 import useDataStore from '../../store/useDataStore';
@@ -20,7 +20,6 @@ const searchablePages = [
     { id: 'nav-pos', name: 'Point of Sale', path: '/pos', icon: ShoppingCart, type: 'page' },
     { id: 'nav-quote', name: 'Cost Estimation & Quotation', path: '/quotation', icon: FileText, type: 'page' },
     { id: 'nav-svc', name: 'Service Orders', path: '/services', icon: Wrench, type: 'page' },
-    { id: 'nav-stock', name: '3D Stockroom Viewer', path: '/stockroom', icon: Box, type: 'page' },
     { id: 'nav-reports', name: 'Reports & Analytics', path: '/reports', icon: BarChart3, type: 'page' },
     { id: 'nav-inventory-report', name: 'Inventory Report', path: '/reports/inventory', icon: BarChart3, type: 'page' },
     { id: 'nav-users', name: 'User Management', path: '/users', icon: Users, type: 'page' },

@@ -3,6 +3,13 @@ import { requireRole } from '../middleware/auth.js';
 import { supabaseAdmin } from '../config/supabase.js';
 
 const router = Router();
+const DISABLED_STOCKROOM_RESPONSE = {
+  error: '3D stockroom persistence is permanently disabled for this project.',
+};
+
+router.use((_req, res) => {
+  res.status(410).json(DISABLED_STOCKROOM_RESPONSE);
+});
 const APP_SCHEMA = 'app';
 const CATALOG_SCHEMA = 'catalog';
 

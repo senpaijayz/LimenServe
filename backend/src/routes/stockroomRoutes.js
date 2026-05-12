@@ -27,6 +27,13 @@ import {
 } from '../services/stockroomService.js';
 
 const router = Router();
+const DISABLED_STOCKROOM_RESPONSE = {
+  error: '3D stockroom is permanently disabled for this project.',
+};
+
+router.use((_req, res) => {
+  res.status(410).json(DISABLED_STOCKROOM_RESPONSE);
+});
 
 function numberOrDefault(value, fallback = 0) {
   const parsed = Number(value);

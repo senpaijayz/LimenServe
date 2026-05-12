@@ -1,7 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
     BarChart3,
-    Box,
     FileText,
     LayoutDashboard,
     Package,
@@ -20,7 +19,6 @@ const iconMap = {
     BarChart3,
     Wrench,
     Users,
-    Box,
 };
 
 const mobilePaths = new Set([
@@ -29,7 +27,6 @@ const mobilePaths = new Set([
     '/inventory',
     '/quotation',
     '/services',
-    '/stockroom',
     '/reports',
     '/users',
 ]);
@@ -64,8 +61,7 @@ export default function MobileBottomNav() {
                                 {item.label
                                     .replace('Point of Sale', 'POS')
                                     .replace('Service Orders', 'Services')
-                                    .replace('User Management', 'Users')
-                                    .replace('3D Stockroom', 'Stockroom')}
+                                    .replace('User Management', 'Users')}
                             </span>
                         </NavLink>
                     );
