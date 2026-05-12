@@ -24,8 +24,7 @@ const Header = () => {
             '/inventory': 'Inventory Management',
             '/quotation': 'Cost Estimation & Quotation',
             '/services': 'Service Orders',
-            '/stockroom': 'Internal Locator',
-            '/parts-mapping': 'Parts Mapping Design',
+            '/stockroom': '3D Stockroom',
             '/reports': 'Reports & Analytics',
             '/users': 'User Management',
         };

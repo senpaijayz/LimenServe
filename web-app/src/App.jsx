@@ -14,11 +14,10 @@ const InventoryList = lazy(() => import('./modules/inventory/pages/InventoryList
 const POSTerminal = lazy(() => import('./modules/pos/pages/POSTerminal'));
 const QuoteBuilder = lazy(() => import('./modules/quotation/pages/QuoteBuilder'));
 const ServiceOrderList = lazy(() => import('./modules/services/pages/ServiceOrderList'));
-const StockroomV2 = lazy(() => import('./modules/stockroom/pages/StockroomV2'));
+const PartsMapping = lazy(() => import('./modules/parts-mapping/PartsMapping'));
 const SalesReport = lazy(() => import('./modules/reports/pages/SalesReport'));
 const InventoryReport = lazy(() => import('./modules/reports/pages/InventoryReport'));
 const UserManagement = lazy(() => import('./modules/users/pages/UserManagement'));
-const PartsMapping = lazy(() => import('./modules/parts-mapping/PartsMapping'));
 const CmsAdmin = lazy(() => import('./modules/cms/pages/CmsAdmin'));
 
 const PublicHome = lazy(() => import('./modules/public/pages/PublicHome'));
@@ -81,8 +80,7 @@ function App() {
                   <Route path="/pos" element={renderRoute(POSTerminal, <WorkspaceRouteFallback title="Loading point of sale" />)} />
                   <Route path="/quotation" element={renderRoute(QuoteBuilder, <WorkspaceRouteFallback title="Loading quotation builder" />)} />
                   <Route path="/services" element={renderRoute(ServiceOrderList, <WorkspaceRouteFallback title="Loading service orders" />)} />
-                  <Route path="/stockroom" element={renderRoute(StockroomV2, <WorkspaceRouteFallback title="Loading 3D Stockroom V2" />)} />
-                  <Route path="/parts-mapping" element={renderRoute(PartsMapping, <WorkspaceRouteFallback title="Loading Parts Mapping" />)} />
+                  <Route path="/stockroom" element={renderRoute(PartsMapping, <WorkspaceRouteFallback title="Loading 3D Stockroom" />)} />
                   <Route path="/reports" element={renderRoute(SalesReport, <WorkspaceRouteFallback title="Loading reports" />)} />
                   <Route path="/reports/sales" element={renderRoute(SalesReport, <WorkspaceRouteFallback title="Loading reports" />)} />
                   <Route path="/reports/inventory" element={renderRoute(InventoryReport, <WorkspaceRouteFallback title="Loading inventory report" />)} />
