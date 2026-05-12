@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Crosshair, MapPin, RotateCcw, Save, Search, Sparkles } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Box, Crosshair, MapPin, RotateCcw, Save, Search, Sparkles, PenTool } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { useToast } from '../../../components/ui/Toast';
@@ -15,6 +16,7 @@ function formatLocation(location: any) {
 }
 
 export default function StockroomV2() {
+    const navigate = useNavigate();
     const { isAdmin, hasRole } = useAuth();
     const { success, error: showError } = useToast();
     const [previewProductId, setPreviewProductId] = useState<string | null>(null);
@@ -135,14 +137,23 @@ export default function StockroomV2() {
                         Clear route
                     </Button>
                     {isAdmin && (
-                        <Button
-                            variant="primary"
-                            leftIcon={<Save className="h-4 w-4" />}
-                            isLoading={isSaving}
-                            onClick={handleSave}
-                        >
-                            {isDirty ? 'Save layout' : 'Saved'}
-                        </Button>
+                        <>
+                            <Button
+                                variant="outline"
+                                leftIcon={<PenTool className="h-4 w-4" />}
+                                onClick={() => navigate('/parts-mapping')}
+                            >
+                                Edit Layout Design
+                            </Button>
+                            <Button
+                                variant="primary"
+                                leftIcon={<Save className="h-4 w-4" />}
+                                isLoading={isSaving}
+                                onClick={handleSave}
+                            >
+                                {isDirty ? 'Save layout' : 'Saved'}
+                            </Button>
+                        </>
                     )}
                 </div>
             </div>

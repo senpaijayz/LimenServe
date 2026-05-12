@@ -96,6 +96,7 @@ export const NAV_ITEMS = {
         { path: '/stockroom', label: '3D Stockroom', icon: 'Box', roles: [ROLES.ADMIN, ROLES.STOCK_CLERK] },
     ],
     admin: [
+        { path: '/parts-mapping', label: 'Parts Mapping Design', icon: 'Box', roles: [ROLES.ADMIN] },
         { path: '/reports', label: 'Reports', icon: 'BarChart3', roles: [ROLES.ADMIN] },
         { path: '/users', label: 'User Management', icon: 'Users', roles: [ROLES.ADMIN] },
         { path: '/cms', label: 'Content CMS', icon: 'FileText', roles: [ROLES.ADMIN] },
