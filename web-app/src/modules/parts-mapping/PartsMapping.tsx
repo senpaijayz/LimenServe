@@ -568,11 +568,11 @@ export default function PartsMapping() {
 
             {store.editMode && (
                 <div className="relative z-[100] mb-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-                    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="rounded-3xl border border-slate-700/50 bg-[#1e293b] p-4 shadow-sm">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div className="min-w-0">
                                 <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Design workspace</p>
-                                <h2 className="mt-1 text-lg font-bold text-slate-950">{store.currentLayoutName}</h2>
+                                <h2 className="mt-1 text-lg font-bold text-white">{store.currentLayoutName}</h2>
                                 <p className="mt-1 text-sm text-slate-500">
                                     {store.isDirty ? 'Unsaved edits are waiting to be saved to Supabase.' : formatLastSaved(store.lastSavedAt)}
                                 </p>
@@ -585,7 +585,7 @@ export default function PartsMapping() {
                                     </button>
 
                                     {addMenuOpen && (
-                                        <div className="absolute left-0 top-full z-[9999] mt-2 w-[300px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                                        <div className="absolute left-0 top-full z-[9999] mt-2 w-[300px] overflow-hidden rounded-2xl border border-slate-700/50 bg-[#1e293b] shadow-2xl">
                                             {OBJECT_GROUPS.map((group) => (
                                                 <div key={group.label} className="border-b border-slate-100 last:border-b-0">
                                                     <div className="bg-slate-50 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{group.label}</div>
@@ -805,10 +805,10 @@ export default function PartsMapping() {
             )}
 
             {(isLargeViewport || showMobileScene) && (
-            <div className="h-[min(560px,calc(100dvh-9rem))] overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-blue-50 via-slate-100 to-white shadow-inner lg:h-[640px]" style={{ padding: 0, position: 'relative' }}>
+            <div className="h-[min(560px,calc(100dvh-9rem))] overflow-hidden rounded-3xl border border-slate-800/50 bg-[#070b14] shadow-inner lg:h-[640px]" style={{ padding: 0, position: 'relative' }}>
                 {!isLargeViewport && (
                     <button
-                        className="absolute right-4 top-4 z-[120] rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm"
+                        className="absolute right-4 top-4 z-[120] rounded-lg border border-slate-700/50 bg-[#1e293b]/95 px-3 py-2 text-sm font-semibold text-white shadow-sm"
                         onClick={() => setShowMobileScene(false)}
                     >
                         Close 3D
@@ -828,7 +828,7 @@ export default function PartsMapping() {
                         pointerEvents: 'none',
                     }}
                 >
-                    <div className="px-4 text-center text-slate-950">
+                    <div className="px-4 text-center text-white">
                         <div className="text-5xl mb-4 text-primary">{store.currentFloor === 1 ? <ChevronDown size={64} className="mx-auto" /> : <ChevronUp size={64} className="mx-auto" />}</div>
                         <div className="text-2xl font-bold">Switching to {store.currentFloor === 1 ? '1st' : '2nd'} Floor...</div>
                     </div>
@@ -851,9 +851,9 @@ export default function PartsMapping() {
                     </div>
                 )}
 
-                <div className="absolute bottom-4 left-4 max-w-[calc(100%-2rem)] rounded-2xl border border-slate-200 bg-white/90 p-3 text-slate-900 shadow-sm backdrop-blur sm:p-4">
+                <div className="absolute bottom-4 left-4 max-w-[calc(100%-2rem)] rounded-2xl border border-slate-700/50 bg-[#0f172a]/90 p-3 text-white shadow-sm backdrop-blur sm:p-4">
                     <div className="text-xs font-bold text-slate-400 mb-2">{store.currentFloor === 1 ? '1ST FLOOR' : '2ND FLOOR'}</div>
-                    <div className="text-sm flex flex-col gap-1 font-semibold text-slate-700">
+                    <div className="text-sm flex flex-col gap-1 font-semibold text-slate-300">
                         <span>Shelves: {store.layout.objects.filter((object) => object.floor === store.currentFloor && (object.type === 'shelf' || object.type === 'shelf2')).length}</span>
                         <span>Counters: {store.layout.objects.filter((object) => object.floor === store.currentFloor && object.type === 'counter').length}</span>
                         <span>Entrances: {store.layout.objects.filter((object) => object.floor === store.currentFloor && object.type === 'entrance').length}</span>
@@ -862,20 +862,20 @@ export default function PartsMapping() {
 
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2">
                     <button
-                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white/90 text-slate-700 shadow-sm backdrop-blur transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none"
+                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700/50 bg-[#1e293b]/90 text-slate-300 shadow-sm backdrop-blur transition hover:bg-slate-700 hover:text-white focus:outline-none"
                         onClick={() => document.querySelector('canvas')?.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }))}
                     >
                         <ZoomIn size={20} />
                     </button>
                     <button
-                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white/90 text-slate-700 shadow-sm backdrop-blur transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none"
+                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700/50 bg-[#1e293b]/90 text-slate-300 shadow-sm backdrop-blur transition hover:bg-slate-700 hover:text-white focus:outline-none"
                         onClick={() => document.querySelector('canvas')?.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, bubbles: true }))}
                     >
                         <ZoomOut size={20} />
                     </button>
                 </div>
 
-                <div className="absolute bottom-4 right-4 hidden rounded-xl border border-slate-200 bg-white/85 px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm backdrop-blur sm:block">
+                <div className="absolute bottom-4 right-4 hidden rounded-xl border border-slate-700/50 bg-[#1e293b]/85 px-4 py-2 text-sm font-semibold text-slate-300 shadow-sm backdrop-blur sm:block">
                     {store.viewMode === '2d' ? '2D View • Drag to pan' : '3D View • Drag to rotate • Scroll to zoom'}
                 </div>
             </div>
@@ -889,13 +889,13 @@ export default function PartsMapping() {
                     { id: 'entrances', label: 'Entrances', total: stats.entrances },
                     { id: 'floors', label: 'Floors', total: stats.floors },
                 ].map((item) => (
-                    <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div key={item.id} className="rounded-2xl border border-slate-800 bg-[#0f172a] p-4 shadow-sm transition-transform hover:scale-[1.02]">
                         <div className="flex items-center gap-4">
                             <div className="flex h-14 w-14 items-center justify-center rounded-2xl text-2xl shadow-glow-primary" style={{ background: 'var(--gradient-primary)' }}>
                                 <Database size={24} color="white" />
                             </div>
                             <div>
-                                <h4 className="text-3xl font-bold tracking-tight text-slate-950">{item.total}</h4>
+                                <h4 className="text-3xl font-bold tracking-tight text-white">{item.total}</h4>
                                 <p className="mt-1 text-sm font-bold uppercase tracking-wider text-slate-500">{item.label}</p>
                             </div>
                         </div>
@@ -906,13 +906,13 @@ export default function PartsMapping() {
             {saveAsModal && (
                 <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
                     <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:p-6">
-                        <h3 className="mb-2 text-xl font-bold text-slate-950">Save Layout As</h3>
+                        <h3 className="mb-2 text-xl font-bold text-white">Save Layout As</h3>
                         <p className="mb-5 text-sm text-slate-500">Create a new Supabase-backed stockroom map from the current scene.</p>
                         <div className="form-group mb-6">
                             <label className="mb-2 block text-sm font-bold text-slate-700">Layout Name</label>
                             <input
                                 type="text"
-                                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                                className="h-11 w-full rounded-xl border border-slate-700/50 bg-[#0f172a] px-3 text-sm font-semibold text-white shadow-sm outline-none transition focus:border-red-500 focus:ring-1 focus:ring-red-500"
                                 placeholder="e.g. Optimized Store Layout"
                                 value={saveName}
                                 onChange={(event) => setSaveName(event.target.value)}

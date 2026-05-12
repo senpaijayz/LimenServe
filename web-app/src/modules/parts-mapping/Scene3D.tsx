@@ -35,12 +35,11 @@ export default function Scene3D() {
 
     return (
         <>
-            <color attach="background" args={['#dbeafe']} />
-            <ambientLight intensity={0.95} />
-            <hemisphereLight args={['#f8fafc', '#64748b', 0.85]} />
-            <directionalLight position={[10, 25, 15]} intensity={1.15} castShadow />
-            <directionalLight position={[-10, 20, -10]} intensity={0.55} />
-            <pointLight position={[0, 15, 0]} intensity={0.35} distance={50} />
+            <color attach="background" args={['#070b14']} />
+            <ambientLight intensity={0.7} />
+            <directionalLight position={[10, 25, 15]} intensity={1.1} castShadow />
+            <directionalLight position={[-10, 20, -10]} intensity={0.4} />
+            <pointLight position={[0, 15, 0]} intensity={0.5} distance={50} />
 
             {/* Current Floor Objects */}
             {layout.objects
