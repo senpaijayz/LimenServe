@@ -76,10 +76,10 @@ const Dropdown = ({
           ${disabled ? 'opacity-50 cursor-not-allowed bg-primary-50' : 'hover:border-primary-400'}
         `}
             >
-                <span className={selectedOption ? 'text-primary-950 font-medium' : 'text-primary-400'}>
+                <span className={`truncate whitespace-nowrap ${selectedOption ? 'text-primary-950 font-medium' : 'text-primary-400'}`}>
                     {selectedOption?.label || placeholder}
                 </span>
-                <ChevronDown className={`w-4 h-4 text-primary-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 flex-shrink-0 text-primary-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {/* Dropdown Menu */}

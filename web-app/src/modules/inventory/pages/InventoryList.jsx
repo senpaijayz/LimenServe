@@ -732,9 +732,9 @@ const InventoryList = () => {
             </div>
 
             {/* Toolbar */}
-            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+            <div className="flex flex-wrap gap-2 items-center">
                 {/* Search + Camera */}
-                <div className="relative flex gap-2 flex-1 lg:max-w-sm">
+                <div className="relative flex gap-2 flex-1 min-w-[200px] max-w-xs">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                         <input
@@ -760,21 +760,25 @@ const InventoryList = () => {
                     </Button>
                 </div>
 
-                {/* Category + Stock filters */}
-                <Dropdown
-                    options={categories}
-                    value={selectedCategory}
-                    onChange={handleCategoryChange}
-                    className="w-full sm:w-52"
-                />
-                <Dropdown
-                    options={stockFilters}
-                    value={selectedStockFilter}
-                    onChange={handleStockFilterChange}
-                    className="w-full sm:w-56"
-                />
+                {/* Category dropdown — fixed width, never grows */}
+                <div className="flex-shrink-0 w-44">
+                    <Dropdown
+                        options={categories}
+                        value={selectedCategory}
+                        onChange={handleCategoryChange}
+                    />
+                </div>
 
-                {/* Right actions */}
+                {/* Stock level dropdown — fixed width, never grows */}
+                <div className="flex-shrink-0 w-48">
+                    <Dropdown
+                        options={stockFilters}
+                        value={selectedStockFilter}
+                        onChange={handleStockFilterChange}
+                    />
+                </div>
+
+                {/* Right actions — pushed to the end */}
                 <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
                     {isAdmin && (
                         <PriceListManager onUpdated={async () => {
