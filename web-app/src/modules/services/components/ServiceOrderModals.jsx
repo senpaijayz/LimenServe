@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
-import { X, Wrench, User, Phone, Car, FileText, Save, CheckCircle, ArrowRight, Archive, CreditCard, Package, CalendarDays, UserCheck, Printer } from 'lucide-react';
+import { X, Wrench, User, Phone, Car, FileText, Save, CheckCircle, ArrowRight, Archive, CreditCard, Package, CalendarDays, UserCheck, Printer, Search, Plus, Trash2 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
 import { formatCurrency, formatDateTime, formatRelativeTime } from '../../../utils/formatters';
 import { StatusBadge } from '../../../components/ui/Badge';
+import useDataStore from '../../../store/useDataStore';
 
 const escapeHtml = (value) => String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -145,6 +146,86 @@ const printServiceOrderDocument = ({ order, serviceItems, partItems, orderTotal,
     printWindow.document.close();
 };
 
+// ── Parts search sub-component ────────────────────────────────────────────────
+function PartSearch({ onAdd }) {
+    const { findProduct } = useDataStore();
+    const [query, setQuery] = useState('');
+    const [result, setResult] = useState(null);
+    const [qty, setQty] = useState('1');
+    const [unitPrice, setUnitPrice] = useState('');
+    const [searching, setSearching] = useState(false);
+    const [notFound, setNotFound] = useState(false);
+
+    useEffect(() => {
+        const id = query.trim();
+        if (!id) { setResult(null); setNotFound(false); return; }
+        let active = true;
+        setSearching(true);
+        void (async () => {
+            const found = await findProduct(id);
+            if (!active) return;
+            if (found) { setResult(found); setUnitPrice(String(found.price ?? '')); setNotFound(false); }
+            else { setResult(null); setNotFound(true); }
+            setSearching(false);
+        })();
+        return () => { active = false; };
+    }, [findProduct, query]);
+
+    const handleAdd = () => {
+        if (!result) return;
+        const q = Number(qty); const p = Number(unitPrice);
+        if (q <= 0 || p < 0) return;
+        onAdd({ itemName: result.name, itemSku: result.sku, quantity: q, unitPrice: p, lineTotal: q * p, lineType: 'part', productId: result.id });
+        setQuery(''); setResult(null); setQty('1'); setUnitPrice(''); setNotFound(false);
+    };
+
+    return (
+        <div className="space-y-3">
+            <div className="flex gap-2">
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
+                    <input type="text" placeholder="Search by SKU or part name..." value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        className="w-full pl-10 pr-3 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/10 bg-white" />
+                </div>
+            </div>
+            {searching && <p className="text-xs text-primary-400">Searching catalog...</p>}
+            {notFound && !searching && <p className="text-xs text-red-500">Part not found in catalog.</p>}
+            {result && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-3">
+                    <div className="flex items-center gap-2">
+                        <Package className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        <div className="min-w-0">
+                            <p className="text-sm font-bold text-primary-950 truncate">{result.name}</p>
+                            <p className="text-xs font-mono text-primary-500">{result.sku} · Stock: {result.quantity ?? result.stock ?? 0}</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                        <div>
+                            <label className="text-xs font-bold text-primary-500 uppercase tracking-wide block mb-1">Qty</label>
+                            <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)}
+                                className="w-full border border-primary-200 rounded-lg px-2 py-1.5 text-sm text-primary-950 focus:outline-none focus:border-accent-blue bg-white" />
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-primary-500 uppercase tracking-wide block mb-1">Unit Price (₱)</label>
+                            <input type="number" min="0" step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)}
+                                className="w-full border border-primary-200 rounded-lg px-2 py-1.5 text-sm text-primary-950 focus:outline-none focus:border-accent-blue bg-white" />
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-primary-500 uppercase tracking-wide block mb-1">Subtotal</label>
+                            <p className="py-1.5 text-sm font-bold text-accent-blue">{formatCurrency((Number(qty) || 0) * (Number(unitPrice) || 0))}</p>
+                        </div>
+                    </div>
+                    <button type="button" onClick={handleAdd}
+                        className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-accent-blue text-white text-sm font-bold py-2 hover:bg-blue-700 transition-colors">
+                        <Plus className="w-4 h-4" /> Add Part
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
 /**
  * CreateServiceOrderModal
  * Modal for creating a new service order
@@ -164,6 +245,11 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
     const [submitError, setSubmitError] = useState('');
+    const [parts, setParts] = useState([]);
+
+    const partsTotal = parts.reduce((sum, p) => sum + Number(p.lineTotal ?? 0), 0);
+    const laborCost = parseFloat(formData.estimatedCost) || 0;
+    const combinedTotal = laborCost + partsTotal;
 
     const validate = () => {
         const newErrors = {};
@@ -190,9 +276,10 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
                 vehicleYear: parseInt(formData.vehicleYear, 10) || null,
                 vehiclePlate: formData.vehiclePlate,
                 description: formData.description,
-                estimatedCost: parseFloat(formData.estimatedCost) || 0,
+                estimatedCost: combinedTotal,
                 status: 'pending',
                 priority: formData.priority,
+                items: parts,
             });
             onClose();
         } catch (error) {
@@ -222,7 +309,7 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
                     initial={{ scale: 0.95, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.95, opacity: 0 }}
-                    className="bg-white rounded-2xl border border-primary-200 shadow-xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6"
+                    className="bg-white rounded-2xl border border-primary-200 shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6"
                     onClick={e => e.stopPropagation()}
                 >
                     {/* Header */}
@@ -347,6 +434,47 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Parts / Inventory Items */}
+                        <div className="rounded-xl border border-primary-200 p-4 space-y-4">
+                            <p className="text-sm font-semibold text-primary-300 flex items-center gap-2">
+                                <Package className="w-4 h-4 text-accent-primary" /> Parts / Inventory Items
+                            </p>
+                            <PartSearch onAdd={(part) => setParts((prev) => [...prev, { ...part, _id: Date.now() + Math.random() }])} />
+                            {parts.length > 0 && (
+                                <div className="space-y-2">
+                                    {parts.map((part) => (
+                                        <div key={part._id} className="flex items-center justify-between gap-3 rounded-xl border border-primary-100 bg-white px-3 py-2">
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-semibold text-primary-950 truncate">{part.itemName}</p>
+                                                <p className="text-xs text-primary-400 font-mono">{part.itemSku} · Qty {part.quantity} × {formatCurrency(part.unitPrice)}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                <p className="text-sm font-bold text-accent-blue">{formatCurrency(part.lineTotal)}</p>
+                                                <button type="button" onClick={() => setParts((prev) => prev.filter((p) => p._id !== part._id))} className="p-1 rounded-lg hover:bg-red-50 text-primary-400 hover:text-red-600 transition-colors">
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <div className="flex items-center justify-between pt-2 border-t border-primary-100">
+                                        <span className="text-xs font-bold uppercase tracking-wide text-primary-500">Parts Total</span>
+                                        <span className="text-sm font-bold text-primary-950">{formatCurrency(partsTotal)}</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Combined total */}
+                        {(laborCost > 0 || partsTotal > 0) && (
+                            <div className="rounded-xl bg-primary-950 text-white p-4 flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/50">Combined Total</p>
+                                    <p className="text-xs text-white/40 mt-0.5">Labor {formatCurrency(laborCost)} + Parts {formatCurrency(partsTotal)}</p>
+                                </div>
+                                <p className="text-2xl font-display font-bold">{formatCurrency(combinedTotal)}</p>
+                            </div>
+                        )}
 
                         {/* Actions */}
                         <div className="flex gap-3 pt-4 border-t border-primary-700">
