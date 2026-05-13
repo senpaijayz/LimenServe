@@ -1166,7 +1166,7 @@ const InventoryList = () => {
             <AddStockModal
                 isOpen={showAddModal}
                 onClose={() => setShowAddModal(false)}
-                onSave={async ({ product, quantity, supplierName, supplierContact, supplierAddress, referenceNumber, receivedDate, reason, isNewProduct, newProductDetails }) => {
+                onSave={async ({ product, quantity, supplierName, supplierContact, supplierAddress, referenceNumber, receivedDate, reason, isNewProduct, newProductDetails, _bulkMode }) => {
                     // ── Register brand-new product ──────────────────────────
                     if (isNewProduct && newProductDetails) {
                         const created = await createCatalogProduct({
@@ -1210,17 +1210,23 @@ const InventoryList = () => {
                         stock: result.updatedStock,
                         quantity: result.updatedStock,
                     };
-
                     setProductOverrides((current) => ({
                         ...current,
                         [updatedProduct.id]: updatedProduct,
                     }));
+                    // In bulk mode the modal manages its own UI
+                    if (_bulkMode) {
+                        setRefreshKey((value) => value + 1);
+                        return;
+                    }
                     setRefreshKey((value) => value + 1);
                     await refreshInventoryMeta();
                     success(`Received ${formatNumber(result.quantityAdded)} units. ${updatedProduct.name} now has ${formatNumber(result.updatedStock)} units.`);
                     setShowAddModal(false);
                 }}
+
             />
+
 
             <CameraScannerModal
                 isOpen={showCameraScanner}

@@ -2,8 +2,9 @@ import axios from 'axios';
 import { API_BASE_URL } from '../utils/constants';
 import { getCachedAccessToken, getFreshAccessToken } from './supabase';
 
-export const DEFAULT_API_TIMEOUT_MS = 15000;
-export const STOCKROOM_API_TIMEOUT_MS = 10000;
+export const DEFAULT_API_TIMEOUT_MS = 30000;
+export const STOCKROOM_API_TIMEOUT_MS = 15000;
+export const INVENTORY_API_TIMEOUT_MS = 25000;
 export const REQUEST_TIMEOUT_MESSAGE = 'The request took too long to finish. Please try again.';
 
 const apiClient = axios.create({

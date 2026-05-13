@@ -1,4 +1,4 @@
-import apiClient, { cachedApiGet, clearApiClientCache, extractApiError } from './apiClient';
+import apiClient, { cachedApiGet, clearApiClientCache, extractApiError, INVENTORY_API_TIMEOUT_MS } from './apiClient';
 import { ALL_VEHICLE_MODELS, products as fallbackProducts } from '../data/productData';
 import inventoryClassifier from '../lib/inventoryClassifier';
 
@@ -387,7 +387,9 @@ export async function getFullProductCatalog() {
 
 export async function getCatalogSummary() {
   try {
-    const { data } = await apiClient.get('/catalog/summary');
+    const { data } = await apiClient.get('/catalog/summary', {
+      timeout: INVENTORY_API_TIMEOUT_MS,
+    });
     return data.summary ?? {
       totalProducts: 0,
       pricelistRows: 0,
@@ -401,7 +403,9 @@ export async function getCatalogSummary() {
 
 export async function createCatalogProduct(payload) {
   try {
-    const { data } = await apiClient.post('/catalog/products', payload);
+    const { data } = await apiClient.post('/catalog/products', payload, {
+      timeout: INVENTORY_API_TIMEOUT_MS,
+    });
     clearApiClientCache('/catalog/products');
     return data.product ?? data;
   } catch (error) {
@@ -411,8 +415,16 @@ export async function createCatalogProduct(payload) {
 
 export async function receiveInventoryStock(payload) {
   try {
-    const { data } = await apiClient.post('/catalog/stock/receive', payload);
+    const { data } = await apiClient.post('/catalog/stock/receive', payload, {
+      timeout: INVENTORY_API_TIMEOUT_MS,
+    });
     clearApiClientCache('/catalog/products');
+    // Also bust the local withCachedRequest cache so next catalog fetch is fresh
+    for (const key of requestCache.keys()) {
+      if (key.startsWith('catalog-products:')) {
+        requestCache.delete(key);
+      }
+    }
     return data;
   } catch (error) {
     extractApiError(error, 'Failed to receive stock.');
@@ -423,6 +435,7 @@ export async function getInventoryMovements(limit = 12) {
   try {
     const { data } = await apiClient.get('/catalog/stock/movements', {
       params: { limit },
+      timeout: INVENTORY_API_TIMEOUT_MS,
     });
     return data.movements ?? [];
   } catch (error) {
