@@ -60,6 +60,15 @@ const MainLayout = () => {
 
     const allowedRoles = getRouteRoles(location.pathname);
     const canAccessRoute = !allowedRoles || allowedRoles.includes(user?.role);
+    const isImmersiveLocator = location.pathname === '/locator-3d' || location.pathname.startsWith('/locator-3d/');
+
+    if (isImmersiveLocator) {
+        return (
+            <main className="min-h-screen overflow-hidden bg-slate-950">
+                {canAccessRoute ? <Outlet /> : <PermissionDenied role={user?.role} />}
+            </main>
+        );
+    }
 
     return (
         <div className="min-h-screen overflow-x-hidden">

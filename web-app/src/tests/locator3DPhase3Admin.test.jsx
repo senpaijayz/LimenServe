@@ -18,6 +18,7 @@ vi.mock('../modules/locator3d/services/locator3DApi', () => ({
     assignProductLocation: vi.fn(async (location) => location),
     getProductLocation: vi.fn(async () => null),
     getProductLocations: vi.fn(async () => []),
+    listStoreLayouts: vi.fn(async () => [{ layoutName: 'main-store' }]),
     loadStoreLayout: vi.fn(async () => ({ layoutData: { objects: useLocator3DStore.getState().sceneObjects } })),
     saveStoreLayout: vi.fn(async () => ({ id: 'layout-1' })),
 }));
@@ -43,6 +44,7 @@ describe('3D Locator Phase 3 admin integration', () => {
         renderLocator();
 
         fireEvent.click(screen.getByRole('button', { name: 'Save Layout' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm Save Layout' }));
         await waitFor(() => expect(saveStoreLayout).toHaveBeenCalled());
 
         saveStoreLayout.mockClear();

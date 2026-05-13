@@ -58,7 +58,7 @@ describe('3D Locator foundation', () => {
         expect(useLocator3DStore.getState().selectedObjectId).toBeNull();
     });
 
-    it('renders a three-column admin workspace with the 3D scene mounted', () => {
+    it('renders the premium one-page locator workspace with the 3D scene mounted', () => {
         render(
             <MemoryRouter>
                 <ToastProvider>
@@ -67,10 +67,11 @@ describe('3D Locator foundation', () => {
             </MemoryRouter>,
         );
 
-        expect(screen.getByText('Tools')).toBeTruthy();
-        expect(screen.getByText('Object Library')).toBeTruthy();
-        expect(screen.getByText('Object List')).toBeTruthy();
-        expect(screen.getByText('Properties')).toBeTruthy();
+        expect(screen.getByText('3D Locator')).toBeTruthy();
+        expect(screen.getByRole('switch', { name: 'Design Mode' })).toBeTruthy();
+        expect(screen.getByLabelText('Product Search')).toBeTruthy();
+        expect(screen.getByText('How to locate products')).toBeTruthy();
         expect(screen.getByTestId('locator-3d-scene')).toBeTruthy();
+        expect(screen.queryByText('Object List')).toBeNull();
     });
 });

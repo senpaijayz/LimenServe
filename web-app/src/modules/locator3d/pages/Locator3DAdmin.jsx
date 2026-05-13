@@ -6,18 +6,20 @@ import {
     BrickWall,
     Camera,
     CheckCircle2,
+    ChevronDown,
     DoorOpen,
     HelpCircle,
+    Layers3,
+    LayoutDashboard,
     Lock,
     Monitor,
-    MousePointer2,
-    Move3D,
     Package,
+    PanelLeftClose,
+    PanelLeftOpen,
     RefreshCw,
     RotateCw,
-    Ruler,
     Save,
-    Settings2,
+    Search,
     Store,
     Trash2,
     Unlock,
@@ -27,11 +29,18 @@ import Modal from '../../../components/ui/Modal';
 import { useToast } from '../../../components/ui/Toast';
 import { getFullProductCatalog } from '../../../services/catalogApi';
 import Locator3DScene from '../components/Locator3DScene';
-import { SHELF_BIN_RANGE, getLocatorObjectById, getLocatorObjectSummary, isShelfObject } from '../data/locatorScene';
+import {
+    LOCATOR_LAYOUT_NAME,
+    SHELF_BIN_RANGE,
+    getLocatorObjectById,
+    getLocatorObjectSummary,
+    isShelfObject,
+} from '../data/locatorScene';
 import {
     assignProductLocation,
     getProductLocation,
     getProductLocations,
+    listStoreLayouts,
     loadStoreLayout,
     saveStoreLayout,
 } from '../services/locator3DApi';
@@ -48,27 +57,20 @@ const libraryIconMap = {
     Waypoints,
 };
 
-const tools = [
-    { id: 'select', label: 'Select', icon: MousePointer2 },
-    { id: 'move', label: 'Move', icon: Move3D },
-    { id: 'rotate', label: 'Rotate', icon: RotateCw },
-    { id: 'measure', label: 'Measure', icon: Ruler },
-];
+function cx(...classes) {
+    return classes.filter(Boolean).join(' ');
+}
 
-function Panel({ children, icon: Icon, title }) {
-    return (
-        <section className="rounded-2xl border border-primary-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:bg-slate-900">
-            <div className="flex h-14 items-center gap-3 border-b border-primary-200 px-4 dark:border-slate-700">
-                {Icon && (
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-950 text-white dark:bg-sky-500">
-                        <Icon className="h-4 w-4" />
-                    </span>
-                )}
-                <h2 className="text-sm font-black text-primary-950 dark:text-white">{title}</h2>
-            </div>
-            <div className="p-4">{children}</div>
-        </section>
-    );
+function formatNumber(value) {
+    return Number(Number(value || 0).toFixed(3));
+}
+
+function toDegrees(value) {
+    return Math.round((Number(value || 0) * 180) / Math.PI);
+}
+
+function toRadians(value) {
+    return (Number(value || 0) * Math.PI) / 180;
 }
 
 function DesignModeSwitch() {
@@ -79,224 +81,360 @@ function DesignModeSwitch() {
         <button
             aria-checked={isDesignMode}
             aria-label="Design Mode"
-            className={`flex min-h-14 min-w-[220px] items-center justify-between gap-4 rounded-2xl border px-4 text-left shadow-sm transition ${
+            className={cx(
+                'group flex min-h-12 min-w-[236px] items-center justify-between gap-4 rounded-full border px-4 text-left transition',
                 isDesignMode
-                    ? 'border-sky-300 bg-sky-500 text-white shadow-[0_16px_32px_rgba(14,165,233,0.24)]'
-                    : 'border-primary-200 bg-primary-50 text-primary-700 hover:border-primary-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
-            }`}
+                    ? 'border-sky-400/70 bg-sky-400 text-slate-950 shadow-[0_0_34px_rgba(56,189,248,0.28)]'
+                    : 'border-white/10 bg-white/[0.06] text-slate-200 hover:border-white/20 hover:bg-white/[0.09]',
+            )}
             onClick={() => setDesignMode(!isDesignMode)}
             role="switch"
             type="button"
         >
             <span>
                 <span className="block text-sm font-black">Design Mode</span>
-                <span className="block text-xs font-bold opacity-80">{isDesignMode ? 'ON / 0.5 snap grid' : 'OFF / view only'}</span>
+                <span className="block text-[11px] font-bold uppercase tracking-[0.18em] opacity-70">
+                    {isDesignMode ? 'Editing enabled' : 'View only'}
+                </span>
             </span>
-            <span className={`flex h-7 w-12 items-center rounded-full p-1 transition ${isDesignMode ? 'bg-white/25' : 'bg-primary-200 dark:bg-slate-700'}`}>
-                <span className={`h-5 w-5 rounded-full bg-white shadow transition ${isDesignMode ? 'translate-x-5' : 'translate-x-0'}`} />
+            <span className={cx('flex h-7 w-12 items-center rounded-full p-1 transition', isDesignMode ? 'bg-slate-950/20' : 'bg-slate-800')}>
+                <span className={cx('h-5 w-5 rounded-full bg-white shadow transition', isDesignMode ? 'translate-x-5' : 'translate-x-0')} />
             </span>
         </button>
     );
 }
 
-function TopBarActions({ isLoadingLayout, isSavingLayout, onLoadLayout, onResetLayout, onSaveLayout }) {
+function TopButton({ children, className = '', ...props }) {
+    return (
+        <button
+            className={cx(
+                'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-xs font-black text-slate-200 transition hover:border-sky-400/40 hover:bg-white/[0.1] disabled:cursor-wait disabled:opacity-60',
+                className,
+            )}
+            type="button"
+            {...props}
+        >
+            {children}
+        </button>
+    );
+}
+
+function TopBar({
+    isLoadingLayout,
+    isSavingLayout,
+    layoutName,
+    layoutOptions,
+    onConfirmSaveLayout,
+    onLoadLayout,
+    onResetLayout,
+    onSaveNameChange,
+    onSelectLayout,
+    selectedLayoutName,
+}) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const goToFloor = useLocator3DStore((state) => state.goToFloor);
-    const lockAllObjects = useLocator3DStore((state) => state.lockAllObjects);
-    const unlockAllObjects = useLocator3DStore((state) => state.unlockAllObjects);
+    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
+    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
+    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
+    const toggleObjectLock = useLocator3DStore((state) => state.toggleObjectLock);
+    const selectedObject = getLocatorObjectById(selectedObjectId, sceneObjects);
+    const [isSaveOpen, setIsSaveOpen] = useState(false);
     const busy = isLoadingLayout || isSavingLayout;
 
+    const handleSaveClick = () => {
+        if (!isSaveOpen) {
+            setIsSaveOpen(true);
+            return;
+        }
+
+        onConfirmSaveLayout();
+    };
+
     return (
-        <div className="flex flex-wrap items-center gap-2">
+        <header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/92 px-4 py-3 shadow-[0_18px_60px_rgba(2,6,23,0.32)] backdrop-blur-xl">
+            <div className="mx-auto flex max-w-[1800px] flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div className="flex min-w-[220px] items-center gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-sky-300/30 bg-sky-400 text-slate-950 shadow-[0_0_32px_rgba(56,189,248,0.32)]">
+                        <LayoutDashboard className="h-5 w-5" />
+                    </span>
+                    <div>
+                        <p className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-500">Admin</p>
+                        <h1 className="text-lg font-black text-white">3D Locator</h1>
+                    </div>
+                </div>
+
+                <div className="flex justify-start xl:justify-center">
+                    <DesignModeSwitch />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                    <div className="relative flex items-center gap-2">
+                        {isSaveOpen && (
+                            <input
+                                aria-label="Layout name"
+                                className="h-10 w-44 rounded-xl border border-white/10 bg-slate-900 px-3 text-xs font-bold text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+                                onChange={(event) => onSaveNameChange(event.target.value)}
+                                placeholder="Layout name"
+                                value={layoutName}
+                            />
+                        )}
+                        <TopButton
+                            aria-label={isSaveOpen ? 'Confirm Save Layout' : 'Save Layout'}
+                            className="border-sky-400/30 bg-sky-400/15 text-sky-100"
+                            disabled={busy}
+                            onClick={handleSaveClick}
+                        >
+                            <Save className="h-4 w-4" />
+                            {isSavingLayout ? 'Saving' : isSaveOpen ? 'Save' : 'Save Layout'}
+                        </TopButton>
+                    </div>
+
+                    <select
+                        aria-label="Saved layouts"
+                        className="h-10 max-w-[180px] rounded-xl border border-white/10 bg-slate-900 px-3 text-xs font-black text-slate-200 outline-none transition focus:border-sky-400"
+                        onChange={(event) => onSelectLayout(event.target.value)}
+                        value={selectedLayoutName}
+                    >
+                        {layoutOptions.map((layout) => (
+                            <option key={layout} value={layout}>{layout}</option>
+                        ))}
+                    </select>
+                    <TopButton aria-label="Load Layout" disabled={busy} onClick={onLoadLayout}>
+                        <RefreshCw className={cx('h-4 w-4', isLoadingLayout && 'animate-spin')} />
+                        Load Layout
+                    </TopButton>
+                    <TopButton aria-label="Reset to Default" onClick={onResetLayout}>
+                        <Store className="h-4 w-4" />
+                        Reset
+                    </TopButton>
+
+                    <span className="mx-1 hidden h-7 w-px bg-white/10 md:block" />
+                    {[1, 2].map((floor) => (
+                        <TopButton
+                            aria-label={`Go to Floor ${floor}`}
+                            className={activeFloor === floor ? 'border-sky-400 bg-sky-400 text-slate-950' : ''}
+                            key={floor}
+                            onClick={() => goToFloor(floor)}
+                        >
+                            Floor {floor}
+                        </TopButton>
+                    ))}
+
+                    {isDesignMode && selectedObject && (
+                        <TopButton
+                            aria-label={selectedObject.isLocked ? 'Unlock selected object' : 'Lock selected object'}
+                            className={selectedObject.isLocked ? 'border-emerald-400/40 bg-emerald-400/15 text-emerald-100' : 'border-amber-400/40 bg-amber-400/15 text-amber-100'}
+                            onClick={() => toggleObjectLock(selectedObject.id)}
+                        >
+                            {selectedObject.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                            {selectedObject.isLocked ? 'Unlock' : 'Lock'}
+                        </TopButton>
+                    )}
+                </div>
+            </div>
+        </header>
+    );
+}
+
+function ObjectLibraryDropdown() {
+    const addSceneObject = useLocator3DStore((state) => state.addSceneObject);
+    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
+    const lockAllObjects = useLocator3DStore((state) => state.lockAllObjects);
+    const objectLibrary = useLocator3DStore((state) => state.objectLibrary);
+    const unlockAllObjects = useLocator3DStore((state) => state.unlockAllObjects);
+    const [isOpen, setIsOpen] = useState(false);
+
+    if (!isDesignMode) {
+        return null;
+    }
+
+    return (
+        <div className="absolute left-4 top-4 z-20 w-[280px]">
             <button
-                aria-label="Save Layout"
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 text-xs font-black text-sky-800 transition hover:bg-sky-100 disabled:cursor-wait disabled:opacity-60"
-                disabled={busy}
-                onClick={onSaveLayout}
+                aria-expanded={isOpen}
+                aria-label="Object Library"
+                className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-slate-950/88 px-4 py-3 text-sm font-black text-white shadow-[0_18px_48px_rgba(2,6,23,0.32)] backdrop-blur-xl transition hover:border-sky-400/40"
+                onClick={() => setIsOpen((value) => !value)}
                 type="button"
             >
-                <Save className="h-4 w-4" />
-                {isSavingLayout ? 'Saving...' : 'Save Layout'}
+                <span className="flex items-center gap-2">
+                    <Box className="h-4 w-4 text-sky-300" />
+                    Object Library
+                </span>
+                <ChevronDown className={cx('h-4 w-4 transition', isOpen && 'rotate-180')} />
             </button>
-            <button
-                aria-label="Load Layout"
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-200 bg-white px-3 text-xs font-black text-primary-700 transition hover:border-primary-300 hover:bg-primary-50 disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"
-                disabled={busy}
-                onClick={onLoadLayout}
-                type="button"
-            >
-                <RefreshCw className={`h-4 w-4 ${isLoadingLayout ? 'animate-spin' : ''}`} />
-                {isLoadingLayout ? 'Loading...' : 'Load Layout'}
-            </button>
-            <button
-                aria-label="Reset to Default"
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-200 bg-white px-3 text-xs font-black text-primary-700 transition hover:border-primary-300 hover:bg-primary-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"
-                onClick={onResetLayout}
-                type="button"
-            >
-                <Store className="h-4 w-4" />
-                Reset to Default
-            </button>
-            <span className="mx-1 hidden h-8 w-px bg-primary-200 sm:block" />
-            <button
-                aria-label="Go to Floor 1"
-                className={`rounded-xl border px-4 py-3 text-xs font-black transition ${
-                    activeFloor === 1
-                        ? 'border-primary-950 bg-primary-950 text-white'
-                        : 'border-primary-200 bg-white text-primary-700 hover:border-primary-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
-                }`}
-                onClick={() => goToFloor(1)}
-                type="button"
-            >
-                Go to Floor 1
-            </button>
-            <button
-                aria-label="Go to Floor 2"
-                className={`rounded-xl border px-4 py-3 text-xs font-black transition ${
-                    activeFloor === 2
-                        ? 'border-primary-950 bg-primary-950 text-white'
-                        : 'border-primary-200 bg-white text-primary-700 hover:border-primary-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
-                }`}
-                onClick={() => goToFloor(2)}
-                type="button"
-            >
-                Go to Floor 2
-            </button>
-            <span className="mx-1 hidden h-8 w-px bg-primary-200 sm:block" />
-            <button
-                aria-label="Lock All Objects"
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 text-xs font-black text-amber-800 transition hover:bg-amber-100"
-                onClick={lockAllObjects}
-                type="button"
-            >
-                <Lock className="h-4 w-4" />
-                Lock All Objects
-            </button>
-            <button
-                aria-label="Unlock All Objects"
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-800 transition hover:bg-emerald-100"
-                onClick={unlockAllObjects}
-                type="button"
-            >
-                <Unlock className="h-4 w-4" />
-                Unlock All Objects
-            </button>
+            {isOpen && (
+                <div className="mt-2 rounded-2xl border border-white/10 bg-slate-950/94 p-2 shadow-[0_24px_70px_rgba(2,6,23,0.46)] backdrop-blur-xl">
+                    <div className="grid gap-2">
+                        {objectLibrary.map((object) => {
+                            const Icon = libraryIconMap[object.icon] ?? Box;
+
+                            return (
+                                <button
+                                    aria-label={`Add ${object.label}`}
+                                    className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-left transition hover:border-sky-400/40 hover:bg-sky-400/10"
+                                    key={object.type}
+                                    onClick={() => addSceneObject(object.type)}
+                                    type="button"
+                                >
+                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10" style={{ backgroundColor: object.color }}>
+                                        <Icon className="h-4 w-4 text-white" />
+                                    </span>
+                                    <span className="min-w-0">
+                                        <span className="block truncate text-sm font-black text-white">{object.label}</span>
+                                        <span className="block truncate text-xs font-semibold text-slate-500">{object.description}</span>
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 border-t border-white/10 pt-2">
+                        <button
+                            aria-label="Lock All Objects"
+                            className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs font-black text-amber-100 transition hover:bg-amber-400/15"
+                            onClick={lockAllObjects}
+                            type="button"
+                        >
+                            Lock All
+                        </button>
+                        <button
+                            aria-label="Unlock All Objects"
+                            className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-black text-emerald-100 transition hover:bg-emerald-400/15"
+                            onClick={unlockAllObjects}
+                            type="button"
+                        >
+                            Unlock All
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
-function ToolsPanel() {
-    const activeTool = useLocator3DStore((state) => state.activeTool);
-    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
-    const setActiveTool = useLocator3DStore((state) => state.setActiveTool);
+function ProductSearch({ isLoadingProducts, onLocateProduct, productLocations, products }) {
+    const [query, setQuery] = useState('');
+    const normalizedQuery = query.trim().toLowerCase();
+    const matches = useMemo(() => {
+        if (!normalizedQuery) {
+            return [];
+        }
+
+        return products
+            .filter((product) => {
+                const haystack = [product.name, product.sku, product.model, product.category].filter(Boolean).join(' ').toLowerCase();
+                return haystack.includes(normalizedQuery);
+            })
+            .slice(0, 6);
+    }, [normalizedQuery, products]);
 
     return (
-        <Panel icon={Settings2} title="Tools">
-            <div className="grid grid-cols-2 gap-2">
-                {tools.map((tool) => {
-                    const Icon = tool.icon;
-                    const active = activeTool === tool.id;
-                    const transformTool = tool.id === 'move' || tool.id === 'rotate';
+        <div>
+            <label className="block">
+                <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.22em] text-sky-300">Product Search</span>
+                <span className="relative block">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                    <input
+                        aria-label="Product Search"
+                        className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.06] pl-10 pr-3 text-sm font-bold text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400 focus:bg-slate-900"
+                        onChange={(event) => setQuery(event.target.value)}
+                        placeholder="Search by name or SKU"
+                        value={query}
+                    />
+                </span>
+            </label>
+            {normalizedQuery && (
+                <div className="mt-3 max-h-64 space-y-2 overflow-auto pr-1">
+                    {isLoadingProducts ? (
+                        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-xs font-bold text-slate-400">Loading products...</div>
+                    ) : matches.length > 0 ? (
+                        matches.map((product) => {
+                            const location = productLocations.find((item) => item.productId === product.id);
 
-                    return (
-                        <button
-                            aria-label={tool.label}
-                            className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-black transition ${
-                                active
-                                    ? 'border-primary-950 bg-primary-950 text-white shadow-[0_12px_26px_rgba(15,23,42,0.18)]'
-                                    : 'border-primary-200 bg-white text-primary-600 hover:border-primary-300 hover:bg-primary-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
-                            } ${transformTool && !isDesignMode ? 'opacity-60' : ''}`}
-                            key={tool.id}
-                            onClick={() => setActiveTool(tool.id)}
-                            title={tool.label}
-                            type="button"
-                        >
-                            <Icon className="h-4 w-4" />
-                            <span>{tool.label}</span>
-                        </button>
-                    );
-                })}
-            </div>
-            <div className={`mt-3 rounded-xl border p-3 text-xs font-bold ${
-                isDesignMode
-                    ? 'border-sky-200 bg-sky-50 text-sky-800'
-                    : 'border-primary-200 bg-primary-50 text-primary-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-400'
-            }`}
-            >
-                {isDesignMode ? 'Editing enabled: move and rotate selected unlocked objects.' : 'View mode: objects are protected from transforms.'}
-            </div>
-        </Panel>
-    );
-}
-
-function ObjectLibraryPanel() {
-    const objectLibrary = useLocator3DStore((state) => state.objectLibrary);
-
-    return (
-        <Panel icon={Box} title="Object Library">
-            <div className="space-y-2">
-                {objectLibrary.map((object) => {
-                    const Icon = libraryIconMap[object.icon] ?? Box;
-
-                    return (
-                        <button
-                            className="group flex w-full items-center gap-3 rounded-xl border border-primary-200 bg-white p-3 text-left transition hover:border-primary-300 hover:bg-primary-50 dark:border-slate-700 dark:bg-slate-950 dark:hover:bg-slate-800"
-                            key={object.type}
-                            type="button"
-                        >
-                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white shadow-sm" style={{ backgroundColor: object.color }}>
-                                <Icon className="h-4 w-4" />
-                            </span>
-                            <span className="min-w-0">
-                                <span className="block truncate text-sm font-black text-primary-950 dark:text-white">{object.label}</span>
-                                <span className="block truncate text-xs font-semibold text-primary-500 dark:text-slate-400">{object.category}</span>
-                            </span>
-                        </button>
-                    );
-                })}
-            </div>
-        </Panel>
-    );
-}
-
-function ObjectListPanel() {
-    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
-    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
-    const forceSelectObject = useLocator3DStore((state) => state.forceSelectObject);
-
-    return (
-        <Panel icon={Boxes} title="Object List">
-            <div className="space-y-2">
-                {sceneObjects.map((object, index) => {
-                    const selected = selectedObjectId === object.id;
-
-                    return (
-                        <button
-                            className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition ${
-                                selected
-                                    ? 'border-sky-400 bg-sky-50 shadow-[0_12px_28px_rgba(14,165,233,0.16)]'
-                                    : 'border-primary-200 bg-white hover:border-primary-300 hover:bg-primary-50 dark:border-slate-700 dark:bg-slate-950 dark:hover:bg-slate-800'
-                            }`}
-                            key={object.id}
-                            onClick={() => forceSelectObject(object.id)}
-                            type="button"
-                        >
-                            <span className="flex min-w-0 items-center gap-3">
-                                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-black ${selected ? 'bg-sky-500 text-white' : 'bg-primary-100 text-primary-600 dark:bg-slate-800 dark:text-slate-300'}`}>
-                                    {object.isLocked ? <Lock className="h-3.5 w-3.5" /> : index + 1}
-                                </span>
-                                <span className="min-w-0">
-                                    <span className="block truncate text-sm font-black text-primary-950 dark:text-white">{object.name}</span>
-                                    <span className="block text-xs font-semibold text-primary-500 dark:text-slate-400">
-                                        Floor {object.floor}{object.isLocked ? ' / Locked' : ''}
+                            return (
+                                <button
+                                    aria-label={`Locate ${product.name}`}
+                                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-left transition hover:border-emerald-400/40 hover:bg-emerald-400/10"
+                                    key={product.id}
+                                    onClick={() => onLocateProduct(product)}
+                                    type="button"
+                                >
+                                    <span className="block truncate text-sm font-black text-white">{product.name}</span>
+                                    <span className="mt-1 block truncate text-xs font-bold text-slate-500">
+                                        {product.sku || 'No SKU'}{location ? ` / Aisle ${location.aisle} / Bin ${location.binNumber}` : ' / No 3D bin yet'}
                                     </span>
-                                </span>
-                            </span>
-                        </button>
-                    );
-                })}
+                                </button>
+                            );
+                        })
+                    ) : (
+                        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-xs font-bold text-slate-400">No matching products.</div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function QuickHelpPanel({ isLoadingProducts, onLocateProduct, productLocations, products }) {
+    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
+    const [isOpen, setIsOpen] = useState(true);
+
+    return (
+        <aside className={cx('absolute bottom-4 left-4 z-20 transition-all', isOpen ? 'w-[330px]' : 'w-auto')}>
+            <div className="rounded-2xl border border-white/10 bg-slate-950/88 shadow-[0_24px_70px_rgba(2,6,23,0.42)] backdrop-blur-xl">
+                <button
+                    aria-label={isOpen ? 'Collapse Quick Help' : 'Expand Quick Help'}
+                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-black text-white"
+                    onClick={() => setIsOpen((value) => !value)}
+                    type="button"
+                >
+                    <span className="flex items-center gap-2">
+                        <HelpCircle className="h-4 w-4 text-sky-300" />
+                        {isDesignMode ? 'Design mode tips' : 'How to locate products'}
+                    </span>
+                    {isOpen ? <PanelLeftClose className="h-4 w-4 text-slate-500" /> : <PanelLeftOpen className="h-4 w-4 text-slate-500" />}
+                </button>
+                {isOpen && (
+                    <div className="border-t border-white/10 p-4">
+                        {isDesignMode ? (
+                            <div className="space-y-3 text-xs font-semibold leading-5 text-slate-400">
+                                <p>Use the object library to add floor pieces, walls, shelves, stairs, counters, and doors.</p>
+                                <p>Select an unlocked object to move or rotate it with snapping enabled.</p>
+                                <p>Edit size, position, rotation, shelf bins, and product assignments from the properties panel.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <ProductSearch
+                                    isLoadingProducts={isLoadingProducts}
+                                    onLocateProduct={onLocateProduct}
+                                    productLocations={productLocations}
+                                    products={products}
+                                />
+                                <p className="text-xs font-semibold leading-5 text-slate-500">
+                                    Search by product name or SKU, choose a result, and the viewer will highlight the shelf, bin, and route from the counter.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
-        </Panel>
+        </aside>
+    );
+}
+
+function NumberField({ label, onChange, step = '0.1', value }) {
+    return (
+        <label className="block">
+            <span className="mb-1.5 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</span>
+            <input
+                aria-label={label}
+                className="h-10 w-full rounded-xl border border-white/10 bg-slate-900 px-3 text-sm font-bold text-white outline-none transition focus:border-sky-400"
+                onChange={(event) => onChange(event.target.value)}
+                step={step}
+                type="number"
+                value={value}
+            />
+        </label>
     );
 }
 
@@ -304,54 +442,42 @@ function ShelfEditor({ object }) {
     const updateShelfProperties = useLocator3DStore((state) => state.updateShelfProperties);
 
     return (
-        <div className="space-y-4 rounded-2xl border border-sky-200 bg-sky-50 p-4 dark:border-sky-900 dark:bg-slate-950">
-            <div>
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-sky-600">Shelf Editing</p>
-                <p className="mt-1 text-xs font-semibold text-primary-500 dark:text-slate-400">Changes update the shelf model immediately.</p>
-            </div>
-            <label className="block">
-                <span className="text-xs font-black uppercase tracking-[0.16em] text-primary-500 dark:text-slate-400">Aisle name</span>
-                <input
-                    aria-label="Aisle name"
-                    className="mt-2 min-h-11 w-full rounded-xl border border-primary-200 bg-white px-3 text-sm font-bold text-primary-950 shadow-sm focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                    onChange={(event) => updateShelfProperties(object.id, { aisle: event.target.value })}
-                    value={object.aisle}
-                />
-            </label>
-            <label className="block">
-                <span className="text-xs font-black uppercase tracking-[0.16em] text-primary-500 dark:text-slate-400">Shelf Number</span>
-                <input
-                    aria-label="Shelf Number"
-                    className="mt-2 min-h-11 w-full rounded-xl border border-primary-200 bg-white px-3 text-sm font-bold text-primary-950 shadow-sm focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                    min="1"
-                    onChange={(event) => updateShelfProperties(object.id, { shelfNumber: event.target.value })}
-                    type="number"
+        <section className="rounded-2xl border border-sky-400/20 bg-sky-400/[0.06] p-4">
+            <h3 className="text-sm font-black text-white">Shelf Details</h3>
+            <div className="mt-4 space-y-3">
+                <label className="block">
+                    <span className="mb-1.5 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Aisle name</span>
+                    <input
+                        aria-label="Aisle name"
+                        className="h-10 w-full rounded-xl border border-white/10 bg-slate-900 px-3 text-sm font-bold text-white outline-none transition focus:border-sky-400"
+                        onChange={(event) => updateShelfProperties(object.id, { aisle: event.target.value })}
+                        value={object.aisle}
+                    />
+                </label>
+                <NumberField
+                    label="Shelf Number"
+                    onChange={(value) => updateShelfProperties(object.id, { shelfNumber: value })}
+                    step="1"
                     value={object.shelfNumber}
                 />
-            </label>
-            <div>
-                <div className="flex items-center justify-between gap-3">
-                    <label className="text-xs font-black uppercase tracking-[0.16em] text-primary-500 dark:text-slate-400" htmlFor="locator-bin-count">
-                        Number of Bins
-                    </label>
-                    <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-sky-700 shadow-sm dark:bg-slate-900">{object.binCount}</span>
-                </div>
-                <input
-                    aria-label="Number of Bins"
-                    className="mt-3 w-full accent-sky-500"
-                    id="locator-bin-count"
-                    max={SHELF_BIN_RANGE.MAX}
-                    min={SHELF_BIN_RANGE.MIN}
-                    onChange={(event) => updateShelfProperties(object.id, { binCount: event.target.value })}
-                    type="range"
-                    value={object.binCount}
-                />
-                <div className="mt-2 flex justify-between text-[11px] font-black text-primary-400">
-                    <span>{SHELF_BIN_RANGE.MIN}</span>
-                    <span>{SHELF_BIN_RANGE.MAX}</span>
+                <div>
+                    <div className="mb-2 flex items-center justify-between">
+                        <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500" htmlFor="locator-bin-count">Number of Bins</label>
+                        <span className="rounded-full bg-slate-900 px-2 py-1 text-xs font-black text-sky-200">{object.binCount}</span>
+                    </div>
+                    <input
+                        aria-label="Number of Bins"
+                        className="w-full accent-sky-400"
+                        id="locator-bin-count"
+                        max={SHELF_BIN_RANGE.MAX}
+                        min={SHELF_BIN_RANGE.MIN}
+                        onChange={(event) => updateShelfProperties(object.id, { binCount: event.target.value })}
+                        type="range"
+                        value={object.binCount}
+                    />
                 </div>
             </div>
-        </div>
+        </section>
     );
 }
 
@@ -366,7 +492,7 @@ function ProductAssignmentModal({ isOpen, onClose, shelf }) {
 
     useEffect(() => {
         if (!isOpen) {
-            return;
+            return undefined;
         }
 
         let active = true;
@@ -432,60 +558,44 @@ function ProductAssignmentModal({ isOpen, onClose, shelf }) {
         }
     };
 
-    if (!shelf) {
-        return null;
-    }
-
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Assign Product Location" size="lg">
-            <form className="space-y-5" onSubmit={handleSubmit}>
-                <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4">
-                    <p className="text-xs font-black uppercase tracking-[0.22em] text-primary-400">Target shelf</p>
-                    <p className="mt-2 text-sm font-black text-primary-950">
-                        Aisle {shelf.aisle} / Shelf {shelf.shelfNumber} / Floor {shelf.floor}
-                    </p>
-                </div>
+        <Modal isOpen={isOpen} onClose={onClose} title="Assign Product to Shelf">
+            <form className="space-y-4" onSubmit={handleSubmit}>
                 <label className="block">
-                    <span className="text-xs font-black uppercase tracking-[0.16em] text-primary-500">Product</span>
+                    <span className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-primary-500">Product</span>
                     <select
                         aria-label="Product"
-                        className="mt-2 min-h-11 w-full rounded-xl border border-primary-200 bg-white px-3 text-sm font-bold text-primary-950 shadow-sm focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                        className="min-h-11 w-full rounded-xl border border-primary-200 bg-white px-3 text-sm font-bold text-primary-950"
                         disabled={isLoadingProducts}
                         onChange={(event) => setSelectedProductId(event.target.value)}
                         value={selectedProductId}
                     >
-                        {isLoadingProducts ? (
-                            <option>Loading products...</option>
-                        ) : products.map((product) => (
+                        {products.map((product) => (
                             <option key={product.id} value={product.id}>
-                                {product.sku ? `${product.sku} / ${product.name}` : product.name}
+                                {[product.sku, product.name].filter(Boolean).join(' / ')}
                             </option>
                         ))}
                     </select>
                 </label>
                 <label className="block">
-                    <span className="text-xs font-black uppercase tracking-[0.16em] text-primary-500">Bin Number</span>
+                    <span className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-primary-500">Bin Number</span>
                     <input
                         aria-label="Bin Number"
-                        className="mt-2 min-h-11 w-full rounded-xl border border-primary-200 bg-white px-3 text-sm font-bold text-primary-950 shadow-sm focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                        max={shelf.binCount}
+                        className="min-h-11 w-full rounded-xl border border-primary-200 bg-white px-3 text-sm font-bold text-primary-950"
+                        max={shelf?.binCount || SHELF_BIN_RANGE.MAX}
                         min="1"
                         onChange={(event) => setBinNumber(Number(event.target.value))}
                         type="number"
                         value={binNumber}
                     />
                 </label>
-                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-                    <button
-                        className="min-h-11 rounded-xl border border-primary-200 bg-white px-4 text-sm font-black text-primary-700 transition hover:bg-primary-50"
-                        onClick={onClose}
-                        type="button"
-                    >
+                <div className="flex justify-end gap-3">
+                    <button className="min-h-11 rounded-xl border border-primary-200 bg-white px-4 text-sm font-black text-primary-700" onClick={onClose} type="button">
                         Cancel
                     </button>
                     <button
                         aria-label="Save Product Location"
-                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary-950 px-4 text-sm font-black text-white transition hover:bg-primary-800 disabled:cursor-wait disabled:opacity-60"
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary-950 px-4 text-sm font-black text-white disabled:cursor-wait disabled:opacity-60"
                         disabled={!selectedProduct || isSavingLocation}
                         type="submit"
                     >
@@ -499,12 +609,14 @@ function ProductAssignmentModal({ isOpen, onClose, shelf }) {
 }
 
 function PropertiesPanel() {
-    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
-    const productLocations = useLocator3DStore((state) => state.productLocations);
-    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
     const centerCameraOnSelected = useLocator3DStore((state) => state.centerCameraOnSelected);
     const deleteSelectedObject = useLocator3DStore((state) => state.deleteSelectedObject);
+    const productLocations = useLocator3DStore((state) => state.productLocations);
+    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
+    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
     const toggleObjectLock = useLocator3DStore((state) => state.toggleObjectLock);
+    const updateObjectDimensions = useLocator3DStore((state) => state.updateObjectDimensions);
+    const updateObjectTransform = useLocator3DStore((state) => state.updateObjectTransform);
     const [isAssigningProduct, setIsAssigningProduct] = useState(false);
     const selectedObject = getLocatorObjectById(selectedObjectId, sceneObjects);
     const selectedIsShelf = isShelfObject(selectedObject);
@@ -514,190 +626,183 @@ function PropertiesPanel() {
             : []
     ), [productLocations, selectedIsShelf, selectedObject]);
 
+    if (!selectedObject) {
+        return null;
+    }
+
+    const updateDimension = (key, value) => {
+        updateObjectDimensions(selectedObject.id, { [key]: value });
+    };
+    const updatePosition = (index, value) => {
+        const position = [...selectedObject.position];
+        position[index] = Number(value);
+        updateObjectTransform(selectedObject.id, { position, rotation: selectedObject.rotation });
+    };
+    const updateRotation = (index, value) => {
+        const rotation = [...(selectedObject.rotation || [0, 0, 0])];
+        rotation[index] = toRadians(value);
+        updateObjectTransform(selectedObject.id, { position: selectedObject.position, rotation });
+    };
+
     return (
-        <Panel icon={Settings2} title="Properties">
-            {selectedObject ? (
-                <div className="space-y-4">
-                    <div>
-                        <p className="text-xs font-black uppercase tracking-[0.22em] text-primary-400 dark:text-slate-500">Selected</p>
-                        <h3 className="mt-2 text-lg font-black text-primary-950 dark:text-white">{selectedObject.name}</h3>
-                        <p className="mt-1 text-sm font-semibold text-primary-500 dark:text-slate-400">{selectedObject.type}</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <PropertyMetric label="Floor" value={selectedObject.floors?.join(', ') ?? selectedObject.floor} />
-                        <PropertyMetric label="Width" value={`${selectedObject.dimensions.width} m`} />
-                        <PropertyMetric label="Depth" value={`${selectedObject.dimensions.depth} m`} />
-                        <PropertyMetric label="Height" value={`${selectedObject.dimensions.height} m`} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                        <button
-                            aria-label="Center Camera on Selected Object"
-                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 text-xs font-black text-sky-800 transition hover:bg-sky-100"
-                            onClick={centerCameraOnSelected}
-                            type="button"
-                        >
-                            <Camera className="h-4 w-4" />
-                            Center
-                        </button>
-                        <button
-                            aria-label={selectedObject.isLocked ? 'Unlock selected object' : 'Lock selected object'}
-                            className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-black transition ${
-                                selectedObject.isLocked
-                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                                    : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
-                            }`}
-                            onClick={() => toggleObjectLock(selectedObject.id)}
-                            type="button"
-                        >
-                            {selectedObject.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                            {selectedObject.isLocked ? 'Unlock' : 'Lock'}
-                        </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                        <button
-                            aria-label="Delete selected object"
-                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 text-xs font-black text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={selectedObject.isLocked}
-                            onClick={deleteSelectedObject}
-                            type="button"
-                        >
-                            <Trash2 className="h-4 w-4" />
-                            Delete
-                        </button>
-                        {selectedIsShelf && (
-                            <button
-                                aria-label="Assign Product to Shelf"
-                                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-800 transition hover:bg-emerald-100"
-                                onClick={() => setIsAssigningProduct(true)}
-                                type="button"
-                            >
-                                <Package className="h-4 w-4" />
-                                Assign
-                            </button>
-                        )}
-                    </div>
-                    {selectedIsShelf && <ShelfEditor object={selectedObject} />}
-                    {selectedIsShelf && (
-                        <div className="rounded-2xl border border-primary-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950">
-                            <p className="text-xs font-black uppercase tracking-[0.2em] text-primary-400 dark:text-slate-500">Assigned products</p>
-                            {shelfAssignments.length > 0 ? (
-                                <div className="mt-3 space-y-2">
-                                    {shelfAssignments.map((location) => (
-                                        <div key={location.productId} className="rounded-xl bg-primary-50 px-3 py-2 text-xs font-bold text-primary-700 dark:bg-slate-900 dark:text-slate-300">
-                                            {location.sku || location.productName} / Bin {location.binNumber}
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="mt-3 text-xs font-semibold text-primary-500 dark:text-slate-400">No products assigned to this shelf yet.</p>
-                            )}
-                        </div>
-                    )}
-                    <div className="rounded-xl border border-primary-200 bg-primary-50 p-3 dark:border-slate-700 dark:bg-slate-950">
-                        <p className="text-xs font-black uppercase tracking-[0.2em] text-primary-400 dark:text-slate-500">Position</p>
-                        <p className="mt-2 font-mono text-xs font-semibold text-primary-700 dark:text-slate-300">
-                            X {selectedObject.position[0]} / Y {selectedObject.position[1]} / Z {selectedObject.position[2]}
-                        </p>
-                    </div>
-                    <ProductAssignmentModal
-                        isOpen={isAssigningProduct}
-                        onClose={() => setIsAssigningProduct(false)}
-                        shelf={selectedIsShelf ? selectedObject : null}
-                    />
+        <aside
+            aria-label="Properties"
+            className="absolute right-4 top-4 z-20 max-h-[calc(100%-2rem)] w-[340px] overflow-auto rounded-3xl border border-white/10 bg-slate-950/92 p-4 shadow-[0_28px_80px_rgba(2,6,23,0.5)] backdrop-blur-xl"
+            role="complementary"
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-sky-300">Properties</p>
+                    <h2 className="mt-1 text-xl font-black text-white">{selectedObject.name}</h2>
+                    <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{selectedObject.type}</p>
                 </div>
-            ) : (
-                <div className="flex min-h-72 items-center justify-center rounded-xl border border-dashed border-primary-300 bg-primary-50 p-6 text-center dark:border-slate-700 dark:bg-slate-950">
-                    <div>
-                        <MousePointer2 className="mx-auto h-8 w-8 text-primary-400 dark:text-slate-500" />
-                        <p className="mt-3 text-sm font-black text-primary-700 dark:text-slate-300">No object selected</p>
-                    </div>
+                <span className={cx('rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em]', selectedObject.isLocked ? 'bg-amber-400/15 text-amber-200' : 'bg-emerald-400/15 text-emerald-200')}>
+                    {selectedObject.isLocked ? 'Locked' : 'Editable'}
+                </span>
+            </div>
+
+            <div className="mt-5 grid grid-cols-3 gap-2">
+                <NumberField label="Width" onChange={(value) => updateDimension('width', value)} value={selectedObject.dimensions.width} />
+                <NumberField label="Height" onChange={(value) => updateDimension('height', value)} value={selectedObject.dimensions.height} />
+                <NumberField label="Depth" onChange={(value) => updateDimension('depth', value)} value={selectedObject.dimensions.depth} />
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+                <h3 className="text-sm font-black text-white">Position</h3>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                    <NumberField label="Position X" onChange={(value) => updatePosition(0, value)} value={formatNumber(selectedObject.position[0])} />
+                    <NumberField label="Position Y" onChange={(value) => updatePosition(1, value)} value={formatNumber(selectedObject.position[1])} />
+                    <NumberField label="Position Z" onChange={(value) => updatePosition(2, value)} value={formatNumber(selectedObject.position[2])} />
+                </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+                <h3 className="text-sm font-black text-white">Rotation</h3>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                    <NumberField label="Rotation X" onChange={(value) => updateRotation(0, value)} step="1" value={toDegrees(selectedObject.rotation?.[0])} />
+                    <NumberField label="Rotation Y" onChange={(value) => updateRotation(1, value)} step="1" value={toDegrees(selectedObject.rotation?.[1])} />
+                    <NumberField label="Rotation Z" onChange={(value) => updateRotation(2, value)} step="1" value={toDegrees(selectedObject.rotation?.[2])} />
+                </div>
+            </div>
+
+            {selectedIsShelf && (
+                <div className="mt-4">
+                    <ShelfEditor object={selectedObject} />
                 </div>
             )}
-        </Panel>
-    );
-}
 
-function PropertyMetric({ label, value }) {
-    return (
-        <div className="rounded-xl border border-primary-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-primary-400 dark:text-slate-500">{label}</p>
-            <p className="mt-2 text-sm font-black text-primary-950 dark:text-white">{value}</p>
-        </div>
+            {selectedIsShelf && (
+                <section className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-black text-white">Assigned Products</h3>
+                        <button
+                            aria-label="Assign Product to Shelf"
+                            className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-black text-emerald-100 transition hover:bg-emerald-400/15"
+                            onClick={() => setIsAssigningProduct(true)}
+                            type="button"
+                        >
+                            Assign
+                        </button>
+                    </div>
+                    {shelfAssignments.length > 0 ? (
+                        <div className="mt-3 space-y-2">
+                            {shelfAssignments.map((location) => (
+                                <div key={location.productId} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-slate-300">
+                                    {location.sku || location.productName} / Bin {location.binNumber}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="mt-3 text-xs font-semibold text-slate-500">No products assigned to this shelf yet.</p>
+                    )}
+                </section>
+            )}
+
+            <div className="mt-5 grid grid-cols-2 gap-2">
+                <button
+                    aria-label="Center Camera on Selected Object"
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-sky-400/30 bg-sky-400/10 px-3 text-xs font-black text-sky-100 transition hover:bg-sky-400/15"
+                    onClick={centerCameraOnSelected}
+                    type="button"
+                >
+                    <Camera className="h-4 w-4" />
+                    Center
+                </button>
+                <button
+                    aria-label="Toggle selected object lock"
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 text-xs font-black text-amber-100 transition hover:bg-amber-400/15"
+                    onClick={() => toggleObjectLock(selectedObject.id)}
+                    type="button"
+                >
+                    {selectedObject.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                    {selectedObject.isLocked ? 'Unlock' : 'Lock'}
+                </button>
+                <button
+                    aria-label="Delete selected object"
+                    className="col-span-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-400/30 bg-red-400/10 px-3 text-xs font-black text-red-100 transition hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={selectedObject.isLocked}
+                    onClick={deleteSelectedObject}
+                    type="button"
+                >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                </button>
+            </div>
+            <ProductAssignmentModal
+                isOpen={isAssigningProduct}
+                onClose={() => setIsAssigningProduct(false)}
+                shelf={selectedIsShelf ? selectedObject : null}
+            />
+        </aside>
     );
 }
 
 function SceneStats() {
-    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
+    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
     const summary = getLocatorObjectSummary(sceneObjects);
 
     return (
-        <div className="pointer-events-none absolute left-4 top-4 z-10 flex flex-wrap gap-2">
-            <span className="rounded-full border border-white/35 bg-white/90 px-3 py-1 text-xs font-black text-primary-950 shadow-sm backdrop-blur">
-                {summary.floors} floors
-            </span>
-            <span className="rounded-full border border-white/35 bg-white/90 px-3 py-1 text-xs font-black text-primary-950 shadow-sm backdrop-blur">
-                {summary.objects} objects
-            </span>
-            <span className="rounded-full border border-white/35 bg-white/90 px-3 py-1 text-xs font-black text-primary-950 shadow-sm backdrop-blur">
-                {summary.shelves} shelves
-            </span>
-            {isDesignMode && (
-                <span className="rounded-full border border-sky-200 bg-sky-100/95 px-3 py-1 text-xs font-black text-sky-900 shadow-sm backdrop-blur">
-                    0.5 snap
-                </span>
-            )}
-            {locatedProduct && (
-                <span className="rounded-full border border-emerald-200 bg-emerald-100/95 px-3 py-1 text-xs font-black text-emerald-900 shadow-sm backdrop-blur">
-                    Locate mode
-                </span>
-            )}
+        <div className="pointer-events-none absolute right-4 bottom-4 z-10 flex flex-wrap justify-end gap-2">
+            <span className="rounded-full border border-white/10 bg-slate-950/75 px-3 py-1 text-xs font-black text-slate-300 backdrop-blur">{summary.floors} floors</span>
+            <span className="rounded-full border border-white/10 bg-slate-950/75 px-3 py-1 text-xs font-black text-slate-300 backdrop-blur">{summary.objects} objects</span>
+            <span className="rounded-full border border-white/10 bg-slate-950/75 px-3 py-1 text-xs font-black text-slate-300 backdrop-blur">{summary.shelves} shelves</span>
+            {isDesignMode && <span className="rounded-full border border-sky-400/30 bg-sky-400/15 px-3 py-1 text-xs font-black text-sky-100 backdrop-blur">0.5 snap grid</span>}
+            {locatedProduct && <span className="rounded-full border border-emerald-400/30 bg-emerald-400/15 px-3 py-1 text-xs font-black text-emerald-100 backdrop-blur">Locate mode</span>}
         </div>
     );
 }
 
 function LocatedProductBanner() {
-    const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const clearLocatedProduct = useLocator3DStore((state) => state.clearLocatedProduct);
+    const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
 
     if (!locatedProduct) {
         return null;
     }
 
     return (
-        <div className="pointer-events-auto absolute bottom-4 left-4 right-4 z-10 rounded-2xl border border-emerald-200 bg-white/95 p-4 shadow-[0_20px_55px_rgba(15,23,42,0.18)] backdrop-blur dark:border-emerald-900 dark:bg-slate-950/95">
+        <div className="pointer-events-auto absolute left-1/2 top-4 z-20 w-[min(560px,calc(100%-2rem))] -translate-x-1/2 rounded-2xl border border-emerald-400/30 bg-slate-950/90 p-4 shadow-[0_24px_70px_rgba(2,6,23,0.44)] backdrop-blur-xl">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-600">Locate in 3D</p>
-                    <h2 className="mt-1 text-lg font-black text-primary-950 dark:text-white">{locatedProduct.locationLabel}</h2>
+                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-emerald-300">Locate in 3D</p>
+                    <h2 className="mt-1 text-lg font-black text-white">{locatedProduct.locationLabel}</h2>
                     {(locatedProduct.productName || locatedProduct.sku) && (
-                        <p className="mt-1 text-sm font-semibold text-primary-500 dark:text-slate-400">
+                        <p className="mt-1 text-sm font-semibold text-slate-400">
                             {[locatedProduct.sku, locatedProduct.productName].filter(Boolean).join(' / ')}
                         </p>
                     )}
                 </div>
                 <button
-                    className="min-h-10 rounded-xl border border-primary-200 bg-white px-4 text-xs font-black text-primary-700 transition hover:bg-primary-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                    className="min-h-10 rounded-xl border border-white/10 bg-white/[0.06] px-4 text-xs font-black text-slate-200 transition hover:bg-white/[0.1]"
                     onClick={clearLocatedProduct}
                     type="button"
                 >
-                    Clear Highlight
+                    Clear
                 </button>
             </div>
         </div>
-    );
-}
-
-function HelpPanel() {
-    return (
-        <Panel icon={HelpCircle} title="Quick Help">
-            <div className="space-y-2 text-xs font-semibold leading-5 text-primary-600 dark:text-slate-400">
-                <p>Turn on Design Mode to move or rotate unlocked objects with 0.5 unit snapping.</p>
-                <p>Select shelves to edit aisle, shelf number, bin count, or assign products to bins.</p>
-                <p>Use Delete to remove the selected unlocked object, Escape to deselect, and Ctrl/Cmd + S to save.</p>
-            </div>
-        </Panel>
     );
 }
 
@@ -740,36 +845,58 @@ export default function Locator3DAdmin() {
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
     const loadLayoutData = useLocator3DStore((state) => state.loadLayoutData);
     const locateProduct = useLocator3DStore((state) => state.locateProduct);
+    const productLocations = useLocator3DStore((state) => state.productLocations);
     const resetToDefaultLayout = useLocator3DStore((state) => state.resetToDefaultLayout);
     const setProductLocations = useLocator3DStore((state) => state.setProductLocations);
     const [isSavingLayout, setIsSavingLayout] = useState(false);
     const [isLoadingLayout, setIsLoadingLayout] = useState(false);
+    const [layoutName, setLayoutName] = useState(LOCATOR_LAYOUT_NAME);
+    const [selectedLayoutName, setSelectedLayoutName] = useState(LOCATOR_LAYOUT_NAME);
+    const [layoutOptions, setLayoutOptions] = useState([LOCATOR_LAYOUT_NAME]);
+    const [products, setProducts] = useState([]);
+    const [isLoadingProducts, setIsLoadingProducts] = useState(false);
     const productId = searchParams.get('productId');
     const productName = searchParams.get('name');
     const productSku = searchParams.get('sku');
 
-    const handleSaveLayout = useCallback(async () => {
+    const loadLayoutOptions = useCallback(async () => {
+        try {
+            const layouts = await listStoreLayouts();
+            const names = layouts.map((layout) => layout.layoutName).filter(Boolean);
+            setLayoutOptions([...new Set([LOCATOR_LAYOUT_NAME, layoutName, ...names])]);
+        } catch {
+            setLayoutOptions((current) => [...new Set([LOCATOR_LAYOUT_NAME, layoutName, ...current])]);
+        }
+    }, [layoutName]);
+
+    const handleSaveLayout = useCallback(async (name = layoutName) => {
+        const safeName = String(name || LOCATOR_LAYOUT_NAME).trim() || LOCATOR_LAYOUT_NAME;
         setIsSavingLayout(true);
         try {
-            await saveStoreLayout(sceneObjects);
+            await saveStoreLayout(sceneObjects, safeName);
+            setLayoutName(safeName);
+            setSelectedLayoutName(safeName);
+            setLayoutOptions((current) => [...new Set([safeName, ...current])]);
             success('3D layout saved.');
         } catch (saveError) {
             showError(saveError.message || 'Unable to save 3D layout.');
         } finally {
             setIsSavingLayout(false);
         }
-    }, [sceneObjects, showError, success]);
+    }, [layoutName, sceneObjects, showError, success]);
 
-    const handleLoadLayout = useCallback(async ({ silent = false, locateProductId = '' } = {}) => {
+    const handleLoadLayout = useCallback(async ({ silent = false, locateProductId = '', layout = selectedLayoutName } = {}) => {
         setIsLoadingLayout(true);
         try {
-            const [layout, locations] = await Promise.all([
-                loadStoreLayout(),
+            const [savedLayout, locations] = await Promise.all([
+                loadStoreLayout(layout),
                 getProductLocations(),
             ]);
 
-            if (layout?.layoutData) {
-                loadLayoutData(layout.layoutData);
+            if (savedLayout?.layoutData) {
+                loadLayoutData(savedLayout.layoutData);
+                setLayoutName(savedLayout.layoutName || layout);
+                setSelectedLayoutName(savedLayout.layoutName || layout);
             } else {
                 resetToDefaultLayout();
                 if (!silent) {
@@ -800,12 +927,64 @@ export default function Locator3DAdmin() {
         } finally {
             setIsLoadingLayout(false);
         }
-    }, [info, loadLayoutData, locateProduct, productName, productSku, resetToDefaultLayout, setProductLocations, showError, success, warning]);
+    }, [info, loadLayoutData, locateProduct, productName, productSku, resetToDefaultLayout, selectedLayoutName, setProductLocations, showError, success, warning]);
 
     const handleResetLayout = useCallback(() => {
         resetToDefaultLayout();
         success('Default two-floor 3D layout restored.');
     }, [resetToDefaultLayout, success]);
+
+    const handleLocateProductFromSearch = useCallback((product) => {
+        const location = productLocations.find((item) => item.productId === product.id);
+
+        if (!location) {
+            warning('This product does not have a saved 3D bin location yet.');
+            return;
+        }
+
+        locateProduct({
+            ...location,
+            productName: product.name || location.productName,
+            sku: product.sku || location.sku,
+        });
+        success('Product located in the 3D store.');
+    }, [locateProduct, productLocations, success, warning]);
+
+    useEffect(() => {
+        void loadLayoutOptions();
+    }, [loadLayoutOptions]);
+
+    useEffect(() => {
+        let active = true;
+        setIsLoadingProducts(true);
+
+        void Promise.all([
+            getFullProductCatalog(),
+            getProductLocations(),
+        ])
+            .then(([catalogProducts, locations]) => {
+                if (!active) {
+                    return;
+                }
+
+                setProducts(catalogProducts || []);
+                setProductLocations(locations || []);
+            })
+            .catch((loadError) => {
+                if (active) {
+                    showError(loadError.message || 'Unable to load locator search data.');
+                }
+            })
+            .finally(() => {
+                if (active) {
+                    setIsLoadingProducts(false);
+                }
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [setProductLocations, showError]);
 
     useEffect(() => {
         if (!productId) {
@@ -815,49 +994,37 @@ export default function Locator3DAdmin() {
         void handleLoadLayout({ silent: true, locateProductId: productId });
     }, [handleLoadLayout, productId]);
 
-    useLocatorKeyboardShortcuts(handleSaveLayout);
+    useLocatorKeyboardShortcuts(() => handleSaveLayout(layoutName));
 
     return (
-        <div className="space-y-5">
-            <div className="rounded-2xl border border-primary-200 bg-white p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:bg-slate-900">
-                <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
-                    <div>
-                        <p className="text-xs font-black uppercase tracking-[0.28em] text-primary-400 dark:text-slate-500">Admin workspace</p>
-                        <h1 className="mt-2 text-2xl font-black text-primary-950 dark:text-white sm:text-3xl">3D Locator</h1>
-                    </div>
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                        <DesignModeSwitch />
-                        <TopBarActions
-                            isLoadingLayout={isLoadingLayout}
-                            isSavingLayout={isSavingLayout}
-                            onLoadLayout={() => void handleLoadLayout()}
-                            onResetLayout={handleResetLayout}
-                            onSaveLayout={() => void handleSaveLayout()}
-                        />
-                    </div>
-                </div>
-            </div>
+        <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
+            <TopBar
+                isLoadingLayout={isLoadingLayout}
+                isSavingLayout={isSavingLayout}
+                layoutName={layoutName}
+                layoutOptions={layoutOptions}
+                onConfirmSaveLayout={() => void handleSaveLayout(layoutName)}
+                onLoadLayout={() => void handleLoadLayout()}
+                onResetLayout={handleResetLayout}
+                onSaveNameChange={setLayoutName}
+                onSelectLayout={setSelectedLayoutName}
+                selectedLayoutName={selectedLayoutName}
+            />
 
-            <div className="grid min-h-[calc(100vh-14rem)] gap-4 xl:grid-cols-[300px_minmax(0,1fr)_340px]">
-                <aside className="space-y-4">
-                    <ToolsPanel />
-                    <HelpPanel />
-                    <ObjectLibraryPanel />
-                    <ObjectListPanel />
-                </aside>
-
-                <main className="min-h-[560px] overflow-hidden rounded-2xl border border-primary-200 bg-slate-950 shadow-[0_28px_70px_rgba(15,23,42,0.14)]">
-                    <div className="relative h-[min(72vh,780px)] min-h-[560px]">
-                        <SceneStats />
-                        <Locator3DScene />
-                        <LocatedProductBanner />
-                    </div>
-                </main>
-
-                <aside>
-                    <PropertiesPanel />
-                </aside>
-            </div>
+            <main className="relative min-h-[640px] flex-1 overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(49,130,206,0.16),transparent_34%),linear-gradient(180deg,#020617,#0f172a)]">
+                <Locator3DScene />
+                <ObjectLibraryDropdown />
+                <QuickHelpPanel
+                    isLoadingProducts={isLoadingProducts}
+                    onLocateProduct={handleLocateProductFromSearch}
+                    productLocations={productLocations}
+                    products={products}
+                />
+                <PropertiesPanel />
+                <LocatedProductBanner />
+                <SceneStats />
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-slate-950/55 to-transparent" />
+            </main>
         </div>
     );
 }

@@ -219,6 +219,56 @@ export function cloneLocatorSceneObjects() {
     return LOCATOR_SCENE_OBJECTS.map(cloneSceneObject);
 }
 
+function getDefaultObjectName(object, count) {
+    if (object.type === 'shelf-2-layer' || object.type === 'shelf-4-layer') {
+        const shelfNumber = count + 1;
+        return `Aisle ${object.aisle || 'A'} Shelf ${shelfNumber}`;
+    }
+
+    return `${object.name || object.type} ${count + 1}`;
+}
+
+function getDefaultObjectPosition(object, activeFloor, count) {
+    const floorY = Number(activeFloor) === 2 ? FLOOR_HEIGHT : 0;
+    const offset = (count % 4) * 1.25;
+
+    if (object.type === 'floor' || object.type === 'walls') {
+        return [0, floorY, 0];
+    }
+
+    if (object.type === 'stairs') {
+        return [4.6 + offset, 0, 1.8];
+    }
+
+    if (object.type === 'counter-computer') {
+        return [-5.8 + offset, floorY, 4.6];
+    }
+
+    if (object.type === 'entrance-door') {
+        return [1.2 + offset, floorY, 6.8];
+    }
+
+    return [-2 + offset, floorY, -1.2];
+}
+
+export function createLocatorSceneObject(type, { activeFloor = 1, count = 0 } = {}) {
+    const source = LOCATOR_SCENE_OBJECTS.find((object) => object.type === type) ?? LOCATOR_SCENE_OBJECTS[0];
+    const object = cloneSceneObject(source);
+    const floor = Number(activeFloor) === 2 ? 2 : 1;
+    const id = `${type}-${Date.now().toString(36)}-${count + 1}`;
+
+    return {
+        ...object,
+        id,
+        floor: object.type === 'stairs' ? 1 : floor,
+        floors: object.type === 'floor' || object.type === 'walls' ? [1, 2] : object.floors,
+        isLocked: false,
+        name: getDefaultObjectName(object, count),
+        position: getDefaultObjectPosition(object, floor, count),
+        rotation: object.rotation ?? [0, 0, 0],
+    };
+}
+
 export function normalizeLayoutObjects(objects) {
     if (!Array.isArray(objects)) {
         return cloneLocatorSceneObjects();

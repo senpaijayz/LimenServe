@@ -30,6 +30,7 @@ describe('3D Locator Phase 2 admin controls', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Lock selected object' }));
         expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-4-a').isLocked).toBe(true);
 
+        fireEvent.click(screen.getByRole('button', { name: 'Object Library' }));
         fireEvent.click(screen.getByRole('button', { name: 'Unlock All Objects' }));
         expect(useLocator3DStore.getState().sceneObjects.every((object) => !object.isLocked)).toBe(true);
 

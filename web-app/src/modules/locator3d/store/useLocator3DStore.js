@@ -4,6 +4,7 @@ import {
     SHELF_BIN_RANGE,
     SNAP_STEP,
     cloneLocatorSceneObjects,
+    createLocatorSceneObject,
     formatProductLocationLabel,
     getShelfBinWorldPosition,
     getShelfObjectByLocation,
@@ -52,6 +53,16 @@ function normalizeRotation(rotation = [0, 0, 0]) {
     return rotation.map((value) => Number(Number(value || 0).toFixed(3)));
 }
 
+function clampDimension(value, fallback = 1) {
+    const numberValue = Number(value);
+
+    if (!Number.isFinite(numberValue)) {
+        return fallback;
+    }
+
+    return Number(Math.min(40, Math.max(0.1, numberValue)).toFixed(3));
+}
+
 function withSceneObjects(set, updater) {
     set((state) => {
         const sceneObjects = updater(state.sceneObjects);
@@ -67,6 +78,26 @@ const initialState = createInitialState();
 
 export const useLocator3DStore = create((set, get) => ({
     ...initialState,
+    addSceneObject: (type) => {
+        if (!type) {
+            return;
+        }
+
+        set((state) => {
+            const count = state.sceneObjects.filter((object) => object.type === type).length;
+            const object = createLocatorSceneObject(type, {
+                activeFloor: state.activeFloor,
+                count,
+            });
+            const sceneObjects = [...state.sceneObjects, object];
+
+            return {
+                objects: sceneObjects,
+                sceneObjects,
+                selectedObjectId: object.id,
+            };
+        });
+    },
     centerCameraOnSelected: () => {
         const { selectedObjectId } = get();
 
@@ -201,6 +232,26 @@ export const useLocator3DStore = create((set, get) => ({
                 rotation: Array.isArray(transform.rotation)
                     ? normalizeRotation(transform.rotation)
                     : object.rotation,
+            };
+        }));
+    },
+    updateObjectDimensions: (objectId, dimensions) => {
+        if (!objectId || !dimensions) {
+            return;
+        }
+
+        withSceneObjects(set, (sceneObjects) => sceneObjects.map((object) => {
+            if (object.id !== objectId || object.isLocked) {
+                return object;
+            }
+
+            return {
+                ...object,
+                dimensions: {
+                    width: dimensions.width === undefined ? object.dimensions.width : clampDimension(dimensions.width, object.dimensions.width),
+                    height: dimensions.height === undefined ? object.dimensions.height : clampDimension(dimensions.height, object.dimensions.height),
+                    depth: dimensions.depth === undefined ? object.dimensions.depth : clampDimension(dimensions.depth, object.dimensions.depth),
+                },
             };
         }));
     },

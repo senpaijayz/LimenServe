@@ -80,6 +80,17 @@ export async function loadStoreLayout(layoutName = LOCATOR_LAYOUT_NAME) {
     return mapLayoutRow(result.data);
 }
 
+export async function listStoreLayouts() {
+    const result = await supabase
+        .from('store_layouts')
+        .select(LAYOUT_SELECT)
+        .order('updated_at', { ascending: false });
+
+    assertSupabaseResult(result, 'Unable to load saved 3D layouts.');
+
+    return (result.data || []).map(mapLayoutRow);
+}
+
 export async function assignProductLocation(location) {
     const payload = {
         aisle: location.aisle,
