@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion as Motion } from 'framer-motion';
-import { ArchiveRestore, Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, Printer, Edit2, Crosshair } from 'lucide-react';
+import { ArchiveRestore, Search, Plus, Grid, List, Package, Camera, ChevronLeft, ChevronRight, Printer, Edit2, Crosshair } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { StockBadge } from '../../../components/ui/Badge';
@@ -684,88 +684,98 @@ const InventoryList = () => {
             setPrintingMovements(false);
         }
     };
-
     return (
         <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Card padding="default" className="flex items-center gap-4">
-                    <div className="p-3 rounded-xl bg-accent-info/20">
-                        <Package className="w-6 h-6 text-accent-info" />
-                    </div>
-                    <div>
-                        <p className="text-2xl font-bold font-display text-primary-950">{formatNumber(totalProducts)}</p>
-                        <p className="text-sm text-primary-600">Total Products</p>
-                        <p className="text-xs text-primary-500">{formatNumber(uniqueProducts)} unique SKUs loaded</p>
-                    </div>
-                </Card>
-
-                <Card padding="default" className="flex items-center gap-4">
-                    <div className="p-3 rounded-xl bg-accent-warning/20">
-                        <AlertTriangle className="w-6 h-6 text-accent-warning" />
-                    </div>
-                    <div>
-                        <p className="text-2xl font-bold font-display text-primary-950">{lowStockCount}</p>
-                        <p className="text-sm text-primary-600">Visible Low Stock</p>
-                        <p className="text-xs text-primary-500">{formatNumber(currentPrices)} current price rows active</p>
-                    </div>
-                </Card>
-
-                <Card padding="default" className="flex items-center gap-4">
-                    <div className="p-3 rounded-xl bg-accent-success/20">
-                        <Package className="w-6 h-6 text-accent-success" />
-                    </div>
-                    <div>
-                        <p className="text-2xl font-bold font-display text-primary-950">{formatCurrency(totalValue)}</p>
-                        <p className="text-sm text-primary-600">Visible Inventory Value</p>
-                        {summaryError && <p className="text-xs text-accent-danger">{summaryError}</p>}
-                    </div>
-                </Card>
+            {/* Page Header */}
+            <div>
+                <h1 className="text-2xl font-bold font-display text-primary-950 tracking-tight">Inventory</h1>
+                <p className="text-sm text-primary-500 mt-0.5">Manage products, stock levels, and movement history</p>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <div className="flex flex-col lg:flex-row gap-3 flex-1 w-full sm:w-auto">
-                    <div className="relative flex w-full flex-1 gap-2 lg:max-w-md">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
-                            <input
-                                type="text"
-                                placeholder="Search products or scan barcode..."
-                                value={searchQuery}
-                                onChange={(event) => handleSearchQueryChange(event.target.value)}
-                                onKeyDown={(event) => {
-                                    if (event.key === 'Enter') {
-                                        void lookupAndPreviewProduct(searchQuery);
-                                    }
-                                }}
-                                className="w-full pl-10 pr-4 py-2.5 bg-white border border-primary-200 rounded-lg text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue shadow-sm"
-                            />
-                        </div>
-                        <Button
-                            variant="secondary"
-                            className="px-3 py-2 h-auto"
-                            onClick={() => setShowCameraScanner(true)}
-                            title="Scan Barcode with Camera"
-                        >
-                            <Camera className="w-5 h-5 text-primary-600" />
-                        </Button>
+            {/* KPI Stats Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white border border-primary-200 border-l-4 border-l-accent-info rounded-2xl p-5 shadow-sm flex items-center gap-4">
+                    <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-accent-info/10 flex items-center justify-center">
+                        <Package className="w-6 h-6 text-accent-info" />
                     </div>
-
-                    <Dropdown
-                        options={categories}
-                        value={selectedCategory}
-                        onChange={handleCategoryChange}
-                        className="w-full sm:w-56"
-                    />
-
-                    <Dropdown
-                        options={stockFilters}
-                        value={selectedStockFilter}
-                        onChange={handleStockFilterChange}
-                        className="w-full sm:w-64"
-                    />
+                    <div className="min-w-0">
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500 mb-0.5">Total Products</p>
+                        <p className="text-2xl font-bold font-display text-primary-950 leading-none">{formatNumber(totalProducts)}</p>
+                        <p className="text-xs text-primary-400 mt-1">{formatNumber(uniqueProducts)} unique SKUs loaded</p>
+                    </div>
                 </div>
 
-                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                <div className="bg-white border border-primary-200 border-l-4 border-l-accent-success rounded-2xl p-5 shadow-sm flex items-center gap-4">
+                    <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-accent-success/10 flex items-center justify-center">
+                        <Package className="w-6 h-6 text-accent-success" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500 mb-0.5">In Stock</p>
+                        <p className="text-2xl font-bold font-display text-primary-950 leading-none">{lowStockCount}</p>
+                        <p className="text-xs text-primary-400 mt-1">{formatNumber(currentPrices)} current price rows active</p>
+                    </div>
+                </div>
+
+                <div className="bg-white border border-primary-200 border-l-4 border-l-accent-success rounded-2xl p-5 shadow-sm flex items-center gap-4">
+                    <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-accent-success/10 flex items-center justify-center">
+                        <Package className="w-6 h-6 text-accent-success" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500 mb-0.5">Inventory Value</p>
+                        <p className="text-2xl font-bold font-display text-primary-950 leading-none">{formatCurrency(totalValue)}</p>
+                        {summaryError
+                            ? <p className="text-xs text-accent-danger mt-1">{summaryError}</p>
+                            : <p className="text-xs text-primary-400 mt-1">Visible on-page total</p>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            {/* Toolbar */}
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                {/* Search + Camera */}
+                <div className="relative flex gap-2 flex-1 lg:max-w-sm">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
+                        <input
+                            type="text"
+                            placeholder="Search products or scan barcode..."
+                            value={searchQuery}
+                            onChange={(event) => handleSearchQueryChange(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                    void lookupAndPreviewProduct(searchQuery);
+                                }
+                            }}
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-primary-200 rounded-xl text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/10 shadow-sm text-sm"
+                        />
+                    </div>
+                    <Button
+                        variant="secondary"
+                        className="px-3 flex-shrink-0"
+                        onClick={() => setShowCameraScanner(true)}
+                        title="Scan Barcode with Camera"
+                    >
+                        <Camera className="w-4 h-4 text-primary-600" />
+                    </Button>
+                </div>
+
+                {/* Category + Stock filters */}
+                <Dropdown
+                    options={categories}
+                    value={selectedCategory}
+                    onChange={handleCategoryChange}
+                    className="w-full sm:w-52"
+                />
+                <Dropdown
+                    options={stockFilters}
+                    value={selectedStockFilter}
+                    onChange={handleStockFilterChange}
+                    className="w-full sm:w-56"
+                />
+
+                {/* Right actions */}
+                <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
                     {isAdmin && (
                         <PriceListManager onUpdated={async () => {
                             setRefreshKey((value) => value + 1);
@@ -777,17 +787,17 @@ const InventoryList = () => {
                         }} />
                     )}
 
-                    <div className="hidden items-center glass rounded-lg p-1 sm:flex">
+                    <div className="hidden items-center border border-primary-200 rounded-xl bg-primary-50 p-1 sm:flex gap-0.5">
                         <button
                             onClick={() => setViewMode('grid')}
-                            className={`min-h-10 min-w-10 rounded-md p-2 transition-colors ${viewMode === 'grid' ? 'bg-accent-primary text-white' : 'text-primary-400 hover:text-primary-100'}`}
+                            className={`min-h-9 min-w-9 rounded-lg p-2 transition-all duration-150 ${viewMode === 'grid' ? 'bg-white text-accent-primary shadow-sm border border-primary-200' : 'text-primary-400 hover:text-primary-700'}`}
                             aria-label="Show inventory as cards"
                         >
                             <Grid className="w-4 h-4" />
                         </button>
                         <button
                             onClick={() => setViewMode('list')}
-                            className={`min-h-10 min-w-10 rounded-md p-2 transition-colors ${viewMode === 'list' ? 'bg-accent-primary text-white' : 'text-primary-400 hover:text-primary-100'}`}
+                            className={`min-h-9 min-w-9 rounded-lg p-2 transition-all duration-150 ${viewMode === 'list' ? 'bg-white text-accent-primary shadow-sm border border-primary-200' : 'text-primary-400 hover:text-primary-700'}`}
                             aria-label="Show inventory as table"
                         >
                             <List className="w-4 h-4" />
@@ -798,7 +808,7 @@ const InventoryList = () => {
                         variant="primary"
                         leftIcon={<Plus className="w-4 h-4" />}
                         onClick={() => setShowAddModal(true)}
-                        className="w-full sm:w-auto"
+                        className="whitespace-nowrap"
                     >
                         Add Stock
                     </Button>
