@@ -15,7 +15,6 @@ import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
 import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
-import DemoDataSeeder from '../components/DemoDataSeeder';
 import { archiveCatalogProduct, createCatalogProduct, getArchivedCatalogProducts, getCatalogSummary, getInventoryMovements, receiveInventoryStock, updateCatalogProduct } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
@@ -767,11 +766,6 @@ const InventoryList = () => {
                     </div>
                 </div>
             </div>
-
-            {/* Demo Data Seeder — Admin only */}
-            {isAdmin && (
-                <DemoDataSeeder />
-            )}
 
             {/* Toolbar */}
 
