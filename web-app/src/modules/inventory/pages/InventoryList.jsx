@@ -15,7 +15,8 @@ import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
 import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
-import { archiveCatalogProduct, getArchivedCatalogProducts, getCatalogSummary, getInventoryMovements, receiveInventoryStock, updateCatalogProduct } from '../../../services/catalogApi';
+import DemoDataSeeder from '../components/DemoDataSeeder';
+import { archiveCatalogProduct, createCatalogProduct, getArchivedCatalogProducts, getCatalogSummary, getInventoryMovements, receiveInventoryStock, updateCatalogProduct } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
 import { productMatchesIdentifier } from '../../../utils/barcode';
@@ -767,7 +768,13 @@ const InventoryList = () => {
                 </div>
             </div>
 
+            {/* Demo Data Seeder — Admin only */}
+            {isAdmin && (
+                <DemoDataSeeder />
+            )}
+
             {/* Toolbar */}
+
             <div className="flex flex-wrap gap-2 items-center">
                 {/* Search + Camera */}
                 <div className="relative flex gap-2 flex-1 min-w-[200px] max-w-xs">
@@ -1165,12 +1172,43 @@ const InventoryList = () => {
             <AddStockModal
                 isOpen={showAddModal}
                 onClose={() => setShowAddModal(false)}
-                onSave={async ({ product, quantity, supplierName, referenceNumber, reason }) => {
+                onSave={async ({ product, quantity, supplierName, supplierContact, supplierAddress, referenceNumber, receivedDate, reason, isNewProduct, newProductDetails }) => {
+                    // ── Register brand-new product ──────────────────────────
+                    if (isNewProduct && newProductDetails) {
+                        const created = await createCatalogProduct({
+                            name: newProductDetails.name,
+                            sku: newProductDetails.sku,
+                            category: newProductDetails.category,
+                            price: newProductDetails.price,
+                            stock: 0,
+                        });
+                        if (quantity > 0 && created?.id) {
+                            await receiveInventoryStock({
+                                productId: created.id,
+                                quantity,
+                                supplierName,
+                                supplierContact,
+                                supplierAddress,
+                                referenceNumber,
+                                receivedDate,
+                                reason: reason || 'New product registration',
+                            });
+                        }
+                        setRefreshKey((value) => value + 1);
+                        await refreshInventoryMeta();
+                        success(`${newProductDetails.name} registered with ${formatNumber(quantity || 0)} units.`);
+                        setShowAddModal(false);
+                        return;
+                    }
+                    // ── Add stock to existing product ───────────────────────
                     const result = await receiveInventoryStock({
                         productId: product.id,
                         quantity,
                         supplierName,
+                        supplierContact,
+                        supplierAddress,
                         referenceNumber,
+                        receivedDate,
                         reason,
                     });
                     const updatedProduct = {

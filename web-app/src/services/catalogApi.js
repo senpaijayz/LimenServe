@@ -399,6 +399,16 @@ export async function getCatalogSummary() {
   }
 }
 
+export async function createCatalogProduct(payload) {
+  try {
+    const { data } = await apiClient.post('/catalog/products', payload);
+    clearApiClientCache('/catalog/products');
+    return data.product ?? data;
+  } catch (error) {
+    extractApiError(error, 'Failed to create new product.');
+  }
+}
+
 export async function receiveInventoryStock(payload) {
   try {
     const { data } = await apiClient.post('/catalog/stock/receive', payload);
