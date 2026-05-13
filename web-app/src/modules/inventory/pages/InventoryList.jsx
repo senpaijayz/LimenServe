@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion as Motion } from 'framer-motion';
-import { ArchiveRestore, Search, Plus, Grid, List, Package, Camera, ChevronLeft, ChevronRight, Printer, Edit2, Crosshair } from 'lucide-react';
+import { ArchiveRestore, Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Printer, Edit2, Crosshair } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { StockBadge } from '../../../components/ui/Badge';
@@ -393,6 +393,7 @@ const InventoryList = () => {
     const [printingMovements, setPrintingMovements] = useState(false);
     const [movementSearchQuery, setMovementSearchQuery] = useState('');
     const [selectedMovementType, setSelectedMovementType] = useState('all');
+    const [sortConfig, setSortConfig] = useState({ key: null, dir: null });
     const {
         products,
         categories: catalogCategories,
@@ -491,6 +492,32 @@ const InventoryList = () => {
             return matchesStock;
         })
     ), [selectedStockFilter, visibleProducts]);
+
+    const sortedProducts = useMemo(() => {
+        if (!sortConfig.key || !sortConfig.dir) return filteredProducts;
+        return [...filteredProducts].sort((a, b) => {
+            let aVal = a[sortConfig.key];
+            let bVal = b[sortConfig.key];
+            if (sortConfig.key === 'price' || sortConfig.key === 'quantity') {
+                aVal = Number(aVal ?? 0);
+                bVal = Number(bVal ?? 0);
+                return sortConfig.dir === 'asc' ? aVal - bVal : bVal - aVal;
+            }
+            aVal = String(aVal ?? '').toLowerCase();
+            bVal = String(bVal ?? '').toLowerCase();
+            if (aVal < bVal) return sortConfig.dir === 'asc' ? -1 : 1;
+            if (aVal > bVal) return sortConfig.dir === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }, [filteredProducts, sortConfig]);
+
+    const handleSort = (key) => {
+        setSortConfig((current) => {
+            if (current.key !== key) return { key, dir: 'asc' };
+            if (current.dir === 'asc') return { key, dir: 'desc' };
+            return { key: null, dir: null };
+        });
+    };
 
     const filteredStockMovements = useMemo(() => {
         const normalizedSearch = movementSearchQuery.trim().toLowerCase();
@@ -1017,18 +1044,34 @@ const InventoryList = () => {
                         <table className="table">
                             <thead>
                                 <tr>
-                                    <th>Product</th>
-                                    <th>SKU</th>
-                                    <th>Category</th>
-                                    <th className="text-right">Price</th>
-                                    <th className="text-right">Qty</th>
-                                    <th>Status</th>
-                                    <th>Location</th>
-                                    {isAdmin && <th>Actions</th>}
+                                    {[{ key: 'name', label: 'Product', align: 'left' }, { key: 'sku', label: 'SKU', align: 'left' }, { key: 'category', label: 'Category', align: 'left' }, { key: 'price', label: 'Price', align: 'right' }, { key: 'quantity', label: 'Qty', align: 'right' }].map(({ key, label, align }) => (
+                                        <th key={key} className={`cursor-pointer select-none ${align === 'right' ? 'text-right' : 'text-left'}`}>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSort(key)}
+                                                className={`inline-flex items-center gap-1 group font-bold uppercase tracking-[0.12em] text-xs transition-colors ${
+                                                    sortConfig.key === key ? 'text-accent-blue' : 'text-primary-400 hover:text-primary-700'
+                                                } ${align === 'right' ? 'flex-row-reverse' : ''}`}
+                                            >
+                                                {label}
+                                                <span className="flex flex-col opacity-60">
+                                                    <ChevronUp className={`w-2.5 h-2.5 -mb-0.5 transition-opacity ${
+                                                        sortConfig.key === key && sortConfig.dir === 'asc' ? 'opacity-100 text-accent-blue' : 'opacity-30'
+                                                    }`} />
+                                                    <ChevronDown className={`w-2.5 h-2.5 -mt-0.5 transition-opacity ${
+                                                        sortConfig.key === key && sortConfig.dir === 'desc' ? 'opacity-100 text-accent-blue' : 'opacity-30'
+                                                    }`} />
+                                                </span>
+                                            </button>
+                                        </th>
+                                    ))}
+                                    <th className="text-left text-xs font-bold uppercase tracking-[0.12em] text-primary-400">Status</th>
+                                    <th className="text-left text-xs font-bold uppercase tracking-[0.12em] text-primary-400">Location</th>
+                                    {isAdmin && <th className="text-left text-xs font-bold uppercase tracking-[0.12em] text-primary-400">Actions</th>}
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredProducts.map((product) => (
+                                {sortedProducts.map((product) => (
                                     <tr
                                         key={product.catalogEntryId || product.id}
                                         className="cursor-pointer hover:bg-primary-50 transition-colors"
