@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Archive, Boxes, ClipboardList, PackageCheck, Printer, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Archive, Boxes, ClipboardList, Download, PackageCheck, Printer, RefreshCw } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
 import { getArchivedCatalogProducts, getCatalogSummary, getInventoryMovements } from '../../../services/catalogApi';
@@ -129,6 +129,43 @@ function buildPrintableInventoryReport({ summary, movements, archivedProducts, g
 </html>`;
 }
 
+const DATE_RANGE_OPTIONS = [
+    { value: '7d', label: 'Last 7 Days' },
+    { value: '30d', label: 'Last 30 Days' },
+    { value: '90d', label: 'Last 90 Days' },
+    { value: 'all', label: 'All Time' },
+];
+
+function isWithinRange(dateStr, range) {
+    if (range === 'all') return true;
+    const date = new Date(dateStr);
+    if (isNaN(date)) return true;
+    const ms = { '7d': 604800000, '30d': 2592000000, '90d': 7776000000 };
+    return Date.now() - date.getTime() <= ms[range];
+}
+
+function exportMovementsCsv(movements) {
+    const headers = ['Product', 'SKU', 'Action', 'Qty', 'Reference', 'Staff', 'Date', 'Notes'];
+    const rows = movements.map((m) => [
+        m.productName || '',
+        m.sku || '',
+        MOVEMENT_LABELS[m.movementType] || m.movementType || '',
+        m.quantity ?? '',
+        m.referenceType || '',
+        m.performedBy || '',
+        formatDateTime(m.createdAt),
+        m.notes || '',
+    ]);
+    const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `inventory-movements-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
 export default function InventoryReport() {
     const [summary, setSummary] = useState(null);
     const [movements, setMovements] = useState([]);
@@ -136,13 +173,17 @@ export default function InventoryReport() {
     const [loading, setLoading] = useState(true);
     const [printing, setPrinting] = useState(false);
     const [error, setError] = useState('');
+    const [dateRange, setDateRange] = useState('30d');
+
+    const filteredMovements = useMemo(() => {
+        return movements.filter((m) => isWithinRange(m.createdAt, dateRange));
+    }, [movements, dateRange]);
 
     const movementStats = useMemo(() => {
-        const movedQuantity = movements.reduce((sum, movement) => sum + Number(movement.quantity ?? 0), 0);
-        const movementTypes = new Set(movements.map((movement) => movement.movementType).filter(Boolean)).size;
-
+        const movedQuantity = filteredMovements.reduce((sum, m) => sum + Number(m.quantity ?? 0), 0);
+        const movementTypes = new Set(filteredMovements.map((m) => m.movementType).filter(Boolean)).size;
         return { movedQuantity, movementTypes };
-    }, [movements]);
+    }, [filteredMovements]);
 
     const loadReportData = async () => {
         setLoading(true);
@@ -209,8 +250,18 @@ export default function InventoryReport() {
                     </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
+                    <select
+                        value={dateRange}
+                        onChange={(e) => setDateRange(e.target.value)}
+                        className="rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-700 focus:outline-none focus:border-accent-blue shadow-sm"
+                    >
+                        {DATE_RANGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
                     <Button variant="secondary" leftIcon={<RefreshCw className="h-4 w-4" />} isLoading={loading} onClick={loadReportData}>
                         Refresh
+                    </Button>
+                    <Button variant="secondary" leftIcon={<Download className="h-4 w-4" />} onClick={() => exportMovementsCsv(filteredMovements)} disabled={filteredMovements.length === 0}>
+                        Export CSV
                     </Button>
                     <Button variant="primary" leftIcon={<Printer className="h-4 w-4" />} isLoading={printing} onClick={handlePrint}>
                         Print PDF
@@ -251,8 +302,8 @@ export default function InventoryReport() {
                 <Card title="Recent Inventory Movements" subtitle={`Total moved quantity in report window: ${formatNumber(movementStats.movedQuantity)} across ${formatNumber(movementStats.movementTypes)} action types.`}>
                     {loading ? (
                         <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">Loading movement records...</div>
-                    ) : movements.length === 0 ? (
-                        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">No movement records found.</div>
+                    ) : filteredMovements.length === 0 ? (
+                        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">No movement records in selected range.</div>
                     ) : (
                         <div className="overflow-x-auto rounded-2xl border border-primary-200">
                             <table className="min-w-full divide-y divide-primary-100 bg-white text-sm">
@@ -266,7 +317,7 @@ export default function InventoryReport() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-primary-100">
-                                    {movements.slice(0, 12).map((movement) => (
+                                    {filteredMovements.slice(0, 12).map((movement) => (
                                         <tr key={movement.id} className="hover:bg-primary-50/60">
                                             <td className="px-4 py-3">
                                                 <p className="font-bold text-primary-950">{movement.productName}</p>

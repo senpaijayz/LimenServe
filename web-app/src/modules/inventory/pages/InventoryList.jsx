@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion as Motion } from 'framer-motion';
-import { ArchiveRestore, Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Printer, Edit2, Crosshair } from 'lucide-react';
+import { ArchiveRestore, Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ClipboardList, Printer, Edit2, Crosshair } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { StockBadge } from '../../../components/ui/Badge';
@@ -714,9 +714,18 @@ const InventoryList = () => {
     return (
         <div className="space-y-6">
             {/* Page Header */}
-            <div>
-                <h1 className="text-2xl font-bold font-display text-primary-950 tracking-tight">Inventory</h1>
-                <p className="text-sm text-primary-500 mt-0.5">Manage products, stock levels, and movement history</p>
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold font-display text-primary-950 tracking-tight">Inventory</h1>
+                    <p className="text-sm text-primary-500 mt-0.5">Manage products, stock levels, and movement history</p>
+                </div>
+                <Link
+                    to="/inventory/logs"
+                    className="flex-shrink-0 inline-flex items-center gap-2 rounded-xl border border-primary-200 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 shadow-sm hover:border-accent-blue hover:text-accent-blue transition-colors"
+                >
+                    <ClipboardList className="w-4 h-4" />
+                    View Logs
+                </Link>
             </div>
 
             {/* KPI Stats Row */}

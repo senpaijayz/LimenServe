@@ -11,6 +11,7 @@ import { ThemeProvider } from './context/ThemeContext';
 const LoginPage = lazy(() => import('./modules/auth/pages/LoginPage'));
 const AdminDashboard = lazy(() => import('./modules/dashboard/pages/AdminDashboard'));
 const InventoryList = lazy(() => import('./modules/inventory/pages/InventoryList'));
+const InventoryLogs = lazy(() => import('./modules/inventory/pages/InventoryLogs'));
 const POSTerminal = lazy(() => import('./modules/pos/pages/POSTerminal'));
 const QuoteBuilder = lazy(() => import('./modules/quotation/pages/QuoteBuilder'));
 const ServiceOrderList = lazy(() => import('./modules/services/pages/ServiceOrderList'));
@@ -77,6 +78,7 @@ function App() {
                 <Route element={<MainLayout />}>
                   <Route path="/dashboard" element={renderRoute(AdminDashboard, <WorkspaceRouteFallback title="Loading dashboard" />)} />
                   <Route path="/inventory" element={renderRoute(InventoryList, <WorkspaceRouteFallback title="Loading inventory" />)} />
+                  <Route path="/inventory/logs" element={renderRoute(InventoryLogs, <WorkspaceRouteFallback title="Loading inventory logs" />)} />
                   <Route path="/pos" element={renderRoute(POSTerminal, <WorkspaceRouteFallback title="Loading point of sale" />)} />
                   <Route path="/quotation" element={renderRoute(QuoteBuilder, <WorkspaceRouteFallback title="Loading quotation builder" />)} />
                   <Route path="/services" element={renderRoute(ServiceOrderList, <WorkspaceRouteFallback title="Loading service orders" />)} />
