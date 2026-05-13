@@ -57,6 +57,9 @@ describe('3D Locator premium redesign', () => {
         expect(screen.getByText('3D Locator')).toBeTruthy();
         expect(screen.getByRole('switch', { name: 'Design Mode' }).getAttribute('aria-checked')).toBe('false');
         expect(screen.getByTestId('locator-3d-scene')).toBeTruthy();
+        expect(screen.getByTestId('locator-3d-scene').closest('main')?.className).toContain('h-[68vh]');
+        expect(screen.getByTestId('locator-3d-scene').closest('main')?.className).toContain('rounded-2xl');
+        expect(screen.getByText('3D Locator').closest('header')?.className).toContain('bg-white');
         expect(screen.getByLabelText('Product Search')).toBeTruthy();
         expect(screen.getByText('How to locate products')).toBeTruthy();
         expect(screen.queryByText('Object Library')).toBeNull();
