@@ -3,7 +3,19 @@ import { motion as Motion } from 'framer-motion';
 import { CalendarDays, Package, Phone, Shield, Settings, Zap, MapPin, Building, Wrench, UserRound } from 'lucide-react';
 import { getPublicCmsPage } from '../../../services/cmsApi';
 import { getPublicMechanics } from '../../../services/mechanicsApi';
-import DynamicPageRenderer from '../components/DynamicPageRenderer';
+
+function getCmsSection(page, sectionType) {
+    return page?.sections?.find((section) => section.sectionType === sectionType || section.section_type === sectionType)?.content || {};
+}
+
+function splitBodyParagraphs(value, fallback) {
+    const paragraphs = String(value || '')
+        .split(/\n{2,}/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+    return paragraphs.length > 0 ? paragraphs : fallback;
+}
 
 const PublicAbout = () => {
     const [mechanics, setMechanics] = useState([]);
@@ -58,67 +70,13 @@ const PublicAbout = () => {
         return 'bg-primary-100 text-primary-500';
     };
 
-    if (cmsPage?.sections?.length) {
-        return (
-            <div className="bg-primary-50 min-h-screen pb-20 text-primary-900">
-                <DynamicPageRenderer page={cmsPage} />
-                <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-                    <div className="text-center mb-12">
-                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">Meet Our Mechanics</h2>
-                        <p className="text-primary-600">Published mechanic profiles are still sourced from the live service team database.</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {mechanicsLoading ? (
-                            <div className="surface p-8 bg-white border border-primary-200 shadow-sm md:col-span-2 xl:col-span-3">
-                                <p className="text-sm text-primary-500">Loading mechanics from the database...</p>
-                            </div>
-                        ) : mechanics.length === 0 ? (
-                            <div className="surface p-8 bg-white border border-primary-200 shadow-sm md:col-span-2 xl:col-span-3">
-                                <p className="text-sm text-primary-500">No public mechanic profiles have been published yet.</p>
-                            </div>
-                        ) : mechanics.map((mechanic) => (
-                            <div key={mechanic.id} className="surface overflow-hidden bg-white border border-primary-200 shadow-sm">
-                                <div className="h-2 bg-gradient-to-r from-accent-primary via-accent-danger to-primary-950" />
-                                <div className="p-6">
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div className="flex min-w-0 items-start gap-4">
-                                            {mechanic.photo_url ? (
-                                                <img src={mechanic.photo_url} alt={mechanic.full_name} className="h-16 w-16 shrink-0 rounded-2xl border border-primary-200 object-cover shadow-sm" loading="lazy" />
-                                            ) : (
-                                                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-primary-200 bg-primary-50 text-primary-400 shadow-sm">
-                                                    <UserRound className="h-8 w-8" />
-                                                </div>
-                                            )}
-                                            <div className="min-w-0">
-                                                <p className="text-xs uppercase tracking-[0.22em] text-primary-400">Limen service team</p>
-                                                <h3 className="mt-2 text-xl font-display font-semibold text-primary-950">{mechanic.full_name}</h3>
-                                                <p className="mt-2 text-sm font-medium text-accent-primary">{mechanic.specialization}</p>
-                                            </div>
-                                        </div>
-                                        <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${statusClass(mechanic.availability_status)}`}>
-                                            {String(mechanic.availability_status || 'available').replace('_', ' ')}
-                                        </span>
-                                    </div>
-                                    <p className="mt-4 text-sm leading-relaxed text-primary-600">{mechanic.bio || 'Experienced Mitsubishi service technician.'}</p>
-                                    <div className="mt-5 grid gap-3 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600">
-                                        <p className="flex items-start gap-2">
-                                            <CalendarDays className="mt-0.5 h-4 w-4 text-accent-primary" />
-                                            <span><span className="font-semibold text-primary-950">Schedule:</span> {shiftLabel(mechanic)}</span>
-                                        </p>
-                                        <p className="flex items-start gap-2">
-                                            <Phone className="mt-0.5 h-4 w-4 text-accent-primary" />
-                                            <span><span className="font-semibold text-primary-950">Contact:</span> {mechanic.contact_number || 'Contact shop for assignment'}</span>
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </section>
-            </div>
-        );
-    }
+    const heroCms = getCmsSection(cmsPage, 'hero');
+    const storyCms = getCmsSection(cmsPage, 'rich_text');
+    const storyParagraphs = splitBodyParagraphs(storyCms.body, [
+        'Limen Auto Parts Center is an established family-owned auto parts retail shop located along EDSA in Pasay City, Metro Manila. For 13 years, the business has focused on providing genuine Mitsubishi car parts that are widely used and trusted by customers in the Philippines.',
+        'The shop operates in a two-floor commercial space, with the first floor serving as the main sales area and the second floor serving as the stockroom. Daily operations involve sales, customer service, stock management, and quotation preparation for both parts and service-related requests.',
+        'Through LimenServe, the business is transitioning from manual, paper-based processes to a more organized digital workflow that supports stock visibility, faster transaction handling, structured quotations, and improved customer service.',
+    ]);
 
     return (
         <div className="bg-primary-50 min-h-screen relative font-sans text-primary-900 pb-20 overflow-hidden">
@@ -142,14 +100,14 @@ const PublicAbout = () => {
                 >
                     <div className="flex items-center justify-center gap-2 mb-6">
                         <span className="w-8 h-1 bg-accent-primary rounded-full" />
-                        <span className="text-sm font-semibold tracking-widest text-primary-500 uppercase">About</span>
+                        <span className="text-sm font-semibold tracking-widest text-primary-500 uppercase">{heroCms.eyebrow || 'About'}</span>
                         <span className="w-8 h-1 bg-accent-primary rounded-full" />
                     </div>
                     <h1 className="text-5xl md:text-7xl font-display font-bold text-primary-950 tracking-tight leading-tight mb-6">
-                        Limen Auto Parts <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent-primary to-accent-danger">Center</span>
+                        {heroCms.title || <>Limen Auto Parts <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent-primary to-accent-danger">Center</span></>}
                     </h1>
                     <p className="text-lg text-primary-700 leading-relaxed font-light">
-                        A family-owned auto parts business in Pasay City that has been serving customers for 13 years with genuine Mitsubishi parts, dependable service, and a more modern way to manage inventory and quotations through LimenServe.
+                        {heroCms.subtitle || 'A family-owned auto parts business in Pasay City that has been serving customers for 13 years with genuine Mitsubishi parts, dependable service, and a more modern way to manage inventory and quotations through LimenServe.'}
                     </p>
                 </Motion.div>
             </section>
@@ -166,18 +124,12 @@ const PublicAbout = () => {
                         transition={{ duration: 0.6 }}
                         className="space-y-6"
                     >
-                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">Our Story & Operations</h2>
+                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">{storyCms.title || 'Our Story & Operations'}</h2>
                         <div className="w-16 h-1 bg-accent-primary rounded-full mb-8" />
 
-                        <p className="text-primary-700 leading-relaxed">
-                            Limen Auto Parts Center is an established family-owned auto parts retail shop located along EDSA in Pasay City, Metro Manila. For 13 years, the business has focused on providing genuine Mitsubishi car parts that are widely used and trusted by customers in the Philippines.
-                        </p>
-                        <p className="text-primary-700 leading-relaxed">
-                            The shop operates in a two-floor commercial space, with the first floor serving as the main sales area and the second floor serving as the stockroom. Daily operations involve sales, customer service, stock management, and quotation preparation for both parts and service-related requests.
-                        </p>
-                        <p className="text-primary-700 leading-relaxed">
-                            Through LimenServe, the business is transitioning from manual, paper-based processes to a more organized digital workflow that supports stock visibility, faster transaction handling, structured quotations, and improved customer service.
-                        </p>
+                        {storyParagraphs.map((paragraph) => (
+                            <p key={paragraph} className="text-primary-700 leading-relaxed">{paragraph}</p>
+                        ))}
                     </Motion.div>
 
                     {/* Stats/Image Grid */}

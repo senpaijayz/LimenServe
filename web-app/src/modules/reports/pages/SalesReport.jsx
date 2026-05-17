@@ -312,8 +312,6 @@ function buildPrintableSalesReport({
 
         <div class="filter-grid">
             <div class="filter-card"><div class="label">Category</div><div class="value">${escapeHtml(filters.category || 'All')}</div></div>
-            <div class="filter-card"><div class="label">Product ID</div><div class="value">${escapeHtml(filters.productId || 'All')}</div></div>
-            <div class="filter-card"><div class="label">Location</div><div class="value">${escapeHtml(filters.location || 'All')}</div></div>
             <div class="filter-card"><div class="label">Search</div><div class="value">${escapeHtml(historySearch || 'All')}</div></div>
         </div>
 
@@ -359,8 +357,6 @@ const SalesReport = () => {
         startDate: new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10),
         endDate: new Date().toISOString().slice(0, 10),
         category: '',
-        productId: '',
-        location: 'Main Shop',
         granularity: 'month',
     });
     const [dashboardSnapshot, setDashboardSnapshot] = useState(null);
@@ -421,8 +417,6 @@ const SalesReport = () => {
                 startDate: filters.startDate,
                 endDate: filters.endDate,
                 category: filters.category || null,
-                productId: filters.productId || null,
-                location: filters.location || null,
                 granularity: filters.granularity,
             };
 
@@ -442,7 +436,7 @@ const SalesReport = () => {
         } finally {
             setLoading(false);
         }
-    }, [filters.category, filters.endDate, filters.granularity, filters.location, filters.productId, filters.startDate]);
+    }, [filters.category, filters.endDate, filters.granularity, filters.startDate]);
 
     const loadSalesHistory = useCallback(async () => {
         setHistoryLoading(true);
@@ -676,7 +670,7 @@ const SalesReport = () => {
             )}
 
             <Card title="Report Filters" subtitle="Narrow the period, category, and trend granularity.">
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <input type="date" value={filters.startDate} onChange={(e) => setFilters((current) => ({ ...current, startDate: e.target.value }))} className="input py-2.5 text-sm" />
                     <input type="date" value={filters.endDate} onChange={(e) => setFilters((current) => ({ ...current, endDate: e.target.value }))} className="input py-2.5 text-sm" />
                     <select value={filters.category} onChange={(e) => setFilters((current) => ({ ...current, category: e.target.value }))} className="input py-2.5 text-sm">
@@ -684,8 +678,6 @@ const SalesReport = () => {
                             <option key={category.value || 'all'} value={category.value}>{category.label}</option>
                         ))}
                     </select>
-                    <input type="text" value={filters.productId} onChange={(e) => setFilters((current) => ({ ...current, productId: e.target.value }))} placeholder="Product ID (optional)" className="input py-2.5 text-sm" />
-                    <input type="text" value={filters.location} onChange={(e) => setFilters((current) => ({ ...current, location: e.target.value }))} placeholder="Location" className="input py-2.5 text-sm" />
                     <select value={filters.granularity} onChange={(e) => setFilters((current) => ({ ...current, granularity: e.target.value }))} className="input py-2.5 text-sm">
                         <option value="month">Monthly Trend</option>
                         <option value="day">Daily Trend</option>

@@ -22,7 +22,6 @@ import tritonImage from '../../../assets/homepage/triton-trimmed.png';
 import xforceImage from '../../../assets/homepage/xforce-trimmed.png';
 import xpanderImage from '../../../assets/homepage/xpander-trimmed.png';
 import { getPublicCmsPage } from '../../../services/cmsApi';
-import DynamicPageRenderer from '../components/DynamicPageRenderer';
 
 const categoryCards = [
     { title: 'Engine Parts', description: 'Filters, timing components, gaskets, and cooling parts.', icon: Cog, query: 'engine' },
@@ -98,6 +97,35 @@ const quickStats = [
 
 const supportedVehicles = ['Montero Sport', 'Triton', 'Xforce', 'Xpander', 'Mirage', 'L300'];
 
+function getCmsSection(page, sectionType) {
+    return page?.sections?.find((section) => section.sectionType === sectionType || section.section_type === sectionType)?.content || {};
+}
+
+function mergeCmsCards(fallbackCards, cmsItems = []) {
+    if (!Array.isArray(cmsItems) || cmsItems.length === 0) {
+        return fallbackCards;
+    }
+
+    return fallbackCards.map((card, index) => ({
+        ...card,
+        title: cmsItems[index]?.title || card.title,
+        description: cmsItems[index]?.description || card.description,
+        query: cmsItems[index]?.href?.replace('/catalog?q=', '') || card.query,
+    }));
+}
+
+function mergeCmsStats(fallbackStats, cmsItems = []) {
+    if (!Array.isArray(cmsItems) || cmsItems.length === 0) {
+        return fallbackStats;
+    }
+
+    return fallbackStats.map((stat, index) => ({
+        ...stat,
+        value: cmsItems[index]?.value || stat.value,
+        label: cmsItems[index]?.label || stat.label,
+    }));
+}
+
 const PublicHome = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [cmsPage, setCmsPage] = useState(null);
@@ -131,9 +159,12 @@ const PublicHome = () => {
         navigate(query ? `/catalog?q=${encodeURIComponent(query)}` : '/catalog');
     };
 
-    if (cmsPage?.sections?.length) {
-        return <DynamicPageRenderer page={cmsPage} />;
-    }
+    const heroCms = getCmsSection(cmsPage, 'hero');
+    const featureCms = getCmsSection(cmsPage, 'feature_grid');
+    const statsCms = getCmsSection(cmsPage, 'stats');
+    const ctaCms = getCmsSection(cmsPage, 'cta');
+    const editableCategoryCards = mergeCmsCards(categoryCards, featureCms.items);
+    const editableQuickStats = mergeCmsStats(quickStats, statsCms.items);
 
     return (
         <div className="bg-white text-primary-900">
@@ -148,15 +179,15 @@ const PublicHome = () => {
                     >
                         <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-bold uppercase tracking-[0.22em] text-accent-primary">
                             <Sparkles className="h-3.5 w-3.5 text-accent-danger" />
-                            Limen Autoparts Center
+                            {heroCms.eyebrow || 'Limen Autoparts Center'}
                         </div>
 
                         <h1 className="mt-6 max-w-4xl text-5xl font-extrabold leading-[0.95] text-primary-950 md:text-7xl">
-                            Genuine and aftermarket auto parts customers can trust.
+                            {heroCms.title || 'Genuine and aftermarket auto parts customers can trust.'}
                         </h1>
 
                         <p className="mt-6 max-w-2xl text-lg leading-relaxed text-primary-700">
-                            Search by part name, part number, or vehicle model and move straight into a cleaner quotation flow backed by a real auto parts store in Pasay City.
+                            {heroCms.subtitle || 'Search by part name, part number, or vehicle model and move straight into a cleaner quotation flow backed by a real auto parts store in Pasay City.'}
                         </p>
 
                         <div className="mt-8 flex flex-wrap gap-3 text-sm text-primary-600">
@@ -228,7 +259,7 @@ const PublicHome = () => {
                     >
                         <div className="overflow-hidden rounded-[2rem] border border-primary-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
                             <div className="relative">
-                                <img src={storefrontImage} alt="Limen Auto Parts storefront" className="h-[320px] w-full object-cover md:h-[430px]" />
+                                <img src={heroCms.imageUrl || storefrontImage} alt={heroCms.imageAlt || 'Limen Auto Parts storefront'} className="h-[320px] w-full object-cover md:h-[430px]" />
                                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-900/10 to-transparent" />
                                 <div className="absolute bottom-0 left-0 right-0 px-6 pb-6">
                                     <div className="max-w-xl rounded-3xl border border-white/20 bg-slate-950/70 p-5 text-white shadow-2xl backdrop-blur-sm">
@@ -273,10 +304,10 @@ const PublicHome = () => {
                 <div className="mx-auto max-w-[1600px]">
                     <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                         <div className="max-w-2xl">
-                            <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-primary">Shop by Category</p>
-                            <h2 className="mt-2 text-4xl font-bold text-primary-950">Browse fast-moving auto parts categories</h2>
+                            <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-primary">{featureCms.eyebrow || 'Shop by Category'}</p>
+                            <h2 className="mt-2 text-4xl font-bold text-primary-950">{featureCms.title || 'Browse fast-moving auto parts categories'}</h2>
                             <p className="mt-3 text-base leading-relaxed text-primary-600">
-                                Start with the part family customers usually ask for, then narrow by Mitsubishi model or exact part number inside the catalog.
+                                {featureCms.subtitle || 'Start with the part family customers usually ask for, then narrow by Mitsubishi model or exact part number inside the catalog.'}
                             </p>
                         </div>
                         <Link to="/catalog" className="text-sm font-semibold text-accent-primary hover:text-accent-blueDark">
@@ -285,7 +316,7 @@ const PublicHome = () => {
                     </div>
 
                     <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                        {categoryCards.map((category, index) => {
+                        {editableCategoryCards.map((category, index) => {
                             const Icon = category.icon;
                             return (
                                 <Motion.div
@@ -399,7 +430,7 @@ const PublicHome = () => {
                             Customers shopping for vehicle parts need clarity first.</p>
 
                         <div className="mt-8 grid gap-4 border-t border-primary-200 pt-6 sm:grid-cols-3">
-                            {quickStats.map((item) => (
+                            {editableQuickStats.map((item) => (
                                 <div key={item.label}>
                                     <p className="text-3xl font-bold text-primary-950">{item.value}</p>
                                     <p className="mt-2 text-sm text-primary-600">{item.label}</p>
@@ -422,16 +453,16 @@ const PublicHome = () => {
             <section className="px-4 pb-16 md:px-8 xl:px-12">
                 <div className="mx-auto flex max-w-[1600px] flex-col gap-6 rounded-[2rem] bg-primary-950 px-6 py-10 text-white md:flex-row md:items-center md:justify-between md:px-10">
                     <div className="max-w-3xl">
-                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/60">Ready to order</p>
-                        <h2 className="mt-3 text-4xl font-bold text-white">Search parts now or move straight into a quote request.</h2>
+                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/60">{ctaCms.eyebrow || 'Ready to order'}</p>
+                        <h2 className="mt-3 text-4xl font-bold text-white">{ctaCms.title || 'Search parts now or move straight into a quote request.'}</h2>
                     </div>
                     <div className="flex flex-col gap-3 sm:flex-row">
-                        <Link to="/catalog" className="btn bg-white text-primary-950 hover:bg-primary-100">
-                            Browse Catalog
+                        <Link to={ctaCms.primaryCta?.href || '/catalog'} className="btn bg-white text-primary-950 hover:bg-primary-100">
+                            {ctaCms.primaryCta?.label || 'Browse Catalog'}
                             <ArrowRight className="h-4 w-4" />
                         </Link>
-                        <Link to="/estimate" className="btn border border-white/20 bg-red-600 text-white hover:bg-red-700">
-                            Request a Quote
+                        <Link to={ctaCms.secondaryCta?.href || '/estimate'} className="btn border border-white/20 bg-red-600 text-white hover:bg-red-700">
+                            {ctaCms.secondaryCta?.label || 'Request a Quote'}
                         </Link>
                     </div>
                 </div>
