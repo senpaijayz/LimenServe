@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { motion as Motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
@@ -10,6 +11,7 @@ import {
     ShieldCheck,
     Wrench
 } from 'lucide-react';
+import { getPublicCmsPage } from '../../../services/cmsApi';
 
 const serviceSteps = [
     {
@@ -41,7 +43,65 @@ const supportItems = [
     'Service order status handling from intake to completion',
 ];
 
+function getCmsSection(page, sectionType) {
+    return page?.sections?.find((section) => section.sectionType === sectionType || section.section_type === sectionType)?.content || {};
+}
+
+function mergeCmsSteps(fallbackSteps, cmsItems = []) {
+    if (!Array.isArray(cmsItems) || cmsItems.length === 0) {
+        return fallbackSteps;
+    }
+
+    return fallbackSteps.map((step, index) => ({
+        ...step,
+        title: cmsItems[index]?.title || step.title,
+        description: cmsItems[index]?.description || step.description,
+    }));
+}
+
+function mergeCmsSupportItems(fallbackItems, cmsItems = []) {
+    if (!Array.isArray(cmsItems) || cmsItems.length === 0) {
+        return fallbackItems;
+    }
+
+    return cmsItems
+        .map((item) => item.label || item.title || item.description || item.value)
+        .filter(Boolean);
+}
+
 const PublicServiceOrders = () => {
+    const [cmsPage, setCmsPage] = useState(null);
+
+    useEffect(() => {
+        let active = true;
+
+        async function loadCmsPage() {
+            try {
+                const page = await getPublicCmsPage('service-orders');
+                if (active) {
+                    setCmsPage(page);
+                }
+            } catch {
+                if (active) {
+                    setCmsPage(null);
+                }
+            }
+        }
+
+        void loadCmsPage();
+
+        return () => {
+            active = false;
+        };
+    }, []);
+
+    const heroCms = getCmsSection(cmsPage, 'hero');
+    const processCms = getCmsSection(cmsPage, 'feature_grid');
+    const supportCms = getCmsSection(cmsPage, 'stats');
+    const assistanceCms = getCmsSection(cmsPage, 'cta');
+    const editableSteps = mergeCmsSteps(serviceSteps, processCms.items);
+    const editableSupportItems = mergeCmsSupportItems(supportItems, supportCms.items);
+
     return (
         <div className="bg-primary-50 min-h-screen relative font-sans text-primary-900 pb-20 overflow-hidden">
             <div className="fixed inset-0 pointer-events-none z-0">
@@ -59,17 +119,17 @@ const PublicServiceOrders = () => {
                     >
                         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/80 border border-primary-200 backdrop-blur-md text-sm font-medium text-primary-900 shadow-sm mb-8">
                             <span className="w-2 h-2 rounded-full bg-accent-primary" />
-                            Service Order Workflow
+                            {heroCms.eyebrow || 'Service Order Workflow'}
                         </div>
 
                         <h1 className="text-5xl md:text-7xl font-display text-primary-950 tracking-tight leading-[0.95]">
-                            Service Orders
+                            {heroCms.title || 'Service Orders'}
                             <br />
-                            <span className="font-light text-primary-600">Handled with structure and clarity</span>
+                            <span className="font-light text-primary-600">{heroCms.subtitle || 'Handled with structure and clarity'}</span>
                         </h1>
 
                         <p className="text-lg md:text-xl text-primary-600 max-w-3xl mt-8 leading-relaxed font-light">
-                            LimenServe supports service-order handling for repair and installation requests, from customer intake and cost estimation to status tracking and completion.
+                            {heroCms.body || 'LimenServe supports service-order handling for repair and installation requests, from customer intake and cost estimation to status tracking and completion.'}
                         </p>
                     </Motion.div>
                 </div>
@@ -89,13 +149,13 @@ const PublicServiceOrders = () => {
                                 <Wrench className="w-6 h-6 text-accent-primary" />
                             </div>
                             <div>
-                                <h2 className="text-2xl font-display font-semibold text-primary-950">How the service-order process works</h2>
-                                <p className="text-primary-500 text-sm mt-1">Aligned with the system's service management module</p>
+                                <h2 className="text-2xl font-display font-semibold text-primary-950">{processCms.title || 'How the service-order process works'}</h2>
+                                <p className="text-primary-500 text-sm mt-1">{processCms.subtitle || "Aligned with the system's service management module"}</p>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            {serviceSteps.map((step, index) => {
+                            {editableSteps.map((step, index) => {
                                 const Icon = step.icon;
 
                                 return (
@@ -127,9 +187,9 @@ const PublicServiceOrders = () => {
                             <div className="w-12 h-12 rounded-2xl bg-accent-blue/10 border border-accent-blue/20 flex items-center justify-center mb-6">
                                 <ShieldCheck className="w-6 h-6 text-accent-blue" />
                             </div>
-                            <h2 className="text-2xl font-display font-semibold text-primary-950 mb-4">Included in service handling</h2>
+                            <h2 className="text-2xl font-display font-semibold text-primary-950 mb-4">{supportCms.title || 'Included in service handling'}</h2>
                             <div className="space-y-3">
-                                {supportItems.map((item) => (
+                                {editableSupportItems.map((item) => (
                                     <div key={item} className="flex items-start gap-3">
                                         <CheckCircle2 className="w-5 h-5 text-accent-primary mt-0.5 shrink-0" />
                                         <p className="text-primary-600 leading-relaxed">{item}</p>
@@ -143,19 +203,19 @@ const PublicServiceOrders = () => {
                                 <div className="w-12 h-12 rounded-2xl bg-primary-50 border border-primary-200 flex items-center justify-center">
                                     <Phone className="w-6 h-6 text-accent-primary" />
                                 </div>
-                                <h2 className="text-2xl font-display font-semibold text-primary-950">Request assistance</h2>
+                                <h2 className="text-2xl font-display font-semibold text-primary-950">{assistanceCms.title || 'Request assistance'}</h2>
                             </div>
 
                             <p className="text-primary-600 leading-relaxed mb-6">
-                                For service concerns, visit the shop or contact the team so your request can be assessed and recorded properly.
+                                {assistanceCms.subtitle || 'For service concerns, visit the shop or contact the team so your request can be assessed and recorded properly.'}
                             </p>
 
                             <div className="rounded-2xl border border-primary-200 bg-primary-50 p-5 mb-6">
-                                <p className="text-xs font-semibold tracking-[0.2em] text-primary-500 uppercase mb-2">Contact</p>
-                                <p className="text-lg font-semibold text-primary-950">(0915) 522 5629</p>
-                                <p className="text-sm font-semibold text-primary-800 mt-1">Landline: 02 8551 3518</p>
-                                <p className="text-sm text-primary-600 mt-3">Mon-Sat: 8:00 AM-5:00 PM | Sun: 8:00 AM-12:00 PM</p>
-                                <p className="text-sm text-primary-600 mt-1">1308, 264 Epifanio de los Santos Ave, Pasay City, Metro Manila</p>
+                                <p className="text-xs font-semibold tracking-[0.2em] text-primary-500 uppercase mb-2">{assistanceCms.eyebrow || 'Contact'}</p>
+                                <p className="text-lg font-semibold text-primary-950">{assistanceCms.phone || '(0915) 522 5629'}</p>
+                                <p className="text-sm font-semibold text-primary-800 mt-1">{assistanceCms.landline || 'Landline: 02 8551 3518'}</p>
+                                <p className="text-sm text-primary-600 mt-3">{assistanceCms.hours || 'Mon-Sat: 8:00 AM-5:00 PM | Sun: 8:00 AM-12:00 PM'}</p>
+                                <p className="text-sm text-primary-600 mt-1">{assistanceCms.address || '1308, 264 Epifanio de los Santos Ave, Pasay City, Metro Manila'}</p>
                             </div>
 
                             <div className="flex flex-col sm:flex-row gap-3">

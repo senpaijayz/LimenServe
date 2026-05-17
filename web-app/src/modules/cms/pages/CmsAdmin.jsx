@@ -83,6 +83,7 @@ function createDefaultSection(sectionType = 'rich_text', index = 0) {
         eyebrow: 'Welcome',
         title: 'Main headline',
         subtitle: 'Short supporting message for customers.',
+        body: '',
         primaryCta: { label: 'Primary action', href: '/catalog' },
         secondaryCta: { label: 'Secondary action', href: '/estimate' },
         imageUrl: '',
@@ -111,6 +112,7 @@ function createDefaultSection(sectionType = 'rich_text', index = 0) {
       ...baseSection,
       title: 'Stats',
       content: {
+        title: 'Stats',
         items: [
           { value: '10+', label: 'Metric label' },
         ],
@@ -126,6 +128,10 @@ function createDefaultSection(sectionType = 'rich_text', index = 0) {
         eyebrow: 'Next step',
         title: 'Invite customers to act',
         subtitle: 'Short supporting copy.',
+        phone: '',
+        landline: '',
+        hours: '',
+        address: '',
         primaryCta: { label: 'Get started', href: '/estimate' },
         secondaryCta: { label: 'Browse parts', href: '/catalog' },
       },
@@ -154,6 +160,101 @@ function createDefaultSection(sectionType = 'rich_text', index = 0) {
       body: 'Write public content here.',
     },
   };
+}
+
+function createServiceOrdersPageDraft() {
+  return createPageDraft({
+    slug: 'service-orders',
+    title: 'Service Orders',
+    pageType: 'landing',
+    templateKey: 'public_service_orders',
+    status: 'published',
+    seo: {
+      title: 'Service Orders',
+      description: 'Learn how Limen handles service intake, estimates, service-order tracking, and release.',
+      keywords: 'service orders, auto service, Limen',
+    },
+    sections: [
+      {
+        ...createDefaultSection('hero', 0),
+        sectionKey: 'service-orders-hero',
+        title: 'Service Orders Hero',
+        status: 'published',
+        content: {
+          eyebrow: 'Service Order Workflow',
+          title: 'Service Orders',
+          subtitle: 'Handled with structure and clarity',
+          body: 'LimenServe supports service-order handling for repair and installation requests, from customer intake and cost estimation to status tracking and completion.',
+        },
+      },
+      {
+        ...createDefaultSection('feature_grid', 1),
+        sectionKey: 'service-orders-process',
+        title: 'Service Process',
+        status: 'published',
+        content: {
+          title: 'How the service-order process works',
+          subtitle: "Aligned with the system's service management module",
+          items: [
+            { title: 'Initial Assessment', description: 'Bring your vehicle concerns to our team so we can review the issue, required parts, and recommended service scope.' },
+            { title: 'Estimate and Approval', description: 'We prepare a service estimate covering parts and labor before work proceeds.' },
+            { title: 'Service Order Tracking', description: 'Once approved, the request is recorded as a service order and monitored through active shop status updates.' },
+            { title: 'Completion and Release', description: 'Completed work is finalized, documented, and prepared for customer release.' },
+          ],
+        },
+      },
+      {
+        ...createDefaultSection('stats', 2),
+        sectionKey: 'service-orders-support',
+        title: 'Service Support Items',
+        status: 'published',
+        content: {
+          title: 'Included in service handling',
+          items: [
+            { label: 'General repair requests and service intake' },
+            { label: 'Parts replacement and installation support' },
+            { label: 'Labor and parts estimate preparation' },
+            { label: 'Service order status handling from intake to completion' },
+          ],
+        },
+      },
+      {
+        ...createDefaultSection('cta', 3),
+        sectionKey: 'service-orders-assistance',
+        title: 'Request Assistance',
+        status: 'published',
+        content: {
+          eyebrow: 'Contact',
+          title: 'Request assistance',
+          subtitle: 'For service concerns, visit the shop or contact the team so your request can be assessed and recorded properly.',
+          phone: '(0915) 522 5629',
+          landline: 'Landline: 02 8551 3518',
+          hours: 'Mon-Sat: 8:00 AM-5:00 PM | Sun: 8:00 AM-12:00 PM',
+          address: '1308, 264 Epifanio de los Santos Ave, Pasay City, Metro Manila',
+          primaryCta: { label: 'Get Estimate', href: '/estimate' },
+          secondaryCta: { label: 'View Parts', href: '/catalog' },
+        },
+      },
+    ],
+  });
+}
+
+function ensureEditablePublicPages(pages = []) {
+  if (pages.some((page) => page.slug === 'service-orders')) {
+    return pages;
+  }
+
+  return [
+    ...pages,
+    {
+      id: 'draft-service-orders',
+      slug: 'service-orders',
+      title: 'Service Orders',
+      status: 'published',
+      sectionCount: 4,
+      isLocalDraft: true,
+    },
+  ];
 }
 
 function createPageDraft(overrides = {}) {
@@ -489,6 +590,7 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
         </div>
         <Field label="Headline" value={content.title} onChange={(value) => updateContent({ title: value })} />
         <TextAreaField label="Subtitle" value={content.subtitle} rows={3} onChange={(value) => updateContent({ subtitle: value })} />
+        <TextAreaField label="Body paragraph" value={content.body} rows={3} onChange={(value) => updateContent({ body: value })} />
         <ImageUploadField
           label="Hero image"
           value={content.imageUrl}
@@ -535,18 +637,21 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
 
   if (section.sectionType === 'stats') {
     return (
-      <RepeatableRows
-        title="Stats"
-        items={content.items}
-        emptyItem={{ value: '', label: '' }}
-        onChange={(items) => updateContent({ items })}
-        renderItem={(item, updateItem) => (
-          <>
-            <Field label="Value" value={item.value} onChange={(value) => updateItem({ value })} placeholder="13 Years" />
-            <Field label="Label" value={item.label} onChange={(value) => updateItem({ label: value })} placeholder="In Service" />
-          </>
-        )}
-      />
+      <div className="space-y-4">
+        <Field label="Section title" value={content.title} onChange={(value) => updateContent({ title: value })} />
+        <RepeatableRows
+          title="Stats or list items"
+          items={content.items}
+          emptyItem={{ value: '', label: '' }}
+          onChange={(items) => updateContent({ items })}
+          renderItem={(item, updateItem) => (
+            <>
+              <Field label="Value" value={item.value} onChange={(value) => updateItem({ value })} placeholder="13 Years" />
+              <Field label="Label" value={item.label} onChange={(value) => updateItem({ label: value })} placeholder="In Service or service support item" />
+            </>
+          )}
+        />
+      </div>
     );
   }
 
@@ -558,6 +663,12 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
           <Field label="Headline" value={content.title} onChange={(value) => updateContent({ title: value })} />
         </div>
         <TextAreaField label="Subtitle" value={content.subtitle} rows={3} onChange={(value) => updateContent({ subtitle: value })} />
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Phone" value={content.phone} onChange={(value) => updateContent({ phone: value })} />
+          <Field label="Landline" value={content.landline} onChange={(value) => updateContent({ landline: value })} />
+          <Field label="Business hours" value={content.hours} onChange={(value) => updateContent({ hours: value })} />
+          <Field label="Address" value={content.address} onChange={(value) => updateContent({ address: value })} />
+        </div>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Primary button label" value={content.primaryCta?.label} onChange={(value) => updatePrimaryCta({ label: value })} />
           <Field label="Primary button link" value={content.primaryCta?.href} onChange={(value) => updatePrimaryCta({ href: value })} />
@@ -696,10 +807,11 @@ export default function CmsAdmin() {
           return;
         }
 
-        setPages(pageRows);
+        const editablePages = ensureEditablePublicPages(pageRows);
+        setPages(editablePages);
         setSettingsDraft(normalizeSettings(site?.settings ?? {}));
         setNavigationDraft(normalizeNavigationItems(site?.navigation ?? []));
-        setSelectedSlug(pageRows[0]?.slug || '');
+        setSelectedSlug(editablePages[0]?.slug || '');
       } catch (loadError) {
         if (active) {
           showError(loadError.message || 'Failed to load CMS content.');
@@ -734,6 +846,10 @@ export default function CmsAdmin() {
 
         setPageDraft(normalizePage(page));
       } catch (loadError) {
+        if (active && selectedSlug === 'service-orders') {
+          setPageDraft(createServiceOrdersPageDraft());
+          return;
+        }
         if (active) {
           showError(loadError.message || 'Failed to load selected page.');
         }
@@ -749,8 +865,9 @@ export default function CmsAdmin() {
 
   const refreshPages = async (slugToSelect) => {
     const pageRows = await listCmsPages();
-    setPages(pageRows);
-    setSelectedSlug(slugToSelect || pageRows[0]?.slug || '');
+    const editablePages = ensureEditablePublicPages(pageRows);
+    setPages(editablePages);
+    setSelectedSlug(slugToSelect || editablePages[0]?.slug || '');
   };
 
   const updatePageField = (field, value) => {
