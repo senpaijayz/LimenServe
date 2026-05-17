@@ -88,6 +88,14 @@ function createDefaultSection(sectionType = 'rich_text', index = 0) {
         secondaryCta: { label: 'Secondary action', href: '/estimate' },
         imageUrl: '',
         imageAlt: '',
+        imageEyebrow: '',
+        imageTitle: '',
+        storeLabel: '',
+        storeValue: '',
+        catalogLabel: '',
+        catalogValue: '',
+        quotesLabel: '',
+        quotesValue: '',
       },
     };
   }
@@ -605,6 +613,19 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
           <Field label="Secondary button label" value={content.secondaryCta?.label} onChange={(value) => updateSecondaryCta({ label: value })} />
           <Field label="Secondary button link" value={content.secondaryCta?.href} onChange={(value) => updateSecondaryCta({ href: value })} />
           <Field label="Image alt text" value={content.imageAlt} onChange={(value) => updateContent({ imageAlt: value })} />
+        </div>
+        <div className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
+          <h4 className="mb-3 text-sm font-bold text-primary-950">Storefront image overlay</h4>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Overlay small label" value={content.imageEyebrow} onChange={(value) => updateContent({ imageEyebrow: value })} />
+            <Field label="Overlay headline" value={content.imageTitle} onChange={(value) => updateContent({ imageTitle: value })} />
+            <Field label="Store metric label" value={content.storeLabel} onChange={(value) => updateContent({ storeLabel: value })} />
+            <Field label="Store metric text" value={content.storeValue} onChange={(value) => updateContent({ storeValue: value })} />
+            <Field label="Catalog metric label" value={content.catalogLabel} onChange={(value) => updateContent({ catalogLabel: value })} />
+            <Field label="Catalog metric text" value={content.catalogValue} onChange={(value) => updateContent({ catalogValue: value })} />
+            <Field label="Quotes metric label" value={content.quotesLabel} onChange={(value) => updateContent({ quotesLabel: value })} />
+            <Field label="Quotes metric text" value={content.quotesValue} onChange={(value) => updateContent({ quotesValue: value })} />
+          </div>
         </div>
       </div>
     );

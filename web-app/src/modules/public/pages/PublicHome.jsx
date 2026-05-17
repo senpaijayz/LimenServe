@@ -101,6 +101,14 @@ function getCmsSection(page, sectionType) {
     return page?.sections?.find((section) => section.sectionType === sectionType || section.section_type === sectionType)?.content || {};
 }
 
+function resolveStorefrontHeroImage(imageUrl) {
+    const value = String(imageUrl || '').trim();
+    if (!value || /logo/i.test(value)) {
+        return storefrontImage;
+    }
+    return value;
+}
+
 function mergeCmsCards(fallbackCards, cmsItems = []) {
     if (!Array.isArray(cmsItems) || cmsItems.length === 0) {
         return fallbackCards;
@@ -165,6 +173,7 @@ const PublicHome = () => {
     const ctaCms = getCmsSection(cmsPage, 'cta');
     const editableCategoryCards = mergeCmsCards(categoryCards, featureCms.items);
     const editableQuickStats = mergeCmsStats(quickStats, statsCms.items);
+    const storefrontHeroImage = resolveStorefrontHeroImage(heroCms.imageUrl);
 
     return (
         <div className="bg-white text-primary-900">
@@ -259,27 +268,27 @@ const PublicHome = () => {
                     >
                         <div className="overflow-hidden rounded-[2rem] border border-primary-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
                             <div className="relative">
-                                <img src={heroCms.imageUrl || storefrontImage} alt={heroCms.imageAlt || 'Limen Auto Parts storefront'} className="h-[320px] w-full object-cover md:h-[430px]" />
+                                <img src={storefrontHeroImage} alt={heroCms.imageAlt || 'Limen Auto Parts storefront'} className="h-[320px] w-full object-cover md:h-[430px]" />
                                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-900/10 to-transparent" />
                                 <div className="absolute bottom-0 left-0 right-0 px-6 pb-6">
                                     <div className="max-w-xl rounded-3xl border border-white/20 bg-slate-950/70 p-5 text-white shadow-2xl backdrop-blur-sm">
-                                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/65">Pasay City flagship store</p>
-                                        <p className="mt-3 text-2xl font-bold leading-tight">Real counter service, fitment checks, and faster quote turnaround for walk-in and online inquiries.</p>
+                                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/65">{heroCms.imageEyebrow || 'Pasay City flagship store'}</p>
+                                        <p className="mt-3 text-2xl font-bold leading-tight">{heroCms.imageTitle || 'Real counter service, fitment checks, and faster quote turnaround for walk-in and online inquiries.'}</p>
                                     </div>
                                 </div>
                             </div>
                             <div className="grid gap-4 border-t border-primary-200 bg-slate-50 px-6 py-6 sm:grid-cols-3">
                                 <div>
-                                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-500">Store</p>
-                                    <p className="mt-2 text-lg font-semibold text-primary-950">Real local support</p>
+                                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-500">{heroCms.storeLabel || 'Store'}</p>
+                                    <p className="mt-2 text-lg font-semibold text-primary-950">{heroCms.storeValue || 'Real local support'}</p>
                                 </div>
                                 <div>
-                                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-500">Catalog</p>
-                                    <p className="mt-2 text-lg font-semibold text-primary-950">Search by part or vehicle</p>
+                                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-500">{heroCms.catalogLabel || 'Catalog'}</p>
+                                    <p className="mt-2 text-lg font-semibold text-primary-950">{heroCms.catalogValue || 'Search by part or vehicle'}</p>
                                 </div>
                                 <div>
-                                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-500">Quotes</p>
-                                    <p className="mt-2 text-lg font-semibold text-primary-950">Fast response flow</p>
+                                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-500">{heroCms.quotesLabel || 'Quotes'}</p>
+                                    <p className="mt-2 text-lg font-semibold text-primary-950">{heroCms.quotesValue || 'Fast response flow'}</p>
                                 </div>
                             </div>
                         </div>

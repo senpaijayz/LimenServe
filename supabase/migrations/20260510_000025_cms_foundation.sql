@@ -690,8 +690,16 @@ select p.id, 'home-hero', 'hero', 'Homepage Hero', 'published', 10,
     "subtitle":"Search by part name, part number, or vehicle model and move straight into a cleaner quotation flow backed by a real auto parts store in Pasay City.",
     "primaryCta":{"label":"Shop Parts","href":"/catalog"},
     "secondaryCta":{"label":"Request a Quote","href":"/estimate"},
-    "imageUrl":"/LogoLimen.jpg",
-    "imageAlt":"Limen Auto Parts Center logo"
+    "imageUrl":"",
+    "imageAlt":"Limen Auto Parts Center storefront",
+    "imageEyebrow":"Pasay City flagship store",
+    "imageTitle":"Real counter service, fitment checks, and faster quote turnaround for walk-in and online inquiries.",
+    "storeLabel":"Store",
+    "storeValue":"Real local support",
+    "catalogLabel":"Catalog",
+    "catalogValue":"Search by part or vehicle",
+    "quotesLabel":"Quotes",
+    "quotesValue":"Fast response flow"
   }'::jsonb,
   timezone('utc', now())
 from cms.pages p where p.slug = 'home'
