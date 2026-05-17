@@ -15,6 +15,7 @@ import {
 } from '../../../services/analyticsApi';
 import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
 import { getPosSaleDetail, listPosSales } from '../../../services/posApi';
+import { getManagedCategories } from '../../../services/catalogApi';
 import { PAYMENT_LABELS } from '../../../utils/constants';
 import { useAuth } from '../../../context/useAuth';
 import SaleReceiptPreview from '../../pos/components/SaleReceiptPreview.jsx';
@@ -379,7 +380,37 @@ const SalesReport = () => {
     const [editingHistoricalSale, setEditingHistoricalSale] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
     const [historySort, setHistorySort] = useState({ key: 'date', dir: 'desc' });
+    const [categoryOptions, setCategoryOptions] = useState([{ value: '', label: 'All categories' }]);
     const activeSaleRequestRef = useRef(null);
+
+    useEffect(() => {
+        let active = true;
+
+        void (async () => {
+            try {
+                const categories = await getManagedCategories();
+                if (!active) return;
+                const options = [
+                    { value: '', label: 'All categories' },
+                    ...categories
+                        .filter((category) => category.name || category.label)
+                        .map((category) => ({
+                            value: category.name || category.label,
+                            label: category.name || category.label,
+                        })),
+                ];
+                setCategoryOptions(options);
+            } catch {
+                if (active) {
+                    setCategoryOptions([{ value: '', label: 'All categories' }]);
+                }
+            }
+        })();
+
+        return () => {
+            active = false;
+        };
+    }, []);
 
     const loadAnalytics = useCallback(async () => {
         setLoading(true);
@@ -648,7 +679,11 @@ const SalesReport = () => {
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
                     <input type="date" value={filters.startDate} onChange={(e) => setFilters((current) => ({ ...current, startDate: e.target.value }))} className="input py-2.5 text-sm" />
                     <input type="date" value={filters.endDate} onChange={(e) => setFilters((current) => ({ ...current, endDate: e.target.value }))} className="input py-2.5 text-sm" />
-                    <input type="text" value={filters.category} onChange={(e) => setFilters((current) => ({ ...current, category: e.target.value }))} placeholder="Category" className="input py-2.5 text-sm" />
+                    <select value={filters.category} onChange={(e) => setFilters((current) => ({ ...current, category: e.target.value }))} className="input py-2.5 text-sm">
+                        {categoryOptions.map((category) => (
+                            <option key={category.value || 'all'} value={category.value}>{category.label}</option>
+                        ))}
+                    </select>
                     <input type="text" value={filters.productId} onChange={(e) => setFilters((current) => ({ ...current, productId: e.target.value }))} placeholder="Product ID (optional)" className="input py-2.5 text-sm" />
                     <input type="text" value={filters.location} onChange={(e) => setFilters((current) => ({ ...current, location: e.target.value }))} placeholder="Location" className="input py-2.5 text-sm" />
                     <select value={filters.granularity} onChange={(e) => setFilters((current) => ({ ...current, granularity: e.target.value }))} className="input py-2.5 text-sm">

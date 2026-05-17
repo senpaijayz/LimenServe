@@ -1,9 +1,10 @@
 import { useMemo, useRef } from 'react';
-import { Archive, Printer, Package2, MapPin, ScanLine, Crosshair, PencilLine } from 'lucide-react';
+import { Printer, ArrowDownCircle, ArrowUpCircle, Crosshair, PencilLine } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
 import Button from '../../../components/ui/Button';
 import MitsubishiGenuinePartsLabel from './MitsubishiGenuinePartsLabel';
 import { printProductLabelNode } from '../utils/printProductLabel';
+import { formatDateTime, formatNumber } from '../../../utils/formatters';
 
 function formatLocation(location = {}) {
     if (location?.label) {
@@ -49,55 +50,22 @@ function formatRouteLocation(details) {
     return parts.join(' / ');
 }
 
-function formatClassificationLabel(product = {}) {
-    const category = product.category || 'General Parts & Accessories';
-    const strategy = product.classification?.strategy;
-    const confidence = product.classification?.confidence;
+const MOVEMENT_LABELS = {
+    stock_in: 'Stock added',
+    stock_out: 'Stock removed',
+    sale: 'Sold',
+    service_usage: 'Used in service',
+    adjustment: 'Stock adjusted',
+    reservation: 'Reserved',
+    release: 'Released',
+};
 
-    if (strategy === 'fallback') {
-        return `${category} (default category)`;
+function isStockIncrease(entry = {}) {
+    if (['sale', 'stock_out', 'service_usage', 'reservation'].includes(entry.movementType)) {
+        return false;
     }
-
-    if (confidence) {
-        return `${category} (${confidence} confidence)`;
-    }
-
-    return category;
+    return entry.movementType === 'stock_in' || Number(entry.quantity ?? 0) > 0;
 }
-
-const InfoPill = ({ icon, label, value }) => (
-    <div
-        style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: '10px',
-            padding: '12px 14px',
-            borderRadius: '14px',
-            background: '#ffffff',
-            border: '1px solid rgba(15, 23, 42, 0.1)',
-        }}
-    >
-        <div
-            style={{
-                width: '34px',
-                height: '34px',
-                borderRadius: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'rgba(217, 34, 42, 0.12)',
-                color: '#d9222a',
-                flexShrink: 0,
-            }}
-        >
-            {icon}
-        </div>
-        <div>
-            <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.12em', color: '#64748b', textTransform: 'uppercase' }}>{label}</div>
-            <div style={{ marginTop: '4px', fontSize: '14px', lineHeight: 1.45, color: '#0f172a', fontWeight: 600 }}>{value}</div>
-        </div>
-    </div>
-);
 
 const ProductLabelPreviewModal = ({
     isOpen,
@@ -108,9 +76,10 @@ const ProductLabelPreviewModal = ({
     routeDetails = null,
     quantity = 1,
     editAction = null,
-    archiveAction = null,
     locationEditAction = null,
     locateAction = null,
+    stockHistory = [],
+    historyLoading = false,
 }) => {
     const labelRef = useRef(null);
 
@@ -153,41 +122,64 @@ const ProductLabelPreviewModal = ({
                                 style={{
                                     transform: 'scale(1.08)',
                                     transformOrigin: 'center center',
-                                    width: product.imageUrl ? '100%' : undefined,
                                 }}
                             >
-                                {product.imageUrl ? (
-                                    <img src={product.imageUrl} alt={product.name} className="mx-auto max-h-[280px] w-full object-contain" />
-                                ) : (
-                                    <MitsubishiGenuinePartsLabel
-                                        ref={labelRef}
-                                        product={product}
-                                        quantity={quantity}
-                                    />
-                                )}
+                                <MitsubishiGenuinePartsLabel
+                                    ref={labelRef}
+                                    product={product}
+                                    quantity={quantity}
+                                />
                             </div>
                         </div>
 
                         <div className="space-y-4">
-                            <div>
-                                <div className="text-[11px] font-bold uppercase tracking-[0.26em] text-primary-500">Operational Category</div>
-                                <div className="mt-2 text-2xl font-black tracking-tight text-primary-950">{product.category || 'General Parts & Accessories'}</div>
-                                {product.sourceCategory && product.sourceCategory !== product.category && (
-                                    <div className="mt-2 text-sm text-primary-600">
-                                        Source category: <span className="font-semibold text-primary-950">{product.sourceCategory}</span>
+                            <div className="rounded-2xl border border-primary-200 bg-white/85 p-4">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-primary-500">Stock Activity</div>
+                                        <p className="mt-1 text-2xl font-black text-primary-950">{formatNumber(product.quantity ?? product.stock ?? 0)}</p>
+                                        <p className="text-xs font-semibold text-primary-500">Current available balance</p>
                                     </div>
-                                )}
+                                    <div className="rounded-2xl border border-accent-blue/20 bg-accent-blue/10 px-4 py-3 text-sm font-black text-accent-blue">
+                                        {effectiveLocationLabel || 'Unassigned'}
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="grid gap-3 md:grid-cols-2">
-                                <InfoPill icon={<Package2 className="h-4 w-4" />} label="Part" value={product.name} />
-                                <InfoPill icon={<ScanLine className="h-4 w-4" />} label="Part Number" value={product.sku} />
-                                <InfoPill icon={<MapPin className="h-4 w-4" />} label="Location" value={effectiveLocationLabel || 'Unassigned'} />
-                                <InfoPill
-                                    icon={<Package2 className="h-4 w-4" />}
-                                    label="Classification"
-                                    value={formatClassificationLabel(product)}
-                                />
+                            <div className="rounded-2xl border border-primary-200 bg-white/85 p-4">
+                                <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-primary-500">Stock Added and Sold</div>
+                                {historyLoading ? (
+                                    <div className="mt-3 rounded-xl border border-primary-200 bg-primary-50 px-4 py-6 text-center text-sm text-primary-500">Loading movement history...</div>
+                                ) : stockHistory.length === 0 ? (
+                                    <div className="mt-3 rounded-xl border border-primary-200 bg-primary-50 px-4 py-6 text-center text-sm text-primary-500">No stock or sales movement has been recorded yet.</div>
+                                ) : (
+                                    <div className="mt-3 max-h-72 space-y-3 overflow-y-auto pr-1">
+                                        {stockHistory.map((entry) => {
+                                            const increased = isStockIncrease(entry);
+                                            const Icon = increased ? ArrowUpCircle : ArrowDownCircle;
+                                            return (
+                                                <div key={entry.id} className="flex gap-3 rounded-xl border border-primary-200 bg-white px-3 py-3">
+                                                    <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${increased ? 'text-emerald-600' : 'text-red-600'}`} />
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                                                            <div>
+                                                                <p className="font-bold text-primary-950">{MOVEMENT_LABELS[entry.movementType] || entry.movementType || 'Inventory movement'}</p>
+                                                                <p className="text-xs text-primary-500">{entry.notes || entry.referenceType || 'No action details'}</p>
+                                                            </div>
+                                                            <div className="text-left sm:text-right">
+                                                                <p className={`font-black ${increased ? 'text-emerald-700' : 'text-red-700'}`}>
+                                                                    {increased ? '+' : '-'}{formatNumber(Math.abs(Number(entry.quantity ?? 0)))}
+                                                                </p>
+                                                                <p className="text-xs text-primary-500">{formatDateTime(entry.createdAt)}</p>
+                                                            </div>
+                                                        </div>
+                                                        <p className="mt-1 text-xs text-primary-500">By {entry.performedBy || 'System'}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
 
                             {Array.isArray(routeDetails?.steps) && routeDetails.steps.length > 0 && (
@@ -206,18 +198,6 @@ const ProductLabelPreviewModal = ({
                                 </div>
                             )}
 
-                            <div className="rounded-2xl border border-primary-200 bg-white/85 p-4">
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-primary-500">Quick Stock</div>
-                                        <p className="mt-1 text-2xl font-black text-primary-950">{product.quantity ?? product.stock ?? 0}</p>
-                                        <p className="text-xs font-semibold text-primary-500">Available quantity from live inventory balance</p>
-                                    </div>
-                                    <div className="rounded-2xl border border-accent-blue/20 bg-accent-blue/10 px-4 py-3 text-sm font-black text-accent-blue">
-                                        {effectiveLocationLabel || 'Unassigned'}
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -251,17 +231,6 @@ const ProductLabelPreviewModal = ({
                             onClick={editAction.onClick}
                         >
                             {editAction.label || 'Edit Details'}
-                        </Button>
-                    )}
-                    {archiveAction && (
-                        <Button
-                            variant="outline"
-                            fullWidth
-                            leftIcon={<Archive className="h-4 w-4" />}
-                            isLoading={archiveAction.isLoading}
-                            onClick={archiveAction.onClick}
-                        >
-                            {archiveAction.label || 'Archive Product'}
                         </Button>
                     )}
                     <Button variant="secondary" fullWidth onClick={onClose}>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion as Motion } from 'framer-motion';
-import { ArchiveRestore, Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ClipboardList, Edit2, Crosshair } from 'lucide-react';
+import { Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ClipboardList, Edit2, Crosshair } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { StockBadge } from '../../../components/ui/Badge';
@@ -9,13 +9,13 @@ import Dropdown from '../../../components/ui/Dropdown';
 import Modal from '../../../components/ui/Modal';
 import ProductCard from '../components/ProductCard';
 import AddStockModal from '../components/AddStockModal';
-import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
+import { formatCurrency, formatNumber } from '../../../utils/formatters';
 import { useToast } from '../../../components/ui/Toast';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
 import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
-import { archiveCatalogProduct, getArchivedCatalogProducts, getCatalogSummary, receiveInventoryStock, updateCatalogProduct } from '../../../services/catalogApi';
+import { getCatalogSummary, getProductStockHistory, receiveInventoryStock, updateCatalogProduct } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
 import { productMatchesIdentifier } from '../../../utils/barcode';
@@ -246,12 +246,10 @@ const InventoryList = () => {
     const [refreshKey, setRefreshKey] = useState(0);
     const [productOverrides, setProductOverrides] = useState({});
     const [selectedPreviewProduct, setSelectedPreviewProduct] = useState(null);
+    const [previewStockHistory, setPreviewStockHistory] = useState([]);
+    const [previewHistoryLoading, setPreviewHistoryLoading] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
     const [savingProductDetails, setSavingProductDetails] = useState(false);
-    const [archivingProductId, setArchivingProductId] = useState(null);
-    const [restoringProductId, setRestoringProductId] = useState(null);
-    const [archivedProducts, setArchivedProducts] = useState([]);
-    const [archiveError, setArchiveError] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: null, dir: null });
     const {
         products,
@@ -273,20 +271,16 @@ const InventoryList = () => {
 
         void (async () => {
             try {
-                const [summary, archives] = await Promise.all([
+                const [summary] = await Promise.all([
                     getCatalogSummary(),
-                    isAdmin ? getArchivedCatalogProducts(8) : Promise.resolve([]),
                 ]);
                 if (active) {
                     setCatalogSummary(summary);
-                    setArchivedProducts(archives);
                     setSummaryError('');
-                    setArchiveError('');
                 }
             } catch (loadError) {
                 if (active) {
                     setSummaryError(loadError.message || 'Unable to load catalog summary.');
-                    setArchiveError(loadError.message || 'Unable to load archived products.');
                 }
             }
         })();
@@ -294,17 +288,14 @@ const InventoryList = () => {
         return () => {
             active = false;
         };
-    }, [isAdmin]);
+    }, []);
 
     const refreshInventoryMeta = async () => {
-        const [summary, archives] = await Promise.all([
+        const [summary] = await Promise.all([
             getCatalogSummary(),
-            isAdmin ? getArchivedCatalogProducts(8) : Promise.resolve([]),
         ]);
         setCatalogSummary(summary);
-        setArchivedProducts(archives);
         setSummaryError('');
-        setArchiveError('');
     };
 
     const visibleProducts = useMemo(() => (
@@ -386,7 +377,20 @@ const InventoryList = () => {
             return;
         }
 
-        setSelectedPreviewProduct(productOverrides[product.id] ?? formatCatalogProduct(product));
+        const normalizedProduct = productOverrides[product.id] ?? formatCatalogProduct(product);
+        setSelectedPreviewProduct(normalizedProduct);
+        setPreviewStockHistory([]);
+        setPreviewHistoryLoading(true);
+
+        void (async () => {
+            try {
+                setPreviewStockHistory(await getProductStockHistory(normalizedProduct.id, 30));
+            } catch (historyError) {
+                showError(historyError.message || 'Unable to load stock movement history.');
+            } finally {
+                setPreviewHistoryLoading(false);
+            }
+        })();
     };
 
     const handleSearchQueryChange = (value) => {
@@ -475,60 +479,6 @@ const InventoryList = () => {
 
         showError(`No inventory item matched ${trimmedIdentifier}.`);
         return null;
-    };
-
-    const handleArchiveProduct = async () => {
-        if (!selectedPreviewProduct?.id) {
-            return;
-        }
-
-        const confirmed = window.confirm(`Archive ${selectedPreviewProduct.name}? It will be removed from active catalog, POS, and quote selection after refresh.`);
-        if (!confirmed) {
-            return;
-        }
-
-        setArchivingProductId(selectedPreviewProduct.id);
-        try {
-            await archiveCatalogProduct(selectedPreviewProduct.id, {
-                archive: true,
-                reason: 'Archived from inventory management',
-            });
-            setSelectedPreviewProduct(null);
-            setProductOverrides((current) => {
-                const next = { ...current };
-                delete next[selectedPreviewProduct.id];
-                return next;
-            });
-            setRefreshKey((value) => value + 1);
-            await refreshInventoryMeta();
-            success(`${selectedPreviewProduct.name} was archived and removed from active inventory.`);
-        } catch (archiveError) {
-            showError(archiveError.message || 'Unable to archive this product.');
-        } finally {
-            setArchivingProductId(null);
-        }
-    };
-
-    const handleRestoreProduct = async (product) => {
-        if (!product?.id) {
-            return;
-        }
-
-        setRestoringProductId(product.id);
-        try {
-            await archiveCatalogProduct(product.id, {
-                archive: false,
-                reason: 'Restored from inventory archive',
-            });
-            setArchivedProducts((current) => current.filter((item) => item.id !== product.id));
-            setRefreshKey((value) => value + 1);
-            await refreshInventoryMeta();
-            success(`${product.name} was restored to active inventory.`);
-        } catch (restoreError) {
-            showError(restoreError.message || 'Unable to restore this product.');
-        } finally {
-            setRestoringProductId(null);
-        }
     };
 
     return (
@@ -675,53 +625,6 @@ const InventoryList = () => {
                     </Button>
                 </div>
             </div>
-
-            {isAdmin && (
-                <Card
-                    title="Archived Products"
-                    subtitle="Soft-deleted inventory items hidden from active catalog, POS, and quotation flows."
-                >
-                    {archiveError ? (
-                        <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/5 px-4 py-3 text-sm text-accent-danger">
-                            {archiveError}
-                        </div>
-                    ) : archivedProducts.length === 0 ? (
-                        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-6 text-center text-sm text-primary-500">
-                            No archived products yet.
-                        </div>
-                    ) : (
-                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                            {archivedProducts.map((product) => (
-                                <div key={product.id} className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <p className="truncate text-sm font-bold text-primary-950">{product.name}</p>
-                                            <p className="mt-1 font-mono text-xs text-primary-500">{product.sku || 'NO SKU'}</p>
-                                        </div>
-                                        <span className="rounded-full border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-primary-500">
-                                            Archived
-                                        </span>
-                                    </div>
-                                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-primary-500">
-                                        <p><span className="font-semibold text-primary-700">Qty:</span> {formatNumber(product.stock ?? 0)}</p>
-                                        <p><span className="font-semibold text-primary-700">Price:</span> {formatCurrency(product.price ?? 0)}</p>
-                                        <p className="col-span-2"><span className="font-semibold text-primary-700">Archived:</span> {formatDateTime(product.archivedAt)}</p>
-                                    </div>
-                                    <Button
-                                        variant="outline"
-                                        className="mt-4 w-full"
-                                        leftIcon={<ArchiveRestore className="h-4 w-4" />}
-                                        isLoading={restoringProductId === product.id}
-                                        onClick={() => void handleRestoreProduct(product)}
-                                    >
-                                        Restore
-                                    </Button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </Card>
-            )}
 
             {loading ? (
                 <Card className="text-center py-12">
@@ -927,7 +830,9 @@ const InventoryList = () => {
                 isOpen={Boolean(selectedPreviewProduct)}
                 onClose={() => setSelectedPreviewProduct(null)}
                 product={selectedPreviewProduct}
-                title="Inventory Label Preview"
+                title="Inventory Activity"
+                stockHistory={previewStockHistory}
+                historyLoading={previewHistoryLoading}
                 locationEditAction={null}
                 locateAction={selectedPreviewProduct ? {
                     label: 'Locate in 3D',
@@ -941,11 +846,6 @@ const InventoryList = () => {
                             openEditProduct(selectedPreviewProduct);
                         }
                     },
-                } : null}
-                archiveAction={isAdmin ? {
-                    label: 'Archive Product',
-                    isLoading: archivingProductId === selectedPreviewProduct?.id,
-                    onClick: handleArchiveProduct,
                 } : null}
             />
 

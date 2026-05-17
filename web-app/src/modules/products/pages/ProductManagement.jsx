@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Edit2, Image as ImageIcon, Package, Plus, RefreshCw, Save, Search, Trash2 } from 'lucide-react';
+import { ArchiveRestore, Edit2, Package, Plus, RefreshCw, Save, Search, Trash2 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
 import { useToast } from '../../../components/ui/Toast';
 import useProductCatalog from '../../../hooks/useProductCatalog';
+import MitsubishiGenuinePartsLabel from '../../inventory/components/MitsubishiGenuinePartsLabel';
 import {
   archiveCatalogProduct,
   createCatalogProduct,
+  getArchivedCatalogProducts,
   getManagedCategories,
   getProductStockHistory,
   getSuppliers,
@@ -17,6 +19,15 @@ import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/for
 
 const PAGE_SIZE = 12;
 const inputClassName = 'w-full rounded-xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-950 shadow-sm outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15';
+const MOVEMENT_LABELS = {
+  stock_in: 'Stock added',
+  stock_out: 'Stock removed',
+  sale: 'Sold',
+  service_usage: 'Used in service',
+  adjustment: 'Stock adjusted',
+  reservation: 'Reserved',
+  release: 'Released',
+};
 const emptyForm = {
   sku: '',
   name: '',
@@ -29,7 +40,6 @@ const emptyForm = {
   status: 'in_stock',
   brand: 'Mitsubishi',
   uom: 'PC',
-  imageUrl: '',
 };
 
 function toForm(product = {}) {
@@ -45,8 +55,14 @@ function toForm(product = {}) {
     status: product.status || 'in_stock',
     brand: product.brand || 'Mitsubishi',
     uom: product.uom || 'PC',
-    imageUrl: product.imageUrl || '',
   };
+}
+
+function isStockIncrease(entry = {}) {
+  if (['sale', 'stock_out', 'service_usage', 'reservation'].includes(entry.movementType)) {
+    return false;
+  }
+  return entry.movementType === 'stock_in' || Number(entry.quantity ?? 0) > 0;
 }
 
 export default function ProductManagement() {
@@ -64,6 +80,9 @@ export default function ProductManagement() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [stockHistory, setStockHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [archivedProducts, setArchivedProducts] = useState([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [restoringProductId, setRestoringProductId] = useState(null);
 
   const { products, categories, pagination, loading, error } = useProductCatalog({
     page: currentPage,
@@ -77,9 +96,10 @@ export default function ProductManagement() {
   useEffect(() => {
     async function loadMeta() {
       try {
-        const [supplierRows, categoryRows] = await Promise.all([getSuppliers(), getManagedCategories()]);
+        const [supplierRows, categoryRows, archivedRows] = await Promise.all([getSuppliers(), getManagedCategories(), getArchivedCatalogProducts(8)]);
         setSuppliers(supplierRows);
         setManagedCategories(categoryRows);
+        setArchivedProducts(archivedRows);
       } catch (loadError) {
         showError(loadError.message || 'Unable to load product metadata.');
       }
@@ -88,7 +108,17 @@ export default function ProductManagement() {
   }, [showError]);
 
   const totalStock = useMemo(() => products.reduce((sum, product) => sum + Number(product.stock ?? product.quantity ?? 0), 0), [products]);
-  const imageCount = useMemo(() => products.filter((product) => product.imageUrl).length, [products]);
+
+  const refreshArchivedProducts = async () => {
+    setArchivedLoading(true);
+    try {
+      setArchivedProducts(await getArchivedCatalogProducts(8));
+    } catch (archiveError) {
+      showError(archiveError.message || 'Unable to load archived products.');
+    } finally {
+      setArchivedLoading(false);
+    }
+  };
 
   const openCreate = () => {
     setEditingProduct(null);
@@ -156,8 +186,24 @@ export default function ProductManagement() {
       await archiveCatalogProduct(product.id, { archive: true, reason: 'Archived from Product Management' });
       success('Product archived.');
       setRefreshKey((value) => value + 1);
+      await refreshArchivedProducts();
     } catch (archiveError) {
       showError(archiveError.message || 'Unable to archive product.');
+    }
+  };
+
+  const handleRestore = async (product) => {
+    if (!product?.id) return;
+    setRestoringProductId(product.id);
+    try {
+      await archiveCatalogProduct(product.id, { archive: false, reason: 'Restored from Product Management' });
+      success('Product restored.');
+      setArchivedProducts((current) => current.filter((item) => item.id !== product.id));
+      setRefreshKey((value) => value + 1);
+    } catch (restoreError) {
+      showError(restoreError.message || 'Unable to restore product.');
+    } finally {
+      setRestoringProductId(null);
     }
   };
 
@@ -167,7 +213,7 @@ export default function ProductManagement() {
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-blue">Product Management</p>
           <h2 className="mt-2 text-2xl font-display font-bold text-primary-950">Products</h2>
-          <p className="mt-1 max-w-3xl text-sm text-primary-500">Register products and manage database-driven images, supplier/category links, pricing, and stock history.</p>
+          <p className="mt-1 max-w-3xl text-sm text-primary-500">Register products, manage barcode labels, supplier/category links, pricing, stock history, and archived records.</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button variant="secondary" leftIcon={<RefreshCw className="h-4 w-4" />} isLoading={loading} onClick={() => setRefreshKey((value) => value + 1)}>Refresh</Button>
@@ -180,7 +226,7 @@ export default function ProductManagement() {
       <div className="grid gap-4 md:grid-cols-3">
         <KPICard title="Visible Products" value={formatNumber(pagination.totalCount ?? products.length)} icon={<Package className="h-6 w-6" />} />
         <KPICard title="Page Stock" value={formatNumber(totalStock)} icon={<Package className="h-6 w-6" />} accentColor="border-emerald-500" iconBg="bg-emerald-50 text-emerald-600" />
-        <KPICard title="DB Images" value={formatNumber(imageCount)} icon={<ImageIcon className="h-6 w-6" />} accentColor="border-amber-500" iconBg="bg-amber-50 text-amber-600" />
+        <KPICard title="Archived" value={formatNumber(archivedProducts.length)} icon={<ArchiveRestore className="h-6 w-6" />} accentColor="border-amber-500" iconBg="bg-amber-50 text-amber-600" />
       </div>
 
       <Card
@@ -203,15 +249,8 @@ export default function ProductManagement() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {products.map((product) => (
             <button key={product.id} type="button" onClick={() => openProductDetail(product)} className="overflow-hidden rounded-xl border border-primary-200 bg-white text-left shadow-sm transition hover:border-accent-blue hover:shadow-md">
-              <div className="flex h-44 items-center justify-center border-b border-primary-200 bg-primary-50">
-                {product.imageUrl ? (
-                  <img src={product.imageUrl} alt={product.name} className="h-full w-full object-contain p-4" />
-                ) : (
-                  <div className="flex flex-col items-center gap-2 text-primary-400">
-                    <ImageIcon className="h-10 w-10" />
-                    <span className="text-xs font-bold uppercase tracking-[0.16em]">No DB image</span>
-                  </div>
-                )}
+              <div className="flex h-56 items-center justify-center border-b border-primary-200 bg-[#0b1320] p-4">
+                <MitsubishiGenuinePartsLabel product={product} quantity={product.stock ?? product.quantity ?? 0} size="dense" />
               </div>
               <div className="space-y-3 p-4">
                 <div>
@@ -246,6 +285,50 @@ export default function ProductManagement() {
             <Button variant="secondary" disabled={currentPage >= (pagination.totalPages ?? 1)} onClick={() => setCurrentPage((page) => Math.min(pagination.totalPages ?? page, page + 1))}>Next</Button>
           </div>
         </div>
+      </Card>
+
+      <Card
+        title="Archived Products"
+        subtitle="Restore soft-deleted catalog items from Product Management."
+        headerAction={(
+          <Button variant="outline" size="sm" leftIcon={<RefreshCw className="h-4 w-4" />} isLoading={archivedLoading} onClick={refreshArchivedProducts}>
+            Refresh
+          </Button>
+        )}
+      >
+        {archivedLoading ? (
+          <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">Loading archived products...</div>
+        ) : archivedProducts.length === 0 ? (
+          <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">No archived products yet.</div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {archivedProducts.map((product) => (
+              <div key={product.id} className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex min-h-36 items-center justify-center rounded-xl bg-[#0b1320] p-3">
+                  <MitsubishiGenuinePartsLabel product={product} quantity={product.stock ?? product.quantity ?? 0} size="dense" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-primary-950">{product.name}</p>
+                  <p className="mt-1 font-mono text-xs text-primary-500">{product.sku || 'NO SKU'}</p>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-primary-500">
+                  <p><span className="font-semibold text-primary-700">Qty:</span> {formatNumber(product.stock ?? product.quantity ?? 0)}</p>
+                  <p><span className="font-semibold text-primary-700">Price:</span> {formatCurrency(product.price ?? 0)}</p>
+                  <p className="col-span-2"><span className="font-semibold text-primary-700">Archived:</span> {product.archivedAt ? formatDateTime(product.archivedAt) : '-'}</p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="mt-4 w-full"
+                  leftIcon={<ArchiveRestore className="h-4 w-4" />}
+                  isLoading={restoringProductId === product.id}
+                  onClick={() => void handleRestore(product)}
+                >
+                  Restore
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       <Modal isOpen={isModalOpen} onClose={closeModal} title={editingProduct ? 'Edit Product' : 'Register New Product'} size="xl">
@@ -299,10 +382,6 @@ export default function ProductManagement() {
               <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Unit</span>
               <input className={`${inputClassName} mt-2`} value={form.uom} onChange={(event) => setForm({ ...form, uom: event.target.value })} />
             </label>
-            <label className="block md:col-span-2">
-              <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Database Image URL</span>
-              <input className={`${inputClassName} mt-2`} type="url" value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} placeholder="https://..." />
-            </label>
           </div>
           <div className="flex justify-end gap-3 border-t border-primary-200 pt-4">
             <Button variant="secondary" type="button" onClick={closeModal}>Cancel</Button>
@@ -315,12 +394,8 @@ export default function ProductManagement() {
         {selectedProduct && (
           <div className="space-y-5">
             <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-              <div className="flex h-56 items-center justify-center rounded-2xl border border-primary-200 bg-primary-50">
-                {selectedProduct.imageUrl ? (
-                  <img src={selectedProduct.imageUrl} alt={selectedProduct.name} className="h-full w-full object-contain p-4" />
-                ) : (
-                  <div className="text-center text-primary-400"><ImageIcon className="mx-auto h-10 w-10" /><p className="mt-2 text-xs font-bold uppercase tracking-[0.16em]">No DB image</p></div>
-                )}
+              <div className="flex h-64 items-center justify-center rounded-2xl border border-primary-200 bg-[#0b1320] p-4">
+                <MitsubishiGenuinePartsLabel product={selectedProduct} quantity={selectedProduct.stock ?? selectedProduct.quantity ?? 0} size="dense" />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <p><span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">SKU</span><br /><span className="font-mono text-primary-950">{selectedProduct.sku}</span></p>
@@ -343,11 +418,11 @@ export default function ProductManagement() {
                     <div key={entry.id} className="rounded-xl border border-primary-200 bg-white px-4 py-3">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div>
-                          <p className="font-bold text-primary-950">{entry.movementType === 'stock_in' ? 'Stock added' : entry.movementType}</p>
+                          <p className="font-bold text-primary-950">{MOVEMENT_LABELS[entry.movementType] || entry.movementType || 'Inventory movement'}</p>
                           <p className="text-sm text-primary-500">{entry.notes || entry.referenceType || 'No action details'}</p>
                         </div>
                         <div className="text-left sm:text-right">
-                          <p className="font-bold text-primary-950">+{formatNumber(entry.quantity)}</p>
+                          <p className={`font-bold ${isStockIncrease(entry) ? 'text-emerald-700' : 'text-red-700'}`}>{isStockIncrease(entry) ? '+' : '-'}{formatNumber(Math.abs(Number(entry.quantity ?? 0)))}</p>
                           <p className="text-xs text-primary-500">{formatDateTime(entry.createdAt)}</p>
                           <p className="text-xs text-primary-500">{entry.performedBy || 'System'}</p>
                         </div>

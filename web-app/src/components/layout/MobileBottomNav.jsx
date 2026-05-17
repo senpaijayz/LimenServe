@@ -6,7 +6,6 @@ import {
     LayoutDashboard,
     Package,
     ShoppingCart,
-    Tags,
     Truck,
     Users,
     Wrench,
@@ -24,7 +23,6 @@ const iconMap = {
     Wrench,
     Users,
     Truck,
-    Tags,
 };
 
 const mobilePaths = new Set([
@@ -33,7 +31,6 @@ const mobilePaths = new Set([
     '/inventory',
     '/products',
     '/suppliers',
-    '/categories',
     '/quotation',
     '/services',
     '/reports',
