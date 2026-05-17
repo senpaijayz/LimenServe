@@ -15,6 +15,7 @@ import PublicQuoteLookupCard from '../components/PublicQuoteLookupCard';
 import PublicVehicleSelector from '../components/PublicVehicleSelector';
 import VehiclePackageShowcase from '../components/VehiclePackageShowcase';
 import { buildSmartQuoteModel } from '../utils/quoteRecommendationModel';
+import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 
 const SORT_OPTIONS = [
     { value: 'name-asc', label: 'A-Z' },
@@ -401,6 +402,7 @@ const PublicEstimate = () => {
         category: product.category,
         model: product.model,
     }));
+    const partNumberSuggestions = getPartNumberSearchSuggestions(filteredProducts, partSearch, 5);
 
     const totalCount = pagination.totalCount || 0;
     const totalPages = pagination.totalPages || 1;
@@ -832,7 +834,7 @@ const PublicEstimate = () => {
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
                                                     <p className="truncate text-sm font-semibold text-primary-950">{part.name}</p>
-                                                    <p className="mt-1 text-xs text-primary-500">{part.sku || 'Pricelist item'}</p>
+                                                    <p className="mt-1 text-xs text-primary-500">{getProductPartNumber(part) || 'Pricelist item'}</p>
                                                 </div>
                                                 <button
                                                     type="button"
@@ -1059,7 +1061,7 @@ const PublicEstimate = () => {
                             <div key={part.id} className="grid gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                                 <div className="min-w-0">
                                     <p className="font-semibold text-primary-950">{part.name}</p>
-                                    <p className="mt-1 text-xs text-primary-500">{part.sku || 'Pricelist item'} - Qty {part.quantity}</p>
+                                    <p className="mt-1 text-xs text-primary-500">{getProductPartNumber(part) || 'Pricelist item'} - Qty {part.quantity}</p>
                                 </div>
                                 <p className="font-bold text-accent-blue">{formatCurrency(part.price * part.quantity)}</p>
                             </div>
@@ -1325,11 +1327,29 @@ const PublicEstimate = () => {
                                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-500" />
                                             <input
                                                 type="text"
-                                                placeholder={hasVehicle ? `Search parts for ${vehicle.model}...` : "Search by part name, SKU, or model..."}
+                                                placeholder={hasVehicle ? `Search parts for ${vehicle.model}...` : "Search by part number, name, or model..."}
                                                 value={partSearch}
                                                 onChange={(event) => setPartSearch(event.target.value)}
                                                 className="input pl-10 py-2.5 text-sm"
                                             />
+                                            {partSearch.trim() && partNumberSuggestions.length > 0 && (
+                                                <div className="absolute z-20 mt-2 max-h-48 w-full overflow-y-auto rounded-xl border border-primary-200 bg-white py-1 shadow-lg">
+                                                    {partNumberSuggestions.map((product) => (
+                                                        <button
+                                                            key={product.catalogEntryId || product.id}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setPartSearch(getProductPartNumber(product));
+                                                                setFocusedProduct(product);
+                                                            }}
+                                                            className="flex w-full flex-col px-3 py-2 text-left transition hover:bg-primary-50"
+                                                        >
+                                                            <span className="truncate text-sm font-semibold text-primary-950">{product.name}</span>
+                                                            <span className="font-mono text-xs text-primary-500">{getProductPartNumber(product) || 'No part number'} · {product.model || 'Universal fitment'}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="relative min-w-[220px]">
                                             <ArrowUpDown className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
@@ -1383,7 +1403,7 @@ const PublicEstimate = () => {
                                                     : 'bg-white border-primary-200 hover:border-accent-primary hover:bg-primary-50 shadow-sm'
                                                     }`}
                                             >
-                                                <span className="text-xs font-semibold text-primary-500">{product.sku}</span>
+                                                <span className="text-xs font-semibold text-primary-500">{getProductPartNumber(product)}</span>
                                                 <span className="text-base font-display font-medium text-primary-950 line-clamp-1">{product.name}</span>
                                                 <span className="line-clamp-1 text-xs text-primary-400">{product.model || 'Universal fitment'}</span>
                                                 <span className="text-sm font-bold text-accent-blue mt-auto">{formatCurrency(product.price)}</span>
@@ -1644,7 +1664,7 @@ const PublicEstimate = () => {
                                                                     <div className="flex items-start justify-between gap-3">
                                                                         <div className="min-w-0">
                                                                             <span className="block text-sm font-semibold text-primary-950">{part.name}</span>
-                                                                            <span className="mt-1 block text-xs text-primary-500">{part.sku || 'Pricelist item'}</span>
+                                                                            <span className="mt-1 block text-xs text-primary-500">{getProductPartNumber(part) || 'Pricelist item'}</span>
                                                                         </div>
                                                                         <button
                                                                             type="button"

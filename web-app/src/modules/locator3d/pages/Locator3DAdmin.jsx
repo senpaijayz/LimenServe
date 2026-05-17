@@ -336,7 +336,7 @@ function ProductSearch({ isLoadingProducts, onLocateProduct, productLocations, p
                         aria-label="Product Search"
                         className="h-12 w-full rounded-xl border border-primary-200 bg-primary-50 pl-10 pr-3 text-sm font-bold text-primary-950 outline-none transition placeholder:text-primary-400 focus:border-accent-primary focus:bg-white"
                         onChange={(event) => setQuery(event.target.value)}
-                        placeholder="Search by name or SKU"
+                        placeholder="Search by name or part number"
                         value={query}
                     />
                 </span>
@@ -359,7 +359,7 @@ function ProductSearch({ isLoadingProducts, onLocateProduct, productLocations, p
                                 >
                                     <span className="block truncate text-sm font-black text-primary-950">{product.name}</span>
                                     <span className="mt-1 block truncate text-xs font-bold text-primary-500">
-                                        {product.sku || 'No SKU'}{location ? ` / Aisle ${location.aisle} / Bin ${location.binNumber}` : ' / No 3D bin yet'}
+                                        {product.sku || 'No part number'}{location ? ` / Aisle ${location.aisle} / Bin ${location.binNumber}` : ' / No 3D bin yet'}
                                     </span>
                                 </button>
                             );
@@ -409,7 +409,7 @@ function QuickHelpPanel({ isLoadingProducts, onLocateProduct, productLocations, 
                                     products={products}
                                 />
                                 <p className="text-xs font-semibold leading-5 text-primary-500">
-                                    Search by product name or SKU, choose a result, and the viewer will highlight the shelf, bin, and route from the counter.
+                                    Search by product name or part number, choose a result, and the viewer will highlight the shelf, bin, and route from the counter.
                                 </p>
                             </div>
                         )}

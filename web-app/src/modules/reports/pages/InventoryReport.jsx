@@ -34,7 +34,7 @@ function isWithinRange(dateStr, range) {
 }
 
 function exportMovementsCsv(movements) {
-    const headers = ['Product', 'SKU', 'Action', 'Qty', 'Reference', 'Staff', 'Date', 'Notes'];
+    const headers = ['Product', 'Part Number', 'Action', 'Qty', 'Reference', 'Staff', 'Date', 'Notes'];
     const rows = movements.map((m) => [
         m.productName || '', m.sku || '', MOVEMENT_LABELS[m.movementType] || m.movementType || '',
         m.quantity ?? '', m.referenceType || '', m.performedBy || '', formatDateTime(m.createdAt), m.notes || '',
@@ -89,7 +89,7 @@ function buildPrintableInventoryReport({
     const movementRows = movements.map((m, idx) => [
         String(idx + 1),
         m.productName || '',
-        m.sku || 'NO SKU',
+        m.sku || 'No part number',
         MOVEMENT_LABELS[m.movementType] || m.movementType || '',
         formatNumber(m.quantity),
         m.referenceType || '—',
@@ -100,7 +100,7 @@ function buildPrintableInventoryReport({
 
     const archivedRows = archivedProducts.map((p) => [
         p.name || '',
-        p.sku || 'NO SKU',
+        p.sku || 'No part number',
         p.category || '—',
         formatNumber(p.stock ?? 0),
         formatCurrency(p.price ?? 0),
@@ -312,7 +312,7 @@ function buildPrintableInventoryReport({
 
         <div class="kpi-grid">
             <div class="kpi-card"><div class="label">Catalog Products</div><div class="value">${escapeHtml(formatNumber(summary?.totalProducts ?? 0))}</div></div>
-            <div class="kpi-card"><div class="label">Unique SKUs</div><div class="value">${escapeHtml(formatNumber(summary?.uniqueProducts ?? 0))}</div></div>
+            <div class="kpi-card"><div class="label">Unique Part Numbers</div><div class="value">${escapeHtml(formatNumber(summary?.uniqueProducts ?? 0))}</div></div>
             <div class="kpi-card"><div class="label">Active Prices</div><div class="value">${escapeHtml(formatNumber(summary?.currentPrices ?? 0))}</div></div>
             <div class="kpi-card"><div class="label">Movement Records</div><div class="value">${escapeHtml(formatNumber(movements.length))}</div></div>
             <div class="kpi-card"><div class="label">Total Stock In</div><div class="value green">+${escapeHtml(formatNumber(stockInQty))}</div></div>
@@ -322,14 +322,14 @@ function buildPrintableInventoryReport({
         <section>
             <h2>Inventory Movement Ledger</h2>
             <div class="section-sub">${escapeHtml(formatNumber(movements.length))} records · ${escapeHtml(formatNumber(uniqueProducts))} products · ${escapeHtml(formatNumber(movedQty))} units moved</div>
-            ${renderReportTable(['#', 'Product', 'SKU', 'Action', 'Qty', 'Reference', 'Performed By', 'Date', 'Notes'], movementRows, 'No inventory movement records found for this period.')}
+            ${renderReportTable(['#', 'Product', 'Part Number', 'Action', 'Qty', 'Reference', 'Performed By', 'Date', 'Notes'], movementRows, 'No inventory movement records found for this period.')}
         </section>
 
         ${archivedProducts.length > 0 ? `
         <section>
             <h2>Archived Products</h2>
             <div class="section-sub">${escapeHtml(String(archivedProducts.length))} products removed from active catalog</div>
-            ${renderReportTable(['Product', 'SKU', 'Category', 'Qty', 'Price', 'Archived'], archivedRows)}
+            ${renderReportTable(['Product', 'Part Number', 'Category', 'Qty', 'Price', 'Archived'], archivedRows)}
         </section>
         ` : ''}
 
@@ -454,7 +454,7 @@ export default function InventoryReport() {
             {/* KPI Cards */}
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <KPICard title="Catalog Rows" value={formatNumber(summary?.totalProducts ?? 0)} icon={<Boxes className="h-6 w-6" />} />
-                <KPICard title="Unique SKUs" value={formatNumber(summary?.uniqueProducts ?? 0)} icon={<PackageCheck className="h-6 w-6" />} />
+                <KPICard title="Unique Part Numbers" value={formatNumber(summary?.uniqueProducts ?? 0)} icon={<PackageCheck className="h-6 w-6" />} />
                 <KPICard title="Movement Rows" value={formatNumber(movements.length)} icon={<ClipboardList className="h-6 w-6" />} />
                 <KPICard title="Archived Products" value={formatNumber(archivedProducts.length)} icon={<Archive className="h-6 w-6" />} />
             </div>
@@ -483,7 +483,7 @@ export default function InventoryReport() {
                                         <tr key={m.id} className="hover:bg-primary-50/60">
                                             <td className="px-4 py-3">
                                                 <p className="font-bold text-primary-950">{m.productName}</p>
-                                                <p className="font-mono text-xs text-primary-500">{m.sku || 'NO SKU'}</p>
+                                                <p className="font-mono text-xs text-primary-500">{m.sku || 'No part number'}</p>
                                             </td>
                                             <td className="px-4 py-3">
                                                 <span className={`inline-block rounded-full border px-2 py-0.5 text-xs font-bold ${MOVEMENT_COLORS[m.movementType] || 'bg-primary-50 text-primary-600 border-primary-200'}`}>
@@ -518,7 +518,7 @@ export default function InventoryReport() {
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
                                             <p className="truncate text-sm font-bold text-primary-950">{p.name}</p>
-                                            <p className="mt-1 font-mono text-xs text-primary-500">{p.sku || 'NO SKU'}</p>
+                                            <p className="mt-1 font-mono text-xs text-primary-500">{p.sku || 'No part number'}</p>
                                         </div>
                                         <p className="text-sm font-bold text-accent-blue">{formatCurrency(p.price ?? 0)}</p>
                                     </div>

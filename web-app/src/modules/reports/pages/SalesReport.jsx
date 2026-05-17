@@ -324,7 +324,7 @@ function buildPrintableSalesReport({
 
         <section>
             <h2>Top-Selling Items</h2>
-            ${renderReportTable(['Product', 'SKU', 'Category', 'Units', 'Revenue'], topItemRows)}
+            ${renderReportTable(['Product', 'Part Number', 'Category', 'Units', 'Revenue'], topItemRows)}
         </section>
 
         <section>
@@ -334,7 +334,7 @@ function buildPrintableSalesReport({
 
         <section>
             <h2>Peak Periods</h2>
-            ${renderReportTable(['Product', 'SKU', 'Peak Month', 'Peak Units', 'Peak Revenue'], peakRows)}
+            ${renderReportTable(['Product', 'Part Number', 'Peak Month', 'Peak Units', 'Peak Revenue'], peakRows)}
         </section>
 
         <section>

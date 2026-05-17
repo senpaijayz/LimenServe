@@ -16,6 +16,7 @@ import {
   updateCatalogProduct,
 } from '../../../services/catalogApi';
 import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
+import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 
 const PAGE_SIZE = 12;
 const inputClassName = 'w-full rounded-xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-950 shadow-sm outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15';
@@ -108,6 +109,7 @@ export default function ProductManagement() {
   }, [showError]);
 
   const totalStock = useMemo(() => products.reduce((sum, product) => sum + Number(product.stock ?? product.quantity ?? 0), 0), [products]);
+  const partNumberSuggestions = useMemo(() => getPartNumberSearchSuggestions(products, searchQuery, 5), [products, searchQuery]);
 
   const refreshArchivedProducts = async () => {
     setArchivedLoading(true);
@@ -153,12 +155,16 @@ export default function ProductManagement() {
 
   const handleSave = async (event) => {
     event.preventDefault();
+    if (!form.sku.trim()) {
+      showError('Part number is required.');
+      return;
+    }
     setSaving(true);
     try {
       const supplier = suppliers.find((item) => item.id === form.supplierId);
       const payload = {
         ...form,
-        sku: form.sku,
+        sku: form.sku.trim(),
         price: Number(form.price || 0),
         supplierName: supplier?.name || form.supplierName,
       };
@@ -241,7 +247,26 @@ export default function ProductManagement() {
             </select>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
-              <input className="input py-2.5 pl-10 text-sm" value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setCurrentPage(1); }} placeholder="Search products" />
+              <input className="input py-2.5 pl-10 text-sm" value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setCurrentPage(1); }} placeholder="Search by part number or product name" />
+              {searchQuery.trim() && partNumberSuggestions.length > 0 && (
+                <div className="absolute z-20 mt-2 max-h-48 w-full overflow-y-auto rounded-xl border border-primary-200 bg-white py-1 shadow-lg">
+                  {partNumberSuggestions.map((product) => (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery(getProductPartNumber(product));
+                        setCurrentPage(1);
+                        void openProductDetail(product);
+                      }}
+                      className="flex w-full flex-col px-3 py-2 text-left transition hover:bg-primary-50"
+                    >
+                      <span className="truncate text-sm font-semibold text-primary-950">{product.name}</span>
+                      <span className="font-mono text-xs text-primary-500">{getProductPartNumber(product) || 'No part number'} · {product.category || 'Uncategorized'}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -255,7 +280,7 @@ export default function ProductManagement() {
               <div className="space-y-3 p-4">
                 <div>
                   <p className="line-clamp-2 font-bold text-primary-950">{product.name}</p>
-                  <p className="mt-1 font-mono text-xs text-primary-500">{product.sku}</p>
+                  <p className="mt-1 font-mono text-xs text-primary-500">{getProductPartNumber(product)}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <p><span className="text-primary-500">Category</span><br /><span className="font-semibold text-primary-950">{product.category}</span></p>
@@ -309,7 +334,7 @@ export default function ProductManagement() {
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold text-primary-950">{product.name}</p>
-                  <p className="mt-1 font-mono text-xs text-primary-500">{product.sku || 'NO SKU'}</p>
+                  <p className="mt-1 font-mono text-xs text-primary-500">{getProductPartNumber(product) || 'No part number'}</p>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-primary-500">
                   <p><span className="font-semibold text-primary-700">Qty:</span> {formatNumber(product.stock ?? product.quantity ?? 0)}</p>
@@ -335,8 +360,8 @@ export default function ProductManagement() {
         <form onSubmit={handleSave} className="space-y-5">
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
-              <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">SKU / Part Number</span>
-              <input className={`${inputClassName} mt-2`} value={form.sku} onChange={(event) => setForm({ ...form, sku: event.target.value })} placeholder="Auto-generated if blank" />
+              <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Part Number</span>
+              <input className={`${inputClassName} mt-2`} value={form.sku} onChange={(event) => setForm({ ...form, sku: event.target.value })} placeholder="Enter exact part number" required />
             </label>
             <label className="block">
               <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Retail Price</span>
@@ -398,7 +423,7 @@ export default function ProductManagement() {
                 <MitsubishiGenuinePartsLabel product={selectedProduct} quantity={selectedProduct.stock ?? selectedProduct.quantity ?? 0} size="dense" />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <p><span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">SKU</span><br /><span className="font-mono text-primary-950">{selectedProduct.sku}</span></p>
+                <p><span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Part Number</span><br /><span className="font-mono text-primary-950">{getProductPartNumber(selectedProduct)}</span></p>
                 <p><span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Category</span><br /><span className="font-semibold text-primary-950">{selectedProduct.category}</span></p>
                 <p><span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Supplier</span><br /><span className="font-semibold text-primary-950">{selectedProduct.supplierName || 'Unlinked'}</span></p>
                 <p><span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Price</span><br /><span className="font-semibold text-accent-blue">{formatCurrency(selectedProduct.price)}</span></p>

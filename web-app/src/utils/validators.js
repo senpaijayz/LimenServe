@@ -66,7 +66,7 @@ export const userSchema = z.object({
 // Product form schema
 export const productSchema = z.object({
     name: requiredString('Product name'),
-    sku: requiredString('SKU'),
+    sku: requiredString('Part number'),
     barcode: z.string().optional(),
     description: z.string().optional(),
     category: requiredString('Category'),

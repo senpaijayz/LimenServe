@@ -18,6 +18,7 @@ import { useToast } from '../../../components/ui/Toast';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
 import ProductPackageSuggestions from '../../public/components/ProductPackageSuggestions';
+import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 import {
     createEstimate,
     getEstimateDetail,
@@ -159,6 +160,7 @@ const QuoteBuilder = () => {
         sortBy: 'name-asc',
         includeCategories: false,
     });
+    const partNumberSuggestions = useMemo(() => getPartNumberSearchSuggestions(availableProducts, searchQuery, 5), [availableProducts, searchQuery]);
 
     const totals = useMemo(() => {
         const partsTotal = selectedParts.reduce((sum, part) => sum + (Number(part.price ?? 0) * Number(part.quantity ?? 1)), 0);
@@ -413,11 +415,29 @@ const QuoteBuilder = () => {
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                             <input
                                 type="text"
-                                placeholder="Search parts by name, SKU, or model..."
+                                placeholder="Search parts by part number, name, or model..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full pl-10 pr-4 py-2.5 bg-white border border-primary-200 rounded-lg text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue shadow-sm"
                             />
+                            {searchQuery.trim() && partNumberSuggestions.length > 0 && (
+                                <div className="absolute z-20 mt-2 max-h-48 w-full overflow-y-auto rounded-xl border border-primary-200 bg-white py-1 shadow-lg">
+                                    {partNumberSuggestions.map((product) => (
+                                        <button
+                                            key={product.id}
+                                            type="button"
+                                            onClick={() => {
+                                                setSearchQuery(getProductPartNumber(product));
+                                                setFocusedProduct(product);
+                                            }}
+                                            className="flex w-full flex-col px-3 py-2 text-left transition hover:bg-primary-50"
+                                        >
+                                            <span className="truncate text-sm font-semibold text-primary-950">{product.name}</span>
+                                            <span className="font-mono text-xs text-primary-500">{getProductPartNumber(product) || 'No part number'} · {product.model || 'Universal fitment'}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -435,7 +455,7 @@ const QuoteBuilder = () => {
                                     className={`rounded-xl border p-4 text-left transition-all ${focusedProduct?.id === product.id ? 'border-accent-blue bg-accent-blue/5 shadow-sm' : 'border-primary-200 bg-white hover:border-primary-300 hover:shadow-sm'}`}
                                 >
                                     <p className="text-sm font-semibold text-primary-950 line-clamp-2">{product.name}</p>
-                                    <p className="mt-1 text-xs font-mono text-primary-500">{product.sku || 'NO SKU'}</p>
+                                    <p className="mt-1 text-xs font-mono text-primary-500">{getProductPartNumber(product) || 'No part number'}</p>
                                     <p className="text-[11px] text-primary-400 mt-1">{product.model || 'Universal fitment'}</p>
                                     <p className="mt-3 text-sm font-bold text-accent-blue">{formatCurrency(product.price || 0)}</p>
                                 </button>
@@ -549,7 +569,7 @@ const QuoteBuilder = () => {
                                         <div key={part.id} className="flex items-center justify-between p-2 bg-primary-50 rounded-lg border border-primary-100">
                                             <div className="flex-1 min-w-0 mr-2">
                                                 <p className="text-sm font-semibold text-primary-950 truncate">{part.name}</p>
-                                                <p className="text-[10px] text-primary-500 font-mono">{part.sku || 'NO SKU'}</p>
+                                                <p className="text-[10px] text-primary-500 font-mono">{getProductPartNumber(part) || 'No part number'}</p>
                                                 <p className="text-xs font-bold text-accent-blue mt-1">{formatCurrency(part.price)} x {part.quantity}</p>
                                             </div>
                                             <div className="flex items-center gap-2">

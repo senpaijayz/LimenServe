@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Camera, Search, Plus, Package, CheckCircle, Trash2, ListPlus } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
 import Button from '../../../components/ui/Button';
@@ -6,6 +6,7 @@ import Input from '../../../components/ui/Input';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import useDataStore from '../../../store/useDataStore';
 import { formatNumber } from '../../../utils/formatters';
+import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 
 const EMPTY_SUPPLIER = {
     name: '',
@@ -16,7 +17,7 @@ const EMPTY_SUPPLIER = {
     reason: 'Stock receiving',
 };
 
-function BulkItemRow({ item, index, onUpdate, onRemove, findProduct }) {
+function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products }) {
     const [query, setQuery] = useState(item.searchQuery || '');
     const [searching, setSearching] = useState(false);
     const [searchError, setSearchError] = useState('');
@@ -38,7 +39,7 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct }) {
                 setSearchError('');
             } else {
                 onUpdate(index, { product: null, searchQuery: q });
-                setSearchError('SKU not found');
+                setSearchError('Part number not found');
             }
         } finally {
             setSearching(false);
@@ -53,6 +54,7 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct }) {
 
     const currentQty = Number(item.product?.quantity ?? item.product?.stock ?? 0);
     const addQty = Number(item.quantity) || 0;
+    const suggestions = useMemo(() => getPartNumberSearchSuggestions(products || [], query, 5), [products, query]);
 
     return (
         <div className="rounded-xl border border-primary-200 bg-white p-4 space-y-3 relative">
@@ -72,7 +74,7 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct }) {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                     <input
                         type="text"
-                        placeholder="Scan barcode or type SKU..."
+                        placeholder="Scan barcode or type part number..."
                         value={query}
                         onChange={(e) => {
                             setQuery(e.target.value);
@@ -84,6 +86,26 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct }) {
                             'border-primary-200 focus:border-accent-blue focus:ring-accent-blue/10'
                         } text-primary-950`}
                     />
+                    {query.trim() && suggestions.length > 0 && (
+                        <div className="absolute z-20 mt-2 max-h-48 w-full overflow-y-auto rounded-xl border border-primary-200 bg-white py-1 shadow-lg">
+                            {suggestions.map((product) => (
+                                <button
+                                    key={product.id}
+                                    type="button"
+                                    onClick={() => {
+                                        const partNumber = getProductPartNumber(product);
+                                        setQuery(partNumber);
+                                        onUpdate(index, { product, searchQuery: partNumber });
+                                        setSearchError('');
+                                    }}
+                                    className="flex w-full flex-col px-3 py-2 text-left transition hover:bg-primary-50"
+                                >
+                                    <span className="truncate text-sm font-semibold text-primary-950">{product.name}</span>
+                                    <span className="font-mono text-xs text-primary-500">{getProductPartNumber(product) || 'No part number'} · Stock: {formatNumber(product.quantity ?? product.stock ?? 0)}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
                 <Button variant="secondary" onClick={() => setShowCamera(true)} type="button" className="px-3">
                     <Camera className="w-4 h-4" />
@@ -98,7 +120,7 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct }) {
                     <Package className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                     <div className="min-w-0 flex-1">
                         <p className="font-bold text-sm text-primary-950 truncate">{item.product.name}</p>
-                        <p className="font-mono text-xs text-primary-500">{item.product.sku} - Stock: {formatNumber(currentQty)}</p>
+                        <p className="font-mono text-xs text-primary-500">{getProductPartNumber(item.product)} - Stock: {formatNumber(currentQty)}</p>
                     </div>
                     {addQty > 0 && (
                         <div className="text-right flex-shrink-0">
@@ -134,7 +156,7 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct }) {
 }
 
 const AddStockModal = ({ isOpen, onClose, onSave }) => {
-    const { findProduct } = useDataStore();
+    const { findProduct, products } = useDataStore();
     const emptyItem = () => ({ product: null, searchQuery: '', quantity: '' });
     const [bulkItems, setBulkItems] = useState([emptyItem()]);
     const [supplier, setSupplier] = useState(EMPTY_SUPPLIER);
@@ -202,7 +224,7 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                     reason: supplier.reason.trim() || 'Stock receiving',
                     _bulkMode: true,
                 });
-                results.push({ name: item.product.name, sku: item.product.sku, qty });
+                results.push({ name: item.product.name, sku: getProductPartNumber(item.product), qty });
                 setSubmitProgress({ done: i + 1, total: validBulkItems.length });
             }
             setBulkResults(results);
@@ -239,7 +261,7 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                 ) : (
                     <>
                         <p className="text-sm text-primary-500">
-                            Scan barcodes or type Part Numbers (SKU) to add stock to existing products. Register brand-new products from Product Management.
+                            Scan barcodes or type part numbers to add stock to existing products. Register brand-new products from Product Management.
                         </p>
 
                         <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
@@ -251,6 +273,7 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                                     onUpdate={updateBulkItem}
                                     onRemove={removeBulkItem}
                                     findProduct={findProduct}
+                                    products={products}
                                 />
                             ))}
                         </div>

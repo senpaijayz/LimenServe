@@ -410,6 +410,15 @@ function normalizeSku(value, fallbackPrefix = 'SKU') {
   return normalized || `${fallbackPrefix}-${Date.now().toString(36).toUpperCase()}`;
 }
 
+function normalizePartNumber(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
 function mergeProductMetadata(currentMetadata = {}, patch = {}) {
   const base = currentMetadata && typeof currentMetadata === 'object' ? currentMetadata : {};
   return Object.entries(patch).reduce((metadata, [key, value]) => {
@@ -2752,7 +2761,7 @@ router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, r
 router.post('/products', requireRole('admin'), async (req, res, next) => {
   try {
     const name = normalizeRequiredText(req.body?.name, 220);
-    const sku = normalizeSku(req.body?.sku, 'PRD');
+    const sku = normalizePartNumber(req.body?.sku);
     const category = normalizeRequiredText(req.body?.category, 140);
     const modelName = normalizeOptionalText(req.body?.model, 140);
     const brand = normalizeOptionalText(req.body?.brand, 80) || 'Mitsubishi';
@@ -2764,8 +2773,8 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
     const imageUrl = normalizeOptionalText(req.body?.imageUrl, 1000);
     const price = parsePrice(req.body?.price);
 
-    if (!name || !category) {
-      res.status(400).json({ error: 'Product name and category are required.' });
+    if (!name || !category || !sku) {
+      res.status(400).json({ error: 'Product name, part number, and category are required.' });
       return;
     }
 
@@ -2815,7 +2824,7 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
 
     if (productError) {
       if (productError.code === '23505') {
-        res.status(409).json({ error: 'A product with this SKU already exists.' });
+        res.status(409).json({ error: 'A product with this part number already exists.' });
         return;
       }
       throw productError;
@@ -2887,7 +2896,7 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
   try {
     const productId = String(req.params.productId || '').trim();
     const name = normalizeRequiredText(req.body?.name, 220);
-    const sku = normalizeSku(req.body?.sku, 'PRD');
+    const sku = normalizePartNumber(req.body?.sku);
     const category = normalizeRequiredText(req.body?.category, 140);
     const modelName = normalizeOptionalText(req.body?.model, 140);
     const brand = normalizeOptionalText(req.body?.brand, 80) || 'Mitsubishi';
@@ -2904,8 +2913,8 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
       return;
     }
 
-    if (!name || !category) {
-      res.status(400).json({ error: 'Product name and category are required.' });
+    if (!name || !category || !sku) {
+      res.status(400).json({ error: 'Product name, part number, and category are required.' });
       return;
     }
 
@@ -3289,7 +3298,7 @@ router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next)
     const effectiveFrom = req.body?.effectiveFrom || new Date().toISOString().slice(0, 10);
 
     if (items.length === 0) {
-      return res.status(400).json({ error: 'Provide at least one valid SKU and price.' });
+      return res.status(400).json({ error: 'Provide at least one valid part number and price.' });
     }
 
     const uniqueItems = Array.from(
@@ -3312,7 +3321,7 @@ router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next)
     const skippedItems = uniqueItems.filter((item) => !productMap.has(item.sku));
 
     if (matchedItems.length === 0) {
-      return res.status(404).json({ error: 'No matching SKUs were found in the catalog.', skippedItems });
+      return res.status(404).json({ error: 'No matching part numbers were found in the catalog.', skippedItems });
     }
 
     const matchedProductIds = matchedItems.map((item) => productMap.get(item.sku).id);

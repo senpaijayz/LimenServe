@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 import useDataStore from '../../store/useDataStore';
+import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../utils/barcode';
 
 const searchableOrders = [
     { id: 'SVC-001', name: 'Juan Dela Cruz - Oil Change', status: 'in_progress', type: 'service' },
@@ -72,7 +73,7 @@ const GlobalSearch = () => {
         const searchableProducts = storeProducts.map(p => ({
             id: `p${p.id}`,
             name: p.name,
-            sku: p.sku,
+            sku: getProductPartNumber(p),
             price: p.price,
             category: p.category,
             model: p.model,
@@ -80,9 +81,7 @@ const GlobalSearch = () => {
         }));
 
         const q = query.toLowerCase();
-        const products = searchableProducts.filter(p =>
-            p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.category.toLowerCase().includes(q) || (p.model && p.model.toLowerCase().includes(q))
-        ).slice(0, 5);
+        const products = getPartNumberSearchSuggestions(searchableProducts, query, 5);
 
         const orders = searchableOrders.filter(o =>
             o.name.toLowerCase().includes(q) || o.id.toLowerCase().includes(q)
@@ -215,7 +214,7 @@ const GlobalSearch = () => {
                                     <div className="text-center py-12 px-4">
                                         <Search className="w-10 h-10 text-primary-700 mx-auto mb-3" />
                                         <p className="text-sm text-primary-500">No results found for "{query}"</p>
-                                        <p className="text-xs text-primary-600 mt-1">Try searching for a product name, SKU, or page</p>
+                                        <p className="text-xs text-primary-600 mt-1">Try searching for a product name, part number, or page</p>
                                     </div>
                                 )}
 

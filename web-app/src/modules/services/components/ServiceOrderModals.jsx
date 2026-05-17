@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { X, Wrench, User, Phone, Car, FileText, Save, CheckCircle, ArrowRight, Archive, CreditCard, Package, CalendarDays, UserCheck, Printer, Search, Plus, Trash2 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
@@ -6,6 +6,7 @@ import Input from '../../../components/ui/Input';
 import { formatCurrency, formatDateTime, formatRelativeTime } from '../../../utils/formatters';
 import { StatusBadge } from '../../../components/ui/Badge';
 import useDataStore from '../../../store/useDataStore';
+import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 
 const escapeHtml = (value) => String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -148,20 +149,27 @@ const printServiceOrderDocument = ({ order, serviceItems, partItems, orderTotal,
 
 // ── Parts search sub-component ────────────────────────────────────────────────
 function PartSearch({ onAdd }) {
-    const { findProduct } = useDataStore();
+    const { findProduct, products } = useDataStore();
     const [query, setQuery] = useState('');
     const [result, setResult] = useState(null);
     const [qty, setQty] = useState('1');
     const [unitPrice, setUnitPrice] = useState('');
     const [searching, setSearching] = useState(false);
     const [notFound, setNotFound] = useState(false);
+    const suggestions = useMemo(() => getPartNumberSearchSuggestions(products || [], query, 5), [products, query]);
 
     useEffect(() => {
         const id = query.trim();
-        if (!id) { setResult(null); setNotFound(false); return; }
         let active = true;
-        setSearching(true);
         void (async () => {
+            if (!id) {
+                if (!active) return;
+                setResult(null);
+                setNotFound(false);
+                setSearching(false);
+                return;
+            }
+            setSearching(true);
             const found = await findProduct(id);
             if (!active) return;
             if (found) { setResult(found); setUnitPrice(String(found.price ?? '')); setNotFound(false); }
@@ -184,9 +192,30 @@ function PartSearch({ onAdd }) {
             <div className="flex gap-2">
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
-                    <input type="text" placeholder="Search by SKU or part name..." value={query}
+                    <input type="text" placeholder="Search by part number or part name..." value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         className="w-full pl-10 pr-3 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/10 bg-white" />
+                    {query.trim() && suggestions.length > 0 && (
+                        <div className="absolute z-20 mt-2 max-h-48 w-full overflow-y-auto rounded-xl border border-primary-200 bg-white py-1 shadow-lg">
+                            {suggestions.map((product) => (
+                                <button
+                                    key={product.id}
+                                    type="button"
+                                    onClick={() => {
+                                        const partNumber = getProductPartNumber(product);
+                                        setQuery(partNumber);
+                                        setResult(product);
+                                        setUnitPrice(String(product.price ?? ''));
+                                        setNotFound(false);
+                                    }}
+                                    className="flex w-full flex-col px-3 py-2 text-left transition hover:bg-primary-50"
+                                >
+                                    <span className="truncate text-sm font-semibold text-primary-950">{product.name}</span>
+                                    <span className="font-mono text-xs text-primary-500">{getProductPartNumber(product) || 'No part number'} · Stock: {product.quantity ?? product.stock ?? 0}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
             {searching && <p className="text-xs text-primary-400">Searching catalog...</p>}
@@ -197,7 +226,7 @@ function PartSearch({ onAdd }) {
                         <Package className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                         <div className="min-w-0">
                             <p className="text-sm font-bold text-primary-950 truncate">{result.name}</p>
-                            <p className="text-xs font-mono text-primary-500">{result.sku} · Stock: {result.quantity ?? result.stock ?? 0}</p>
+                            <p className="text-xs font-mono text-primary-500">{getProductPartNumber(result)} · Stock: {result.quantity ?? result.stock ?? 0}</p>
                         </div>
                     </div>
                     <div className="grid grid-cols-3 gap-2">

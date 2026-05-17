@@ -57,7 +57,7 @@ const PriceListManager = ({ onUpdated }) => {
         try {
             const currentPriceList = await getCurrentRetailPriceList();
             const rows = [
-                ['SKU', 'PRICE', 'NAME', 'MODEL', 'CATEGORY'],
+                ['PART_NUMBER', 'PRICE', 'NAME', 'MODEL', 'CATEGORY'],
                 ...currentPriceList.map((item) => [item.sku, item.price, item.name, item.model, item.category]),
             ];
             downloadCsv('limen-price-list-template.csv', rows);
@@ -83,7 +83,7 @@ const PriceListManager = ({ onUpdated }) => {
         submitEvent.preventDefault();
 
         if (parsedItems.length === 0) {
-            error('Add at least one valid SKU and price before uploading.');
+            error('Add at least one valid part number and price before uploading.');
             return;
         }
 
@@ -123,7 +123,7 @@ const PriceListManager = ({ onUpdated }) => {
                     <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4">
                         <p className="text-sm font-semibold text-primary-950">Supabase retail price source</p>
                         <p className="mt-1 text-sm text-primary-600">
-                            Paste a full yearly price list using <span className="font-semibold">SKU,PRICE</span> per line. The upload replaces the current retail prices in Supabase and keeps price history in <span className="font-semibold">app.product_prices</span>.
+                            Paste a full yearly price list using <span className="font-semibold">PART_NUMBER,PRICE</span> per line. The upload replaces the current retail prices in Supabase and keeps price history in <span className="font-semibold">app.product_prices</span>.
                         </p>
                     </div>
 
@@ -162,7 +162,7 @@ const PriceListManager = ({ onUpdated }) => {
                     </div>
 
                     <div>
-                        <label className="input-label">SKU and price list</label>
+                        <label className="input-label">Part number and price list</label>
                         <textarea
                             value={bulkText}
                             onChange={(event) => setBulkText(event.target.value)}
@@ -183,7 +183,7 @@ const PriceListManager = ({ onUpdated }) => {
                             <p>Effective from: {lastResult.effectiveFrom}</p>
                             {lastResult.skippedItems?.length > 0 && (
                                 <p className="mt-2 text-accent-danger">
-                                    Missing SKUs: {lastResult.skippedItems.map((item) => item.sku).join(', ')}
+                                    Missing part numbers: {lastResult.skippedItems.map((item) => item.sku).join(', ')}
                                 </p>
                             )}
                         </div>

@@ -4,7 +4,7 @@ import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Dropdown from '../../../components/ui/Dropdown';
 import { getInventoryMovements } from '../../../services/catalogApi';
-import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
+import { formatDateTime, formatNumber } from '../../../utils/formatters';
 
 const MOVEMENT_LABELS = {
     stock_in: 'Stock In',
@@ -57,7 +57,7 @@ function isWithinRange(dateStr, range) {
 }
 
 function exportToExcel(movements) {
-    const headers = ['#', 'Product', 'SKU', 'Action', 'Prev Stock', 'Change', 'New Stock', 'Supplier', 'Reference', 'Staff', 'Date/Time', 'Notes'];
+    const headers = ['#', 'Product', 'Part Number', 'Action', 'Prev Stock', 'Change', 'New Stock', 'Supplier', 'Reference', 'Staff', 'Date/Time', 'Notes'];
     const rows = movements.map((m, i) => [
         i + 1,
         m.productName || 'Unknown',
@@ -118,9 +118,9 @@ function printLogs(movements) {
         @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
     </style></head><body>
     <header><div><h1>Inventory Movement Logs</h1><p>Limen Auto Supply and Services</p><p>Generated: ${formatDateTime(new Date())}</p></div><div style="text-align:right"><p><strong>${movements.length}</strong> records</p></div></header>
-    <table><thead><tr><th>#</th><th>Product / SKU</th><th>Action</th><th>Prev</th><th>Change</th><th>New</th><th>Supplier</th><th>Reference</th><th>Staff</th><th>Date</th></tr></thead>
+    <table><thead><tr><th>#</th><th>Product / Part Number</th><th>Action</th><th>Prev</th><th>Change</th><th>New</th><th>Supplier</th><th>Reference</th><th>Staff</th><th>Date</th></tr></thead>
     <tbody>${rows}</tbody></table>
-    <script>window.onload=()=>{window.focus();window.print();}<\/script></body></html>`);
+    <script>window.onload=()=>{window.focus();window.print();}</script></body></html>`);
     win.document.close();
 }
 
@@ -214,7 +214,7 @@ export default function InventoryLogs() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                         <input
                             type="text"
-                            placeholder="Search product, SKU, staff, reference..."
+                            placeholder="Search product, part number, staff, reference..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             className="w-full pl-10 pr-4 py-2.5 bg-white border border-primary-200 rounded-xl text-sm text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/10 shadow-sm"
@@ -252,7 +252,7 @@ export default function InventoryLogs() {
                         <table className="min-w-full text-sm">
                             <thead className="bg-primary-50 border-b border-primary-100">
                                 <tr>
-                                    {['#', 'Product / SKU', 'Action', 'Prev Stock', 'Change', 'New Stock', 'Supplier', 'Reference', 'Staff', 'Date & Time', 'Notes'].map((h) => (
+                                    {['#', 'Product / Part Number', 'Action', 'Prev Stock', 'Change', 'New Stock', 'Supplier', 'Reference', 'Staff', 'Date & Time', 'Notes'].map((h) => (
                                         <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.12em] text-primary-400 whitespace-nowrap">{h}</th>
                                     ))}
                                 </tr>

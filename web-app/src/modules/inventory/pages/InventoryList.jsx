@@ -18,7 +18,7 @@ import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
 import { getCatalogSummary, getProductStockHistory, receiveInventoryStock, updateCatalogProduct } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
-import { productMatchesIdentifier } from '../../../utils/barcode';
+import { getPartNumberSearchSuggestions, getProductPartNumber, productMatchesIdentifier } from '../../../utils/barcode';
 import { buildLocator3DUrl } from '../../locator3d/utils/locatorNavigation';
 
 const PAGE_SIZE = 12;
@@ -353,6 +353,7 @@ const InventoryList = () => {
             return 0;
         });
     }, [filteredProducts, sortConfig]);
+    const partNumberSuggestions = useMemo(() => getPartNumberSearchSuggestions(visibleProducts, searchQuery, 5), [searchQuery, visibleProducts]);
 
     const handleSort = (key) => {
         setSortConfig((current) => {
@@ -507,7 +508,7 @@ const InventoryList = () => {
                     <div className="min-w-0">
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500 mb-0.5">Total Products</p>
                         <p className="text-2xl font-bold font-display text-primary-950 leading-none">{formatNumber(totalProducts)}</p>
-                        <p className="text-xs text-primary-400 mt-1">{formatNumber(uniqueProducts)} unique SKUs loaded</p>
+                        <p className="text-xs text-primary-400 mt-1">{formatNumber(uniqueProducts)} unique part numbers loaded</p>
                     </div>
                 </div>
 
@@ -546,7 +547,7 @@ const InventoryList = () => {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                         <input
                             type="text"
-                            placeholder="Search products or scan barcode..."
+                            placeholder="Search part number, product, or scan barcode..."
                             value={searchQuery}
                             onChange={(event) => handleSearchQueryChange(event.target.value)}
                             onKeyDown={(event) => {
@@ -556,6 +557,25 @@ const InventoryList = () => {
                             }}
                             className="w-full pl-10 pr-4 py-2.5 bg-white border border-primary-200 rounded-xl text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/10 shadow-sm text-sm"
                         />
+                        {searchQuery.trim() && partNumberSuggestions.length > 0 && (
+                            <div className="absolute z-20 mt-2 max-h-48 w-full overflow-y-auto rounded-xl border border-primary-200 bg-white py-1 shadow-lg">
+                                {partNumberSuggestions.map((product) => (
+                                    <button
+                                        key={product.catalogEntryId || product.id}
+                                        type="button"
+                                        onClick={() => {
+                                            const partNumber = getProductPartNumber(product);
+                                            handleSearchQueryChange(partNumber);
+                                            openPreview(product);
+                                        }}
+                                        className="flex w-full flex-col px-3 py-2 text-left transition hover:bg-primary-50"
+                                    >
+                                        <span className="truncate text-sm font-semibold text-primary-950">{product.name}</span>
+                                        <span className="font-mono text-xs text-primary-500">{getProductPartNumber(product) || 'No part number'} · Stock: {formatNumber(product.quantity ?? product.stock ?? 0)}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
                     <Button
                         variant="secondary"
@@ -665,7 +685,7 @@ const InventoryList = () => {
                         <table className="table">
                             <thead>
                                 <tr>
-                                    {[{ key: 'name', label: 'Product', align: 'left' }, { key: 'sku', label: 'SKU', align: 'left' }, { key: 'category', label: 'Category', align: 'left' }, { key: 'price', label: 'Price', align: 'right' }, { key: 'quantity', label: 'Qty', align: 'right' }].map(({ key, label, align }) => (
+                                    {[{ key: 'name', label: 'Product', align: 'left' }, { key: 'sku', label: 'Part Number', align: 'left' }, { key: 'category', label: 'Category', align: 'left' }, { key: 'price', label: 'Price', align: 'right' }, { key: 'quantity', label: 'Qty', align: 'right' }].map(({ key, label, align }) => (
                                         <th key={key} className={`cursor-pointer select-none ${align === 'right' ? 'text-right' : 'text-left'}`}>
                                             <button
                                                 type="button"
@@ -699,7 +719,7 @@ const InventoryList = () => {
                                         onClick={() => openPreview(product)}
                                     >
                                         <td className="font-bold text-primary-950 border-b border-primary-100 py-3">{product.name}</td>
-                                        <td className="font-mono text-sm text-primary-500 border-b border-primary-100 py-3">{product.sku}</td>
+                                        <td className="font-mono text-sm text-primary-500 border-b border-primary-100 py-3">{getProductPartNumber(product)}</td>
                                         <td className="border-b border-primary-100 py-3 text-primary-700">{product.category}</td>
                                         <td className="text-right border-b border-primary-100 py-3 font-semibold text-accent-blue">{formatCurrency(product.price)}</td>
                                         <td className="text-right border-b border-primary-100 py-3 text-primary-900 font-bold">{product.quantity}</td>
@@ -819,8 +839,8 @@ const InventoryList = () => {
                         handleSearchQueryChange(barcode);
                         success(`Scanned: ${barcode}`);
                         const matchedProduct = await lookupAndPreviewProduct(barcode);
-                        if (matchedProduct?.sku) {
-                            handleSearchQueryChange(matchedProduct.sku);
+                        if (matchedProduct) {
+                            handleSearchQueryChange(getProductPartNumber(matchedProduct));
                         }
                     }
                 }}

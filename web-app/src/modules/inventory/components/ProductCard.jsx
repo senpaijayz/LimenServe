@@ -2,6 +2,7 @@ import { motion as Motion } from 'framer-motion';
 import { MapPin, Edit2, Trash2 } from 'lucide-react';
 import { StockBadge } from '../../../components/ui/Badge';
 import { formatCurrency } from '../../../utils/formatters';
+import { getProductPartNumber } from '../../../utils/barcode';
 import MitsubishiGenuinePartsLabel from './MitsubishiGenuinePartsLabel';
 
 function formatLocation(location = {}) {
@@ -76,7 +77,7 @@ const ProductCard = ({ product, onEdit, onDelete, onSelect }) => {
                     <h3 className="font-semibold text-primary-950 line-clamp-2 mb-1">
                         {product.name}
                     </h3>
-                    <p className="text-xs font-mono text-primary-500">{product.sku}</p>
+                    <p className="text-xs font-mono text-primary-500">{getProductPartNumber(product)}</p>
                 </div>
 
                 <div className="flex items-baseline gap-2">
