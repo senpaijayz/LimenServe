@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AlertTriangle, Download, FilePlus2, Filter, Receipt, RefreshCw, TrendingUp } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
@@ -36,6 +37,10 @@ function isDemoSale(sale) {
     return transactionNumber.startsWith('SALE-DEMO-')
         || customerName.toLowerCase().startsWith('demo customer')
         || originalReference.toUpperCase().startsWith('DEMO-');
+}
+
+function getSaleTimestamp(sale) {
+    return sale?.saleAt || sale?.sale_at || sale?.business_date || sale?.created_at || null;
 }
 
 function escapeHtml(value) {
@@ -99,7 +104,7 @@ function buildPrintableSalesReport({
     ]);
     const ledgerRows = exportedSales.map((sale) => [
         sale.transaction_number || '',
-        formatDateTime(sale.saleAt || sale.sale_at || sale.created_at),
+        formatDateTime(getSaleTimestamp(sale)),
         sale.customer_name || '',
         sale.cashier_name || '',
         sale.sourceType === 'historical_encoded' || sale.source_type === 'historical_encoded' ? 'Historical' : 'POS',
@@ -373,6 +378,7 @@ const SalesReport = () => {
     const [isHistoricalEditorOpen, setIsHistoricalEditorOpen] = useState(false);
     const [editingHistoricalSale, setEditingHistoricalSale] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
+    const [historySort, setHistorySort] = useState({ key: 'date', dir: 'desc' });
     const activeSaleRequestRef = useRef(null);
 
     const loadAnalytics = useCallback(async () => {
@@ -483,6 +489,32 @@ const SalesReport = () => {
     const topLeader = topSellingItems[0];
     const peakLeader = peakPeriods[0];
     const trendRevenue = useMemo(() => itemTrend.reduce((sum, item) => sum + Number(item.revenue ?? 0), 0), [itemTrend]);
+    const salesByCategory = useMemo(() => {
+        const grouped = topSellingItems.reduce((map, item) => {
+            const category = item.category || 'Uncategorized';
+            const existing = map.get(category) || { category, revenue: 0, quantity: 0 };
+            existing.revenue += Number(item.revenue ?? 0);
+            existing.quantity += Number(item.quantity ?? 0);
+            map.set(category, existing);
+            return map;
+        }, new Map());
+
+        return Array.from(grouped.values()).sort((left, right) => right.revenue - left.revenue);
+    }, [topSellingItems]);
+    const sortedSalesHistory = useMemo(() => {
+        const multiplier = historySort.dir === 'asc' ? 1 : -1;
+        return [...salesHistory].sort((left, right) => {
+            if (historySort.key === 'total') {
+                return (Number(left.total_amount ?? 0) - Number(right.total_amount ?? 0)) * multiplier;
+            }
+
+            if (historySort.key === 'receipt') {
+                return String(left.transaction_number || '').localeCompare(String(right.transaction_number || '')) * multiplier;
+            }
+
+            return (new Date(getSaleTimestamp(left) || 0).getTime() - new Date(getSaleTimestamp(right) || 0).getTime()) * multiplier;
+        });
+    }, [historySort, salesHistory]);
 
     const handleExport = useCallback(async () => {
         setIsExporting(true);
@@ -635,6 +667,26 @@ const SalesReport = () => {
 
             <SalesChart data={itemTrend} title="Item-Level Sales Trend" subtitle="Revenue and units sold over the selected period" />
 
+            <Card title="Sales By Category" subtitle="Dedicated category revenue graph from the selected sales period.">
+                <div className="h-80">
+                    {salesByCategory.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={salesByCategory} margin={{ top: 12, right: 16, bottom: 32, left: 8 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="category" angle={-18} textAnchor="end" height={72} interval={0} tick={{ fontSize: 11 }} />
+                                <YAxis tickFormatter={(value) => formatNumber(value)} width={72} />
+                                <Tooltip formatter={(value, name) => [name === 'revenue' ? formatCurrency(value) : formatNumber(value), name === 'revenue' ? 'Revenue' : 'Units']} />
+                                <Bar dataKey="revenue" fill="#1d4ed8" radius={[6, 6, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    ) : (
+                        <div className="flex h-full items-center justify-center rounded-xl border border-primary-200 bg-primary-50 text-sm text-primary-500">
+                            No category sales data matched the selected filters.
+                        </div>
+                    )}
+                </div>
+            </Card>
+
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                 <Card title="Top-Selling Items" subtitle="Best performing items in the selected time frame">
                     <div className="grid gap-3 md:hidden">
@@ -784,7 +836,7 @@ const SalesReport = () => {
                 )}
 
                 <div className="grid gap-3 md:hidden">
-                    {salesHistory.map((sale) => (
+                    {sortedSalesHistory.map((sale) => (
                         <button
                             type="button"
                             key={sale.sale_id}
@@ -795,7 +847,7 @@ const SalesReport = () => {
                                 <div>
                                     <p className="font-semibold text-primary-950">{sale.transaction_number}</p>
                                     <p className="mt-1 text-sm text-primary-500">{sale.customer_name}</p>
-                                    <p className="text-xs text-primary-400">{formatDateTime(sale.saleAt || sale.sale_at || sale.created_at)}</p>
+                                    <p className="text-xs text-primary-400">{formatDateTime(getSaleTimestamp(sale))}</p>
                                 </div>
                                 <p className="font-semibold text-accent-blue">{formatCurrency(sale.total_amount)}</p>
                             </div>
@@ -815,7 +867,7 @@ const SalesReport = () => {
                             </div>
                         </button>
                     ))}
-                    {!historyLoading && salesHistory.length === 0 && (
+                    {!historyLoading && sortedSalesHistory.length === 0 && (
                         <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-6 text-center text-sm text-primary-500">
                             No sales matched the selected filters yet.
                         </div>
@@ -843,7 +895,7 @@ const SalesReport = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {salesHistory.map((sale) => (
+                            {sortedSalesHistory.map((sale) => (
                                 <tr
                                     key={sale.sale_id}
                                     onClick={() => handleOpenSale(sale.sale_id)}
@@ -857,7 +909,7 @@ const SalesReport = () => {
                                             </span>
                                         </div>
                                     </td>
-                                    <td>{formatDateTime(sale.saleAt || sale.sale_at || sale.created_at)}</td>
+                                    <td>{formatDateTime(getSaleTimestamp(sale))}</td>
                                     <td>{sale.customer_name}</td>
                                     <td>{sale.cashier_name}</td>
                                     <td>
@@ -878,7 +930,7 @@ const SalesReport = () => {
                                     <td className="text-right font-medium text-accent-blue">{formatCurrency(sale.total_amount)}</td>
                                 </tr>
                             ))}
-                            {!historyLoading && salesHistory.length === 0 && (
+                            {!historyLoading && sortedSalesHistory.length === 0 && (
                                 <tr>
                                     <td colSpan="9" className="py-8 text-center text-primary-500">No sales matched the selected filters yet.</td>
                                 </tr>
@@ -890,6 +942,29 @@ const SalesReport = () => {
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 border-t border-primary-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Sort sales table</p>
+                    <div className="grid gap-2 sm:grid-cols-[160px_140px]">
+                        <select
+                            className="input py-2.5 text-sm"
+                            value={historySort.key}
+                            onChange={(event) => setHistorySort((current) => ({ ...current, key: event.target.value }))}
+                        >
+                            <option value="date">Actual date</option>
+                            <option value="receipt">Receipt</option>
+                            <option value="total">Total</option>
+                        </select>
+                        <select
+                            className="input py-2.5 text-sm"
+                            value={historySort.dir}
+                            onChange={(event) => setHistorySort((current) => ({ ...current, dir: event.target.value }))}
+                        >
+                            <option value="desc">Descending</option>
+                            <option value="asc">Ascending</option>
+                        </select>
+                    </div>
                 </div>
             </Card>
 

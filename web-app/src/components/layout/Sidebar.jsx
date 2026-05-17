@@ -7,8 +7,11 @@ import {
     FileText,
     Wrench,
     Box,
+    Boxes,
     BarChart3,
     Users,
+    Truck,
+    Tags,
     ChevronLeft,
     LogOut,
     X,
@@ -25,8 +28,11 @@ const iconMap = {
     FileText,
     Wrench,
     Box,
+    Boxes,
     BarChart3,
     Users,
+    Truck,
+    Tags,
 };
 
 /**

@@ -394,6 +394,32 @@ function buildStockReceiveNotes({ supplierName, referenceNumber, reason }) {
   ].filter(Boolean).join(' | ');
 }
 
+function buildOperationalReference(prefix = 'REF', date = new Date()) {
+  const stamp = date.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+  return `${prefix}-${stamp}`;
+}
+
+function normalizeSku(value, fallbackPrefix = 'SKU') {
+  const normalized = String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+
+  return normalized || `${fallbackPrefix}-${Date.now().toString(36).toUpperCase()}`;
+}
+
+function mergeProductMetadata(currentMetadata = {}, patch = {}) {
+  const base = currentMetadata && typeof currentMetadata === 'object' ? currentMetadata : {};
+  return Object.entries(patch).reduce((metadata, [key, value]) => {
+    if (value !== undefined) {
+      metadata[key] = value === '' ? null : value;
+    }
+    return metadata;
+  }, { ...base });
+}
+
 function mapCatalogRow(row) {
   const sourceCategory = row.source_category
     ?? row.sourceCategory
@@ -430,8 +456,186 @@ function mapCatalogRow(row) {
     uom: row.uom,
     brand: row.brand,
     location: row.location ?? {},
+    supplierId: row.supplier_id ?? row.supplierId ?? row.metadata?.supplierId ?? null,
+    supplierName: row.supplier_name ?? row.supplierName ?? row.metadata?.supplierName ?? null,
+    categoryId: row.category_id ?? row.categoryId ?? row.metadata?.categoryId ?? null,
+    imageUrl: row.image_url ?? row.imageUrl ?? row.metadata?.imageUrl ?? row.metadata?.primaryImageUrl ?? null,
     metadata: row.metadata ?? {},
   };
+}
+
+function mapSupplierRow(row = {}) {
+  return {
+    id: row.id,
+    supplierId: row.supplier_code ?? row.supplierId ?? row.id,
+    name: row.name ?? '',
+    contactName: row.contact_name ?? row.contactName ?? '',
+    phone: row.phone ?? '',
+    email: row.email ?? '',
+    address: row.address ?? '',
+    notes: row.notes ?? '',
+    createdAt: row.created_at ?? row.createdAt ?? null,
+    updatedAt: row.updated_at ?? row.updatedAt ?? null,
+  };
+}
+
+function mapCategoryRow(row = {}) {
+  return {
+    id: row.id ?? row.value ?? row.name,
+    name: row.name ?? row.label ?? row.value ?? '',
+    description: row.description ?? '',
+    color: row.color ?? '#1d4ed8',
+    count: Number(row.count ?? 0),
+    createdAt: row.created_at ?? row.createdAt ?? null,
+    updatedAt: row.updated_at ?? row.updatedAt ?? null,
+  };
+}
+
+async function listSupplierRows() {
+  const { data, error } = await supabaseAdmin
+    .schema('catalog')
+    .from('suppliers')
+    .select('id, supplier_code, name, contact_name, phone, email, address, notes, created_at, updated_at')
+    .order('name', { ascending: true });
+
+  if (error) {
+    if (isPrivateSchemaAccessError(error) || String(error.message || '').includes('suppliers')) {
+      return [];
+    }
+    throw error;
+  }
+
+  return (data ?? []).map(mapSupplierRow);
+}
+
+async function listCategoryRows() {
+  const { data, error } = await supabaseAdmin
+    .schema('catalog')
+    .from('categories')
+    .select('id, name, description, color, created_at, updated_at')
+    .order('name', { ascending: true });
+
+  if (error) {
+    if (isPrivateSchemaAccessError(error) || String(error.message || '').includes('categories')) {
+      return buildCategoryRows(await getCachedProductCatalog()).map(mapCategoryRow);
+    }
+    throw error;
+  }
+
+  const counts = buildCategoryRows(await getCachedProductCatalog());
+  const countMap = new Map(counts.map((category) => [category.value, category.count]));
+  return (data ?? []).map((category) => mapCategoryRow({
+    ...category,
+    count: countMap.get(category.name) ?? 0,
+  }));
+}
+
+async function upsertProductImage(productId, imageUrl) {
+  if (imageUrl === undefined) {
+    return;
+  }
+
+  const normalizedImageUrl = String(imageUrl || '').trim();
+  try {
+    if (!normalizedImageUrl) {
+      await supabaseAdmin.schema('catalog').from('product_images').delete().eq('product_id', productId);
+      return;
+    }
+
+    await supabaseAdmin
+      .schema('catalog')
+      .from('product_images')
+      .upsert({
+        product_id: productId,
+        image_url: normalizedImageUrl,
+        alt_text: 'Product image',
+        is_primary: true,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'product_id' });
+  } catch (error) {
+    if (!isPrivateSchemaAccessError(error) && !String(error.message || '').includes('product_images')) {
+      throw error;
+    }
+  }
+}
+
+async function linkProductSupplier(productId, supplierId) {
+  if (supplierId === undefined) {
+    return;
+  }
+
+  try {
+    await supabaseAdmin.schema('catalog').from('product_supplier_links').delete().eq('product_id', productId);
+    if (supplierId) {
+      await supabaseAdmin.schema('catalog').from('product_supplier_links').insert({
+        product_id: productId,
+        supplier_id: supplierId,
+      });
+    }
+  } catch (error) {
+    if (!isPrivateSchemaAccessError(error) && !String(error.message || '').includes('product_supplier_links')) {
+      throw error;
+    }
+  }
+}
+
+async function enrichCatalogProducts(products = []) {
+  const productIds = [...new Set(products.map((product) => product.id).filter(Boolean))];
+  if (productIds.length === 0) {
+    return products;
+  }
+
+  const productById = new Map(products.map((product) => [product.id, { ...product }]));
+
+  try {
+    const { data: images, error: imagesError } = await supabaseAdmin
+      .schema('catalog')
+      .from('product_images')
+      .select('product_id, image_url')
+      .in('product_id', productIds)
+      .eq('is_primary', true);
+
+    if (imagesError && !isPrivateSchemaAccessError(imagesError)) {
+      throw imagesError;
+    }
+
+    (imagesError ? [] : (images ?? [])).forEach((image) => {
+      const product = productById.get(image.product_id);
+      if (product) {
+        product.imageUrl = image.image_url;
+      }
+    });
+  } catch (error) {
+    if (!String(error.message || '').includes('product_images')) {
+      throw error;
+    }
+  }
+
+  try {
+    const { data: links, error: linksError } = await supabaseAdmin
+      .schema('catalog')
+      .from('product_supplier_links')
+      .select('product_id, supplier_id, suppliers(id, supplier_code, name)')
+      .in('product_id', productIds);
+
+    if (linksError && !isPrivateSchemaAccessError(linksError)) {
+      throw linksError;
+    }
+
+    (linksError ? [] : (links ?? [])).forEach((link) => {
+      const product = productById.get(link.product_id);
+      if (product) {
+        product.supplierId = link.supplier_id;
+        product.supplierName = link.suppliers?.name ?? product.supplierName ?? null;
+      }
+    });
+  } catch (error) {
+    if (!String(error.message || '').includes('product_supplier_links')) {
+      throw error;
+    }
+  }
+
+  return products.map((product) => productById.get(product.id) ?? product);
 }
 
 function mapPricelistStagingRow(row, productBySku = new Map(), balanceByProductId = new Map()) {
@@ -1976,6 +2180,202 @@ router.get('/vehicle-packages', async (req, res, next) => {
   }
 });
 
+router.get('/suppliers', requireRole('admin', 'stock_clerk'), async (_req, res, next) => {
+  try {
+    res.json({ suppliers: await listSupplierRows() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/suppliers', requireRole('admin'), async (req, res, next) => {
+  try {
+    const name = normalizeRequiredText(req.body?.name, 180);
+    if (!name) {
+      res.status(400).json({ error: 'Supplier name is required.' });
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const supplierCode = normalizeSku(req.body?.supplierId, 'SUP');
+    const { data, error } = await supabaseAdmin
+      .schema('catalog')
+      .from('suppliers')
+      .insert({
+        supplier_code: supplierCode,
+        name,
+        contact_name: normalizeOptionalText(req.body?.contactName, 160),
+        phone: normalizeOptionalText(req.body?.phone, 80),
+        email: normalizeOptionalText(req.body?.email, 160),
+        address: normalizeOptionalText(req.body?.address, 500),
+        notes: normalizeOptionalText(req.body?.notes, 1000),
+        created_at: nowIso,
+        updated_at: nowIso,
+      })
+      .select('id, supplier_code, name, contact_name, phone, email, address, notes, created_at, updated_at')
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    invalidateProductCatalogCache();
+    res.status(201).json({ supplier: mapSupplierRow(data) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/suppliers/:supplierId', requireRole('admin'), async (req, res, next) => {
+  try {
+    const supplierId = String(req.params.supplierId || '').trim();
+    const name = normalizeRequiredText(req.body?.name, 180);
+    if (!supplierId || !name) {
+      res.status(400).json({ error: 'Supplier and supplier name are required.' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .schema('catalog')
+      .from('suppliers')
+      .update({
+        name,
+        contact_name: normalizeOptionalText(req.body?.contactName, 160),
+        phone: normalizeOptionalText(req.body?.phone, 80),
+        email: normalizeOptionalText(req.body?.email, 160),
+        address: normalizeOptionalText(req.body?.address, 500),
+        notes: normalizeOptionalText(req.body?.notes, 1000),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', supplierId)
+      .select('id, supplier_code, name, contact_name, phone, email, address, notes, created_at, updated_at')
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      res.status(404).json({ error: 'Supplier was not found.' });
+      return;
+    }
+
+    invalidateProductCatalogCache();
+    res.json({ supplier: mapSupplierRow(data) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/suppliers/:supplierId', requireRole('admin'), async (req, res, next) => {
+  try {
+    const supplierId = String(req.params.supplierId || '').trim();
+    const { error } = await supabaseAdmin.schema('catalog').from('suppliers').delete().eq('id', supplierId);
+    if (error) {
+      throw error;
+    }
+
+    invalidateProductCatalogCache();
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/categories', requireRole('admin', 'stock_clerk'), async (_req, res, next) => {
+  try {
+    res.json({ categories: await listCategoryRows() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/categories', requireRole('admin'), async (req, res, next) => {
+  try {
+    const name = normalizeRequiredText(req.body?.name, 140);
+    if (!name) {
+      res.status(400).json({ error: 'Category name is required.' });
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const { data, error } = await supabaseAdmin
+      .schema('catalog')
+      .from('categories')
+      .insert({
+        name,
+        description: normalizeOptionalText(req.body?.description, 500),
+        color: normalizeOptionalText(req.body?.color, 20) || '#1d4ed8',
+        created_at: nowIso,
+        updated_at: nowIso,
+      })
+      .select('id, name, description, color, created_at, updated_at')
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    invalidateProductCatalogCache();
+    res.status(201).json({ category: mapCategoryRow(data) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/categories/:categoryId', requireRole('admin'), async (req, res, next) => {
+  try {
+    const categoryId = String(req.params.categoryId || '').trim();
+    const name = normalizeRequiredText(req.body?.name, 140);
+    if (!categoryId || !name) {
+      res.status(400).json({ error: 'Category and category name are required.' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .schema('catalog')
+      .from('categories')
+      .update({
+        name,
+        description: normalizeOptionalText(req.body?.description, 500),
+        color: normalizeOptionalText(req.body?.color, 20) || '#1d4ed8',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', categoryId)
+      .select('id, name, description, color, created_at, updated_at')
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      res.status(404).json({ error: 'Category was not found.' });
+      return;
+    }
+
+    invalidateProductCatalogCache();
+    res.json({ category: mapCategoryRow(data) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/categories/:categoryId', requireRole('admin'), async (req, res, next) => {
+  try {
+    const categoryId = String(req.params.categoryId || '').trim();
+    const { error } = await supabaseAdmin.schema('catalog').from('categories').delete().eq('id', categoryId);
+    if (error) {
+      throw error;
+    }
+
+    invalidateProductCatalogCache();
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/products', async (req, res, next) => {
   try {
     const page = parsePositiveInteger(req.query.page, 1, 10000);
@@ -2029,6 +2429,7 @@ router.get('/products', async (req, res, next) => {
         products = await filterActiveCatalogProducts((pageRows ?? []).map(mapCatalogRow));
         totalCount = Number(pageRows?.[0]?.total_count ?? 0);
       }
+      products = await enrichCatalogProducts(products);
 
       totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
@@ -2060,7 +2461,7 @@ router.get('/products', async (req, res, next) => {
 
       totalCount = sortedProducts.length;
       totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-      products = sortedProducts.slice((page - 1) * pageSize, page * pageSize);
+      products = await enrichCatalogProducts(sortedProducts.slice((page - 1) * pageSize, page * pageSize));
 
       if (includeCategories) {
         const categoryRows = buildCategoryRows(categoryScopedProducts);
@@ -2089,8 +2490,56 @@ router.get('/products', async (req, res, next) => {
 
 router.get('/products/all', async (_req, res, next) => {
   try {
-    const products = await getCachedProductCatalog();
+    const products = await enrichCatalogProducts(await getCachedProductCatalog());
     res.json({ products: products ?? [] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/products/:productId/stock-history', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
+  try {
+    const productId = String(req.params.productId || '').trim();
+    const limit = parsePositiveInteger(req.query.limit, 20, 100);
+    const { data: movements, error: movementsError } = await supabaseAdmin
+      .schema('catalog')
+      .from('inventory_movements')
+      .select('id, product_id, movement_type, quantity, reference_type, notes, performed_by, business_date, created_at')
+      .eq('product_id', productId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (movementsError) {
+      throw movementsError;
+    }
+
+    const userIds = [...new Set((movements ?? []).map((movement) => movement.performed_by).filter(Boolean))];
+    const { data: profiles, error: profilesError } = userIds.length > 0
+      ? await supabaseAdmin.schema('core').from('user_profiles').select('user_id, full_name, email').in('user_id', userIds)
+      : { data: [], error: null };
+
+    if (profilesError && !isPrivateSchemaAccessError(profilesError)) {
+      throw profilesError;
+    }
+
+    const profileMap = new Map((profilesError ? [] : (profiles ?? [])).map((profile) => [profile.user_id, profile]));
+
+    res.json({
+      history: (movements ?? []).map((movement) => {
+        const profile = profileMap.get(movement.performed_by) ?? {};
+        return {
+          id: movement.id,
+          productId: movement.product_id,
+          movementType: movement.movement_type,
+          quantity: Number(movement.quantity ?? 0),
+          referenceType: movement.reference_type,
+          notes: movement.notes,
+          performedBy: profile.full_name || profile.email || 'System',
+          businessDate: movement.business_date,
+          createdAt: movement.created_at,
+        };
+      }),
+    });
   } catch (error) {
     next(error);
   }
@@ -2138,8 +2587,9 @@ router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, r
   try {
     const productId = String(req.body?.productId || '').trim();
     const quantity = parsePositiveStockQuantity(req.body?.quantity);
+    const supplierId = String(req.body?.supplierId || '').trim() || null;
     const supplierName = String(req.body?.supplierName || '').trim();
-    const referenceNumber = String(req.body?.referenceNumber || '').trim();
+    const referenceNumber = String(req.body?.referenceNumber || '').trim() || buildOperationalReference('RCV');
     const reason = String(req.body?.reason || '').trim();
 
     if (!productId) {
@@ -2187,6 +2637,7 @@ router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, r
     const previousStock = Number(currentBalance?.on_hand ?? 0);
     const updatedStock = Number((previousStock + quantity).toFixed(2));
     const nowIso = new Date().toISOString();
+    let effectiveSupplierId = supplierId;
 
     const { error: upsertError } = await supabaseAdmin
       .schema('catalog')
@@ -2207,6 +2658,35 @@ router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, r
       throw upsertError;
     }
 
+    if (!effectiveSupplierId && supplierName) {
+      try {
+        const { data: supplier, error: supplierError } = await supabaseAdmin
+          .schema('catalog')
+          .from('suppliers')
+          .upsert({
+            supplier_code: normalizeSku(`SUP-${supplierName}`, 'SUP'),
+            name: supplierName,
+            phone: normalizeOptionalText(req.body?.supplierContact, 80),
+            address: normalizeOptionalText(req.body?.supplierAddress, 500),
+            updated_at: nowIso,
+          }, { onConflict: 'supplier_code' })
+          .select('id')
+          .single();
+
+        if (supplierError && !isPrivateSchemaAccessError(supplierError)) {
+          throw supplierError;
+        }
+
+        effectiveSupplierId = supplier?.id ?? effectiveSupplierId;
+      } catch (error) {
+        if (!String(error.message || '').includes('suppliers')) {
+          throw error;
+        }
+      }
+    }
+
+    await linkProductSupplier(productId, effectiveSupplierId);
+
     const { data: movement, error: movementError } = await supabaseAdmin
       .schema('catalog')
       .from('inventory_movements')
@@ -2225,6 +2705,25 @@ router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, r
 
     if (movementError) {
       throw movementError;
+    }
+
+    try {
+      await supabaseAdmin.schema('catalog').from('stock_receiving_logs').insert({
+        product_id: productId,
+        supplier_id: effectiveSupplierId,
+        quantity_added: quantity,
+        previous_stock: previousStock,
+        updated_stock: updatedStock,
+        reference_number: referenceNumber,
+        received_date: req.body?.receivedDate || nowIso.slice(0, 10),
+        notes: reason || null,
+        performed_by: req.user?.id || null,
+        movement_id: movement.id,
+      });
+    } catch (error) {
+      if (!isPrivateSchemaAccessError(error) && !String(error.message || '').includes('stock_receiving_logs')) {
+        throw error;
+      }
     }
 
     invalidateProductCatalogCache();
@@ -2253,17 +2752,20 @@ router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, r
 router.post('/products', requireRole('admin'), async (req, res, next) => {
   try {
     const name = normalizeRequiredText(req.body?.name, 220);
-    const sku = normalizeRequiredText(req.body?.sku, 80)?.toUpperCase();
+    const sku = normalizeSku(req.body?.sku, 'PRD');
     const category = normalizeRequiredText(req.body?.category, 140);
     const modelName = normalizeOptionalText(req.body?.model, 140);
     const brand = normalizeOptionalText(req.body?.brand, 80) || 'Mitsubishi';
     const uom = normalizeOptionalText(req.body?.uom, 20) || 'PC';
     const status = normalizeOptionalText(req.body?.status, 40) || 'in_stock';
     const sourceCategory = normalizeOptionalText(req.body?.sourceCategory, 140);
+    const supplierId = normalizeOptionalText(req.body?.supplierId, 80);
+    const supplierName = normalizeOptionalText(req.body?.supplierName, 180);
+    const imageUrl = normalizeOptionalText(req.body?.imageUrl, 1000);
     const price = parsePrice(req.body?.price);
 
-    if (!name || !sku || !category) {
-      res.status(400).json({ error: 'Part number, product name, and category are required.' });
+    if (!name || !category) {
+      res.status(400).json({ error: 'Product name and category are required.' });
       return;
     }
 
@@ -2302,6 +2804,9 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
         source_category: sourceCategory,
         metadata: {
           sourceCategory,
+          supplierId,
+          supplierName,
+          imageUrl,
           classification: classification.trace,
         },
       })
@@ -2352,10 +2857,13 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
       throw balanceError;
     }
 
+    await linkProductSupplier(product.id, supplierId);
+    await upsertProductImage(product.id, imageUrl);
+
     invalidateProductCatalogCache();
 
     res.status(201).json({
-      product: mapCatalogRow({
+      product: (await enrichCatalogProducts([mapCatalogRow({
         id: product.id,
         sku: product.sku,
         name: product.name,
@@ -2368,7 +2876,7 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
         uom: product.uom,
         brand: product.brand,
         metadata: product.metadata ?? {},
-      }),
+      })]))[0],
     });
   } catch (error) {
     next(error);
@@ -2379,13 +2887,16 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
   try {
     const productId = String(req.params.productId || '').trim();
     const name = normalizeRequiredText(req.body?.name, 220);
-    const sku = normalizeRequiredText(req.body?.sku, 80)?.toUpperCase();
+    const sku = normalizeSku(req.body?.sku, 'PRD');
     const category = normalizeRequiredText(req.body?.category, 140);
     const modelName = normalizeOptionalText(req.body?.model, 140);
     const brand = normalizeOptionalText(req.body?.brand, 80) || 'Mitsubishi';
     const uom = normalizeOptionalText(req.body?.uom, 20) || 'PC';
     const status = normalizeOptionalText(req.body?.status, 40) || 'in_stock';
     const sourceCategory = normalizeOptionalText(req.body?.sourceCategory, 140);
+    const supplierId = normalizeOptionalText(req.body?.supplierId, 80);
+    const supplierName = normalizeOptionalText(req.body?.supplierName, 180);
+    const imageUrl = normalizeOptionalText(req.body?.imageUrl, 1000);
     const price = parsePrice(req.body?.price);
 
     if (!productId) {
@@ -2393,8 +2904,8 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
       return;
     }
 
-    if (!name || !sku || !category) {
-      res.status(400).json({ error: 'Part number, product name, and category are required.' });
+    if (!name || !category) {
+      res.status(400).json({ error: 'Product name and category are required.' });
       return;
     }
 
@@ -2419,6 +2930,17 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
       metadata: { sourceCategory },
     });
 
+    const { data: currentProduct, error: currentProductError } = await supabaseAdmin
+      .schema('catalog')
+      .from('products')
+      .select('metadata')
+      .eq('id', productId)
+      .maybeSingle();
+
+    if (currentProductError) {
+      throw currentProductError;
+    }
+
     const { data: product, error: productError } = await supabaseAdmin
       .schema('catalog')
       .from('products')
@@ -2431,10 +2953,13 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
         uom,
         status,
         source_category: sourceCategory,
-        metadata: {
+        metadata: mergeProductMetadata(currentProduct?.metadata, {
           sourceCategory,
+          supplierId,
+          supplierName,
+          imageUrl,
           classification: classification.trace,
-        },
+        }),
         updated_at: nowIso,
       })
       .eq('id', productId)
@@ -2484,10 +3009,13 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
       throw priceError;
     }
 
+    await linkProductSupplier(productId, supplierId);
+    await upsertProductImage(productId, imageUrl);
+
     invalidateProductCatalogCache();
 
     res.json({
-      product: mapCatalogRow({
+      product: (await enrichCatalogProducts([mapCatalogRow({
         id: product.id,
         sku: product.sku,
         name: product.name,
@@ -2500,7 +3028,7 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
         uom: product.uom,
         brand: product.brand,
         metadata: product.metadata ?? {},
-      }),
+      })]))[0],
     });
   } catch (error) {
     next(error);

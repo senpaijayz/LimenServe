@@ -413,6 +413,98 @@ export async function createCatalogProduct(payload) {
   }
 }
 
+export async function getSuppliers() {
+  try {
+    const { data } = await apiClient.get('/catalog/suppliers', {
+      timeout: INVENTORY_API_TIMEOUT_MS,
+    });
+    return data.suppliers ?? [];
+  } catch (error) {
+    extractApiError(error, 'Failed to load suppliers.');
+  }
+}
+
+export async function createSupplier(payload) {
+  try {
+    const { data } = await apiClient.post('/catalog/suppliers', payload, {
+      timeout: INVENTORY_API_TIMEOUT_MS,
+    });
+    clearApiClientCache('/catalog/products');
+    return data.supplier;
+  } catch (error) {
+    extractApiError(error, 'Failed to create supplier.');
+  }
+}
+
+export async function updateSupplier(supplierId, payload) {
+  try {
+    const { data } = await apiClient.patch(`/catalog/suppliers/${supplierId}`, payload, {
+      timeout: INVENTORY_API_TIMEOUT_MS,
+    });
+    clearApiClientCache('/catalog/products');
+    return data.supplier;
+  } catch (error) {
+    extractApiError(error, 'Failed to update supplier.');
+  }
+}
+
+export async function deleteSupplier(supplierId) {
+  try {
+    await apiClient.delete(`/catalog/suppliers/${supplierId}`, {
+      timeout: INVENTORY_API_TIMEOUT_MS,
+    });
+    clearApiClientCache('/catalog/products');
+  } catch (error) {
+    extractApiError(error, 'Failed to delete supplier.');
+  }
+}
+
+export async function getManagedCategories() {
+  try {
+    const { data } = await apiClient.get('/catalog/categories', {
+      timeout: INVENTORY_API_TIMEOUT_MS,
+    });
+    return data.categories ?? [];
+  } catch (error) {
+    extractApiError(error, 'Failed to load categories.');
+  }
+}
+
+export async function createManagedCategory(payload) {
+  try {
+    const { data } = await apiClient.post('/catalog/categories', payload, {
+      timeout: INVENTORY_API_TIMEOUT_MS,
+    });
+    clearApiClientCache('/catalog/products');
+    return data.category;
+  } catch (error) {
+    extractApiError(error, 'Failed to create category.');
+  }
+}
+
+export async function updateManagedCategory(categoryId, payload) {
+  try {
+    const { data } = await apiClient.patch(`/catalog/categories/${categoryId}`, payload, {
+      timeout: INVENTORY_API_TIMEOUT_MS,
+    });
+    clearApiClientCache('/catalog/products');
+    return data.category;
+  } catch (error) {
+    extractApiError(error, 'Failed to update category.');
+  }
+}
+
+export async function deleteManagedCategory(categoryId) {
+  try {
+    await apiClient.delete(`/catalog/categories/${categoryId}`, {
+      timeout: INVENTORY_API_TIMEOUT_MS,
+    });
+    clearApiClientCache('/catalog/products');
+  } catch (error) {
+    extractApiError(error, 'Failed to delete category.');
+  }
+}
+
 export async function receiveInventoryStock(payload) {
   try {
     const { data } = await apiClient.post('/catalog/stock/receive', payload, {
@@ -428,6 +520,18 @@ export async function receiveInventoryStock(payload) {
     return data;
   } catch (error) {
     extractApiError(error, 'Failed to receive stock.');
+  }
+}
+
+export async function getProductStockHistory(productId, limit = 20) {
+  try {
+    const { data } = await apiClient.get(`/catalog/products/${productId}/stock-history`, {
+      params: { limit },
+      timeout: INVENTORY_API_TIMEOUT_MS,
+    });
+    return data.history ?? [];
+  } catch (error) {
+    extractApiError(error, 'Failed to load product stock history.');
   }
 }
 

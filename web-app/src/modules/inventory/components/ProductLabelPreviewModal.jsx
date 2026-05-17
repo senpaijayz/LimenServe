@@ -153,13 +153,18 @@ const ProductLabelPreviewModal = ({
                                 style={{
                                     transform: 'scale(1.08)',
                                     transformOrigin: 'center center',
+                                    width: product.imageUrl ? '100%' : undefined,
                                 }}
                             >
-                                <MitsubishiGenuinePartsLabel
-                                    ref={labelRef}
-                                    product={product}
-                                    quantity={quantity}
-                                />
+                                {product.imageUrl ? (
+                                    <img src={product.imageUrl} alt={product.name} className="mx-auto max-h-[280px] w-full object-contain" />
+                                ) : (
+                                    <MitsubishiGenuinePartsLabel
+                                        ref={labelRef}
+                                        product={product}
+                                        quantity={quantity}
+                                    />
+                                )}
                             </div>
                         </div>
 

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Archive, Boxes, ClipboardList, Download, PackageCheck, Printer, RefreshCw, Eye, EyeOff, ChevronDown, ChevronUp } from 'lucide-react';
+import { Archive, Boxes, ClipboardList, Download, PackageCheck, Printer, RefreshCw } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
 import { getArchivedCatalogProducts, getCatalogSummary, getInventoryMovements } from '../../../services/catalogApi';
 import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
+import { useAuth } from '../../../context/useAuth';
 
 const MOVEMENT_LABELS = {
     stock_in: 'Stock In', stock_out: 'Stock Out', adjustment: 'Adjustment',
@@ -46,185 +47,315 @@ function exportMovementsCsv(movements) {
     a.click(); URL.revokeObjectURL(url);
 }
 
-/* ── Inline printable report section ─────────────────────────── */
-function PrintableReport({ summary, movements, archivedProducts, dateRangeLabel }) {
-    const generatedAt = formatDateTime(new Date());
-    const movedQty = movements.reduce((s, m) => s + Number(m.quantity ?? 0), 0);
-    const uniqueProducts = new Set(movements.map((m) => m.productId).filter(Boolean)).size;
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function renderReportTable(headers, rows, emptyMessage = 'No records') {
+    const safeRows = rows.length > 0 ? rows : [[emptyMessage, ...Array(Math.max(headers.length - 1, 0)).fill('')]];
+    return `
+        <table>
+            <thead>
+                <tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr>
+            </thead>
+            <tbody>
+                ${safeRows.map((row) => `
+                    <tr>${headers.map((_, i) => `<td>${escapeHtml(row[i] ?? '')}</td>`).join('')}</tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+/* ── Build full-page printable HTML (same pattern as SalesReport) ── */
+function buildPrintableInventoryReport({
+    summary,
+    movements,
+    archivedProducts,
+    dateRangeLabel,
+    generatedAt,
+    generatedBy,
+}) {
     const stockInQty = movements.filter(m => m.movementType === 'stock_in').reduce((s, m) => s + Number(m.quantity ?? 0), 0);
     const stockOutQty = movements.filter(m => ['stock_out', 'sale', 'service_usage'].includes(m.movementType)).reduce((s, m) => s + Number(m.quantity ?? 0), 0);
+    const movedQty = movements.reduce((s, m) => s + Number(m.quantity ?? 0), 0);
+    const uniqueProducts = new Set(movements.map((m) => m.productId).filter(Boolean)).size;
 
-    return (
-        <div id="printable-report" className="print-report bg-white rounded-2xl border border-primary-200 shadow-sm overflow-hidden">
-            {/* Report Header */}
-            <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white px-8 py-6 print:bg-slate-900">
-                <div className="flex items-start justify-between gap-6">
-                    <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">LimenServe Inventory Control</p>
-                        <h1 className="mt-2 text-2xl font-bold tracking-tight">Inventory Audit Report</h1>
-                        <p className="mt-1 text-sm text-slate-300">Limen Auto Supply and Services</p>
-                        <p className="text-xs text-slate-400 mt-1">Contact: (0915) 522 5629 | Landline: 0285513518</p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Report Generated</p>
-                        <p className="mt-1 text-sm font-semibold text-white">{generatedAt}</p>
-                        <p className="mt-1 text-xs text-slate-400">Period: {dateRangeLabel}</p>
-                    </div>
-                </div>
+    const movementRows = movements.map((m, idx) => [
+        String(idx + 1),
+        m.productName || '',
+        m.sku || 'NO SKU',
+        MOVEMENT_LABELS[m.movementType] || m.movementType || '',
+        formatNumber(m.quantity),
+        m.referenceType || '—',
+        m.performedBy || 'System',
+        formatDateTime(m.createdAt),
+        m.notes || '—',
+    ]);
+
+    const archivedRows = archivedProducts.map((p) => [
+        p.name || '',
+        p.sku || 'NO SKU',
+        p.category || '—',
+        formatNumber(p.stock ?? 0),
+        formatCurrency(p.price ?? 0),
+        formatDateTime(p.archivedAt),
+    ]);
+
+    return `<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>LimenServe Inventory Audit Report — ${escapeHtml(dateRangeLabel)}</title>
+    <style>
+        @page { size: A4 landscape; margin: 10mm; }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            color: #101828;
+            background: #ffffff;
+            font-family: "Segoe UI", Arial, sans-serif;
+            font-size: 10.5px;
+            line-height: 1.45;
+        }
+        .report-shell { width: 100%; }
+        .report-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            border-bottom: 2px solid #172554;
+            padding-bottom: 12px;
+            margin-bottom: 14px;
+        }
+        .brand-kicker {
+            color: #1d4ed8;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+        }
+        h1 {
+            margin: 3px 0 0;
+            color: #0f172a;
+            font-size: 22px;
+            line-height: 1.1;
+        }
+        .company {
+            margin-top: 4px;
+            color: #475569;
+            font-size: 10.5px;
+        }
+        .contact {
+            margin-top: 2px;
+            color: #94a3b8;
+            font-size: 9px;
+        }
+        .meta-box {
+            min-width: 170px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 10px;
+            text-align: right;
+        }
+        .meta-box strong {
+            display: block;
+            color: #0f172a;
+            font-size: 12px;
+        }
+        .meta-box span {
+            display: block;
+            margin-top: 2px;
+            color: #64748b;
+        }
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .kpi-card {
+            border: 1px solid #dbe3ef;
+            border-radius: 10px;
+            padding: 8px 10px;
+            background: #ffffff;
+            break-inside: avoid;
+        }
+        .label {
+            color: #64748b;
+            font-size: 8px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .value {
+            margin-top: 3px;
+            color: #0f172a;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .value.green { color: #059669; }
+        .value.red { color: #dc2626; }
+        section {
+            margin-top: 14px;
+            break-inside: avoid;
+        }
+        h2 {
+            margin: 0 0 4px;
+            color: #0f172a;
+            font-size: 13px;
+        }
+        .section-sub {
+            color: #64748b;
+            font-size: 9px;
+            margin: 0 0 7px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            border: 1px solid #cbd5e1;
+        }
+        th {
+            background: #eaf0f8;
+            color: #334155;
+            font-size: 8.5px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-align: left;
+            text-transform: uppercase;
+        }
+        th, td {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 5px 6px;
+            vertical-align: top;
+            overflow-wrap: anywhere;
+        }
+        tr:nth-child(even) td {
+            background: #fbfdff;
+        }
+        .signatures {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 40px;
+            margin-top: 28px;
+            page-break-inside: avoid;
+        }
+        .signature-line {
+            border-top: 1px solid #334155;
+            padding-top: 7px;
+            text-align: center;
+            color: #475569;
+            font-weight: 700;
+        }
+        .footer-note {
+            margin-top: 16px;
+            padding: 8px;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 9px;
+            border-top: 1px solid #e2e8f0;
+        }
+        .print-actions {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 10px 0;
+            background: #ffffff;
+        }
+        .print-actions button {
+            border: 1px solid #cbd5e1;
+            border-radius: 999px;
+            background: #172554;
+            color: #ffffff;
+            cursor: pointer;
+            font-weight: 800;
+            padding: 8px 14px;
+        }
+        .print-actions button.secondary {
+            background: #ffffff;
+            color: #172554;
+        }
+        @media print {
+            .print-actions { display: none; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-actions">
+        <button class="secondary" onclick="window.close()">Close</button>
+        <button onclick="window.print()">Print / Save PDF</button>
+    </div>
+    <main class="report-shell">
+        <header class="report-header">
+            <div>
+                <div class="brand-kicker">LimenServe Inventory Control</div>
+                <h1>Inventory Audit Report</h1>
+                <div class="company">Limen Auto Supply and Services</div>
+                <div class="contact">Contact: (0915) 522 5629 | Landline: 0285513518</div>
             </div>
-
-            {/* KPI Summary Strip */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 border-b border-primary-200">
-                {[
-                    { label: 'Catalog Products', value: formatNumber(summary?.totalProducts ?? 0), accent: 'text-blue-600' },
-                    { label: 'Unique SKUs', value: formatNumber(summary?.uniqueProducts ?? 0), accent: 'text-indigo-600' },
-                    { label: 'Active Prices', value: formatNumber(summary?.currentPrices ?? 0), accent: 'text-cyan-600' },
-                    { label: 'Movement Records', value: formatNumber(movements.length), accent: 'text-amber-600' },
-                    { label: 'Total Stock In', value: `+${formatNumber(stockInQty)}`, accent: 'text-emerald-600' },
-                    { label: 'Total Stock Out', value: formatNumber(stockOutQty), accent: 'text-red-600' },
-                ].map((kpi, i) => (
-                    <div key={i} className="px-5 py-4 border-r border-primary-100 last:border-r-0">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary-400">{kpi.label}</p>
-                        <p className={`mt-1 text-xl font-bold ${kpi.accent}`}>{kpi.value}</p>
-                    </div>
-                ))}
+            <div class="meta-box">
+                <strong>Period: ${escapeHtml(dateRangeLabel)}</strong>
+                <span>Generated ${escapeHtml(formatDateTime(generatedAt))}</span>
+                <span>By ${escapeHtml(generatedBy)}</span>
             </div>
+        </header>
 
-            {/* Movement Ledger Table */}
-            <div className="px-8 py-6">
-                <div className="flex items-center justify-between mb-4">
-                    <div>
-                        <h2 className="text-base font-bold text-primary-950">Inventory Movement Ledger</h2>
-                        <p className="text-xs text-primary-500 mt-0.5">{formatNumber(movements.length)} records · {formatNumber(uniqueProducts)} products · {formatNumber(movedQty)} units moved</p>
-                    </div>
-                </div>
-
-                {movements.length === 0 ? (
-                    <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">
-                        No inventory movement records found for this period.
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto rounded-xl border border-primary-200">
-                        <table className="min-w-full divide-y divide-primary-100 text-sm">
-                            <thead className="bg-slate-50">
-                                <tr>
-                                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-primary-500 w-8">#</th>
-                                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-primary-500">Product</th>
-                                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-primary-500">Action</th>
-                                    <th className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-[0.1em] text-primary-500">Qty</th>
-                                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-primary-500">Reference</th>
-                                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-primary-500">Performed By</th>
-                                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-primary-500">Date</th>
-                                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-primary-500">Notes</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-primary-100 bg-white">
-                                {movements.map((m, idx) => (
-                                    <tr key={m.id} className="hover:bg-primary-50/40 print:hover:bg-transparent">
-                                        <td className="px-3 py-2 text-primary-400 text-xs">{idx + 1}</td>
-                                        <td className="px-3 py-2">
-                                            <p className="font-semibold text-primary-950">{m.productName}</p>
-                                            <p className="font-mono text-[11px] text-primary-400">{m.sku || 'NO SKU'}</p>
-                                        </td>
-                                        <td className="px-3 py-2">
-                                            <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${MOVEMENT_COLORS[m.movementType] || 'bg-primary-50 text-primary-600 border-primary-200'}`}>
-                                                {MOVEMENT_LABELS[m.movementType] || m.movementType}
-                                            </span>
-                                        </td>
-                                        <td className="px-3 py-2 text-right font-bold text-primary-950">{formatNumber(m.quantity)}</td>
-                                        <td className="px-3 py-2 text-primary-600 text-xs">{m.referenceType || '—'}</td>
-                                        <td className="px-3 py-2 text-primary-700 text-xs">{m.performedBy || 'System'}</td>
-                                        <td className="px-3 py-2 text-primary-600 text-xs whitespace-nowrap">{formatDateTime(m.createdAt)}</td>
-                                        <td className="px-3 py-2 text-primary-500 text-xs max-w-[180px] truncate">{m.notes || '—'}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
-
-            {/* Archived Products */}
-            {archivedProducts.length > 0 && (
-                <div className="px-8 py-6 border-t border-primary-200">
-                    <h2 className="text-base font-bold text-primary-950 mb-1">Archived Products</h2>
-                    <p className="text-xs text-primary-500 mb-4">{archivedProducts.length} products removed from active catalog</p>
-                    <div className="overflow-x-auto rounded-xl border border-primary-200">
-                        <table className="min-w-full divide-y divide-primary-100 text-sm">
-                            <thead className="bg-slate-50">
-                                <tr>
-                                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-primary-500">Product</th>
-                                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-primary-500">SKU</th>
-                                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-primary-500">Category</th>
-                                    <th className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-[0.1em] text-primary-500">Qty</th>
-                                    <th className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-[0.1em] text-primary-500">Price</th>
-                                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-primary-500">Archived</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-primary-100 bg-white">
-                                {archivedProducts.map((p) => (
-                                    <tr key={p.id}>
-                                        <td className="px-3 py-2 font-semibold text-primary-950">{p.name}</td>
-                                        <td className="px-3 py-2 font-mono text-xs text-primary-500">{p.sku || 'NO SKU'}</td>
-                                        <td className="px-3 py-2 text-primary-600 text-xs">{p.category || '—'}</td>
-                                        <td className="px-3 py-2 text-right font-bold text-primary-950">{formatNumber(p.stock ?? 0)}</td>
-                                        <td className="px-3 py-2 text-right text-primary-700">{formatCurrency(p.price ?? 0)}</td>
-                                        <td className="px-3 py-2 text-primary-500 text-xs">{formatDateTime(p.archivedAt)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
-
-            {/* Signatures */}
-            <div className="px-8 py-8 border-t border-primary-200">
-                <div className="grid grid-cols-3 gap-12">
-                    {['Prepared By', 'Checked By', 'Approved By'].map((label) => (
-                        <div key={label} className="text-center">
-                            <div className="h-12" />
-                            <div className="border-t border-primary-900 pt-2">
-                                <p className="text-xs font-bold text-primary-600">{label}</p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* Footer */}
-            <div className="px-8 py-3 bg-slate-50 border-t border-primary-200 text-center">
-                <p className="text-[10px] text-primary-400">
-                    This report is generated from LimenServe inventory movement records and should be reconciled with physical stock counts during audit.
-                </p>
-            </div>
+        <div class="kpi-grid">
+            <div class="kpi-card"><div class="label">Catalog Products</div><div class="value">${escapeHtml(formatNumber(summary?.totalProducts ?? 0))}</div></div>
+            <div class="kpi-card"><div class="label">Unique SKUs</div><div class="value">${escapeHtml(formatNumber(summary?.uniqueProducts ?? 0))}</div></div>
+            <div class="kpi-card"><div class="label">Active Prices</div><div class="value">${escapeHtml(formatNumber(summary?.currentPrices ?? 0))}</div></div>
+            <div class="kpi-card"><div class="label">Movement Records</div><div class="value">${escapeHtml(formatNumber(movements.length))}</div></div>
+            <div class="kpi-card"><div class="label">Total Stock In</div><div class="value green">+${escapeHtml(formatNumber(stockInQty))}</div></div>
+            <div class="kpi-card"><div class="label">Total Stock Out</div><div class="value red">${escapeHtml(formatNumber(stockOutQty))}</div></div>
         </div>
-    );
-}
 
-/* ── Print CSS injected via style tag ────────────────────────── */
-const PRINT_STYLES = `
-@media print {
-    body * { visibility: hidden !important; }
-    #printable-report, #printable-report * { visibility: visible !important; }
-    #printable-report {
-        position: absolute !important; left: 0 !important; top: 0 !important;
-        width: 100% !important; border: none !important; border-radius: 0 !important;
-        box-shadow: none !important; margin: 0 !important;
-    }
-    @page { size: A4 landscape; margin: 8mm; }
-    .no-print { display: none !important; }
+        <section>
+            <h2>Inventory Movement Ledger</h2>
+            <div class="section-sub">${escapeHtml(formatNumber(movements.length))} records · ${escapeHtml(formatNumber(uniqueProducts))} products · ${escapeHtml(formatNumber(movedQty))} units moved</div>
+            ${renderReportTable(['#', 'Product', 'SKU', 'Action', 'Qty', 'Reference', 'Performed By', 'Date', 'Notes'], movementRows, 'No inventory movement records found for this period.')}
+        </section>
+
+        ${archivedProducts.length > 0 ? `
+        <section>
+            <h2>Archived Products</h2>
+            <div class="section-sub">${escapeHtml(String(archivedProducts.length))} products removed from active catalog</div>
+            ${renderReportTable(['Product', 'SKU', 'Category', 'Qty', 'Price', 'Archived'], archivedRows)}
+        </section>
+        ` : ''}
+
+        <div class="signatures">
+            <div class="signature-line">Prepared By</div>
+            <div class="signature-line">Checked By</div>
+            <div class="signature-line">Approved By</div>
+        </div>
+
+        <div class="footer-note">
+            This report is generated from LimenServe inventory movement records and should be reconciled with physical stock counts during audit.
+        </div>
+    </main>
+</body>
+</html>`;
 }
-`;
 
 export default function InventoryReport() {
+    const { user } = useAuth();
     const [summary, setSummary] = useState(null);
     const [movements, setMovements] = useState([]);
     const [archivedProducts, setArchivedProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [dateRange, setDateRange] = useState('30d');
-    const [showReport, setShowReport] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
 
     const filteredMovements = useMemo(() => movements.filter((m) => isWithinRange(m.createdAt, dateRange)), [movements, dateRange]);
     const dateRangeLabel = DATE_RANGE_OPTIONS.find((o) => o.value === dateRange)?.label || dateRange;
@@ -246,22 +377,51 @@ export default function InventoryReport() {
 
     useEffect(() => { void loadReportData(); }, []);
 
-    const handlePrint = () => {
-        setShowReport(true);
-        setTimeout(() => window.print(), 300);
-    };
+    const handlePrint = useCallback(() => {
+        setIsExporting(true);
+        setError('');
+
+        try {
+            const reportWindow = window.open('', '_blank');
+            if (!reportWindow) {
+                throw new Error('Please allow pop-ups to print or save the PDF report.');
+            }
+
+            reportWindow.document.write('<p style="font-family:Arial,sans-serif;padding:24px;">Preparing LimenServe inventory report...</p>');
+
+            const generatedAt = new Date();
+            const generatedBy = user?.fullName || user?.email || 'LimenServe user';
+            const reportHtml = buildPrintableInventoryReport({
+                summary,
+                movements: filteredMovements,
+                archivedProducts,
+                dateRangeLabel,
+                generatedAt,
+                generatedBy,
+            });
+
+            reportWindow.document.open();
+            reportWindow.document.write(reportHtml);
+            reportWindow.document.close();
+            reportWindow.document.title = `limenserve-inventory-report-${dateRangeLabel.replace(/\s+/g, '-').toLowerCase()}-${generatedAt.toISOString().slice(0, 10)}`;
+            reportWindow.focus();
+            window.setTimeout(() => reportWindow.print(), 400);
+        } catch (exportError) {
+            setError(exportError.message || 'Unable to export the report.');
+        } finally {
+            setIsExporting(false);
+        }
+    }, [summary, filteredMovements, archivedProducts, dateRangeLabel, user?.fullName, user?.email]);
 
     return (
         <div className="space-y-6">
-            <style>{PRINT_STYLES}</style>
-
-            {/* Header toolbar — hidden in print */}
-            <div className="no-print flex flex-col gap-4 rounded-2xl border border-primary-200 bg-white p-6 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+            {/* Header toolbar */}
+            <div className="flex flex-col gap-4 rounded-2xl border border-primary-200 bg-white p-6 shadow-sm lg:flex-row lg:items-center lg:justify-between">
                 <div>
                     <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-blue">Inventory Reports</p>
                     <h2 className="mt-2 text-2xl font-display font-bold text-primary-950">Inventory Summary & Audit</h2>
                     <p className="mt-1 max-w-3xl text-sm text-primary-500">
-                        Live catalog totals, movement ledger, and archived-product visibility with inline printable report.
+                        Live catalog totals, movement ledger, and archived-product visibility with printable report.
                     </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
@@ -271,16 +431,14 @@ export default function InventoryReport() {
                     </select>
                     <Button variant="secondary" leftIcon={<RefreshCw className="h-4 w-4" />} isLoading={loading} onClick={loadReportData}>Refresh</Button>
                     <Button variant="secondary" leftIcon={<Download className="h-4 w-4" />} onClick={() => exportMovementsCsv(filteredMovements)} disabled={filteredMovements.length === 0}>Export CSV</Button>
-                    <Button variant="secondary" leftIcon={showReport ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        onClick={() => setShowReport(!showReport)}>{showReport ? 'Hide Report' : 'Preview Report'}</Button>
-                    <Button variant="primary" leftIcon={<Printer className="h-4 w-4" />} onClick={handlePrint}>Print Report</Button>
+                    <Button variant="primary" leftIcon={<Printer className="h-4 w-4" />} isLoading={isExporting} onClick={handlePrint}>Print Report</Button>
                 </div>
             </div>
 
-            {error && <div className="no-print rounded-xl border border-accent-danger/20 bg-accent-danger/5 px-4 py-3 text-sm text-accent-danger">{error}</div>}
+            {error && <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/5 px-4 py-3 text-sm text-accent-danger">{error}</div>}
 
-            {/* Report switch cards — hidden in print */}
-            <div className="no-print grid gap-3 md:grid-cols-2">
+            {/* Report switch cards */}
+            <div className="grid gap-3 md:grid-cols-2">
                 <Link to="/reports/sales" className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm transition hover:border-accent-blue/40 hover:shadow-md">
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-500">Switch Report</p>
                     <p className="mt-1 text-lg font-display font-bold text-primary-950">Sales Analytics</p>
@@ -293,91 +451,84 @@ export default function InventoryReport() {
                 </div>
             </div>
 
-            {/* KPI Cards — hidden in print */}
-            <div className="no-print grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {/* KPI Cards */}
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <KPICard title="Catalog Rows" value={formatNumber(summary?.totalProducts ?? 0)} icon={<Boxes className="h-6 w-6" />} />
                 <KPICard title="Unique SKUs" value={formatNumber(summary?.uniqueProducts ?? 0)} icon={<PackageCheck className="h-6 w-6" />} />
                 <KPICard title="Movement Rows" value={formatNumber(movements.length)} icon={<ClipboardList className="h-6 w-6" />} />
                 <KPICard title="Archived Products" value={formatNumber(archivedProducts.length)} icon={<Archive className="h-6 w-6" />} />
             </div>
 
-            {/* Quick movement preview — hidden in print, hidden when full report is shown */}
-            {!showReport && (
-                <div className="no-print grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
-                    <Card title="Recent Inventory Movements" subtitle={`Total moved: ${formatNumber(movementStats.movedQuantity)} across ${formatNumber(movementStats.types)} action types.`}>
-                        {loading ? (
-                            <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">Loading...</div>
-                        ) : filteredMovements.length === 0 ? (
-                            <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">No movement records in selected range.</div>
-                        ) : (
-                            <div className="overflow-x-auto rounded-2xl border border-primary-200">
-                                <table className="min-w-full divide-y divide-primary-100 bg-white text-sm">
-                                    <thead className="bg-primary-50">
-                                        <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Product</th>
-                                            <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Action</th>
-                                            <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Qty</th>
-                                            <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Staff</th>
-                                            <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Date</th>
+            {/* Quick movement preview */}
+            <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+                <Card title="Recent Inventory Movements" subtitle={`Total moved: ${formatNumber(movementStats.movedQuantity)} across ${formatNumber(movementStats.types)} action types.`}>
+                    {loading ? (
+                        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">Loading...</div>
+                    ) : filteredMovements.length === 0 ? (
+                        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">No movement records in selected range.</div>
+                    ) : (
+                        <div className="overflow-x-auto rounded-2xl border border-primary-200">
+                            <table className="min-w-full divide-y divide-primary-100 bg-white text-sm">
+                                <thead className="bg-primary-50">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Product</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Action</th>
+                                        <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Qty</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Staff</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-primary-100">
+                                    {filteredMovements.slice(0, 12).map((m) => (
+                                        <tr key={m.id} className="hover:bg-primary-50/60">
+                                            <td className="px-4 py-3">
+                                                <p className="font-bold text-primary-950">{m.productName}</p>
+                                                <p className="font-mono text-xs text-primary-500">{m.sku || 'NO SKU'}</p>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className={`inline-block rounded-full border px-2 py-0.5 text-xs font-bold ${MOVEMENT_COLORS[m.movementType] || 'bg-primary-50 text-primary-600 border-primary-200'}`}>
+                                                    {MOVEMENT_LABELS[m.movementType] || m.movementType}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-bold text-primary-950">{formatNumber(m.quantity)}</td>
+                                            <td className="px-4 py-3 text-primary-600">{m.performedBy}</td>
+                                            <td className="px-4 py-3 text-primary-600">{formatDateTime(m.createdAt)}</td>
                                         </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-primary-100">
-                                        {filteredMovements.slice(0, 12).map((m) => (
-                                            <tr key={m.id} className="hover:bg-primary-50/60">
-                                                <td className="px-4 py-3">
-                                                    <p className="font-bold text-primary-950">{m.productName}</p>
-                                                    <p className="font-mono text-xs text-primary-500">{m.sku || 'NO SKU'}</p>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <span className={`inline-block rounded-full border px-2 py-0.5 text-xs font-bold ${MOVEMENT_COLORS[m.movementType] || 'bg-primary-50 text-primary-600 border-primary-200'}`}>
-                                                        {MOVEMENT_LABELS[m.movementType] || m.movementType}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-bold text-primary-950">{formatNumber(m.quantity)}</td>
-                                                <td className="px-4 py-3 text-primary-600">{m.performedBy}</td>
-                                                <td className="px-4 py-3 text-primary-600">{formatDateTime(m.createdAt)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                        {filteredMovements.length > 12 && (
-                            <p className="mt-3 text-center text-xs text-primary-400">
-                                Showing 12 of {filteredMovements.length} records. Click "Preview Report" to see all.
-                            </p>
-                        )}
-                    </Card>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                    {filteredMovements.length > 12 && (
+                        <p className="mt-3 text-center text-xs text-primary-400">
+                            Showing 12 of {filteredMovements.length} records. Click &quot;Print Report&quot; to see all.
+                        </p>
+                    )}
+                </Card>
 
-                    <Card title="Archived Products" subtitle="Products hidden from active selling flows.">
-                        {loading ? (
-                            <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">Loading...</div>
-                        ) : archivedProducts.length === 0 ? (
-                            <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">No archived products found.</div>
-                        ) : (
-                            <div className="space-y-3">
-                                {archivedProducts.slice(0, 8).map((p) => (
-                                    <div key={p.id} className="rounded-2xl border border-primary-200 bg-white p-4">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <p className="truncate text-sm font-bold text-primary-950">{p.name}</p>
-                                                <p className="mt-1 font-mono text-xs text-primary-500">{p.sku || 'NO SKU'}</p>
-                                            </div>
-                                            <p className="text-sm font-bold text-accent-blue">{formatCurrency(p.price ?? 0)}</p>
+                <Card title="Archived Products" subtitle="Products hidden from active selling flows.">
+                    {loading ? (
+                        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">Loading...</div>
+                    ) : archivedProducts.length === 0 ? (
+                        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">No archived products found.</div>
+                    ) : (
+                        <div className="space-y-3">
+                            {archivedProducts.slice(0, 8).map((p) => (
+                                <div key={p.id} className="rounded-2xl border border-primary-200 bg-white p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-bold text-primary-950">{p.name}</p>
+                                            <p className="mt-1 font-mono text-xs text-primary-500">{p.sku || 'NO SKU'}</p>
                                         </div>
-                                        <p className="mt-2 text-xs text-primary-500">Qty {formatNumber(p.stock ?? 0)} | Archived {formatDateTime(p.archivedAt)}</p>
+                                        <p className="text-sm font-bold text-accent-blue">{formatCurrency(p.price ?? 0)}</p>
                                     </div>
-                                ))}
-                            </div>
-                        )}
-                    </Card>
-                </div>
-            )}
-
-            {/* Full inline printable report — shown when preview is toggled or always visible for print */}
-            {showReport && !loading && (
-                <PrintableReport summary={summary} movements={filteredMovements} archivedProducts={archivedProducts} dateRangeLabel={dateRangeLabel} />
-            )}
+                                    <p className="mt-2 text-xs text-primary-500">Qty {formatNumber(p.stock ?? 0)} | Archived {formatDateTime(p.archivedAt)}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </Card>
+            </div>
         </div>
     );
 }

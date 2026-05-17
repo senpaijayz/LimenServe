@@ -1,10 +1,13 @@
 import { NavLink } from 'react-router-dom';
 import {
     BarChart3,
+    Boxes,
     FileText,
     LayoutDashboard,
     Package,
     ShoppingCart,
+    Tags,
+    Truck,
     Users,
     Wrench,
 } from 'lucide-react';
@@ -15,16 +18,22 @@ const iconMap = {
     LayoutDashboard,
     ShoppingCart,
     Package,
+    Boxes,
     FileText,
     BarChart3,
     Wrench,
     Users,
+    Truck,
+    Tags,
 };
 
 const mobilePaths = new Set([
     '/dashboard',
     '/pos',
     '/inventory',
+    '/products',
+    '/suppliers',
+    '/categories',
     '/quotation',
     '/services',
     '/reports',

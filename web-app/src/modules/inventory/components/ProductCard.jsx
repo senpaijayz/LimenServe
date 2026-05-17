@@ -38,8 +38,12 @@ const ProductCard = ({ product, onEdit, onDelete, onSelect }) => {
         >
             <div className="mb-4 relative overflow-hidden rounded-2xl border border-primary-200 bg-[#0b1320] p-3">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(216,23,36,0.18),transparent_34%)] pointer-events-none" />
-                <div className="relative">
-                    <MitsubishiGenuinePartsLabel product={product} size="compact" />
+                <div className="relative flex min-h-[150px] items-center justify-center">
+                    {product.imageUrl ? (
+                        <img src={product.imageUrl} alt={product.name} className="max-h-[150px] w-full object-contain" />
+                    ) : (
+                        <MitsubishiGenuinePartsLabel product={product} size="compact" />
+                    )}
                 </div>
                 {(onEdit || onDelete) && (
                     <div className="absolute inset-0 bg-white/92 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 z-10">
