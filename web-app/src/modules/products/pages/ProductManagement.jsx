@@ -167,11 +167,11 @@ export default function ProductManagement() {
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-blue">Product Management</p>
           <h2 className="mt-2 text-2xl font-display font-bold text-primary-950">Products</h2>
-          <p className="mt-1 max-w-3xl text-sm text-primary-500">Manage product records, database-driven images, supplier/category links, pricing, and stock history.</p>
+          <p className="mt-1 max-w-3xl text-sm text-primary-500">Register products and manage database-driven images, supplier/category links, pricing, and stock history.</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button variant="secondary" leftIcon={<RefreshCw className="h-4 w-4" />} isLoading={loading} onClick={() => setRefreshKey((value) => value + 1)}>Refresh</Button>
-          <Button variant="primary" leftIcon={<Plus className="h-4 w-4" />} onClick={openCreate}>New Product</Button>
+          <Button variant="primary" leftIcon={<Plus className="h-4 w-4" />} onClick={openCreate}>Register New Product</Button>
         </div>
       </div>
 
@@ -248,7 +248,7 @@ export default function ProductManagement() {
         </div>
       </Card>
 
-      <Modal isOpen={isModalOpen} onClose={closeModal} title={editingProduct ? 'Edit Product' : 'New Product'} size="xl">
+      <Modal isOpen={isModalOpen} onClose={closeModal} title={editingProduct ? 'Edit Product' : 'Register New Product'} size="xl">
         <form onSubmit={handleSave} className="space-y-5">
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
