@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, Check, Printer, Wrench, Camera, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, Check, Printer, Wrench, Camera, ChevronLeft, ChevronRight, AlertTriangle, Calculator, WalletCards } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import { useCart } from '../../../context/CartContext';
@@ -16,6 +16,29 @@ import useProductCatalog from '../../../hooks/useProductCatalog';
 import { buildProductBarcodeValue, productMatchesIdentifier } from '../../../utils/barcode';
 
 const PAGE_SIZE = 14;
+
+function buildCashTenderOptions(total) {
+    const safeTotal = Math.max(0, Number(total) || 0);
+    const roundedToHundred = Math.ceil(safeTotal / 100) * 100;
+    const roundedToFiveHundred = Math.ceil(safeTotal / 500) * 500;
+    const baseOptions = [
+        safeTotal,
+        roundedToHundred,
+        roundedToFiveHundred,
+        500,
+        1000,
+        2000,
+        5000,
+    ].filter((amount) => amount >= safeTotal && amount > 0);
+
+    return [...new Set(baseOptions.map((amount) => Number(amount.toFixed(2))))].slice(0, 6);
+}
+
+function formatTenderAmount(amount) {
+    const value = Number(amount);
+    if (!Number.isFinite(value)) return '';
+    return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
 
 function formatCatalogProduct(product) {
     return {
@@ -114,15 +137,44 @@ const POSTerminal = () => {
     };
 
     // Calculate change
-    const change = parseFloat(paymentAmount) - totals.total;
+    const paymentReceived = Number(paymentAmount) || 0;
+    const change = paymentReceived - totals.total;
+    const amountShort = Math.max(0, totals.total - paymentReceived);
+    const hasEnoughCash = paymentReceived >= totals.total;
+    const cashTenderOptions = useMemo(() => buildCashTenderOptions(totals.total), [totals.total]);
+    const canCompletePayment = items.length > 0 && hasEnoughCash && !processingPayment;
     const canGoPrev = (pagination.page ?? currentPage) > 1;
     const canGoNext = (pagination.page ?? currentPage) < (pagination.totalPages ?? 1);
     const rangeStart = pagination.totalCount === 0 ? 0 : (((pagination.page ?? currentPage) - 1) * (pagination.pageSize ?? PAGE_SIZE)) + 1;
     const rangeEnd = pagination.totalCount === 0 ? 0 : Math.min((pagination.page ?? currentPage) * (pagination.pageSize ?? PAGE_SIZE), pagination.totalCount ?? 0);
 
+    const openPaymentModal = () => {
+        setPaymentAmount('');
+        setPaymentError('');
+        setShowPaymentModal(true);
+    };
+
+    const closePaymentModal = () => {
+        if (processingPayment) return;
+        setShowPaymentModal(false);
+        setPaymentError('');
+    };
+
+    const setTenderAmount = (amount) => {
+        setPaymentAmount(formatTenderAmount(amount));
+        setPaymentError('');
+    };
+
     // Handle payment
     const handlePayment = async () => {
-        if (parseFloat(paymentAmount) < totals.total || processingPayment) return;
+        if (!canCompletePayment) {
+            if (items.length === 0) {
+                setPaymentError('Add at least one item before completing the sale.');
+            } else if (!hasEnoughCash) {
+                setPaymentError(`Cash received is short by ${formatCurrency(amountShort)}.`);
+            }
+            return;
+        }
 
         setProcessingPayment(true);
         setPaymentError('');
@@ -131,8 +183,8 @@ const POSTerminal = () => {
             const payload = {
                 customerName,
                 paymentMethod: 'cash',
-                cashReceived: parseFloat(paymentAmount),
-                changeDue: change,
+                cashReceived: paymentReceived,
+                changeDue: Math.max(0, change),
                 discountPercent,
                 totals,
                 items: items.map((item) => ({
@@ -168,6 +220,13 @@ const POSTerminal = () => {
             setPaymentError(error.message || 'Failed to save the sale.');
         } finally {
             setProcessingPayment(false);
+        }
+    };
+
+    const handlePaymentInputKeyDown = (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            handlePayment();
         }
     };
 
@@ -411,7 +470,7 @@ const POSTerminal = () => {
                     fullWidth
                     className="mt-4"
                     disabled={items.length === 0}
-                    onClick={() => setShowPaymentModal(true)}
+                    onClick={openPaymentModal}
                     leftIcon={<CreditCard className="w-5 h-5" />}
                 >
                     Process Payment
@@ -421,65 +480,126 @@ const POSTerminal = () => {
             {/* Payment Modal */}
             <Modal
                 isOpen={showPaymentModal}
-                onClose={() => {
-                    if (!processingPayment) {
-                        setShowPaymentModal(false);
-                        setPaymentError('');
-                    }
-                }}
-                title="Process Payment"
-                size="md"
+                onClose={closePaymentModal}
+                title="Cash Checkout"
+                size="lg"
             >
-                <div className="space-y-6">
-                    {/* Total Display */}
-                    <div className="text-center p-6 bg-primary-50 border border-primary-100 rounded-xl shadow-inner">
-                        <p className="text-sm text-primary-500 font-semibold uppercase tracking-widest mb-1">Amount Due</p>
-                        <p className="text-4xl font-bold font-display text-accent-blue">
-                            {formatCurrency(totals.total)}
-                        </p>
-                    </div>
-
-                    {/* Cash Amount */}
-                    <div>
-                        <label className="text-sm font-semibold text-primary-700 mb-2 block">Cash Received</label>
-                        <div className="relative">
-                            <Banknote className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-primary-400" />
-                            <input
-                                type="number"
-                                value={paymentAmount}
-                                onChange={(e) => setPaymentAmount(e.target.value)}
-                                placeholder="Enter amount"
-                                className="w-full pl-12 pr-4 py-3 bg-white border border-primary-200 rounded-xl text-2xl font-bold text-primary-950 placeholder-primary-300 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue shadow-sm"
-                                autoFocus
-                            />
+                <div className="space-y-5">
+                    <div className="rounded-2xl border border-primary-900 bg-primary-950 p-5 text-white shadow-lg">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary-300">Amount Due</p>
+                                <p className="mt-2 text-4xl font-bold font-display tracking-normal">{formatCurrency(totals.total)}</p>
+                                <p className="mt-2 text-sm text-primary-300">
+                                    {items.length} {items.length === 1 ? 'item' : 'items'}
+                                    {customerName ? ` for ${customerName}` : ' in current sale'}
+                                </p>
+                            </div>
+                            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/10">
+                                <WalletCards className="h-6 w-6 text-white" />
+                            </div>
                         </div>
                     </div>
 
-                    {/* Quick Amount Buttons */}
-                    <div className="grid grid-cols-3 gap-3">
-                        {[500, 1000, 2000].map((amount) => (
-                            <button
-                                key={amount}
-                                onClick={() => setPaymentAmount(String(amount))}
-                                className="min-h-11 rounded-lg border border-primary-200 bg-white p-3 font-bold text-primary-700 transition-all hover:border-accent-blue hover:text-accent-blue hover:shadow-sm"
-                            >
-                                ₱{amount.toLocaleString()}
-                            </button>
-                        ))}
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        <div className="rounded-xl border border-primary-200 bg-primary-50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-primary-400">Subtotal</p>
+                            <p className="mt-1 text-sm font-bold text-primary-950">{formatCurrency(totals.rawSubtotal)}</p>
+                        </div>
+                        <div className="rounded-xl border border-primary-200 bg-primary-50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-primary-400">Discount</p>
+                            <p className="mt-1 text-sm font-bold text-accent-danger">-{formatCurrency(totals.discountAmount)}</p>
+                        </div>
+                        <div className="rounded-xl border border-primary-200 bg-primary-50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-primary-400">VAT</p>
+                            <p className="mt-1 text-sm font-bold text-primary-950">{formatCurrency(totals.tax)}</p>
+                        </div>
+                        <div className="rounded-xl border border-accent-blue/30 bg-accent-blue/10 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-accent-blue">Total</p>
+                            <p className="mt-1 text-sm font-bold text-accent-blue">{formatCurrency(totals.total)}</p>
+                        </div>
                     </div>
 
-                    {/* Change Display */}
-                    {paymentAmount && (
-                        <div className={`text-center p-4 rounded-xl ${change >= 0 ? 'bg-accent-success/20' : 'bg-accent-danger/20'}`}>
-                            <p className="text-sm text-primary-400 mb-1">
-                                {change >= 0 ? 'Change' : 'Insufficient'}
-                            </p>
-                            <p className={`text-2xl font-bold ${change >= 0 ? 'text-accent-success' : 'text-accent-danger'}`}>
-                                {formatCurrency(Math.abs(change))}
-                            </p>
-                        </div>
-                    )}
+                    <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+                        <div className="space-y-4">
+                            <div>
+                                <label className="mb-2 block text-sm font-semibold text-primary-700">Cash Received</label>
+                                <div className="relative">
+                                    <Banknote className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-primary-400" />
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={paymentAmount}
+                                        onChange={(e) => {
+                                            setPaymentAmount(e.target.value);
+                                            setPaymentError('');
+                                        }}
+                                        onKeyDown={handlePaymentInputKeyDown}
+                                        placeholder="Enter cash amount"
+                                        className="w-full rounded-xl border border-primary-200 bg-white py-3 pl-12 pr-4 text-2xl font-bold text-primary-950 shadow-sm placeholder-primary-300 focus:border-accent-blue focus:outline-none focus:ring-1 focus:ring-accent-blue"
+                                        autoFocus
+                                    />
+                                </div>
+                            </div>
 
+                            <div>
+                                <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-primary-700">
+                                    <Calculator className="h-4 w-4 text-primary-400" />
+                                    Quick tender
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                    {cashTenderOptions.map((amount) => (
+                                        <button
+                                            key={amount}
+                                            type="button"
+                                            onClick={() => setTenderAmount(amount)}
+                                            className="min-h-12 rounded-lg border border-primary-200 bg-white px-3 py-2 text-left transition-all hover:border-accent-blue hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-accent-blue/30"
+                                        >
+                                            <span className="block text-xs font-semibold uppercase tracking-wider text-primary-400">
+                                                {amount === totals.total ? 'Exact' : 'Cash'}
+                                            </span>
+                                            <span className="block text-base font-bold text-primary-950">{formatCurrency(amount)}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className={`rounded-xl border p-4 ${hasEnoughCash ? 'border-accent-success/30 bg-accent-success/10' : 'border-accent-danger/30 bg-accent-danger/10'}`}>
+                                <p className="text-sm font-semibold text-primary-600">
+                                    {hasEnoughCash ? 'Change Due' : 'Amount Short'}
+                                </p>
+                                <p className={`mt-1 text-3xl font-bold ${hasEnoughCash ? 'text-accent-success' : 'text-accent-danger'}`}>
+                                    {formatCurrency(hasEnoughCash ? Math.max(0, change) : amountShort)}
+                                </p>
+                                <p className="mt-2 text-sm text-primary-500">
+                                    {hasEnoughCash ? 'Ready to complete and print the receipt.' : 'Enter enough cash before completing the sale.'}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="rounded-xl border border-primary-200 bg-white">
+                            <div className="flex items-center justify-between border-b border-primary-100 px-4 py-3">
+                                <p className="text-sm font-bold text-primary-950">Sale Review</p>
+                                <p className="text-xs font-semibold text-primary-400">{items.length} lines</p>
+                            </div>
+                            <div className="max-h-72 overflow-y-auto px-4 py-2">
+                                {items.map((item) => (
+                                    <div key={item.id} className="flex items-start justify-between gap-3 border-b border-primary-100 py-3 last:border-b-0">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-semibold text-primary-950">{item.name}</p>
+                                            <p className="mt-0.5 text-xs text-primary-500">
+                                                {item.quantity} x {formatCurrency(item.price)}
+                                            </p>
+                                        </div>
+                                        <p className="shrink-0 text-sm font-bold text-primary-950">
+                                            {formatCurrency(item.price * item.quantity)}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                     {paymentError && (
                         <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/10 px-4 py-3 text-sm text-accent-danger">
                             {paymentError}
@@ -492,22 +612,19 @@ const POSTerminal = () => {
                             variant="secondary"
                             fullWidth
                             disabled={processingPayment}
-                            onClick={() => {
-                                setShowPaymentModal(false);
-                                setPaymentError('');
-                            }}
+                            onClick={closePaymentModal}
                         >
                             Cancel
                         </Button>
                         <Button
                             variant="success"
                             fullWidth
-                            disabled={!paymentAmount || parseFloat(paymentAmount) < totals.total || processingPayment}
+                            disabled={!canCompletePayment}
                             onClick={handlePayment}
                             leftIcon={<Check className="w-4 h-4" />}
                             isLoading={processingPayment}
                         >
-                            Complete Sale
+                            {processingPayment ? 'Saving Sale' : 'Complete Sale'}
                         </Button>
                     </div>
                 </div>
