@@ -16,6 +16,7 @@ import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
 import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
 import { getCatalogSummary, getProductStockHistory, receiveInventoryStock, updateCatalogProduct } from '../../../services/catalogApi';
+import { saveInventoryProductLocation } from '../../../services/stockroomApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
 import { getPartNumberSearchSuggestions, getProductPartNumber, productMatchesIdentifier } from '../../../utils/barcode';
@@ -114,6 +115,20 @@ function normalizeLocationForDisplay(rawLocation) {
 
 const inputClassName = 'w-full rounded-xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-950 shadow-sm outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15';
 
+function extractLocationFormValues(product = {}) {
+    const location = product.location && typeof product.location === 'object' ? product.location : {};
+    const aisle = location.aisle
+        ? String(location.aisle).replace(/^aisle\s+/i, '').toUpperCase()
+        : '';
+
+    return {
+        locationAisle: aisle,
+        locationShelfNumber: String(location.shelfNumber ?? location.shelf_number ?? location.shelf ?? ''),
+        locationLevel: String(location.level ?? ''),
+        locationBin: String(location.bin ?? location.binNumber ?? location.binLabel ?? location.slot ?? ''),
+    };
+}
+
 function buildEditProductForm(product = {}) {
     return {
         sku: product.sku || '',
@@ -125,6 +140,7 @@ function buildEditProductForm(product = {}) {
         uom: product.uom || 'PC',
         status: product.status || (Number(product.quantity ?? product.stock ?? 0) <= 0 ? 'out_of_stock' : 'in_stock'),
         price: String(product.price ?? 0),
+        ...extractLocationFormValues(product),
     };
 }
 
@@ -224,6 +240,31 @@ function EditProductModalContent({ isOpen, product, isSaving, onClose, onSave })
                         <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Unit</span>
                         <input className={`${inputClassName} mt-2`} value={form.uom} onChange={(event) => updateForm('uom', event.target.value)} placeholder="PC" />
                     </label>
+                </div>
+
+                <div className="rounded-2xl border border-primary-200 bg-white p-4">
+                    <div className="mb-4 flex items-center gap-2">
+                        <Crosshair className="h-4 w-4 text-accent-blue" />
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Stockroom location</p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-4">
+                        <label className="block">
+                            <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Aisle</span>
+                            <input className={`${inputClassName} mt-2`} value={form.locationAisle} onChange={(event) => updateForm('locationAisle', event.target.value)} placeholder="A" />
+                        </label>
+                        <label className="block">
+                            <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Shelf</span>
+                            <input className={`${inputClassName} mt-2`} value={form.locationShelfNumber} onChange={(event) => updateForm('locationShelfNumber', event.target.value)} placeholder="1" />
+                        </label>
+                        <label className="block">
+                            <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Level</span>
+                            <input className={`${inputClassName} mt-2`} value={form.locationLevel} onChange={(event) => updateForm('locationLevel', event.target.value)} placeholder="1" />
+                        </label>
+                        <label className="block">
+                            <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Bin</span>
+                            <input className={`${inputClassName} mt-2`} value={form.locationBin} onChange={(event) => updateForm('locationBin', event.target.value)} placeholder="1" />
+                        </label>
+                    </div>
                 </div>
             </form>
         </Modal>
@@ -367,7 +408,9 @@ const InventoryList = () => {
     const uniqueProducts = catalogSummary?.uniqueProducts ?? pagination.totalCount ?? visibleProducts.length;
     const currentPrices = catalogSummary?.currentPrices ?? pagination.totalCount ?? visibleProducts.length;
     const lowStockCount = filteredProducts.filter((product) => product.quantity <= 5).length;
-    const totalValue = filteredProducts.reduce((sum, product) => sum + (product.price * product.quantity), 0);
+    const pageInventoryValue = filteredProducts.reduce((sum, product) => sum + (product.price * product.quantity), 0);
+    const summaryInventoryValue = Number(catalogSummary?.inventoryValue);
+    const totalValue = Number.isFinite(summaryInventoryValue) ? summaryInventoryValue : pageInventoryValue;
     const canGoPrev = (pagination.page ?? currentPage) > 1;
     const canGoNext = (pagination.page ?? currentPage) < (pagination.totalPages ?? 1);
     const rangeStart = pagination.totalCount === 0 ? 0 : (((pagination.page ?? currentPage) - 1) * (pagination.pageSize ?? PAGE_SIZE)) + 1;
@@ -431,17 +474,44 @@ const InventoryList = () => {
 
         setSavingProductDetails(true);
         try {
+            const {
+                locationAisle,
+                locationShelfNumber,
+                locationLevel,
+                locationBin,
+                ...productForm
+            } = form;
+            const hasLocationInput = [locationAisle, locationShelfNumber, locationLevel, locationBin]
+                .some((value) => String(value || '').trim());
+
+            if (hasLocationInput && (!String(locationAisle || '').trim() || !String(locationShelfNumber || '').trim())) {
+                throw new Error('Aisle and shelf are required when saving a stockroom location.');
+            }
+
             const updatedProduct = await updateCatalogProduct(editingProduct.id, {
-                ...form,
-                price: Number(form.price ?? 0),
+                ...productForm,
+                price: Number(productForm.price ?? 0),
                 stock: editingProduct.quantity ?? editingProduct.stock ?? 0,
             });
+            let updatedLocation = editingProduct.location;
+
+            if (hasLocationInput) {
+                const locationResult = await saveInventoryProductLocation(editingProduct.id, {
+                    aisle: String(locationAisle || '').trim().toUpperCase(),
+                    shelfNumber: String(locationShelfNumber || '').trim(),
+                    level: String(locationLevel || '').trim() || '1',
+                    bin: String(locationBin || '').trim() || '1',
+                    binNumber: String(locationBin || '').trim() || '1',
+                });
+                updatedLocation = locationResult?.catalogLocation ?? locationResult?.location ?? updatedLocation;
+            }
+
             const normalizedProduct = {
                 ...editingProduct,
                 ...formatCatalogProduct({
                     ...updatedProduct,
                     stock: editingProduct.quantity ?? editingProduct.stock ?? updatedProduct?.stock ?? 0,
-                    location: editingProduct.location,
+                    location: updatedLocation,
                 }),
             };
 
@@ -532,7 +602,7 @@ const InventoryList = () => {
                         <p className="text-2xl font-bold font-display text-primary-950 leading-none">{formatCurrency(totalValue)}</p>
                         {summaryError
                             ? <p className="text-xs text-accent-danger mt-1">{summaryError}</p>
-                            : <p className="text-xs text-primary-400 mt-1">Visible on-page total</p>
+                            : <p className="text-xs text-primary-400 mt-1">Total stock value</p>
                         }
                     </div>
                 </div>
@@ -854,7 +924,14 @@ const InventoryList = () => {
                 title="Inventory Activity"
                 stockHistory={previewStockHistory}
                 historyLoading={previewHistoryLoading}
-                locationEditAction={null}
+                locationEditAction={isAdmin ? {
+                    label: 'Edit Location',
+                    onClick: () => {
+                        if (selectedPreviewProduct) {
+                            openEditProduct(selectedPreviewProduct);
+                        }
+                    },
+                } : null}
                 locateAction={selectedPreviewProduct ? {
                     label: 'Locate in 3D',
                     onClick: () => handleLocateIn3D(selectedPreviewProduct),

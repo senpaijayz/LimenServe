@@ -2105,6 +2105,30 @@ async function getCachedProductCatalog() {
   return productCatalogCachePromise;
 }
 
+function calculateInventoryValue(products = []) {
+  return products.reduce((sum, product) => {
+    const unitPrice = Number(product.price ?? 0);
+    const stockOnHand = Number(product.stock ?? product.quantity ?? 0);
+
+    if (!Number.isFinite(unitPrice) || !Number.isFinite(stockOnHand)) {
+      return sum;
+    }
+
+    return sum + (unitPrice * stockOnHand);
+  }, 0);
+}
+
+async function getCatalogInventoryValueSafely() {
+  try {
+    return calculateInventoryValue(await getCachedProductCatalog());
+  } catch (error) {
+    if (!isPrivateSchemaAccessError(error)) {
+      console.warn('Unable to calculate inventory value for catalog summary:', error?.message || error);
+    }
+    return 0;
+  }
+}
+
 async function getCachedServiceCatalog() {
   const now = Date.now();
   if (serviceCatalogCache.data && (now - serviceCatalogCache.fetchedAt) < SERVICE_CATALOG_CACHE_TTL_MS) {
@@ -2571,6 +2595,8 @@ router.get('/products/:productId/stock-history', requireRole('admin', 'stock_cle
 
 router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, next) => {
   try {
+    const inventoryValue = await getCatalogInventoryValueSafely();
+
     try {
       const summaryRows = await callRpc('get_catalog_summary');
       const summary = Array.isArray(summaryRows) ? (summaryRows[0] ?? null) : summaryRows;
@@ -2581,6 +2607,7 @@ router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, ne
           pricelistRows: Number(summary?.pricelist_rows ?? 0),
           uniqueProducts: Number(summary?.unique_products ?? 0),
           currentPrices: Number(summary?.current_prices ?? 0),
+          inventoryValue,
         },
       });
       return;
@@ -2600,6 +2627,7 @@ router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, ne
         pricelistRows: totalProducts,
         uniqueProducts: totalProducts,
         currentPrices: totalProducts,
+        inventoryValue,
       },
     });
   } catch (error) {

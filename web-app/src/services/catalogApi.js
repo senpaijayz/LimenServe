@@ -395,6 +395,7 @@ export async function getCatalogSummary() {
       pricelistRows: 0,
       uniqueProducts: 0,
       currentPrices: 0,
+      inventoryValue: 0,
     };
   } catch (error) {
     extractApiError(error, 'Failed to load catalog summary.');
