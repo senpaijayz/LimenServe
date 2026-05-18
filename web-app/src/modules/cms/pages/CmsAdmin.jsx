@@ -1437,9 +1437,6 @@ export default function CmsAdmin() {
               Website Editor
             </div>
             <h1 className="mt-4 text-3xl font-display font-bold text-primary-950">Content Management</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-primary-600">
-              Edit public website pages with simple forms. No JSON or code editing is required for basic page, navigation, and contact updates.
-            </p>
           </div>
           <button
             type="button"
