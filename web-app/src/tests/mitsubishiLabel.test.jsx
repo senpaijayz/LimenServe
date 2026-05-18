@@ -26,7 +26,7 @@ describe('Mitsubishi genuine parts label', () => {
         expect(screen.getByText('RIKEN CP38 (SANDPAPER)')).toBeTruthy();
         expect(screen.getByText('QTY: 1')).toBeTruthy();
         expect(labelRoot?.getAttribute('data-barcode-value')).toBe('DP0103740001');
-        expect(labelRoot?.getAttribute('data-barcode-format')).toBe('CODE39');
+        expect(labelRoot?.getAttribute('data-barcode-format')).toBe('CODE128');
     });
 
     it('writes print output with sticker-specific sizing and print color fidelity', () => {
