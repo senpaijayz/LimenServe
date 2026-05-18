@@ -24,7 +24,7 @@ export function normalizeBarcodeToken(value) {
 
 export function buildProductBarcodeValue(sku) {
     const normalizedSku = normalizeBarcodeToken(sku);
-    return normalizedSku ? `${normalizedSku}${PRODUCT_BARCODE_SUFFIX}` : '';
+    return normalizedSku ? `${normalizedSku} ${PRODUCT_BARCODE_SUFFIX}` : '';
 }
 
 export function stripProductBarcodeSuffix(value) {

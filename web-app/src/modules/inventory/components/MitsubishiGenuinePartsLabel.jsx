@@ -23,9 +23,9 @@ const SIZE_PRESETS = {
         quantityFontSize: 16,
         skuFontSize: 64,
         barcodeTopMargin: 12,
-        barcodeHeight: 92,
-        barcodeWidth: 1.72,
-        barcodeMargin: 24,
+        barcodeHeight: 96,
+        barcodeWidth: 1.08,
+        barcodeMargin: 30,
         barcodePadX: 8,
         footerTopMargin: 8,
         footerFontSize: 10.5,
@@ -50,9 +50,9 @@ const SIZE_PRESETS = {
         quantityFontSize: 14,
         skuFontSize: 52,
         barcodeTopMargin: 10,
-        barcodeHeight: 78,
-        barcodeWidth: 1.46,
-        barcodeMargin: 20,
+        barcodeHeight: 86,
+        barcodeWidth: 0.98,
+        barcodeMargin: 28,
         barcodePadX: 6,
         footerTopMargin: 8,
         footerFontSize: 9,
@@ -77,9 +77,9 @@ const SIZE_PRESETS = {
         quantityFontSize: 12,
         skuFontSize: 40,
         barcodeTopMargin: 8,
-        barcodeHeight: 62,
-        barcodeWidth: 1.18,
-        barcodeMargin: 16,
+        barcodeHeight: 72,
+        barcodeWidth: 0.84,
+        barcodeMargin: 24,
         barcodePadX: 4,
         footerTopMargin: 6,
         footerFontSize: 8,
@@ -112,7 +112,7 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
             ref={ref}
             data-product-label-root="true"
             data-label-variant="mitsubishi-sticker"
-            data-barcode-format="CODE128"
+            data-barcode-format="CODE39"
             data-barcode-value={barcodeValue}
             className={className}
             style={{
@@ -299,7 +299,7 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
                     >
                         <Barcode
                             value={barcodeValue}
-                            format="CODE128"
+                            format="CODE39"
                             width={preset.barcodeWidth}
                             height={preset.barcodeHeight}
                             fontSize={0}

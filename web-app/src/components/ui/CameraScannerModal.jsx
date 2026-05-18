@@ -117,7 +117,7 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                             <p className="font-semibold text-primary-900">Keep the printed part number and barcode bars inside the guide.</p>
                             <div className="flex flex-wrap gap-2 text-xs uppercase tracking-wide text-primary-500">
                                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
-                                    <Camera className="h-3.5 w-3.5" /> Code 128 / 39
+                                    <Camera className="h-3.5 w-3.5" /> Code 39 / 128
                                 </span>
                                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
                                     <Zap className="h-3.5 w-3.5" /> Torch when supported

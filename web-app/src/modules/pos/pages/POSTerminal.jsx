@@ -291,10 +291,10 @@ const POSTerminal = () => {
                                             <Barcode
                                                 value={buildProductBarcodeValue(product.sku || 'UNKNOWN') || (product.sku || 'UNKNOWN')}
                                                 format="CODE39"
-                                                width={0.68}
-                                                height={36}
+                                                width={0.82}
+                                                height={48}
                                                 fontSize={10}
-                                                margin={6}
+                                                margin={16}
                                                 displayValue={false}
                                                 background="#ffffff"
                                                 lineColor="#0f172a"
