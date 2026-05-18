@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArchiveRestore, Edit2, Package, Plus, RefreshCw, Save, Search, Trash2 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
@@ -94,24 +94,7 @@ export default function ProductManagement() {
     refreshKey,
   });
 
-  useEffect(() => {
-    async function loadMeta() {
-      try {
-        const [supplierRows, categoryRows, archivedRows] = await Promise.all([getSuppliers(), getManagedCategories(), getArchivedCatalogProducts(8)]);
-        setSuppliers(supplierRows);
-        setManagedCategories(categoryRows);
-        setArchivedProducts(archivedRows);
-      } catch (loadError) {
-        showError(loadError.message || 'Unable to load product metadata.');
-      }
-    }
-    void loadMeta();
-  }, [showError]);
-
-  const totalStock = useMemo(() => products.reduce((sum, product) => sum + Number(product.stock ?? product.quantity ?? 0), 0), [products]);
-  const partNumberSuggestions = useMemo(() => getPartNumberSearchSuggestions(products, searchQuery, 5), [products, searchQuery]);
-
-  const refreshArchivedProducts = async () => {
+  const refreshArchivedProducts = useCallback(async () => {
     setArchivedLoading(true);
     try {
       setArchivedProducts(await getArchivedCatalogProducts(8));
@@ -120,7 +103,24 @@ export default function ProductManagement() {
     } finally {
       setArchivedLoading(false);
     }
-  };
+  }, [showError]);
+
+  useEffect(() => {
+    async function loadMeta() {
+      try {
+        const [supplierRows, categoryRows] = await Promise.all([getSuppliers(), getManagedCategories()]);
+        setSuppliers(supplierRows);
+        setManagedCategories(categoryRows);
+      } catch (loadError) {
+        showError(loadError.message || 'Unable to load product metadata.');
+      }
+    }
+    void loadMeta();
+    void refreshArchivedProducts();
+  }, [refreshArchivedProducts, showError]);
+
+  const totalStock = useMemo(() => products.reduce((sum, product) => sum + Number(product.stock ?? product.quantity ?? 0), 0), [products]);
+  const partNumberSuggestions = useMemo(() => getPartNumberSearchSuggestions(products, searchQuery, 5), [products, searchQuery]);
 
   const openCreate = () => {
     setEditingProduct(null);
