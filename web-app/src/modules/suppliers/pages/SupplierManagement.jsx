@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Edit2, Plus, RefreshCw, Save, Search, Trash2, Truck } from 'lucide-react';
 import Button from '../../../components/ui/Button';
-import Card, { KPICard } from '../../../components/ui/Card';
+import Card from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
 import { useToast } from '../../../components/ui/Toast';
 import { createSupplier, deleteSupplier, getSuppliers, updateSupplier } from '../../../services/catalogApi';
@@ -66,6 +66,7 @@ export default function SupplierManagement() {
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
+  const [deletingSupplierId, setDeletingSupplierId] = useState(null);
 
   const loadSuppliers = async () => {
     setLoading(true);
@@ -140,12 +141,15 @@ export default function SupplierManagement() {
 
   const handleDelete = async (supplier) => {
     if (!window.confirm(`Delete supplier "${supplier.name}"?`)) return;
+    setDeletingSupplierId(supplier.id);
     try {
       await deleteSupplier(supplier.id);
+      setSuppliers((current) => current.filter((item) => item.id !== supplier.id));
       success('Supplier deleted.');
-      await loadSuppliers();
     } catch (deleteError) {
       showError(deleteError.message || 'Unable to delete supplier.');
+    } finally {
+      setDeletingSupplierId(null);
     }
   };
 
@@ -165,10 +169,16 @@ export default function SupplierManagement() {
 
       {error && <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/5 px-4 py-3 text-sm text-accent-danger">{error}</div>}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <KPICard title="Supplier Records" value={formatNumber(suppliers.length)} icon={<Truck className="h-6 w-6" />} />
-        <KPICard title="With Email" value={formatNumber(suppliers.filter((supplier) => supplier.email).length)} icon={<Truck className="h-6 w-6" />} accentColor="border-emerald-500" iconBg="bg-emerald-50 text-emerald-600" />
-        <KPICard title="With Phone" value={formatNumber(suppliers.filter((supplier) => supplier.phone).length)} icon={<Truck className="h-6 w-6" />} accentColor="border-amber-500" iconBg="bg-amber-50 text-amber-600" />
+      <div className="rounded-2xl border border-primary-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50 text-accent-blue">
+            <Truck className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-500">Supplier Records</p>
+            <p className="mt-1 text-3xl font-bold text-primary-950">{formatNumber(suppliers.length)}</p>
+          </div>
+        </div>
       </div>
 
       <Card
@@ -208,7 +218,16 @@ export default function SupplierManagement() {
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
                       <Button variant="outline" size="sm" leftIcon={<Edit2 className="h-4 w-4" />} onClick={() => openEdit(supplier)}>Edit</Button>
-                      <Button variant="outline" size="sm" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => handleDelete(supplier)}>Delete</Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        leftIcon={<Trash2 className="h-4 w-4" />}
+                        isLoading={deletingSupplierId === supplier.id}
+                        disabled={Boolean(deletingSupplierId)}
+                        onClick={() => handleDelete(supplier)}
+                      >
+                        Delete
+                      </Button>
                     </div>
                   </td>
                 </tr>

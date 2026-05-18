@@ -2279,6 +2279,21 @@ router.patch('/suppliers/:supplierId', requireRole('admin'), async (req, res, ne
 router.delete('/suppliers/:supplierId', requireRole('admin'), async (req, res, next) => {
   try {
     const supplierId = String(req.params.supplierId || '').trim();
+    if (!supplierId) {
+      res.status(400).json({ error: 'Supplier is required.' });
+      return;
+    }
+
+    const { error: unlinkError } = await supabaseAdmin
+      .schema('catalog')
+      .from('product_supplier_links')
+      .delete()
+      .eq('supplier_id', supplierId);
+
+    if (unlinkError && !isPrivateSchemaAccessError(unlinkError) && !String(unlinkError.message || '').includes('product_supplier_links')) {
+      throw unlinkError;
+    }
+
     const { error } = await supabaseAdmin.schema('catalog').from('suppliers').delete().eq('id', supplierId);
     if (error) {
       throw error;
