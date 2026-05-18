@@ -411,9 +411,16 @@ function normalizeSku(value, fallbackPrefix = 'SKU') {
 }
 
 function normalizePartNumber(value) {
-  return String(value || '')
+  const normalizedScanValue = String(value || '')
     .trim()
     .toUpperCase()
+    .replace(/^\*+|\*+$/g, '')
+    .replace(/\s+/g, '');
+  const withoutBarcodeSuffix = normalizedScanValue.endsWith('0001') && normalizedScanValue.length > 4
+    ? normalizedScanValue.slice(0, -4)
+    : normalizedScanValue;
+
+  return withoutBarcodeSuffix
     .replace(/[^A-Z0-9-]/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');

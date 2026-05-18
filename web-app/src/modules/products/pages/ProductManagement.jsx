@@ -16,7 +16,7 @@ import {
   updateCatalogProduct,
 } from '../../../services/catalogApi';
 import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
-import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
+import { getPartNumberSearchSuggestions, getProductPartNumber, normalizeBarcodeToken, stripProductBarcodeSuffix } from '../../../utils/barcode';
 
 const PAGE_SIZE = 12;
 const inputClassName = 'w-full rounded-xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-950 shadow-sm outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15';
@@ -67,7 +67,7 @@ function isStockIncrease(entry = {}) {
 }
 
 export default function ProductManagement() {
-  const { success, error: showError } = useToast();
+  const { success, error: showError, info } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -121,6 +121,23 @@ export default function ProductManagement() {
 
   const totalStock = useMemo(() => products.reduce((sum, product) => sum + Number(product.stock ?? product.quantity ?? 0), 0), [products]);
   const partNumberSuggestions = useMemo(() => getPartNumberSearchSuggestions(products, searchQuery, 5), [products, searchQuery]);
+  const productCategoryOptions = useMemo(() => {
+    const categoryRows = (managedCategories.length > 0 ? managedCategories : categories)
+      .map((category) => ({
+        id: category.id || category.value || category.name || category.label,
+        name: category.name || category.label,
+      }))
+      .filter((category) => category.name && category.name.toLowerCase() !== 'all categories');
+
+    if (!categoryRows.some((category) => category.name === 'General Parts & Accessories')) {
+      categoryRows.unshift({
+        id: 'general-parts-accessories',
+        name: 'General Parts & Accessories',
+      });
+    }
+
+    return categoryRows;
+  }, [categories, managedCategories]);
 
   const openCreate = () => {
     setEditingProduct(null);
@@ -155,26 +172,45 @@ export default function ProductManagement() {
 
   const handleSave = async (event) => {
     event.preventDefault();
-    if (!form.sku.trim()) {
+    const partNumber = stripProductBarcodeSuffix(normalizeBarcodeToken(form.sku));
+    const productName = String(form.name || '').trim() || partNumber;
+    const category = String(form.category || 'General Parts & Accessories').trim();
+    const price = Number(form.price || 0);
+
+    if (!partNumber) {
       showError('Part number is required.');
       return;
     }
+
+    if (!category || category === 'all') {
+      showError('Choose a product category before saving.');
+      return;
+    }
+
+    if (!Number.isFinite(price) || price < 0) {
+      showError('Retail price must be zero or greater.');
+      return;
+    }
+
     setSaving(true);
+    info(editingProduct ? `Saving ${partNumber}...` : `Registering ${partNumber}...`);
     try {
       const supplier = suppliers.find((item) => item.id === form.supplierId);
       const payload = {
         ...form,
-        sku: form.sku.trim(),
-        price: Number(form.price || 0),
+        sku: partNumber,
+        name: productName,
+        category,
+        price,
         supplierName: supplier?.name || form.supplierName,
       };
 
       if (editingProduct) {
         await updateCatalogProduct(editingProduct.id, payload);
-        success('Product updated.');
+        success(`Product ${partNumber} updated successfully.`);
       } else {
         await createCatalogProduct(payload);
-        success('Product created.');
+        success(`Product ${partNumber} registered successfully.`);
       }
 
       closeModal();
@@ -357,11 +393,11 @@ export default function ProductManagement() {
       </Card>
 
       <Modal isOpen={isModalOpen} onClose={closeModal} title={editingProduct ? 'Edit Product' : 'Register New Product'} size="xl">
-        <form onSubmit={handleSave} className="space-y-5">
+        <form onSubmit={handleSave} className="space-y-5" noValidate>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
               <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Part Number</span>
-              <input className={`${inputClassName} mt-2`} value={form.sku} onChange={(event) => setForm({ ...form, sku: event.target.value })} placeholder="Enter exact part number" required />
+              <input className={`${inputClassName} mt-2 font-mono uppercase`} value={form.sku} onChange={(event) => setForm({ ...form, sku: event.target.value.toUpperCase() })} placeholder="Example: 5370A737" required />
             </label>
             <label className="block">
               <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Retail Price</span>
@@ -369,13 +405,13 @@ export default function ProductManagement() {
             </label>
             <label className="block md:col-span-2">
               <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Product Name</span>
-              <input className={`${inputClassName} mt-2`} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
+              <input className={`${inputClassName} mt-2`} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Optional; defaults to the part number" />
             </label>
             <label className="block">
               <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Category</span>
               <select className={`${inputClassName} mt-2`} value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
-                {(managedCategories.length > 0 ? managedCategories : categories).filter((category) => category.name || category.label).map((category) => (
-                  <option key={category.id || category.value} value={category.name || category.label}>{category.name || category.label}</option>
+                {productCategoryOptions.map((category) => (
+                  <option key={category.id || category.name} value={category.name}>{category.name}</option>
                 ))}
               </select>
             </label>
