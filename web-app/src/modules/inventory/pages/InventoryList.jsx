@@ -797,10 +797,11 @@ const InventoryList = () => {
             <AddStockModal
                 isOpen={showAddModal}
                 onClose={() => setShowAddModal(false)}
-                onSave={async ({ product, quantity, supplierName, supplierContact, supplierAddress, referenceNumber, receivedDate, reason, _bulkMode }) => {
+                onSave={async ({ product, quantity, supplierId, supplierName, supplierContact, supplierAddress, referenceNumber, receivedDate, reason, _bulkMode }) => {
                     const result = await receiveInventoryStock({
                         productId: product.id,
                         quantity,
+                        supplierId,
                         supplierName,
                         supplierContact,
                         supplierAddress,

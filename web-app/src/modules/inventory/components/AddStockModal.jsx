@@ -5,10 +5,12 @@ import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import useDataStore from '../../../store/useDataStore';
+import { getSuppliers } from '../../../services/catalogApi';
 import { formatNumber } from '../../../utils/formatters';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 
 const EMPTY_SUPPLIER = {
+    id: '',
     name: '',
     contact: '',
     address: '',
@@ -16,6 +18,12 @@ const EMPTY_SUPPLIER = {
     receivedDate: new Date().toISOString().slice(0, 10),
     reason: 'Stock receiving',
 };
+
+const getSupplierContactDetails = (supplier = {}) => [
+    supplier.contactName,
+    supplier.phone,
+    supplier.email,
+].filter(Boolean).join(' | ');
 
 function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products }) {
     const [query, setQuery] = useState(item.searchQuery || '');
@@ -165,9 +173,13 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
     const [submitProgress, setSubmitProgress] = useState({ done: 0, total: 0 });
     const [bulkSuccess, setBulkSuccess] = useState(false);
     const [bulkResults, setBulkResults] = useState([]);
+    const [suppliers, setSuppliers] = useState([]);
+    const [loadingSuppliers, setLoadingSuppliers] = useState(false);
 
     useEffect(() => {
         if (!isOpen) return;
+        let isActive = true;
+
         setBulkItems([emptyItem()]);
         setSupplier(EMPTY_SUPPLIER);
         setError('');
@@ -175,9 +187,56 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
         setSubmitProgress({ done: 0, total: 0 });
         setBulkSuccess(false);
         setBulkResults([]);
+
+        const loadSuppliers = async () => {
+            setLoadingSuppliers(true);
+            try {
+                const supplierRows = await getSuppliers();
+                if (isActive) {
+                    setSuppliers(supplierRows);
+                }
+            } catch (loadError) {
+                if (isActive) {
+                    setError(loadError.message || 'Unable to load suppliers.');
+                    setSuppliers([]);
+                }
+            } finally {
+                if (isActive) {
+                    setLoadingSuppliers(false);
+                }
+            }
+        };
+
+        void loadSuppliers();
+
+        return () => {
+            isActive = false;
+        };
     }, [isOpen]);
 
     const updateSupplier = (field, val) => setSupplier((current) => ({ ...current, [field]: val }));
+
+    const selectSupplier = (supplierId) => {
+        const selectedSupplier = suppliers.find((item) => item.id === supplierId);
+        if (!selectedSupplier) {
+            setSupplier((current) => ({
+                ...current,
+                id: '',
+                name: '',
+                contact: '',
+                address: '',
+            }));
+            return;
+        }
+
+        setSupplier((current) => ({
+            ...current,
+            id: selectedSupplier.id,
+            name: selectedSupplier.name || '',
+            contact: getSupplierContactDetails(selectedSupplier),
+            address: selectedSupplier.address || '',
+        }));
+    };
 
     const updateBulkItem = useCallback((index, changes) => {
         setBulkItems((items) => items.map((item, i) => (i === index ? { ...item, ...changes } : item)));
@@ -199,10 +258,6 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
             setError('Supplier name is required.');
             return;
         }
-        if (!supplier.contact.trim()) {
-            setError('Supplier contact details are required.');
-            return;
-        }
 
         setIsSubmitting(true);
         setError('');
@@ -216,6 +271,7 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                 await onSave({
                     product: item.product,
                     quantity: qty,
+                    supplierId: supplier.id || null,
                     supplierName: supplier.name.trim(),
                     supplierContact: supplier.contact.trim(),
                     supplierAddress: supplier.address.trim(),
@@ -290,8 +346,24 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                         <div className="rounded-xl border border-primary-200 p-4 space-y-4">
                             <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Supplier Information</p>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <label className="block sm:col-span-2">
+                                    <span className="mb-1 block text-xs font-medium text-primary-600">Supplier</span>
+                                    <select
+                                        className="input w-full"
+                                        value={supplier.id}
+                                        onChange={(e) => selectSupplier(e.target.value)}
+                                        disabled={loadingSuppliers}
+                                    >
+                                        <option value="">{loadingSuppliers ? 'Loading suppliers...' : 'Manual supplier entry'}</option>
+                                        {suppliers.map((supplierOption) => (
+                                            <option key={supplierOption.id} value={supplierOption.id}>
+                                                {supplierOption.name}{supplierOption.supplierId ? ` - ${supplierOption.supplierId}` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
                                 <Input label="Supplier Name *" placeholder="e.g. Mitsubishi Motors PH" value={supplier.name} onChange={(e) => updateSupplier('name', e.target.value)} />
-                                <Input label="Contact Details *" placeholder="Phone or email" value={supplier.contact} onChange={(e) => updateSupplier('contact', e.target.value)} />
+                                <Input label="Contact Details" placeholder="Phone or email" value={supplier.contact} onChange={(e) => updateSupplier('contact', e.target.value)} />
                                 <Input label="Address" placeholder="Supplier address" value={supplier.address} onChange={(e) => updateSupplier('address', e.target.value)} />
                                 <Input label="Invoice / Reference No." placeholder="DR / OR number" value={supplier.referenceNumber} onChange={(e) => updateSupplier('referenceNumber', e.target.value)} />
                                 <Input label="Received Date" type="date" value={supplier.receivedDate} onChange={(e) => updateSupplier('receivedDate', e.target.value)} />
@@ -319,7 +391,7 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                                     type="button"
                                     onClick={handleSaveBulk}
                                     isLoading={isSubmitting}
-                                    disabled={validBulkItems.length === 0 || !supplier.name.trim() || !supplier.contact.trim() || isSubmitting}
+                                    disabled={validBulkItems.length === 0 || !supplier.name.trim() || isSubmitting}
                                     leftIcon={<Plus className="w-4 h-4" />}
                                 >
                                     Receive Stock ({validBulkItems.length})
