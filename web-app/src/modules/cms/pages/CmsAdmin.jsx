@@ -667,6 +667,22 @@ function readFileAsDataUrl(file) {
   });
 }
 
+function getImageFileName(value) {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) {
+    return '';
+  }
+
+  const withoutQuery = rawValue.split('?')[0];
+  const lastSegment = withoutQuery.split('/').filter(Boolean).pop() || withoutQuery;
+
+  try {
+    return decodeURIComponent(lastSegment);
+  } catch {
+    return lastSegment;
+  }
+}
+
 function StatusBadge({ status }) {
   const styles = {
     published: 'bg-accent-success/10 text-accent-success',
@@ -708,6 +724,7 @@ function ImageUploadField({
   helper = 'Upload JPG, PNG, WEBP, or SVG up to 5MB.',
 }) {
   const isUploading = uploadingKey === uploadKey;
+  const fileName = getImageFileName(value);
 
   const handleFileChange = async (event) => {
     const file = event.target.files?.[0];
@@ -733,7 +750,27 @@ function ImageUploadField({
           )}
         </div>
         <div className="min-w-0 space-y-3">
-          <Field label={label} value={value} onChange={onChange} placeholder="/LogoLimen.jpg or uploaded image URL" />
+          <label className="block">
+            <span className="text-xs font-bold uppercase tracking-[0.18em] text-primary-500">{label}</span>
+            <input
+              type="text"
+              value={fileName}
+              readOnly
+              placeholder="No image selected"
+              className="mt-2 w-full rounded-2xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-900 outline-none"
+            />
+          </label>
+          {value && (
+            <details className="rounded-2xl border border-primary-200 bg-white px-4 py-3 text-xs text-primary-500">
+              <summary className="cursor-pointer font-semibold text-primary-700">Advanced image URL</summary>
+              <input
+                type="text"
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                className="mt-3 w-full rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 font-mono text-xs text-primary-700 outline-none focus:border-accent-primary"
+              />
+            </details>
+          )}
           <div className="flex flex-wrap items-center gap-3">
             <label className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-primary-200 bg-white px-4 text-sm font-semibold text-accent-primary shadow-sm transition hover:bg-primary-100 ${isUploading ? 'pointer-events-none opacity-70' : ''}`}>
               {isUploading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -1297,12 +1334,12 @@ export default function CmsAdmin() {
     const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']);
 
     if (!allowedTypes.has(file.type)) {
-      showError('Upload a JPG, PNG, WEBP, or SVG image.');
+      showError('Image upload failed. Upload a JPG, PNG, WEBP, or SVG image.');
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      showError('Image must be 5MB or smaller.');
+      showError('Image upload failed. Image must be 5MB or smaller.');
       return;
     }
 
@@ -1320,9 +1357,9 @@ export default function CmsAdmin() {
       }
 
       onUrlReady(asset.publicUrl);
-      success('Image uploaded successfully');
+      success(`Image uploaded successfully: ${getImageFileName(asset.publicUrl) || file.name}`);
     } catch (uploadError) {
-      showError(uploadError.message || 'Failed to upload image.');
+      showError(uploadError.message || 'Image upload failed. Please try again.');
     } finally {
       setUploadingKey('');
     }
@@ -1345,9 +1382,9 @@ export default function CmsAdmin() {
       const savedPage = await saveCmsPage(payload);
       await refreshPages(savedPage.slug);
       setPageDraft(normalizePage(savedPage));
-      success('CMS page saved successfully');
+      success(`CMS page saved successfully: ${savedPage.title || savedPage.slug}`);
     } catch (saveError) {
-      showError(saveError.message || 'Failed to save CMS page.');
+      showError(saveError.message || 'Failed to save CMS page. Please check the page fields and try again.');
     } finally {
       setSaving(false);
     }
@@ -1357,9 +1394,9 @@ export default function CmsAdmin() {
     setSaving(true);
     try {
       await saveCmsSiteSettings(settingsDraft);
-      success('Site settings saved successfully');
+      success('Site settings saved successfully.');
     } catch (saveError) {
-      showError(saveError.message || 'Failed to save site settings.');
+      showError(saveError.message || 'Failed to save site settings. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -1376,9 +1413,9 @@ export default function CmsAdmin() {
       }));
       await saveCmsNavigation(navigation);
       setNavigationDraft(normalizeNavigationItems(navigation));
-      success('Navigation saved successfully');
+      success('Navigation saved successfully.');
     } catch (saveError) {
-      showError(saveError.message || 'Failed to save navigation.');
+      showError(saveError.message || 'Failed to save navigation. Please try again.');
     } finally {
       setSaving(false);
     }
