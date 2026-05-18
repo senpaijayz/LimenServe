@@ -28,10 +28,15 @@ const { constructorSpy, renderSpy, MockHtml5QrcodeScanner } = vi.hoisted(() => {
 vi.mock('html5-qrcode', () => ({
     Html5QrcodeScanner: MockHtml5QrcodeScanner,
     Html5QrcodeSupportedFormats: {
+        CODABAR: 'CODABAR',
         CODE_39: 'CODE_39',
+        CODE_93: 'CODE_93',
         CODE_128: 'CODE_128',
+        ITF: 'ITF',
         EAN_13: 'EAN_13',
+        EAN_8: 'EAN_8',
         UPC_A: 'UPC_A',
+        UPC_E: 'UPC_E',
     },
     Html5QrcodeScanType: {
         SCAN_TYPE_CAMERA: 'SCAN_TYPE_CAMERA',
@@ -68,16 +73,17 @@ describe('CameraScannerModal', () => {
                 disableFlip: true,
                 qrbox: expect.any(Function),
                 rememberLastUsedCamera: true,
+                useBarCodeDetectorIfSupported: true,
                 showTorchButtonIfSupported: true,
                 showZoomSliderIfSupported: false,
-                formatsToSupport: ['CODE_39', 'CODE_128', 'EAN_13', 'UPC_A'],
+                formatsToSupport: ['CODABAR', 'CODE_39', 'CODE_93', 'CODE_128', 'ITF', 'EAN_13', 'EAN_8', 'UPC_A', 'UPC_E'],
                 supportedScanTypes: ['SCAN_TYPE_CAMERA'],
             }),
             false
         );
 
         const [, scannerConfig] = constructorSpy.mock.calls[0];
-        expect(scannerConfig.qrbox(390, 640)).toEqual({ width: 358, height: 217 });
+        expect(scannerConfig.qrbox(390, 640)).toEqual({ width: 374, height: 153 });
     });
 
     it('ignores empty scan callbacks instead of closing with an invalid code', async () => {
@@ -104,7 +110,7 @@ describe('CameraScannerModal', () => {
         expect(onClose).not.toHaveBeenCalled();
     });
 
-    it('normalizes valid barcode text before handing it to the parent flow', async () => {
+    it('normalizes valid barcode text to the primary part number before handing it to the parent flow', async () => {
         const onClose = vi.fn();
         const onScan = vi.fn();
 
@@ -123,7 +129,7 @@ describe('CameraScannerModal', () => {
         const [handleSuccess] = renderSpy.mock.calls[0];
         handleSuccess('* 4013A310 0001 *');
 
-        expect(onScan).toHaveBeenCalledWith('4013A3100001');
+        expect(onScan).toHaveBeenCalledWith('4013A310');
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 });

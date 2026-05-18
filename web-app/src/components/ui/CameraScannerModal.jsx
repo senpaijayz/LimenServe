@@ -7,11 +7,11 @@ import {
 import { Camera, Zap, ScanLine } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
-import { normalizeBarcodeToken } from '../../utils/barcode';
+import { normalizeBarcodeToken, stripProductBarcodeSuffix } from '../../utils/barcode';
 
 const getBarcodeScanBox = (viewfinderWidth, viewfinderHeight) => {
-    const width = Math.max(260, Math.min(Math.floor(viewfinderWidth * 0.92), 520));
-    const height = Math.max(120, Math.min(Math.floor(viewfinderHeight * 0.34), 220));
+    const width = Math.max(300, Math.min(Math.floor(viewfinderWidth * 0.96), 680));
+    const height = Math.max(96, Math.min(Math.floor(viewfinderHeight * 0.24), 160));
 
     return { width, height };
 };
@@ -34,14 +34,20 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                     aspectRatio: 1.777778,
                     disableFlip: true,
                     rememberLastUsedCamera: true,
+                    useBarCodeDetectorIfSupported: true,
                     supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
                     showTorchButtonIfSupported: true,
                     showZoomSliderIfSupported: false,
                     formatsToSupport: [
+                        Html5QrcodeSupportedFormats.CODABAR,
                         Html5QrcodeSupportedFormats.CODE_39,
+                        Html5QrcodeSupportedFormats.CODE_93,
                         Html5QrcodeSupportedFormats.CODE_128,
+                        Html5QrcodeSupportedFormats.ITF,
                         Html5QrcodeSupportedFormats.EAN_13,
+                        Html5QrcodeSupportedFormats.EAN_8,
                         Html5QrcodeSupportedFormats.UPC_A,
+                        Html5QrcodeSupportedFormats.UPC_E,
                     ],
                 },
                 /* verbose= */ false
@@ -49,7 +55,7 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
 
             scanner.render(
                 (decodedText) => {
-                    const normalizedCode = normalizeBarcodeToken(decodedText);
+                    const normalizedCode = stripProductBarcodeSuffix(normalizeBarcodeToken(decodedText));
 
                     if (!normalizedCode) {
                         return;
