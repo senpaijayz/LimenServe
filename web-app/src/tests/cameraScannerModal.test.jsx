@@ -1,4 +1,4 @@
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { constructorSpy, renderSpy, MockHtml5QrcodeScanner } = vi.hoisted(() => {
@@ -75,7 +75,8 @@ describe('CameraScannerModal', () => {
                 rememberLastUsedCamera: true,
                 useBarCodeDetectorIfSupported: true,
                 showTorchButtonIfSupported: true,
-                showZoomSliderIfSupported: false,
+                showZoomSliderIfSupported: true,
+                defaultZoomValueIfSupported: 2,
                 formatsToSupport: ['CODABAR', 'CODE_39', 'CODE_93', 'CODE_128', 'ITF', 'EAN_13', 'EAN_8', 'UPC_A', 'UPC_E'],
                 supportedScanTypes: ['SCAN_TYPE_CAMERA'],
             }),
@@ -83,7 +84,7 @@ describe('CameraScannerModal', () => {
         );
 
         const [, scannerConfig] = constructorSpy.mock.calls[0];
-        expect(scannerConfig.qrbox(390, 640)).toEqual({ width: 374, height: 153 });
+        expect(scannerConfig.qrbox(390, 640)).toEqual({ width: 374, height: 371 });
     });
 
     it('ignores empty scan callbacks instead of closing with an invalid code', async () => {
@@ -130,6 +131,27 @@ describe('CameraScannerModal', () => {
         handleSuccess('* 4013A310 0001 *');
 
         expect(onScan).toHaveBeenCalledWith('4013A310');
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets staff submit the printed part number when a damaged label will not decode', async () => {
+        const onClose = vi.fn();
+        const onScan = vi.fn();
+
+        render(
+            <CameraScannerModal
+                isOpen
+                onClose={onClose}
+                onScan={onScan}
+            />
+        );
+
+        fireEvent.change(screen.getByLabelText(/enter the printed part number/i), {
+            target: { value: '21305W010P 0001' },
+        });
+        fireEvent.click(screen.getByText('Use Part Number'));
+
+        expect(onScan).toHaveBeenCalledWith('21305W010P');
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 });

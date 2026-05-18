@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Html5QrcodeScanner,
     Html5QrcodeSupportedFormats,
@@ -11,7 +11,7 @@ import { normalizeBarcodeToken, stripProductBarcodeSuffix } from '../../utils/ba
 
 const getBarcodeScanBox = (viewfinderWidth, viewfinderHeight) => {
     const width = Math.max(300, Math.min(Math.floor(viewfinderWidth * 0.96), 680));
-    const height = Math.max(96, Math.min(Math.floor(viewfinderHeight * 0.24), 160));
+    const height = Math.max(240, Math.min(Math.floor(viewfinderHeight * 0.58), 440));
 
     return { width, height };
 };
@@ -21,6 +21,8 @@ const getBarcodeScanBox = (viewfinderWidth, viewfinderHeight) => {
  * Displays a live camera feed for scanning barcodes using html5-qrcode.
  */
 const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
+    const [manualCode, setManualCode] = useState('');
+
     useEffect(() => {
         let scanner = null;
 
@@ -37,7 +39,8 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                     useBarCodeDetectorIfSupported: true,
                     supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
                     showTorchButtonIfSupported: true,
-                    showZoomSliderIfSupported: false,
+                    showZoomSliderIfSupported: true,
+                    defaultZoomValueIfSupported: 2,
                     formatsToSupport: [
                         Html5QrcodeSupportedFormats.CODABAR,
                         Html5QrcodeSupportedFormats.CODE_39,
@@ -87,6 +90,17 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
 
     if (!isOpen) return null;
 
+    const submitManualCode = () => {
+        const normalizedCode = stripProductBarcodeSuffix(normalizeBarcodeToken(manualCode));
+        if (!normalizedCode) {
+            return;
+        }
+
+        onScan(normalizedCode);
+        setManualCode('');
+        onClose();
+    };
+
     return (
         <Modal
             isOpen={isOpen}
@@ -101,13 +115,13 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                             <ScanLine className="h-5 w-5" />
                         </div>
                         <div className="space-y-2 text-sm text-primary-600">
-                            <p className="font-semibold text-primary-900">Center the barcode inside the guide and keep the label steady.</p>
+                            <p className="font-semibold text-primary-900">Keep the printed part number and barcode bars inside the guide.</p>
                             <div className="flex flex-wrap gap-2 text-xs uppercase tracking-wide text-primary-500">
                                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
                                     <Camera className="h-3.5 w-3.5" /> Code 39
                                 </span>
                                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
-                                    <Zap className="h-3.5 w-3.5" /> Torch when supported
+                                    <Zap className="h-3.5 w-3.5" /> Torch / zoom when supported
                                 </span>
                             </div>
                         </div>
@@ -118,6 +132,30 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                     {/* The div where html5-qrcode will render the video element */}
                     <div id="reader" className="w-full" />
 
+                </div>
+
+                <div className="rounded-xl border border-primary-200 bg-white p-3">
+                    <label className="block text-xs font-semibold text-primary-500" htmlFor="manual-barcode-entry">
+                        If the sticker is scratched or glossy, enter the printed part number
+                    </label>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                        <input
+                            id="manual-barcode-entry"
+                            className="input flex-1 font-mono text-sm uppercase"
+                            value={manualCode}
+                            onChange={(event) => setManualCode(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    submitManualCode();
+                                }
+                            }}
+                            placeholder="21305W010P"
+                        />
+                        <Button variant="secondary" onClick={submitManualCode} disabled={!manualCode.trim()}>
+                            Use Part Number
+                        </Button>
+                    </div>
                 </div>
 
                 {/* CSS Override for html5-qrcode default styling to make it look decent */}
@@ -153,6 +191,10 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                         border: 1px solid #e2e8f0;
                         width: 100%;
                         max-width: 300px;
+                    }
+                    #reader__dashboard_section_csr input[type="range"] {
+                        width: min(100%, 280px);
+                        accent-color: #2563eb;
                     }
                     #reader {
                         border: 0 !important;
