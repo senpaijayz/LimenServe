@@ -43,8 +43,13 @@ const supportItems = [
     'Service order status handling from intake to completion',
 ];
 
-function getCmsSection(page, sectionType) {
-    return page?.sections?.find((section) => section.sectionType === sectionType || section.section_type === sectionType)?.content || {};
+function getCmsSection(page, sectionType, sectionKey = '') {
+    const sections = page?.sections ?? [];
+    const section = sectionKey
+        ? sections.find((item) => (item.sectionKey || item.section_key) === sectionKey)
+        : sections.find((item) => item.sectionType === sectionType || item.section_type === sectionType);
+
+    return section?.content || {};
 }
 
 function mergeCmsSteps(fallbackSteps, cmsItems = []) {
@@ -95,10 +100,10 @@ const PublicServiceOrders = () => {
         };
     }, []);
 
-    const heroCms = getCmsSection(cmsPage, 'hero');
-    const processCms = getCmsSection(cmsPage, 'feature_grid');
-    const supportCms = getCmsSection(cmsPage, 'stats');
-    const assistanceCms = getCmsSection(cmsPage, 'cta');
+    const heroCms = getCmsSection(cmsPage, 'hero', 'service-orders-hero');
+    const processCms = getCmsSection(cmsPage, 'feature_grid', 'service-orders-process');
+    const supportCms = getCmsSection(cmsPage, 'stats', 'service-orders-support');
+    const assistanceCms = getCmsSection(cmsPage, 'cta', 'service-orders-assistance');
     const editableSteps = mergeCmsSteps(serviceSteps, processCms.items);
     const editableSupportItems = mergeCmsSupportItems(supportItems, supportCms.items);
 
@@ -219,12 +224,12 @@ const PublicServiceOrders = () => {
                             </div>
 
                             <div className="flex flex-col sm:flex-row gap-3">
-                                <Link to="/estimate" className="btn btn-primary">
-                                    Get Estimate
+                                <Link to={assistanceCms.primaryCta?.href || '/estimate'} className="btn btn-primary">
+                                    {assistanceCms.primaryCta?.label || 'Get Estimate'}
                                     <ArrowRight className="w-4 h-4" />
                                 </Link>
-                                <Link to="/catalog" className="btn btn-secondary">
-                                    View Parts
+                                <Link to={assistanceCms.secondaryCta?.href || '/catalog'} className="btn btn-secondary">
+                                    {assistanceCms.secondaryCta?.label || 'View Parts'}
                                 </Link>
                             </div>
                         </div>

@@ -109,7 +109,7 @@ function createDefaultSection(sectionType = 'rich_text', index = 0) {
         title: 'Section headline',
         subtitle: 'Short supporting copy.',
         items: [
-          { title: 'Feature title', description: 'Feature description', href: '' },
+          { title: 'Feature title', description: 'Feature description', href: '', imageUrl: '', imageAlt: '' },
         ],
       },
     };
@@ -168,6 +168,220 @@ function createDefaultSection(sectionType = 'rich_text', index = 0) {
       body: 'Write public content here.',
     },
   };
+}
+
+function createHomePageDraft() {
+  return createPageDraft({
+    slug: 'home',
+    title: 'Homepage',
+    pageType: 'landing',
+    templateKey: 'public_home',
+    status: 'published',
+    seo: {
+      title: 'Limen Auto Parts Center',
+      description: 'Search genuine and aftermarket auto parts from Limen Auto Parts Center.',
+      keywords: 'auto parts, Mitsubishi, Pasay, Limen',
+    },
+    sections: [
+      {
+        ...createDefaultSection('hero', 0),
+        sectionKey: 'home-hero',
+        title: 'Homepage Hero',
+        status: 'published',
+        content: {
+          eyebrow: 'Limen Autoparts Center',
+          title: 'Genuine and aftermarket auto parts customers can trust.',
+          subtitle: 'Search by part name, part number, or vehicle model and move straight into a cleaner quotation flow backed by a real auto parts store in Pasay City.',
+          primaryCta: { label: 'Shop Parts', href: '/catalog' },
+          secondaryCta: { label: 'Request a Quote', href: '/estimate' },
+          imageUrl: '',
+          imageAlt: 'Limen Auto Parts Center storefront',
+          imageEyebrow: 'Pasay City flagship store',
+          imageTitle: 'Real counter service, fitment checks, and faster quote turnaround for walk-in and online inquiries.',
+          storeLabel: 'Store',
+          storeValue: 'Real local support',
+          catalogLabel: 'Catalog',
+          catalogValue: 'Search by part or vehicle',
+          quotesLabel: 'Quotes',
+          quotesValue: 'Fast response flow',
+          badgeOne: 'Genuine Parts',
+          badgeTwo: 'Fast Delivery in PH',
+          badgeThree: 'Search by Vehicle',
+          vehicleTags: 'Montero Sport, Triton, Xforce, Xpander, Mirage, L300',
+        },
+      },
+      {
+        ...createDefaultSection('feature_grid', 1),
+        sectionKey: 'home-features',
+        title: 'Shop Categories',
+        status: 'published',
+        content: {
+          eyebrow: 'Shop by Category',
+          title: 'Browse fast-moving auto parts categories',
+          subtitle: 'Start with the part family customers usually ask for, then narrow by Mitsubishi model or exact part number inside the catalog.',
+          ctaLabel: 'View full catalog',
+          ctaHref: '/catalog',
+          items: [
+            { title: 'Engine Parts', description: 'Filters, timing components, gaskets, and cooling parts.', href: '/catalog?q=engine' },
+            { title: 'Brakes', description: 'Pads, rotors, brake hardware, and wear items for daily safety.', href: '/catalog?q=brake' },
+            { title: 'Suspension', description: 'Shocks, bushings, steering links, and ride-control parts.', href: '/catalog?q=suspension' },
+            { title: 'Electrical', description: 'Sensors, charging parts, relays, and wiring support.', href: '/catalog?q=electrical' },
+            { title: 'Body Parts', description: 'Panels, lamps, trims, mirrors, and exterior replacement parts.', href: '/catalog?q=body parts' },
+            { title: 'Maintenance', description: 'Tune-up items and service kits for regular preventive work.', href: '/catalog?q=maintenance' },
+          ],
+        },
+      },
+      {
+        ...createDefaultSection('feature_grid', 2),
+        sectionKey: 'home-best-sellers',
+        title: 'Best Sellers',
+        status: 'published',
+        content: {
+          eyebrow: 'Best Sellers',
+          title: 'Featured parts anchored to real Mitsubishi vehicle lines',
+          items: [
+            { title: 'Montero Sport Oil Filter', description: 'Best for PMS and daily service visits', eyebrow: 'Montero Sport', badge: 'Best Seller', partNo: 'ME-013307', price: 'PHP 1,245', href: '/catalog?q=Montero%20Sport%20Oil%20Filter', imageUrl: '', imageAlt: 'Montero Sport Oil Filter' },
+            { title: 'Triton Front Brake Pads', description: 'Fast-moving pickup wear-item replacement', eyebrow: 'Triton', badge: 'Best Seller', partNo: 'MB-699200', price: 'PHP 3,980', href: '/catalog?q=Triton%20Front%20Brake%20Pads', imageUrl: '', imageAlt: 'Triton Front Brake Pads' },
+            { title: 'Xforce Air Filter', description: 'Clean intake maintenance for newer compact SUVs', eyebrow: 'Xforce', badge: 'Best Seller', partNo: '1500A760', price: 'PHP 1,760', href: '/catalog?q=Xforce%20Air%20Filter', imageUrl: '', imageAlt: 'Xforce Air Filter' },
+            { title: 'Xpander Cabin Filter Set', description: 'Popular MPV maintenance item for family-use vehicles', eyebrow: 'Xpander', badge: 'Best Seller', partNo: '7803A167', price: 'PHP 2,140', href: '/catalog?q=Xpander%20Cabin%20Filter%20Set', imageUrl: '', imageAlt: 'Xpander Cabin Filter Set' },
+          ],
+        },
+      },
+      {
+        ...createDefaultSection('feature_grid', 3),
+        sectionKey: 'home-trust-signals',
+        title: 'Why customers trust Limen',
+        status: 'published',
+        content: {
+          eyebrow: 'Why customers trust Limen',
+          title: 'Built to look credible before the customer even asks for a quote.',
+          subtitle: 'Customers shopping for vehicle parts need clarity first.',
+          body: 'Fast responses, correct fitment help, and a better quote process.',
+          items: [
+            { title: 'Genuine Parts Available', description: 'OEM-focused inventory for Mitsubishi and other popular vehicle lines.' },
+            { title: 'Fast Delivery in the Philippines', description: 'Quick quotation support and local fulfillment for urgent repair needs.' },
+            { title: 'Trusted Local Store', description: 'Real in-store assistance in Pasay City for fitment checks and customer support.' },
+          ],
+        },
+      },
+      {
+        ...createDefaultSection('stats', 4),
+        sectionKey: 'home-stats',
+        title: 'Customer Confidence Stats',
+        status: 'published',
+        content: {
+          title: 'Customer confidence',
+          items: [
+            { value: 'OEM', label: 'Genuine parts support' },
+            { value: 'PH', label: 'Local delivery and pickup' },
+            { value: 'Real', label: 'Store-based customer support' },
+          ],
+        },
+      },
+      {
+        ...createDefaultSection('cta', 5),
+        sectionKey: 'home-cta',
+        title: 'Homepage CTA',
+        status: 'published',
+        content: {
+          eyebrow: 'Ready to order',
+          title: 'Search parts now or move straight into a quote request.',
+          primaryCta: { label: 'Browse Catalog', href: '/catalog' },
+          secondaryCta: { label: 'Request a Quote', href: '/estimate' },
+        },
+      },
+    ],
+  });
+}
+
+function createAboutPageDraft() {
+  return createPageDraft({
+    slug: 'about',
+    title: 'About Limen',
+    pageType: 'landing',
+    templateKey: 'public_about',
+    status: 'published',
+    seo: {
+      title: 'About Limen Auto Parts Center',
+      description: 'Learn about Limen Auto Parts Center and its digital service workflow.',
+      keywords: 'about Limen, Mitsubishi parts, Pasay auto parts',
+    },
+    sections: [
+      {
+        ...createDefaultSection('hero', 0),
+        sectionKey: 'about-hero',
+        title: 'About Hero',
+        status: 'published',
+        content: {
+          eyebrow: 'About',
+          title: 'Limen Auto Parts Center',
+          subtitle: 'A family-owned auto parts business in Pasay City that has been serving customers for 13 years with genuine Mitsubishi parts, dependable service, and a more modern way to manage inventory and quotations through LimenServe.',
+        },
+      },
+      {
+        ...createDefaultSection('rich_text', 1),
+        sectionKey: 'about-story',
+        title: 'Our Story & Operations',
+        status: 'published',
+        content: {
+          eyebrow: 'About',
+          title: 'Our Story & Operations',
+          body: 'Limen Auto Parts Center is an established family-owned auto parts retail shop located along EDSA in Pasay City, Metro Manila.\n\nThe shop operates in a two-floor commercial space, with the first floor serving as the main sales area and the second floor serving as the stockroom.\n\nThrough LimenServe, the business is transitioning from manual, paper-based processes to a more organized digital workflow.',
+        },
+      },
+      {
+        ...createDefaultSection('stats', 2),
+        sectionKey: 'about-stats',
+        title: 'Business Snapshot',
+        status: 'published',
+        content: {
+          title: 'Business Snapshot',
+          items: [
+            { value: '13 Years', label: 'In Service' },
+            { value: 'Pasay City', label: 'Metro Manila' },
+            { value: '2 Floors', label: 'Sales and Stockroom' },
+            { value: 'Family-Owned', label: 'Local Business' },
+          ],
+        },
+      },
+      {
+        ...createDefaultSection('feature_grid', 3),
+        sectionKey: 'about-pillars',
+        title: 'What We Stand For',
+        status: 'published',
+        content: {
+          title: 'What We Stand For',
+          subtitle: 'The values that shape how Limen Auto Parts Center serves customers and manages daily operations.',
+          items: [
+            { title: 'Genuine Mitsubishi Parts', description: 'The business focuses on supplying genuine Mitsubishi parts so customers can rely on accurate fitment, dependable quality, and trusted replacement components.' },
+            { title: 'Faster and More Organized Service', description: 'LimenServe is designed to reduce delays in stock checking, quotation preparation, and transaction handling.' },
+            { title: 'Digital Modernization', description: 'The system supports a shift from paper-based records to digital inventory, quotation, service-order, and stockroom management.' },
+          ],
+        },
+      },
+      {
+        ...createDefaultSection('rich_text', 4),
+        sectionKey: 'about-mechanics',
+        title: 'Mechanics Section',
+        status: 'published',
+        content: {
+          title: 'Meet Our Mechanics',
+          body: 'Published mechanic profiles are loaded from the mechanics database.',
+        },
+      },
+      {
+        ...createDefaultSection('cta', 5),
+        sectionKey: 'about-location',
+        title: 'Visit the Facility',
+        status: 'published',
+        content: {
+          title: 'Visit the Facility',
+          address: '1308, 264 Epifanio de los Santos Ave, Pasay City, 1308 Metro Manila',
+          mapUrl: 'https://maps.google.com/maps?q=Limen%20Auto%20Parts%20Center,%201308,%20264%20Epifanio%20de%20los%20Santos%20Ave,%20Pasay%20City,%201308%20Metro%20Manila&t=&z=16&ie=UTF8&iwloc=&output=embed',
+        },
+      },
+    ],
+  });
 }
 
 function createServiceOrdersPageDraft() {
@@ -248,21 +462,55 @@ function createServiceOrdersPageDraft() {
 }
 
 function ensureEditablePublicPages(pages = []) {
-  if (pages.some((page) => page.slug === 'service-orders')) {
-    return pages;
+  const requiredPages = [
+    { slug: 'home', title: 'Homepage', sectionCount: 6 },
+    { slug: 'about', title: 'About Limen', sectionCount: 6 },
+    { slug: 'service-orders', title: 'Service Orders', sectionCount: 4 },
+  ];
+  const rows = [...pages];
+
+  requiredPages.forEach((requiredPage) => {
+    if (!rows.some((page) => page.slug === requiredPage.slug)) {
+      rows.push({
+        id: `draft-${requiredPage.slug}`,
+        slug: requiredPage.slug,
+        title: requiredPage.title,
+        status: 'published',
+        sectionCount: requiredPage.sectionCount,
+        isLocalDraft: true,
+      });
+    }
+  });
+
+  return rows;
+}
+
+function defaultDraftForSlug(slug) {
+  if (slug === 'home') return createHomePageDraft();
+  if (slug === 'about') return createAboutPageDraft();
+  if (slug === 'service-orders') return createServiceOrdersPageDraft();
+  return null;
+}
+
+function mergeRequiredSections(page) {
+  const defaultPage = defaultDraftForSlug(page?.slug);
+  if (!defaultPage) {
+    return page;
   }
 
-  return [
-    ...pages,
-    {
-      id: 'draft-service-orders',
-      slug: 'service-orders',
-      title: 'Service Orders',
-      status: 'published',
-      sectionCount: 4,
-      isLocalDraft: true,
+  const existingSections = Array.isArray(page.sections) ? page.sections : [];
+  const existingKeys = new Set(existingSections.map((section) => section.sectionKey || section.section_key));
+  const missingSections = defaultPage.sections.filter((section) => !existingKeys.has(section.sectionKey));
+
+  return {
+    ...defaultPage,
+    ...page,
+    seo: {
+      ...defaultPage.seo,
+      ...(page.seo ?? {}),
     },
-  ];
+    sections: [...existingSections, ...missingSections].sort((a, b) => Number(a.sortOrder ?? a.sort_order ?? 0) - Number(b.sortOrder ?? b.sort_order ?? 0)),
+  };
 }
 
 function createPageDraft(overrides = {}) {
@@ -566,7 +814,7 @@ function RepeatableRows({ title, items, emptyItem, renderItem, onChange }) {
           <div key={index} className="rounded-2xl border border-primary-200 bg-white p-4">
             <div className="grid gap-3 md:grid-cols-[1fr_auto]">
               <div className="grid gap-3 md:grid-cols-2">
-                {renderItem(item, (patch) => updateRow(index, patch))}
+                {renderItem(item, (patch) => updateRow(index, patch), index)}
               </div>
               <button
                 type="button"
@@ -627,6 +875,15 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
             <Field label="Quotes metric text" value={content.quotesValue} onChange={(value) => updateContent({ quotesValue: value })} />
           </div>
         </div>
+        <div className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
+          <h4 className="mb-3 text-sm font-bold text-primary-950">Homepage badges and vehicle chips</h4>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Badge 1" value={content.badgeOne} onChange={(value) => updateContent({ badgeOne: value })} />
+            <Field label="Badge 2" value={content.badgeTwo} onChange={(value) => updateContent({ badgeTwo: value })} />
+            <Field label="Badge 3" value={content.badgeThree} onChange={(value) => updateContent({ badgeThree: value })} />
+            <Field label="Vehicle chips" value={content.vehicleTags} onChange={(value) => updateContent({ vehicleTags: value })} helper="Comma-separated list, e.g. Montero Sport, Triton, Xforce." />
+          </div>
+        </div>
       </div>
     );
   }
@@ -637,18 +894,37 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Small label" value={content.eyebrow} onChange={(value) => updateContent({ eyebrow: value })} />
           <Field label="Headline" value={content.title} onChange={(value) => updateContent({ title: value })} />
+          <Field label="Section button label" value={content.ctaLabel} onChange={(value) => updateContent({ ctaLabel: value })} />
+          <Field label="Section button link" value={content.ctaHref} onChange={(value) => updateContent({ ctaHref: value })} />
         </div>
         <TextAreaField label="Subtitle" value={content.subtitle} rows={3} onChange={(value) => updateContent({ subtitle: value })} />
+        <TextAreaField label="Body / quote text" value={content.body} rows={3} onChange={(value) => updateContent({ body: value })} />
         <RepeatableRows
           title="Feature cards"
           items={content.items}
-          emptyItem={{ title: '', description: '', href: '' }}
+          emptyItem={{ title: '', description: '', href: '', imageUrl: '', imageAlt: '' }}
           onChange={(items) => updateContent({ items })}
-          renderItem={(item, updateItem) => (
+          renderItem={(item, updateItem, itemIndex) => (
             <>
+              <Field label="Small label / vehicle" value={item.eyebrow} onChange={(value) => updateItem({ eyebrow: value })} placeholder="Montero Sport" />
+              <Field label="Badge" value={item.badge} onChange={(value) => updateItem({ badge: value })} placeholder="Best Seller" />
               <Field label="Card title" value={item.title} onChange={(value) => updateItem({ title: value })} />
               <Field label="Optional link" value={item.href} onChange={(value) => updateItem({ href: value })} placeholder="/catalog" />
+              <Field label="Part number" value={item.partNo} onChange={(value) => updateItem({ partNo: value })} placeholder="ME-013307" />
+              <Field label="Price" value={item.price} onChange={(value) => updateItem({ price: value })} placeholder="PHP 1,245" />
+              <Field label="Image alt text" value={item.imageAlt} onChange={(value) => updateItem({ imageAlt: value })} />
               <TextAreaField label="Description" value={item.description} rows={2} onChange={(value) => updateItem({ description: value })} />
+              <div className="md:col-span-2">
+                <ImageUploadField
+                  label="Card image"
+                  value={item.imageUrl}
+                  onChange={(value) => updateItem({ imageUrl: value })}
+                  onUpload={onImageUpload}
+                  uploadKey={`section-${section.sectionKey || section.id || 'feature'}-item-${itemIndex}-image`}
+                  uploadingKey={uploadingKey}
+                  helper="Optional. Use this for Best Sellers, service visuals, or any public card that needs an editable image."
+                />
+              </div>
             </>
           )}
         />
@@ -689,6 +965,7 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
           <Field label="Landline" value={content.landline} onChange={(value) => updateContent({ landline: value })} />
           <Field label="Business hours" value={content.hours} onChange={(value) => updateContent({ hours: value })} />
           <Field label="Address" value={content.address} onChange={(value) => updateContent({ address: value })} />
+          <Field label="Map embed URL" value={content.mapUrl} onChange={(value) => updateContent({ mapUrl: value })} />
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Primary button label" value={content.primaryCta?.label} onChange={(value) => updatePrimaryCta({ label: value })} />
@@ -865,10 +1142,11 @@ export default function CmsAdmin() {
           return;
         }
 
-        setPageDraft(normalizePage(page));
+        setPageDraft(normalizePage(mergeRequiredSections(page)));
       } catch (loadError) {
-        if (active && selectedSlug === 'service-orders') {
-          setPageDraft(createServiceOrdersPageDraft());
+        const fallbackDraft = defaultDraftForSlug(selectedSlug);
+        if (active && fallbackDraft) {
+          setPageDraft(fallbackDraft);
           return;
         }
         if (active) {

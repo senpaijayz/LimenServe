@@ -97,8 +97,13 @@ const quickStats = [
 
 const supportedVehicles = ['Montero Sport', 'Triton', 'Xforce', 'Xpander', 'Mirage', 'L300'];
 
-function getCmsSection(page, sectionType) {
-    return page?.sections?.find((section) => section.sectionType === sectionType || section.section_type === sectionType)?.content || {};
+function getCmsSection(page, sectionType, sectionKey = '') {
+    const sections = page?.sections ?? [];
+    const section = sectionKey
+        ? sections.find((item) => (item.sectionKey || item.section_key) === sectionKey)
+        : sections.find((item) => item.sectionType === sectionType || item.section_type === sectionType);
+
+    return section?.content || {};
 }
 
 function resolveStorefrontHeroImage(imageUrl) {
@@ -117,8 +122,18 @@ function mergeCmsCards(fallbackCards, cmsItems = []) {
     return fallbackCards.map((card, index) => ({
         ...card,
         title: cmsItems[index]?.title || card.title,
+        name: cmsItems[index]?.title || card.name,
         description: cmsItems[index]?.description || card.description,
         query: cmsItems[index]?.href?.replace('/catalog?q=', '') || card.query,
+        href: cmsItems[index]?.href || card.href,
+        image: cmsItems[index]?.imageUrl || card.image,
+        imageAlt: cmsItems[index]?.imageAlt || card.imageAlt,
+        partNo: cmsItems[index]?.partNo || card.partNo,
+        price: cmsItems[index]?.price || card.price,
+        vehicle: cmsItems[index]?.eyebrow || card.vehicle,
+        badge: cmsItems[index]?.badge || card.badge,
+        note: cmsItems[index]?.description || card.note,
+        catalogQuery: cmsItems[index]?.href?.replace('/catalog?q=', '') || card.catalogQuery,
     }));
 }
 
@@ -167,13 +182,26 @@ const PublicHome = () => {
         navigate(query ? `/catalog?q=${encodeURIComponent(query)}` : '/catalog');
     };
 
-    const heroCms = getCmsSection(cmsPage, 'hero');
-    const featureCms = getCmsSection(cmsPage, 'feature_grid');
-    const statsCms = getCmsSection(cmsPage, 'stats');
-    const ctaCms = getCmsSection(cmsPage, 'cta');
+    const heroCms = getCmsSection(cmsPage, 'hero', 'home-hero');
+    const featureCms = getCmsSection(cmsPage, 'feature_grid', 'home-features');
+    const bestSellersCms = getCmsSection(cmsPage, 'feature_grid', 'home-best-sellers');
+    const trustCms = getCmsSection(cmsPage, 'feature_grid', 'home-trust-signals');
+    const statsCms = getCmsSection(cmsPage, 'stats', 'home-stats');
+    const ctaCms = getCmsSection(cmsPage, 'cta', 'home-cta');
     const editableCategoryCards = mergeCmsCards(categoryCards, featureCms.items);
+    const editableFeaturedParts = mergeCmsCards(featuredParts, bestSellersCms.items);
+    const editableTrustSignals = mergeCmsCards(trustSignals, trustCms.items);
     const editableQuickStats = mergeCmsStats(quickStats, statsCms.items);
     const storefrontHeroImage = resolveStorefrontHeroImage(heroCms.imageUrl);
+    const editableVehicleTags = String(heroCms.vehicleTags || supportedVehicles.join(','))
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    const heroBadges = [
+        { label: heroCms.badgeOne || 'Genuine Parts', icon: ShieldCheck, tone: 'text-accent-primary' },
+        { label: heroCms.badgeTwo || 'Fast Delivery in PH', icon: Truck, tone: 'text-accent-danger' },
+        { label: heroCms.badgeThree || 'Search by Vehicle', icon: CarFront, tone: 'text-accent-primary' },
+    ].filter((badge) => badge.label);
 
     return (
         <div className="bg-white text-primary-900">
@@ -200,22 +228,19 @@ const PublicHome = () => {
                         </p>
 
                         <div className="mt-8 flex flex-wrap gap-3 text-sm text-primary-600">
-                            <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-4 py-2 shadow-sm">
-                                <ShieldCheck className="h-4 w-4 text-accent-primary" />
-                                Genuine Parts
-                            </span>
-                            <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-4 py-2 shadow-sm">
-                                <Truck className="h-4 w-4 text-accent-danger" />
-                                Fast Delivery in PH
-                            </span>
-                            <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-4 py-2 shadow-sm">
-                                <CarFront className="h-4 w-4 text-accent-primary" />
-                                Search by Vehicle
-                            </span>
+                            {heroBadges.map((badge) => {
+                                const Icon = badge.icon;
+                                return (
+                                    <span key={badge.label} className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-4 py-2 shadow-sm">
+                                        <Icon className={`h-4 w-4 ${badge.tone}`} />
+                                        {badge.label}
+                                    </span>
+                                );
+                            })}
                         </div>
 
                         <div className="mt-6 flex flex-wrap gap-2">
-                            {supportedVehicles.map((vehicle) => (
+                            {editableVehicleTags.map((vehicle) => (
                                 <span
                                     key={vehicle}
                                     className="rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm"
@@ -296,8 +321,8 @@ const PublicHome = () => {
                         <div className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,_#0f172a,_#172554_55%,_#1e3a8a)] px-6 py-6 text-white shadow-[0_24px_50px_rgba(15,23,42,0.12)]">
                             <div className="flex flex-wrap items-center justify-between gap-4">
                                 <div>
-                                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/60">Why customers buy here</p>
-                                    <p className="mt-3 text-2xl font-bold">Reliable parts, visible pricing, and store-backed support.</p>
+                                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/60">{trustCms.eyebrow || 'Why customers buy here'}</p>
+                                    <p className="mt-3 text-2xl font-bold">{trustCms.body || 'Reliable parts, visible pricing, and store-backed support.'}</p>
                                 </div>
                                 <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-semibold">
                                     <Star className="h-4 w-4 text-red-300" />
@@ -319,8 +344,8 @@ const PublicHome = () => {
                                 {featureCms.subtitle || 'Start with the part family customers usually ask for, then narrow by Mitsubishi model or exact part number inside the catalog.'}
                             </p>
                         </div>
-                        <Link to="/catalog" className="text-sm font-semibold text-accent-primary hover:text-accent-blueDark">
-                            View full catalog
+                        <Link to={featureCms.ctaHref || '/catalog'} className="text-sm font-semibold text-accent-primary hover:text-accent-blueDark">
+                            {featureCms.ctaLabel || 'View full catalog'}
                         </Link>
                     </div>
 
@@ -361,13 +386,13 @@ const PublicHome = () => {
                 <div className="mx-auto max-w-[1600px]">
                     <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                         <div className="max-w-2xl">
-                            <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-danger">Best Sellers</p>
-                            <h2 className="mt-2 text-4xl font-bold text-primary-950">Featured parts anchored to real Mitsubishi vehicle lines</h2>
+                            <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-danger">{bestSellersCms.eyebrow || 'Best Sellers'}</p>
+                            <h2 className="mt-2 text-4xl font-bold text-primary-950">{bestSellersCms.title || 'Featured parts anchored to real Mitsubishi vehicle lines'}</h2>
                         </div>
                     </div>
 
                     <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-                        {featuredParts.map((part, index) => (
+                        {editableFeaturedParts.map((part, index) => (
                             <Motion.article
                                 key={part.name}
                                 initial={{ opacity: 0, y: 22 }}
@@ -382,11 +407,11 @@ const PublicHome = () => {
                                             {part.vehicle}
                                         </span>
                                         <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-[11px] font-semibold text-red-700">
-                                            Best Seller
+                                            {part.badge || 'Best Seller'}
                                         </span>
                                     </div>
                                     <div className="flex h-[220px] items-center justify-center overflow-hidden rounded-3xl bg-[linear-gradient(135deg,_rgba(255,255,255,0.96),_rgba(241,245,249,0.92)_55%,_rgba(226,232,240,0.88))] p-4 shadow-inner">
-                                        <img src={part.image} alt={part.name} className="h-full w-full object-contain drop-shadow-[0_24px_30px_rgba(15,23,42,0.18)]" />
+                                        <img src={part.image} alt={part.imageAlt || part.name} className="h-full w-full object-contain drop-shadow-[0_24px_30px_rgba(15,23,42,0.18)]" />
                                     </div>
                                 </div>
                                 <div className="p-6">
@@ -395,10 +420,10 @@ const PublicHome = () => {
                                     <p className="mt-3 text-sm leading-relaxed text-primary-600">{part.note}</p>
                                     <p className="mt-4 text-2xl font-bold text-accent-primary">{part.price}</p>
                                     <div className="mt-6 flex gap-3">
-                                        <Link to={`/catalog?q=${encodeURIComponent(part.catalogQuery)}`} className="btn btn-primary flex-1 px-4 py-3">
+                                        <Link to={part.href || `/catalog?q=${encodeURIComponent(part.catalogQuery)}`} className="btn btn-primary flex-1 px-4 py-3">
                                             Add to Quote
                                         </Link>
-                                        <Link to={`/catalog?q=${encodeURIComponent(part.catalogQuery)}`} className="btn btn-secondary px-4 py-3">
+                                        <Link to={part.href || `/catalog?q=${encodeURIComponent(part.catalogQuery)}`} className="btn btn-secondary px-4 py-3">
                                             Quick View
                                         </Link>
                                     </div>
@@ -412,10 +437,10 @@ const PublicHome = () => {
             <section className="px-4 py-16 md:px-8 xl:px-12">
                 <div className="mx-auto grid max-w-[1600px] gap-8 xl:grid-cols-[1fr_1fr]">
                     <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-primary">Why customers trust Limen</p>
-                        <h2 className="mt-2 text-4xl font-bold text-primary-950">Built to look credible before the customer even asks for a quote.</h2>
+                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-primary">{trustCms.eyebrow || 'Why customers trust Limen'}</p>
+                        <h2 className="mt-2 text-4xl font-bold text-primary-950">{trustCms.title || 'Built to look credible before the customer even asks for a quote.'}</h2>
                         <div className="mt-8 space-y-4">
-                            {trustSignals.map((signal) => {
+                            {editableTrustSignals.map((signal) => {
                                 const Icon = signal.icon;
                                 return (
                                     <div key={signal.title} className="flex items-start gap-4 rounded-2xl border border-primary-200 bg-white p-5 shadow-sm">
@@ -433,10 +458,10 @@ const PublicHome = () => {
                     </div>
 
                     <div className="rounded-[2rem] border border-primary-200 bg-white p-8 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
-                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-danger">Customer confidence</p>
-                        <h3 className="mt-3 text-3xl font-bold text-primary-950">"Fast responses, correct fitment help, and a better quote process."</h3>
+                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-danger">{statsCms.title || 'Customer confidence'}</p>
+                        <h3 className="mt-3 text-3xl font-bold text-primary-950">"{trustCms.body || 'Fast responses, correct fitment help, and a better quote process.'}"</h3>
                         <p className="mt-5 text-base leading-relaxed text-primary-600">
-                            Customers shopping for vehicle parts need clarity first.</p>
+                            {trustCms.subtitle || 'Customers shopping for vehicle parts need clarity first.'}</p>
 
                         <div className="mt-8 grid gap-4 border-t border-primary-200 pt-6 sm:grid-cols-3">
                             {editableQuickStats.map((item) => (

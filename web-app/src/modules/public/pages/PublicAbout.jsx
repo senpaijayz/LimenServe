@@ -4,8 +4,13 @@ import { CalendarDays, Package, Phone, Shield, Settings, Zap, MapPin, Building, 
 import { getPublicCmsPage } from '../../../services/cmsApi';
 import { getPublicMechanics } from '../../../services/mechanicsApi';
 
-function getCmsSection(page, sectionType) {
-    return page?.sections?.find((section) => section.sectionType === sectionType || section.section_type === sectionType)?.content || {};
+function getCmsSection(page, sectionType, sectionKey = '') {
+    const sections = page?.sections ?? [];
+    const section = sectionKey
+        ? sections.find((item) => (item.sectionKey || item.section_key) === sectionKey)
+        : sections.find((item) => item.sectionType === sectionType || item.section_type === sectionType);
+
+    return section?.content || {};
 }
 
 function splitBodyParagraphs(value, fallback) {
@@ -15,6 +20,45 @@ function splitBodyParagraphs(value, fallback) {
         .filter(Boolean);
 
     return paragraphs.length > 0 ? paragraphs : fallback;
+}
+
+const fallbackAboutStats = [
+    { value: '13 Years', label: 'In Service', icon: Package },
+    { value: 'Pasay City', label: 'Metro Manila', icon: MapPin },
+    { value: '2 Floors', label: 'Sales and Stockroom', icon: Building },
+    { value: 'Family-Owned', label: 'Local Business', icon: Wrench },
+];
+
+const fallbackPillars = [
+    {
+        title: 'Genuine Mitsubishi Parts',
+        description: 'The business focuses on supplying genuine Mitsubishi parts so customers can rely on accurate fitment, dependable quality, and trusted replacement components.',
+        icon: Shield,
+    },
+    {
+        title: 'Faster and More Organized Service',
+        description: 'LimenServe is designed to reduce delays in stock checking, quotation preparation, and transaction handling by giving staff a more structured digital workflow.',
+        icon: Zap,
+    },
+    {
+        title: 'Digital Modernization',
+        description: 'The system supports a shift from paper-based records to digital inventory, quotation, service-order, and stockroom management for more accurate business operations.',
+        icon: Settings,
+    },
+];
+
+function mergeCmsIconItems(fallbackItems, cmsItems = []) {
+    if (!Array.isArray(cmsItems) || cmsItems.length === 0) {
+        return fallbackItems;
+    }
+
+    return fallbackItems.map((item, index) => ({
+        ...item,
+        value: cmsItems[index]?.value || item.value,
+        label: cmsItems[index]?.label || item.label,
+        title: cmsItems[index]?.title || item.title,
+        description: cmsItems[index]?.description || item.description,
+    }));
 }
 
 const PublicAbout = () => {
@@ -70,13 +114,22 @@ const PublicAbout = () => {
         return 'bg-primary-100 text-primary-500';
     };
 
-    const heroCms = getCmsSection(cmsPage, 'hero');
-    const storyCms = getCmsSection(cmsPage, 'rich_text');
+    const heroCms = getCmsSection(cmsPage, 'hero', 'about-hero');
+    const storyCms = getCmsSection(cmsPage, 'rich_text', 'about-story');
+    const statsCms = getCmsSection(cmsPage, 'stats', 'about-stats');
+    const pillarsCms = getCmsSection(cmsPage, 'feature_grid', 'about-pillars');
+    const mechanicsCms = getCmsSection(cmsPage, 'rich_text', 'about-mechanics');
+    const locationCms = getCmsSection(cmsPage, 'cta', 'about-location');
     const storyParagraphs = splitBodyParagraphs(storyCms.body, [
         'Limen Auto Parts Center is an established family-owned auto parts retail shop located along EDSA in Pasay City, Metro Manila. For 13 years, the business has focused on providing genuine Mitsubishi car parts that are widely used and trusted by customers in the Philippines.',
         'The shop operates in a two-floor commercial space, with the first floor serving as the main sales area and the second floor serving as the stockroom. Daily operations involve sales, customer service, stock management, and quotation preparation for both parts and service-related requests.',
         'Through LimenServe, the business is transitioning from manual, paper-based processes to a more organized digital workflow that supports stock visibility, faster transaction handling, structured quotations, and improved customer service.',
     ]);
+    const editableStats = mergeCmsIconItems(fallbackAboutStats, statsCms.items);
+    const editablePillars = mergeCmsIconItems(fallbackPillars, pillarsCms.items);
+    const locationTitle = locationCms.title || 'Visit the Facility';
+    const locationAddress = locationCms.address || '1308, 264 Epifanio de los Santos Ave, Pasay City, 1308 Metro Manila';
+    const locationMapUrl = locationCms.mapUrl || `https://maps.google.com/maps?q=${encodeURIComponent(locationAddress)}&t=&z=16&ie=UTF8&iwloc=&output=embed`;
 
     return (
         <div className="bg-primary-50 min-h-screen relative font-sans text-primary-900 pb-20 overflow-hidden">
@@ -140,90 +193,54 @@ const PublicAbout = () => {
                         transition={{ duration: 0.6, delay: 0.2 }}
                         className="grid grid-cols-2 gap-4"
                     >
-                        <div className="surface p-6 flex flex-col items-center justify-center text-center bg-white border-primary-200 shadow-sm">
-                            <Package className="w-10 h-10 text-accent-primary mb-4" />
-                            <span className="text-3xl font-display font-bold text-primary-950">13 Years</span>
-                            <span className="text-xs font-semibold text-primary-500 uppercase tracking-widest mt-1">In Service</span>
-                        </div>
-                        <div className="surface p-6 flex flex-col items-center justify-center text-center bg-white border-primary-200 shadow-sm translate-y-8">
-                            <MapPin className="w-10 h-10 text-accent-primary mb-4" />
-                            <span className="text-3xl font-display font-bold text-primary-950">Pasay City</span>
-                            <span className="text-xs font-semibold text-primary-500 uppercase tracking-widest mt-1">Metro Manila</span>
-                        </div>
-                        <div className="surface p-6 flex flex-col items-center justify-center text-center bg-white border-primary-200 shadow-sm -translate-y-8">
-                            <Building className="w-10 h-10 text-accent-primary mb-4" />
-                            <span className="text-3xl font-display font-bold text-primary-950">2 Floors</span>
-                            <span className="text-xs font-semibold text-primary-500 uppercase tracking-widest mt-1">Sales and Stockroom</span>
-                        </div>
-                        <div className="surface p-6 flex flex-col items-center justify-center text-center bg-white border-primary-200 shadow-sm">
-                            <Wrench className="w-10 h-10 text-accent-primary mb-4" />
-                            <span className="text-3xl font-display font-bold text-primary-950">Family-Owned</span>
-                            <span className="text-xs font-semibold text-primary-500 uppercase tracking-widest mt-1">Local Business</span>
-                        </div>
+                        {editableStats.map((item, index) => {
+                            const Icon = item.icon;
+                            const offsetClass = index === 1 ? 'translate-y-8' : index === 2 ? '-translate-y-8' : '';
+                            return (
+                                <div key={`${item.value}-${item.label}`} className={`surface p-6 flex flex-col items-center justify-center text-center bg-white border-primary-200 shadow-sm ${offsetClass}`}>
+                                    <Icon className="w-10 h-10 text-accent-primary mb-4" />
+                                    <span className="text-3xl font-display font-bold text-primary-950">{item.value}</span>
+                                    <span className="text-xs font-semibold text-primary-500 uppercase tracking-widest mt-1">{item.label}</span>
+                                </div>
+                            );
+                        })}
                     </Motion.div>
                 </div>
 
                 {/* Core Pillars */}
                 <div className="mb-16">
                     <div className="text-center mb-12">
-                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">What We Stand For</h2>
-                        <p className="text-primary-600 max-w-2xl mx-auto">The values that shape how Limen Auto Parts Center serves customers and manages daily operations.</p>
+                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">{pillarsCms.title || 'What We Stand For'}</h2>
+                        <p className="text-primary-600 max-w-2xl mx-auto">{pillarsCms.subtitle || 'The values that shape how Limen Auto Parts Center serves customers and manages daily operations.'}</p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <Motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true }}
-                            transition={{ duration: 0.5 }}
-                            className="surface p-8 group hover:-translate-y-1 transition-transform bg-white border border-primary-200 shadow-sm"
-                        >
-                            <div className="w-12 h-12 bg-primary-50 border border-primary-100 rounded-xl flex items-center justify-center mb-6 text-accent-primary group-hover:bg-accent-primary group-hover:text-white group-hover:scale-110 transition-all duration-300">
-                                <Shield className="w-6 h-6" />
-                            </div>
-                            <h3 className="text-xl font-display font-semibold text-primary-950 mb-3">Genuine Mitsubishi Parts</h3>
-                            <p className="text-sm text-primary-600 leading-relaxed">
-                                The business focuses on supplying genuine Mitsubishi parts so customers can rely on accurate fitment, dependable quality, and trusted replacement components.
-                            </p>
-                        </Motion.div>
-
-                        <Motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true }}
-                            transition={{ duration: 0.5, delay: 0.1 }}
-                            className="surface p-8 group hover:-translate-y-1 transition-transform bg-white border border-primary-200 shadow-sm"
-                        >
-                            <div className="w-12 h-12 bg-primary-50 border border-primary-100 rounded-xl flex items-center justify-center mb-6 text-accent-primary group-hover:bg-accent-primary group-hover:text-white group-hover:scale-110 transition-all duration-300">
-                                <Zap className="w-6 h-6" />
-                            </div>
-                            <h3 className="text-xl font-display font-semibold text-primary-950 mb-3">Faster and More Organized Service</h3>
-                            <p className="text-sm text-primary-600 leading-relaxed">
-                                LimenServe is designed to reduce delays in stock checking, quotation preparation, and transaction handling by giving staff a more structured digital workflow.
-                            </p>
-                        </Motion.div>
-
-                        <Motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true }}
-                            transition={{ duration: 0.5, delay: 0.2 }}
-                            className="surface p-8 group hover:-translate-y-1 transition-transform bg-white border border-primary-200 shadow-sm"
-                        >
-                            <div className="w-12 h-12 bg-primary-50 border border-primary-100 rounded-xl flex items-center justify-center mb-6 text-accent-primary group-hover:bg-accent-primary group-hover:text-white group-hover:scale-110 transition-all duration-300">
-                                <Settings className="w-6 h-6" />
-                            </div>
-                            <h3 className="text-xl font-display font-semibold text-primary-950 mb-3">Digital Modernization</h3>
-                            <p className="text-sm text-primary-600 leading-relaxed">
-                                The system supports a shift from paper-based records to digital inventory, quotation, service-order, and stockroom management for more accurate business operations.
-                            </p>
-                        </Motion.div>
+                        {editablePillars.map((pillar, index) => {
+                            const Icon = pillar.icon;
+                            return (
+                                <Motion.div
+                                    key={pillar.title}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    whileInView={{ opacity: 1, y: 0 }}
+                                    viewport={{ once: true }}
+                                    transition={{ duration: 0.5, delay: index * 0.1 }}
+                                    className="surface p-8 group hover:-translate-y-1 transition-transform bg-white border border-primary-200 shadow-sm"
+                                >
+                                    <div className="w-12 h-12 bg-primary-50 border border-primary-100 rounded-xl flex items-center justify-center mb-6 text-accent-primary group-hover:bg-accent-primary group-hover:text-white group-hover:scale-110 transition-all duration-300">
+                                        <Icon className="w-6 h-6" />
+                                    </div>
+                                    <h3 className="text-xl font-display font-semibold text-primary-950 mb-3">{pillar.title}</h3>
+                                    <p className="text-sm text-primary-600 leading-relaxed">{pillar.description}</p>
+                                </Motion.div>
+                            );
+                        })}
                     </div>
                 </div>
 
                 <div className="mb-16">
                     <div className="text-center mb-12">
-                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">Meet Our Mechanics</h2>
+                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">{mechanicsCms.title || 'Meet Our Mechanics'}</h2>
+                        {mechanicsCms.body && <p className="text-primary-600 max-w-2xl mx-auto">{mechanicsCms.body}</p>}
                         </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -294,10 +311,10 @@ const PublicAbout = () => {
                 >
                     <div className="relative z-10 p-8 md:p-12 md:w-1/2 flex flex-col justify-center">
                         <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-r from-white to-transparent pointer-events-none" />
-                        <h3 className="text-2xl font-display font-bold text-primary-950 mb-4 relative z-10">Visit the Facility</h3>
+                        <h3 className="text-2xl font-display font-bold text-primary-950 mb-4 relative z-10">{locationTitle}</h3>
                         <p className="text-primary-700 flex items-start gap-3 relative z-10 leading-relaxed font-sans mt-0">
                             <MapPin className="w-5 h-5 mt-1 text-accent-primary shrink-0" />
-                            1308, 264 Epifanio de los Santos Ave,<br />Pasay City, 1308 Metro Manila
+                            {locationAddress}
                         </p>
                     </div>
 
@@ -306,7 +323,7 @@ const PublicAbout = () => {
                           Normal light Map format
                         */}
                         <iframe
-                            src="https://maps.google.com/maps?q=Limen%20Auto%20Parts%20Center,%201308,%20264%20Epifanio%20de%20los%20Santos%20Ave,%20Pasay%20City,%201308%20Metro%20Manila&t=&z=16&ie=UTF8&iwloc=&output=embed"
+                            src={locationMapUrl}
                             className="absolute inset-0 w-full h-full border-0"
                             allowFullScreen=""
                             loading="lazy"
