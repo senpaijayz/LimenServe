@@ -54,27 +54,38 @@ describe('3D Locator premium redesign', () => {
         getProductLocation.mockResolvedValue(null);
     });
 
-    it('uses a spacious view-mode layout with product search and no heavy object chrome', async () => {
+    it('uses a professional locator workspace with sidebar search, floor tabs, and scene controls', async () => {
         resetLocator3DStore();
 
         renderLocator();
 
-        expect(screen.getByText('3D Locator')).toBeTruthy();
+        expect(screen.getByText('3D Stockroom Locator')).toBeTruthy();
+        expect(screen.getByText('Current layout')).toBeTruthy();
+        expect(screen.getAllByText('main-store').length).toBeGreaterThan(0);
         expect(screen.getByRole('switch', { name: 'Design Mode' }).getAttribute('aria-checked')).toBe('false');
         expect(screen.getByTestId('locator-3d-scene')).toBeTruthy();
-        expect(screen.getByTestId('locator-3d-scene').closest('main')?.className).toContain('h-[68vh]');
-        expect(screen.getByTestId('locator-3d-scene').closest('main')?.className).toContain('rounded-2xl');
-        expect(screen.getByText('3D Locator').closest('header')?.className).toContain('bg-white');
+        expect(screen.getByTestId('locator-3d-scene').closest('main')?.getAttribute('aria-label')).toBe('3D stockroom canvas');
+        expect(screen.getByTestId('locator-3d-scene').closest('main')?.className).toContain('bg-slate-950');
+        expect(screen.getByText('3D Stockroom Locator').closest('header')?.className).toContain('bg-slate-950');
+        expect(screen.getByRole('button', { name: 'Go to Floor 1' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Go to Floor 2' })).toBeTruthy();
         expect(screen.getByLabelText('Product Search')).toBeTruthy();
-        expect(screen.getByText('How to locate products')).toBeTruthy();
+        expect(screen.getByText('Located Products')).toBeTruthy();
+        expect(screen.getByRole('region', { name: 'Camera and scene controls' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Overview camera' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Counter View camera' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Focus on Selected camera' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Show Labels' }).getAttribute('aria-pressed')).toBe('true');
+        expect(screen.getByRole('button', { name: 'Show Paths' }).getAttribute('aria-pressed')).toBe('true');
+        expect(screen.getByRole('button', { name: 'Show Grid' }).getAttribute('aria-pressed')).toBe('true');
         expect(screen.queryByText('Object Library')).toBeNull();
         expect(screen.queryByText('Properties')).toBeNull();
 
-        fireEvent.change(screen.getByLabelText('Product Search'), { target: { value: 'OF-1' } });
-        fireEvent.click(await screen.findByRole('button', { name: /Oil Filter/i }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Locate Oil Filter in 3D' }));
 
         await waitFor(() => expect(useLocator3DStore.getState().locatedProduct?.productId).toBe('product-1'));
-        expect(screen.getAllByText(/Product located/i).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/Product Location/i).length).toBeGreaterThan(0);
+        expect(screen.getByRole('link', { name: 'View Full Details' })).toBeTruthy();
     });
 
     it('loads a deep-linked product into a product location card and focuses the mapped shelf', async () => {
@@ -94,10 +105,12 @@ describe('3D Locator premium redesign', () => {
 
         await waitFor(() => expect(useLocator3DStore.getState().locatedProduct?.productId).toBe('product-1'));
         expect(screen.getByText('Product Location')).toBeTruthy();
-        expect(screen.getByText('Oil Filter')).toBeTruthy();
-        expect(screen.getByText('OF-1')).toBeTruthy();
+        expect(screen.getAllByText('Oil Filter').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('OF-1').length).toBeGreaterThan(0);
         expect(screen.getByText('12 in stock')).toBeTruthy();
-        expect(screen.getByText('Aisle B - Shelf 2 - Bin 4')).toBeTruthy();
+        expect(screen.getByText('In Stock')).toBeTruthy();
+        expect(screen.getAllByText('Aisle B - Shelf 2 - Bin 4').length).toBeGreaterThan(0);
+        expect(screen.getByRole('link', { name: 'View Full Details' }).getAttribute('href')).toContain('/inventory');
         const pathSequence = useLocator3DStore.getState().pathAnimationRequest;
         fireEvent.click(screen.getByRole('button', { name: 'Animate Path from Counter' }));
         expect(useLocator3DStore.getState().pathAnimationRequest).toBe(pathSequence + 1);
@@ -121,7 +134,7 @@ describe('3D Locator premium redesign', () => {
         renderLocator();
 
         fireEvent.click(screen.getByRole('switch', { name: 'Design Mode' }));
-        expect(screen.getByText('Design mode tips')).toBeTruthy();
+        expect(screen.getAllByText('Edit Layout mode').length).toBeGreaterThan(0);
         expect(screen.getByRole('button', { name: 'Object Library' })).toBeTruthy();
 
         const initialCount = useLocator3DStore.getState().sceneObjects.length;
@@ -133,7 +146,7 @@ describe('3D Locator premium redesign', () => {
             useLocator3DStore.getState().forceSelectObject('shelf-4-a');
         });
 
-        const properties = screen.getByRole('complementary', { name: 'Properties' });
+        const properties = await screen.findByRole('complementary', { name: 'Properties' });
         fireEvent.change(within(properties).getByLabelText('Width'), { target: { value: '4.5' } });
         fireEvent.change(within(properties).getByLabelText('Position X'), { target: { value: '-3.5' } });
         fireEvent.change(within(properties).getByLabelText('Rotation Y'), { target: { value: '45' } });

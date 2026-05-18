@@ -42,6 +42,7 @@ describe('3D Locator Phase 3 admin integration', () => {
         useLocator3DStore.getState().forceSelectObject('shelf-4-a');
 
         renderLocator();
+        fireEvent.click(screen.getByRole('switch', { name: 'Design Mode' }));
 
         fireEvent.click(screen.getByRole('button', { name: 'Save Layout' }));
         fireEvent.click(screen.getByRole('button', { name: 'Confirm Save Layout' }));

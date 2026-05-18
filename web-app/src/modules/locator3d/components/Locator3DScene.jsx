@@ -63,6 +63,12 @@ function Block({
 }
 
 function Label({ children, position, rotation = [-Math.PI / 2, 0, 0] }) {
+    const showLabels = useLocator3DStore((state) => state.showLabels);
+
+    if (!showLabels) {
+        return null;
+    }
+
     return (
         <Text
             anchorX="center"
@@ -227,6 +233,7 @@ function WallsObject({ object, onTransformingChange }) {
 
 function ProductMarker({ highlighted, location, position }) {
     const markerRef = useRef();
+    const showLabels = useLocator3DStore((state) => state.showLabels);
 
     useFrame(({ clock }) => {
         if (!highlighted || !markerRef.current?.material) {
@@ -249,7 +256,7 @@ function ProductMarker({ highlighted, location, position }) {
                 />
                 {highlighted && <Edges color="#facc15" scale={1.25} threshold={8} />}
             </mesh>
-            {highlighted && (
+            {highlighted && showLabels && (
                 <Html center position={[0, 0.42, 0]}>
                     <div className="rounded-full border border-yellow-200 bg-yellow-100 px-2 py-1 text-[10px] font-black text-yellow-900 shadow-lg">
                         Bin {location.binNumber}
@@ -514,9 +521,10 @@ function LocatorPath() {
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const pathAnimationRequest = useLocator3DStore((state) => state.pathAnimationRequest);
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
+    const showPaths = useLocator3DStore((state) => state.showPaths);
     const points = useMemo(() => buildPathPoints(sceneObjects, locatedProduct), [locatedProduct, sceneObjects]);
 
-    if (points.length < 2) {
+    if (!showPaths || points.length < 2) {
         return null;
     }
 
@@ -544,12 +552,59 @@ function LocatorPath() {
 function CameraRig({ controlsRef }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const cameraFocusRequest = useLocator3DStore((state) => state.cameraFocusRequest);
+    const cameraPresetRequest = useLocator3DStore((state) => state.cameraPresetRequest);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
+    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
     const { camera } = useThree();
     const activeTargetRef = useRef(null);
     const isAnimatingRef = useRef(true);
     const target = useMemo(() => {
+        const buildObjectTarget = (object) => {
+            if (!object) {
+                return null;
+            }
+
+            const [x, y, z] = object.position;
+            const height = Number(object.dimensions?.height || 1);
+
+            return {
+                lookAt: new THREE.Vector3(x, y + (height / 2), z),
+                position: new THREE.Vector3(x + 5.8, y + height + 3.6, z + 5.8),
+            };
+        };
+
+        if (cameraPresetRequest?.preset === 'overview') {
+            return {
+                lookAt: new THREE.Vector3(...CAMERA_TARGETS[activeFloor].lookAt),
+                position: new THREE.Vector3(...CAMERA_TARGETS[activeFloor].position),
+            };
+        }
+
+        if (cameraPresetRequest?.preset === 'counter') {
+            const counter = getCounterObject(sceneObjects);
+
+            if (counter) {
+                const [x, y, z] = counter.position;
+                const height = Number(counter.dimensions?.height || 1);
+
+                return {
+                    lookAt: new THREE.Vector3(x, y + (height * 0.58), z),
+                    position: new THREE.Vector3(x + 4.6, y + height + 2.6, z + 4.4),
+                };
+            }
+        }
+
+        if (cameraPresetRequest?.preset === 'selected') {
+            const selectedObject = sceneObjects.find((object) => object.id === selectedObjectId)
+                ?? sceneObjects.find((object) => object.id === locatedProduct?.shelfObjectId);
+            const selectedTarget = buildObjectTarget(selectedObject);
+
+            if (selectedTarget) {
+                return selectedTarget;
+            }
+        }
+
         if (locatedProduct?.targetPosition) {
             const [x, y, z] = locatedProduct.targetPosition;
 
@@ -562,22 +617,17 @@ function CameraRig({ controlsRef }) {
         const focusedObject = cameraFocusRequest?.objectId
             ? sceneObjects.find((object) => object.id === cameraFocusRequest.objectId)
             : null;
+        const focusedTarget = buildObjectTarget(focusedObject);
 
-        if (focusedObject) {
-            const [x, y, z] = focusedObject.position;
-            const height = Number(focusedObject.dimensions?.height || 1);
-
-            return {
-                lookAt: new THREE.Vector3(x, y + (height / 2), z),
-                position: new THREE.Vector3(x + 5.8, y + height + 3.6, z + 5.8),
-            };
+        if (focusedTarget) {
+            return focusedTarget;
         }
 
         return {
             lookAt: new THREE.Vector3(...CAMERA_TARGETS[activeFloor].lookAt),
             position: new THREE.Vector3(...CAMERA_TARGETS[activeFloor].position),
         };
-    }, [activeFloor, cameraFocusRequest, locatedProduct, sceneObjects]);
+    }, [activeFloor, cameraFocusRequest, cameraPresetRequest, locatedProduct, sceneObjects, selectedObjectId]);
 
     useEffect(() => {
         activeTargetRef.current = target;
@@ -609,6 +659,7 @@ function SceneContents() {
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
+    const showGrid = useLocator3DStore((state) => state.showGrid);
     const controlsRef = useRef();
     const [isTransforming, setIsTransforming] = useState(false);
 
@@ -620,19 +671,21 @@ function SceneContents() {
             <directionalLight castShadow intensity={1.28} position={[7, 11, 6]} shadow-mapSize={[2048, 2048]} />
             <spotLight angle={0.42} intensity={1.35} penumbra={0.55} position={[-7, 9, 7]} />
             <pointLight color="#38bdf8" intensity={0.45} position={[-4, 4, 3]} />
-            <Grid
-                cellColor="#334155"
-                cellSize={1}
-                cellThickness={0.42}
-                fadeDistance={24}
-                fadeStrength={1.2}
-                infiniteGrid
-                position={[0, 0.012, 0]}
-                sectionColor="#475569"
-                sectionSize={4}
-                sectionThickness={0.9}
-            />
-            {isDesignMode && (
+            {showGrid && (
+                <Grid
+                    cellColor="#334155"
+                    cellSize={1}
+                    cellThickness={0.42}
+                    fadeDistance={24}
+                    fadeStrength={1.2}
+                    infiniteGrid
+                    position={[0, 0.012, 0]}
+                    sectionColor="#475569"
+                    sectionSize={4}
+                    sectionThickness={0.9}
+                />
+            )}
+            {showGrid && isDesignMode && (
                 <>
                     <Grid
                         cellColor="#38bdf8"

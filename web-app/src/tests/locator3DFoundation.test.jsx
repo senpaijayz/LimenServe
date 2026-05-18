@@ -67,10 +67,11 @@ describe('3D Locator foundation', () => {
             </MemoryRouter>,
         );
 
-        expect(screen.getByText('3D Locator')).toBeTruthy();
+        expect(screen.getByText('3D Stockroom Locator')).toBeTruthy();
         expect(screen.getByRole('switch', { name: 'Design Mode' })).toBeTruthy();
         expect(screen.getByLabelText('Product Search')).toBeTruthy();
-        expect(screen.getByText('How to locate products')).toBeTruthy();
+        expect(screen.getByText('Located Products')).toBeTruthy();
+        expect(screen.getByRole('region', { name: 'Camera and scene controls' })).toBeTruthy();
         expect(screen.getByTestId('locator-3d-scene')).toBeTruthy();
         expect(screen.queryByText('Object List')).toBeNull();
     });

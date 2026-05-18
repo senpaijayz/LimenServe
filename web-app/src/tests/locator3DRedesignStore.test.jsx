@@ -2,6 +2,33 @@ import { describe, expect, it } from 'vitest';
 import { resetLocator3DStore, useLocator3DStore } from '../modules/locator3d/store/useLocator3DStore';
 
 describe('3D Locator redesign store behavior', () => {
+    it('stores scene visibility toggles and camera preset requests', () => {
+        resetLocator3DStore();
+
+        expect(useLocator3DStore.getState().showLabels).toBe(true);
+        expect(useLocator3DStore.getState().showPaths).toBe(true);
+        expect(useLocator3DStore.getState().showGrid).toBe(true);
+
+        useLocator3DStore.getState().toggleSceneOption('showLabels');
+        useLocator3DStore.getState().toggleSceneOption('showPaths');
+        useLocator3DStore.getState().requestCameraPreset('counter');
+
+        expect(useLocator3DStore.getState().showLabels).toBe(false);
+        expect(useLocator3DStore.getState().showPaths).toBe(false);
+        expect(useLocator3DStore.getState().showGrid).toBe(true);
+        expect(useLocator3DStore.getState().cameraPresetRequest).toEqual({
+            preset: 'counter',
+            sequence: 1,
+        });
+
+        useLocator3DStore.getState().resetCamera();
+
+        expect(useLocator3DStore.getState().cameraPresetRequest).toEqual({
+            preset: 'overview',
+            sequence: 2,
+        });
+    });
+
     it('adds objects from the library and selects the new object', () => {
         resetLocator3DStore();
         const initialCount = useLocator3DStore.getState().sceneObjects.length;

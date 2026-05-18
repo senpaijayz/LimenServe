@@ -19,6 +19,7 @@ function createInitialState() {
         activeFloor: 1,
         activeTool: 'select',
         cameraFocusRequest: null,
+        cameraPresetRequest: null,
         isDesignMode: false,
         locatedProduct: null,
         objectLibrary: LOCATOR_OBJECT_LIBRARY,
@@ -28,6 +29,9 @@ function createInitialState() {
         sceneObjects,
         selectedObjectId: null,
         selectedProductForLocation: null,
+        showGrid: true,
+        showLabels: true,
+        showPaths: true,
     };
 }
 
@@ -114,10 +118,23 @@ export const useLocator3DStore = create((set, get) => ({
             },
         }));
     },
+    requestCameraPreset: (preset) => {
+        const safePreset = ['counter', 'overview', 'selected'].includes(preset) ? preset : 'overview';
+
+        set((state) => ({
+            cameraPresetRequest: {
+                preset: safePreset,
+                sequence: (state.cameraPresetRequest?.sequence || 0) + 1,
+            },
+        }));
+    },
+    resetCamera: () => {
+        get().requestCameraPreset('overview');
+    },
     animatePathFromCounter: () => set((state) => ({
         pathAnimationRequest: state.pathAnimationRequest + 1,
     })),
-    clearLocatedProduct: () => set({ locatedProduct: null, selectedProductForLocation: null }),
+    clearLocatedProduct: () => set({ cameraPresetRequest: null, locatedProduct: null, selectedProductForLocation: null }),
     clearSelection: () => set({ selectedObjectId: null }),
     deleteSelectedObject: () => {
         const { sceneObjects, selectedObjectId } = get();
@@ -144,6 +161,7 @@ export const useLocator3DStore = create((set, get) => ({
 
         set({
             activeFloor: 1,
+            cameraPresetRequest: null,
             objects: sceneObjects,
             sceneObjects,
             locatedProduct: null,
@@ -168,6 +186,7 @@ export const useLocator3DStore = create((set, get) => ({
 
         set({
             activeFloor: floor,
+            cameraPresetRequest: null,
             locatedProduct: {
                 ...location,
                 binNumber: Number(location.binNumber),
@@ -194,6 +213,7 @@ export const useLocator3DStore = create((set, get) => ({
 
         set({
             activeFloor: 1,
+            cameraPresetRequest: null,
             objects: sceneObjects,
             sceneObjects,
             locatedProduct: null,
@@ -208,6 +228,13 @@ export const useLocator3DStore = create((set, get) => ({
     })),
     setProductLocations: (productLocations) => set({ productLocations: Array.isArray(productLocations) ? productLocations : [] }),
     setSelectedProductForLocation: (product) => set({ selectedProductForLocation: product || null }),
+    toggleSceneOption: (option) => {
+        if (!['showGrid', 'showLabels', 'showPaths'].includes(option)) {
+            return;
+        }
+
+        set((state) => ({ [option]: !state[option] }));
+    },
     toggleFloorFocus: () => set((state) => ({ activeFloor: state.activeFloor === 1 ? 2 : 1 })),
     toggleObjectLock: (objectId) => {
         const targetId = objectId ?? get().selectedObjectId;
