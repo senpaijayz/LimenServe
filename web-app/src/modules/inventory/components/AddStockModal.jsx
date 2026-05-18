@@ -254,8 +254,8 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
             setError('Add at least one product with a valid quantity.');
             return;
         }
-        if (!supplier.name.trim()) {
-            setError('Supplier name is required.');
+        if (!supplier.id) {
+            setError('Choose a supplier from Supplier Management.');
             return;
         }
 
@@ -271,7 +271,7 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                 await onSave({
                     product: item.product,
                     quantity: qty,
-                    supplierId: supplier.id || null,
+                    supplierId: supplier.id,
                     supplierName: supplier.name.trim(),
                     supplierContact: supplier.contact.trim(),
                     supplierAddress: supplier.address.trim(),
@@ -354,7 +354,7 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                                         onChange={(e) => selectSupplier(e.target.value)}
                                         disabled={loadingSuppliers}
                                     >
-                                        <option value="">{loadingSuppliers ? 'Loading suppliers...' : 'Manual supplier entry'}</option>
+                                        <option value="">{loadingSuppliers ? 'Loading suppliers...' : 'Choose supplier'}</option>
                                         {suppliers.map((supplierOption) => (
                                             <option key={supplierOption.id} value={supplierOption.id}>
                                                 {supplierOption.name}{supplierOption.supplierId ? ` - ${supplierOption.supplierId}` : ''}
@@ -362,9 +362,26 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                                         ))}
                                     </select>
                                 </label>
-                                <Input label="Supplier Name *" placeholder="e.g. Mitsubishi Motors PH" value={supplier.name} onChange={(e) => updateSupplier('name', e.target.value)} />
-                                <Input label="Contact Details" placeholder="Phone or email" value={supplier.contact} onChange={(e) => updateSupplier('contact', e.target.value)} />
-                                <Input label="Address" placeholder="Supplier address" value={supplier.address} onChange={(e) => updateSupplier('address', e.target.value)} />
+                                <div className="rounded-xl border border-primary-100 bg-primary-50/70 p-3 sm:col-span-2">
+                                    {supplier.id ? (
+                                        <div className="grid gap-3 text-sm sm:grid-cols-3">
+                                            <div>
+                                                <p className="text-xs font-semibold text-primary-500">Supplier Name</p>
+                                                <p className="mt-1 font-bold text-primary-950">{supplier.name || '-'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-semibold text-primary-500">Contact Details</p>
+                                                <p className="mt-1 text-primary-700">{supplier.contact || '-'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-semibold text-primary-500">Address</p>
+                                                <p className="mt-1 text-primary-700">{supplier.address || '-'}</p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-primary-500">Select a supplier to use its saved name, contact details, and address.</p>
+                                    )}
+                                </div>
                                 <Input label="Invoice / Reference No." placeholder="DR / OR number" value={supplier.referenceNumber} onChange={(e) => updateSupplier('referenceNumber', e.target.value)} />
                                 <Input label="Received Date" type="date" value={supplier.receivedDate} onChange={(e) => updateSupplier('receivedDate', e.target.value)} />
                                 <Input label="Reason / Notes" placeholder="Stock receiving" value={supplier.reason} onChange={(e) => updateSupplier('reason', e.target.value)} />
@@ -391,7 +408,7 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                                     type="button"
                                     onClick={handleSaveBulk}
                                     isLoading={isSubmitting}
-                                    disabled={validBulkItems.length === 0 || !supplier.name.trim() || isSubmitting}
+                                    disabled={validBulkItems.length === 0 || !supplier.id || isSubmitting}
                                     leftIcon={<Plus className="w-4 h-4" />}
                                 >
                                     Receive Stock ({validBulkItems.length})
