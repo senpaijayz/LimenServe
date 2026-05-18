@@ -760,17 +760,6 @@ function ImageUploadField({
               className="mt-2 w-full rounded-2xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-900 outline-none"
             />
           </label>
-          {value && (
-            <details className="rounded-2xl border border-primary-200 bg-white px-4 py-3 text-xs text-primary-500">
-              <summary className="cursor-pointer font-semibold text-primary-700">Advanced image URL</summary>
-              <input
-                type="text"
-                value={value}
-                onChange={(event) => onChange(event.target.value)}
-                className="mt-3 w-full rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 font-mono text-xs text-primary-700 outline-none focus:border-accent-primary"
-              />
-            </details>
-          )}
           <div className="flex flex-wrap items-center gap-3">
             <label className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-primary-200 bg-white px-4 text-sm font-semibold text-accent-primary shadow-sm transition hover:bg-primary-100 ${isUploading ? 'pointer-events-none opacity-70' : ''}`}>
               {isUploading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
