@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion as Motion } from 'framer-motion';
-import { Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ClipboardList, Edit2, Crosshair } from 'lucide-react';
+import { Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ClipboardList, Edit2, Crosshair, Box } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { StockBadge } from '../../../components/ui/Badge';
@@ -464,7 +464,12 @@ const InventoryList = () => {
         const normalizedProduct = productOverrides[product.id] ?? formatCatalogProduct(product);
 
         setSelectedPreviewProduct(null);
-        navigate(buildLocator3DUrl(normalizedProduct));
+        navigate(buildLocator3DUrl(normalizedProduct), {
+            state: {
+                product: normalizedProduct,
+                productId: normalizedProduct.id,
+            },
+        });
     };
 
     const handleSaveProductDetails = async (form) => {
@@ -745,6 +750,7 @@ const InventoryList = () => {
                             key={product.catalogEntryId || product.id}
                             product={product}
                             onEdit={isAdmin ? openEditProduct : null}
+                            onLocate={handleLocateIn3D}
                             onSelect={openPreview}
                         />
                     ))}
@@ -778,7 +784,7 @@ const InventoryList = () => {
                                     ))}
                                     <th className="text-left text-xs font-bold uppercase tracking-[0.12em] text-primary-400">Status</th>
                                     <th className="text-left text-xs font-bold uppercase tracking-[0.12em] text-primary-400">Location</th>
-                                    {isAdmin && <th className="text-left text-xs font-bold uppercase tracking-[0.12em] text-primary-400">Actions</th>}
+                                    <th className="text-left text-xs font-bold uppercase tracking-[0.12em] text-primary-400">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -806,9 +812,20 @@ const InventoryList = () => {
                                                 {normalizeLocationForDisplay(product.location)}
                                             </button>
                                         </td>
-                                        {isAdmin && (
-                                            <td className="border-b border-primary-100 py-3">
-                                                <div className="flex flex-wrap gap-2">
+                                        <td className="border-b border-primary-100 py-3">
+                                            <div className="flex flex-wrap gap-2">
+                                                <Button
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    leftIcon={<Box className="h-4 w-4" />}
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        handleLocateIn3D(product);
+                                                    }}
+                                                >
+                                                    Locate in 3D
+                                                </Button>
+                                                {isAdmin && (
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
@@ -820,9 +837,9 @@ const InventoryList = () => {
                                                 >
                                                     Edit
                                                 </Button>
-                                                </div>
-                                            </td>
-                                        )}
+                                                )}
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

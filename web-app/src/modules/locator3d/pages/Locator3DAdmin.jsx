@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import {
+    AlertTriangle,
+    ArrowLeft,
     Box,
     Boxes,
     BrickWall,
@@ -12,10 +14,12 @@ import {
     LayoutDashboard,
     Lock,
     Monitor,
+    MapPin,
     Package,
     PanelLeftClose,
     PanelLeftOpen,
     RefreshCw,
+    Route,
     Save,
     Search,
     Store,
@@ -25,6 +29,7 @@ import {
 } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
 import { useToast } from '../../../components/ui/Toast';
+import AuthContext from '../../../context/auth-context';
 import { getFullProductCatalog } from '../../../services/catalogApi';
 import Locator3DScene from '../components/Locator3DScene';
 import {
@@ -32,7 +37,9 @@ import {
     SHELF_BIN_RANGE,
     getLocatorObjectById,
     getLocatorObjectSummary,
+    getShelfObjectByLocation,
     isShelfObject,
+    normalizeAisle,
 } from '../data/locatorScene';
 import {
     assignProductLocation,
@@ -117,6 +124,45 @@ function TopButton({ children, className = '', ...props }) {
     );
 }
 
+const PRODUCT_LOCATION_INITIAL_STATE = {
+    location: null,
+    message: '',
+    product: null,
+    status: 'idle',
+};
+
+function getProductStock(product = {}) {
+    const value = product.quantity ?? product.stock ?? product.onHand ?? product.on_hand ?? 0;
+    const numericValue = Number(value);
+
+    return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function resolveProductDetails({ catalogProducts = [], fallbackProduct = null, location = null, productId = '', productName = '', productSku = '' }) {
+    const matchedProduct = catalogProducts.find((product) => product.id === productId) ?? fallbackProduct ?? {};
+
+    return {
+        ...matchedProduct,
+        id: matchedProduct.id || productId,
+        name: matchedProduct.name || location?.productName || productName || 'Selected product',
+        quantity: getProductStock(matchedProduct),
+        sku: matchedProduct.sku || location?.sku || productSku || '',
+        stock: getProductStock(matchedProduct),
+    };
+}
+
+function formatLocatorTextLocation(location) {
+    if (!location) {
+        return 'Unassigned';
+    }
+
+    return [
+        location.aisle ? `Aisle ${normalizeAisle(location.aisle)}` : null,
+        location.shelfNumber ? `Shelf ${location.shelfNumber}` : null,
+        location.binNumber ? `Bin ${location.binNumber}` : null,
+    ].filter(Boolean).join(' - ') || 'Unassigned';
+}
+
 function TopBar({
     isLoadingLayout,
     isSavingLayout,
@@ -158,6 +204,13 @@ function TopBar({
                     <div>
                         <p className="text-[11px] font-black uppercase tracking-[0.28em] text-primary-400">Admin</p>
                         <h1 className="text-xl font-black text-primary-950">3D Locator</h1>
+                        <Link
+                            className="mt-2 inline-flex items-center gap-1 text-xs font-black text-accent-blue transition hover:text-accent-primary"
+                            to="/inventory"
+                        >
+                            <ArrowLeft className="h-3.5 w-3.5" />
+                            Back to Inventory
+                        </Link>
                     </div>
                 </div>
 
@@ -373,12 +426,124 @@ function ProductSearch({ isLoadingProducts, onLocateProduct, productLocations, p
     );
 }
 
-function QuickHelpPanel({ isLoadingProducts, onLocateProduct, productLocations, products }) {
+function ProductLocationCard({ canEditLayout, onAnimatePath, onOpenEditLayout, state }) {
+    if (!state || state.status === 'idle') {
+        return null;
+    }
+
+    const product = state.product || {};
+    const location = state.location;
+    const stock = formatNumber(getProductStock(product));
+    const sku = product.sku || location?.sku || 'No part number';
+    const productName = product.name || location?.productName || 'Selected product';
+
+    if (state.status === 'loading') {
+        return (
+            <section className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm" aria-label="Product Location">
+                <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-blue/10 text-accent-blue">
+                        <MapPin className="h-5 w-5 animate-pulse" />
+                    </span>
+                    <div>
+                        <p className="text-[11px] font-black uppercase tracking-[0.22em] text-primary-400">Product Location</p>
+                        <h2 className="mt-1 text-base font-black text-primary-950">Loading stockroom location...</h2>
+                    </div>
+                </div>
+            </section>
+        );
+    }
+
+    if (state.status === 'error') {
+        return (
+            <section className="rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm" aria-label="Product Location">
+                <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700">
+                        <AlertTriangle className="h-5 w-5" />
+                    </span>
+                    <div>
+                        <p className="text-[11px] font-black uppercase tracking-[0.22em] text-red-500">Product Location</p>
+                        <h2 className="mt-1 text-base font-black text-red-950">Unable to load product location</h2>
+                        <p className="mt-2 text-xs font-semibold leading-5 text-red-700">{state.message || 'Please reload the locator and try again.'}</p>
+                    </div>
+                </div>
+            </section>
+        );
+    }
+
+    if (state.status === 'empty') {
+        return (
+            <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm" aria-label="Product Location">
+                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-amber-600">Product Location</p>
+                <h2 className="mt-2 text-base font-black text-primary-950">This product has no stockroom location assigned yet</h2>
+                <div className="mt-3 rounded-xl bg-white/80 p-3 shadow-sm">
+                    <p className="truncate text-sm font-black text-primary-950">{productName}</p>
+                    <p className="mt-1 font-mono text-xs font-bold text-primary-500">{sku}</p>
+                </div>
+                <p className="mt-3 text-xs font-semibold leading-5 text-amber-800">
+                    {state.message || 'Assign this item to a shelf and bin before using 3D locate mode.'}
+                </p>
+                {canEditLayout && (
+                    <button
+                        className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white px-3 text-xs font-black text-amber-800 shadow-sm transition hover:bg-amber-100"
+                        onClick={onOpenEditLayout}
+                        type="button"
+                    >
+                        <Box className="h-4 w-4" />
+                        Open Edit Layout
+                    </button>
+                )}
+            </section>
+        );
+    }
+
+    return (
+        <section className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm" aria-label="Product Location">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-emerald-600">Product Location</p>
+                    <h2 className="mt-2 truncate text-lg font-black text-primary-950">{productName}</h2>
+                </div>
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">Mapped</span>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-primary-50 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary-400">Part No.</p>
+                    <p className="mt-1 truncate font-mono text-xs font-black text-primary-900">{sku}</p>
+                </div>
+                <div className="rounded-xl bg-primary-50 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary-400">Stock</p>
+                    <p className="mt-1 text-xs font-black text-primary-900">{stock} in stock</p>
+                </div>
+            </div>
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-black text-emerald-900">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{formatLocatorTextLocation(location)}</span>
+            </div>
+            <button
+                aria-label="Animate Path from Counter"
+                className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700"
+                onClick={onAnimatePath}
+                type="button"
+            >
+                <Route className="h-4 w-4" />
+                Animate Path from Counter
+            </button>
+        </section>
+    );
+}
+
+function QuickHelpPanel({ canEditLayout, isLoadingProducts, onAnimatePath, onLocateProduct, onOpenEditLayout, productLocationState, productLocations, products }) {
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const [isOpen, setIsOpen] = useState(true);
 
     return (
-        <aside className="min-w-0 transition-all">
+        <aside className="min-w-0 space-y-3 transition-all">
+            <ProductLocationCard
+                canEditLayout={canEditLayout}
+                onAnimatePath={onAnimatePath}
+                onOpenEditLayout={onOpenEditLayout}
+                state={productLocationState}
+            />
             <div className="rounded-2xl border border-primary-200 bg-white shadow-sm">
                 <button
                     aria-label={isOpen ? 'Collapse Quick Help' : 'Expand Quick Help'}
@@ -839,14 +1004,20 @@ function useLocatorKeyboardShortcuts(onSaveLayout) {
 
 export default function Locator3DAdmin() {
     const { success, error: showError, info, warning } = useToast();
+    const authContext = useContext(AuthContext);
+    const routeLocation = useLocation();
     const [searchParams] = useSearchParams();
+    const routeStateProduct = routeLocation.state?.product ?? null;
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
     const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
+    const animatePathFromCounter = useLocator3DStore((state) => state.animatePathFromCounter);
     const loadLayoutData = useLocator3DStore((state) => state.loadLayoutData);
     const locateProduct = useLocator3DStore((state) => state.locateProduct);
     const productLocations = useLocator3DStore((state) => state.productLocations);
     const resetToDefaultLayout = useLocator3DStore((state) => state.resetToDefaultLayout);
+    const setDesignMode = useLocator3DStore((state) => state.setDesignMode);
     const setProductLocations = useLocator3DStore((state) => state.setProductLocations);
+    const setSelectedProductForLocation = useLocator3DStore((state) => state.setSelectedProductForLocation);
     const [isSavingLayout, setIsSavingLayout] = useState(false);
     const [isLoadingLayout, setIsLoadingLayout] = useState(false);
     const [layoutName, setLayoutName] = useState(LOCATOR_LAYOUT_NAME);
@@ -854,9 +1025,11 @@ export default function Locator3DAdmin() {
     const [layoutOptions, setLayoutOptions] = useState([LOCATOR_LAYOUT_NAME]);
     const [products, setProducts] = useState([]);
     const [isLoadingProducts, setIsLoadingProducts] = useState(false);
-    const productId = searchParams.get('productId');
-    const productName = searchParams.get('name');
-    const productSku = searchParams.get('sku');
+    const [productLocationState, setProductLocationState] = useState(PRODUCT_LOCATION_INITIAL_STATE);
+    const productId = searchParams.get('productId') || routeLocation.state?.productId || routeStateProduct?.id || '';
+    const productName = searchParams.get('name') || routeStateProduct?.name || '';
+    const productSku = searchParams.get('sku') || routeStateProduct?.sku || '';
+    const canEditLayout = Boolean(authContext?.isAdmin);
     const hasSelectedObject = Boolean(getLocatorObjectById(selectedObjectId, sceneObjects));
 
     const loadLayoutOptions = useCallback(async () => {
@@ -887,6 +1060,25 @@ export default function Locator3DAdmin() {
 
     const handleLoadLayout = useCallback(async ({ silent = false, locateProductId = '', layout = selectedLayoutName } = {}) => {
         setIsLoadingLayout(true);
+        const fallbackProduct = locateProductId
+            ? resolveProductDetails({
+                fallbackProduct: routeStateProduct,
+                productId: locateProductId,
+                productName,
+                productSku,
+            })
+            : null;
+
+        if (locateProductId) {
+            setProductLocationState({
+                location: null,
+                message: '',
+                product: fallbackProduct,
+                status: 'loading',
+            });
+            setSelectedProductForLocation(fallbackProduct);
+        }
+
         try {
             const [savedLayout, locations] = await Promise.all([
                 loadStoreLayout(layout),
@@ -907,48 +1099,157 @@ export default function Locator3DAdmin() {
             setProductLocations(locations);
 
             if (locateProductId) {
-                const location = await getProductLocation(locateProductId);
+                const [location, catalogProducts] = await Promise.all([
+                    getProductLocation(locateProductId),
+                    getFullProductCatalog(),
+                ]);
+                const safeCatalogProducts = Array.isArray(catalogProducts) ? catalogProducts : [];
+                const product = resolveProductDetails({
+                    catalogProducts: safeCatalogProducts,
+                    fallbackProduct,
+                    location,
+                    productId: locateProductId,
+                    productName,
+                    productSku,
+                });
 
-                if (location) {
-                    locateProduct({
-                        ...location,
-                        productName: productName || location.productName,
-                        sku: productSku || location.sku,
+                setProducts(safeCatalogProducts);
+                setSelectedProductForLocation(product);
+
+                if (!location) {
+                    locateProduct(null);
+                    setProductLocationState({
+                        location: null,
+                        message: 'Assign this item to a shelf and bin before using 3D locate mode.',
+                        product,
+                        status: 'empty',
                     });
-                    success('Product located in the 3D store.');
-                } else {
                     warning('This product does not have a saved 3D bin location yet.');
+                    return;
                 }
+
+                const activeSceneObjects = useLocator3DStore.getState().sceneObjects;
+                const targetShelf = getShelfObjectByLocation(location, activeSceneObjects);
+
+                if (!targetShelf) {
+                    locateProduct(null);
+                    setProductLocationState({
+                        location,
+                        message: 'A saved location exists, but its shelf is not in the current layout.',
+                        product,
+                        status: 'empty',
+                    });
+                    warning('This product location is not mapped to the current 3D layout.');
+                    return;
+                }
+
+                const mappedLocation = {
+                    ...location,
+                    floor: Number(location.floor || targetShelf.floor || 1),
+                    productName: product.name || location.productName,
+                    shelfObjectId: targetShelf.id || location.shelfObjectId,
+                    sku: product.sku || location.sku,
+                };
+
+                locateProduct(mappedLocation);
+                setProductLocationState({
+                    location: mappedLocation,
+                    message: '',
+                    product,
+                    status: 'located',
+                });
+                success('Product located in the 3D store.');
             } else if (!silent) {
                 success('3D layout loaded.');
             }
         } catch (loadError) {
+            if (locateProductId) {
+                setProductLocationState({
+                    location: null,
+                    message: loadError.message || 'Unable to load product location.',
+                    product: fallbackProduct,
+                    status: 'error',
+                });
+            }
             showError(loadError.message || 'Unable to load 3D layout.');
         } finally {
             setIsLoadingLayout(false);
         }
-    }, [info, loadLayoutData, locateProduct, productName, productSku, resetToDefaultLayout, selectedLayoutName, setProductLocations, showError, success, warning]);
+    }, [info, loadLayoutData, locateProduct, productName, productSku, resetToDefaultLayout, routeStateProduct, selectedLayoutName, setProductLocations, setSelectedProductForLocation, showError, success, warning]);
 
     const handleResetLayout = useCallback(() => {
         resetToDefaultLayout();
+        setProductLocationState(PRODUCT_LOCATION_INITIAL_STATE);
+        setSelectedProductForLocation(null);
         success('Default two-floor 3D layout restored.');
-    }, [resetToDefaultLayout, success]);
+    }, [resetToDefaultLayout, setSelectedProductForLocation, success]);
 
     const handleLocateProductFromSearch = useCallback((product) => {
         const location = productLocations.find((item) => item.productId === product.id);
+        const productDetails = resolveProductDetails({
+            catalogProducts: products,
+            fallbackProduct: product,
+            location,
+            productId: product.id,
+            productName: product.name,
+            productSku: product.sku,
+        });
+
+        setSelectedProductForLocation(productDetails);
 
         if (!location) {
+            locateProduct(null);
+            setProductLocationState({
+                location: null,
+                message: 'Assign this item to a shelf and bin before using 3D locate mode.',
+                product: productDetails,
+                status: 'empty',
+            });
             warning('This product does not have a saved 3D bin location yet.');
             return;
         }
 
-        locateProduct({
+        const targetShelf = getShelfObjectByLocation(location, useLocator3DStore.getState().sceneObjects);
+
+        if (!targetShelf) {
+            locateProduct(null);
+            setProductLocationState({
+                location,
+                message: 'A saved location exists, but its shelf is not in the current layout.',
+                product: productDetails,
+                status: 'empty',
+            });
+            warning('This product location is not mapped to the current 3D layout.');
+            return;
+        }
+
+        const mappedLocation = {
             ...location,
-            productName: product.name || location.productName,
-            sku: product.sku || location.sku,
+            floor: Number(location.floor || targetShelf.floor || 1),
+            productName: productDetails.name || location.productName,
+            shelfObjectId: targetShelf.id || location.shelfObjectId,
+            sku: productDetails.sku || location.sku,
+        };
+
+        locateProduct(mappedLocation);
+        setProductLocationState({
+            location: mappedLocation,
+            message: '',
+            product: productDetails,
+            status: 'located',
         });
         success('Product located in the 3D store.');
-    }, [locateProduct, productLocations, success, warning]);
+    }, [locateProduct, productLocations, products, setSelectedProductForLocation, success, warning]);
+
+    const handleAnimatePathFromCounter = useCallback(() => {
+        animatePathFromCounter();
+        info('Path animation restarted from the counter.');
+    }, [animatePathFromCounter, info]);
+
+    const handleOpenEditLayout = useCallback(() => {
+        setDesignMode(true);
+        info('Design mode enabled. Select a shelf to assign this product.');
+    }, [info, setDesignMode]);
 
     useEffect(() => {
         void loadLayoutOptions();
@@ -1020,8 +1321,12 @@ export default function Locator3DAdmin() {
                 )}
             >
                 <QuickHelpPanel
+                    canEditLayout={canEditLayout}
                     isLoadingProducts={isLoadingProducts}
+                    onAnimatePath={handleAnimatePathFromCounter}
                     onLocateProduct={handleLocateProductFromSearch}
+                    onOpenEditLayout={handleOpenEditLayout}
+                    productLocationState={productLocationState}
                     productLocations={productLocations}
                     products={products}
                 />

@@ -23,9 +23,11 @@ function createInitialState() {
         locatedProduct: null,
         objectLibrary: LOCATOR_OBJECT_LIBRARY,
         objects: sceneObjects,
+        pathAnimationRequest: 0,
         productLocations: [],
         sceneObjects,
         selectedObjectId: null,
+        selectedProductForLocation: null,
     };
 }
 
@@ -112,7 +114,10 @@ export const useLocator3DStore = create((set, get) => ({
             },
         }));
     },
-    clearLocatedProduct: () => set({ locatedProduct: null }),
+    animatePathFromCounter: () => set((state) => ({
+        pathAnimationRequest: state.pathAnimationRequest + 1,
+    })),
+    clearLocatedProduct: () => set({ locatedProduct: null, selectedProductForLocation: null }),
     clearSelection: () => set({ selectedObjectId: null }),
     deleteSelectedObject: () => {
         const { sceneObjects, selectedObjectId } = get();
@@ -128,6 +133,7 @@ export const useLocator3DStore = create((set, get) => ({
             objects: nextObjects,
             sceneObjects: nextObjects,
             locatedProduct: null,
+            selectedProductForLocation: null,
             selectedObjectId: null,
         });
     },
@@ -141,6 +147,7 @@ export const useLocator3DStore = create((set, get) => ({
             objects: sceneObjects,
             sceneObjects,
             locatedProduct: null,
+            selectedProductForLocation: null,
             selectedObjectId: null,
         });
     },
@@ -190,6 +197,7 @@ export const useLocator3DStore = create((set, get) => ({
             objects: sceneObjects,
             sceneObjects,
             locatedProduct: null,
+            selectedProductForLocation: null,
             selectedObjectId: null,
         });
     },
@@ -199,6 +207,7 @@ export const useLocator3DStore = create((set, get) => ({
         isDesignMode,
     })),
     setProductLocations: (productLocations) => set({ productLocations: Array.isArray(productLocations) ? productLocations : [] }),
+    setSelectedProductForLocation: (product) => set({ selectedProductForLocation: product || null }),
     toggleFloorFocus: () => set((state) => ({ activeFloor: state.activeFloor === 1 ? 2 : 1 })),
     toggleObjectLock: (objectId) => {
         const targetId = objectId ?? get().selectedObjectId;

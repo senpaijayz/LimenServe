@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../components/ui/Toast';
 import { resetLocator3DStore, useLocator3DStore } from '../modules/locator3d/store/useLocator3DStore';
 
@@ -10,8 +10,8 @@ vi.mock('../modules/locator3d/components/Locator3DScene', () => ({
 
 vi.mock('../services/catalogApi', () => ({
     getFullProductCatalog: vi.fn(async () => [
-        { id: 'product-1', name: 'Oil Filter', sku: 'OF-1' },
-        { id: 'product-2', name: 'Brake Pad', sku: 'BP-2' },
+        { id: 'product-1', name: 'Oil Filter', quantity: 12, sku: 'OF-1', stock: 12 },
+        { id: 'product-2', name: 'Brake Pad', quantity: 0, sku: 'BP-2', stock: 0 },
     ]),
 }));
 
@@ -35,7 +35,7 @@ vi.mock('../modules/locator3d/services/locator3DApi', () => ({
     saveStoreLayout: vi.fn(async () => ({ id: 'layout-1' })),
 }));
 
-import { saveStoreLayout } from '../modules/locator3d/services/locator3DApi';
+import { getProductLocation, saveStoreLayout } from '../modules/locator3d/services/locator3DApi';
 import Locator3DAdmin from '../modules/locator3d/pages/Locator3DAdmin';
 
 function renderLocator(route = '/locator-3d') {
@@ -49,6 +49,11 @@ function renderLocator(route = '/locator-3d') {
 }
 
 describe('3D Locator premium redesign', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        getProductLocation.mockResolvedValue(null);
+    });
+
     it('uses a spacious view-mode layout with product search and no heavy object chrome', async () => {
         resetLocator3DStore();
 
@@ -70,6 +75,45 @@ describe('3D Locator premium redesign', () => {
 
         await waitFor(() => expect(useLocator3DStore.getState().locatedProduct?.productId).toBe('product-1'));
         expect(screen.getAllByText(/Product located/i).length).toBeGreaterThan(0);
+    });
+
+    it('loads a deep-linked product into a product location card and focuses the mapped shelf', async () => {
+        resetLocator3DStore();
+        getProductLocation.mockResolvedValueOnce({
+            aisle: 'B',
+            binNumber: 4,
+            floor: 1,
+            productId: 'product-1',
+            productName: 'Oil Filter',
+            shelfNumber: 2,
+            shelfObjectId: 'shelf-4-a',
+            sku: 'OF-1',
+        });
+
+        renderLocator('/locator-3d?productId=product-1');
+
+        await waitFor(() => expect(useLocator3DStore.getState().locatedProduct?.productId).toBe('product-1'));
+        expect(screen.getByText('Product Location')).toBeTruthy();
+        expect(screen.getByText('Oil Filter')).toBeTruthy();
+        expect(screen.getByText('OF-1')).toBeTruthy();
+        expect(screen.getByText('12 in stock')).toBeTruthy();
+        expect(screen.getByText('Aisle B - Shelf 2 - Bin 4')).toBeTruthy();
+        const pathSequence = useLocator3DStore.getState().pathAnimationRequest;
+        fireEvent.click(screen.getByRole('button', { name: 'Animate Path from Counter' }));
+        expect(useLocator3DStore.getState().pathAnimationRequest).toBe(pathSequence + 1);
+        expect(useLocator3DStore.getState().selectedObjectId).toBe('shelf-4-a');
+    });
+
+    it('shows a helpful empty state when a deep-linked product has no mapped location', async () => {
+        resetLocator3DStore();
+        getProductLocation.mockResolvedValueOnce(null);
+
+        renderLocator('/locator-3d?productId=product-2&sku=BP-2&name=Brake+Pad');
+
+        await screen.findByText('This product has no stockroom location assigned yet');
+        expect(screen.getByText('Brake Pad')).toBeTruthy();
+        expect(screen.getByText('BP-2')).toBeTruthy();
+        expect(useLocator3DStore.getState().locatedProduct).toBeNull();
     });
 
     it('shows design controls only in design mode and supports layout names, object adds, and property edits', async () => {

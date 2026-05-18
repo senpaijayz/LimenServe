@@ -1,5 +1,5 @@
 import { motion as Motion } from 'framer-motion';
-import { MapPin, Edit2, Trash2 } from 'lucide-react';
+import { Box, MapPin, Edit2, Trash2 } from 'lucide-react';
 import { StockBadge } from '../../../components/ui/Badge';
 import { formatCurrency } from '../../../utils/formatters';
 import { getProductPartNumber } from '../../../utils/barcode';
@@ -28,7 +28,12 @@ function formatLocation(location = {}) {
     return parts.length > 0 ? parts.join(' • ') : 'Unassigned';
 }
 
-const ProductCard = ({ product, onEdit, onDelete, onSelect }) => {
+const ProductCard = ({ product, onEdit, onDelete, onLocate, onSelect }) => {
+    const handleLocateClick = (event) => {
+        event.stopPropagation();
+        onLocate?.(product);
+    };
+
     return (
         <Motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -98,6 +103,18 @@ const ProductCard = ({ product, onEdit, onDelete, onSelect }) => {
                     <MapPin className="w-3 h-3" />
                     <span>{formatLocation(product.location)}</span>
                 </div>
+
+                {onLocate && (
+                    <button
+                        type="button"
+                        aria-label={`Locate ${product.name} in 3D`}
+                        onClick={handleLocateClick}
+                        className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-accent-blue/30 bg-accent-blue/10 px-3 text-xs font-black text-accent-blue transition hover:border-accent-blue/50 hover:bg-accent-blue/15"
+                    >
+                        <Box className="h-4 w-4" />
+                        Locate in 3D
+                    </button>
+                )}
             </div>
         </Motion.div>
     );

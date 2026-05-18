@@ -472,17 +472,26 @@ function buildPathPoints(sceneObjects, locatedProduct) {
     return [start, target];
 }
 
-function MovingPathDot({ points }) {
+function MovingPathDot({ points, sequence }) {
     const dotRef = useRef();
+    const animationStartRef = useRef(null);
     const vectors = useMemo(() => points.map((point) => new THREE.Vector3(...point)), [points]);
+
+    useEffect(() => {
+        animationStartRef.current = null;
+    }, [points, sequence]);
 
     useFrame(({ clock }) => {
         if (!dotRef.current || vectors.length < 2) {
             return;
         }
 
+        if (animationStartRef.current === null) {
+            animationStartRef.current = clock.elapsedTime;
+        }
+
         const totalSegments = vectors.length - 1;
-        const progress = (clock.elapsedTime * 0.32) % 1;
+        const progress = ((clock.elapsedTime - animationStartRef.current) * 0.32) % 1;
         const segmentProgress = progress * totalSegments;
         const segmentIndex = Math.min(totalSegments - 1, Math.floor(segmentProgress));
         const localProgress = segmentProgress - segmentIndex;
@@ -503,6 +512,7 @@ function MovingPathDot({ points }) {
 
 function LocatorPath() {
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
+    const pathAnimationRequest = useLocator3DStore((state) => state.pathAnimationRequest);
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
     const points = useMemo(() => buildPathPoints(sceneObjects, locatedProduct), [locatedProduct, sceneObjects]);
 
@@ -526,7 +536,7 @@ function LocatorPath() {
                 points={points}
                 transparent
             />
-            <MovingPathDot points={points} />
+            <MovingPathDot points={points} sequence={pathAnimationRequest} />
         </group>
     );
 }
