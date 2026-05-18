@@ -886,6 +886,12 @@ function RepeatableRows({ title, items, emptyItem, renderItem, onChange }) {
 
 function SectionContentEditor({ section, onContentChange, onImageUpload, uploadingKey }) {
   const content = section.content && typeof section.content === 'object' ? section.content : {};
+  const sectionKey = section.sectionKey || section.section_key || '';
+  const isHomeFeatures = sectionKey === 'home-features';
+  const isBestSellers = sectionKey === 'home-best-sellers';
+  const isTrustSection = sectionKey === 'home-trust-signals';
+  const isServiceProcess = sectionKey === 'service-orders-process';
+  const isMechanicsSection = sectionKey === 'about-mechanics';
   const updateContent = (patch) => onContentChange({ ...content, ...patch });
   const updatePrimaryCta = (patch) => updateContent({ primaryCta: { ...(content.primaryCta ?? {}), ...patch } });
   const updateSecondaryCta = (patch) => updateContent({ secondaryCta: { ...(content.secondaryCta ?? {}), ...patch } });
@@ -894,11 +900,11 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
     return (
       <div className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Small label" value={content.eyebrow} onChange={(value) => updateContent({ eyebrow: value })} />
+          <Field label="Top text" value={content.eyebrow} onChange={(value) => updateContent({ eyebrow: value })} />
         </div>
         <Field label="Headline" value={content.title} onChange={(value) => updateContent({ title: value })} />
         <TextAreaField label="Subtitle" value={content.subtitle} rows={3} onChange={(value) => updateContent({ subtitle: value })} />
-        <TextAreaField label="Body paragraph" value={content.body} rows={3} onChange={(value) => updateContent({ body: value })} />
+        <TextAreaField label="Description" value={content.body} rows={3} onChange={(value) => updateContent({ body: value })} />
         <ImageUploadField
           label="Hero image"
           value={content.imageUrl}
@@ -908,27 +914,27 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
           uploadingKey={uploadingKey}
         />
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Primary button label" value={content.primaryCta?.label} onChange={(value) => updatePrimaryCta({ label: value })} />
-          <Field label="Primary button link" value={content.primaryCta?.href} onChange={(value) => updatePrimaryCta({ href: value })} />
-          <Field label="Secondary button label" value={content.secondaryCta?.label} onChange={(value) => updateSecondaryCta({ label: value })} />
-          <Field label="Secondary button link" value={content.secondaryCta?.href} onChange={(value) => updateSecondaryCta({ href: value })} />
+          <Field label="Main button text" value={content.primaryCta?.label} onChange={(value) => updatePrimaryCta({ label: value })} />
+          <Field label="Main button link" value={content.primaryCta?.href} onChange={(value) => updatePrimaryCta({ href: value })} />
+          <Field label="Second button text" value={content.secondaryCta?.label} onChange={(value) => updateSecondaryCta({ label: value })} />
+          <Field label="Second button link" value={content.secondaryCta?.href} onChange={(value) => updateSecondaryCta({ href: value })} />
           <Field label="Image alt text" value={content.imageAlt} onChange={(value) => updateContent({ imageAlt: value })} />
         </div>
         <div className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
-          <h4 className="mb-3 text-sm font-bold text-primary-950">Storefront image overlay</h4>
+          <h4 className="mb-3 text-sm font-bold text-primary-950">Image Text</h4>
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Overlay small label" value={content.imageEyebrow} onChange={(value) => updateContent({ imageEyebrow: value })} />
-            <Field label="Overlay headline" value={content.imageTitle} onChange={(value) => updateContent({ imageTitle: value })} />
-            <Field label="Store metric label" value={content.storeLabel} onChange={(value) => updateContent({ storeLabel: value })} />
-            <Field label="Store metric text" value={content.storeValue} onChange={(value) => updateContent({ storeValue: value })} />
-            <Field label="Catalog metric label" value={content.catalogLabel} onChange={(value) => updateContent({ catalogLabel: value })} />
-            <Field label="Catalog metric text" value={content.catalogValue} onChange={(value) => updateContent({ catalogValue: value })} />
-            <Field label="Quotes metric label" value={content.quotesLabel} onChange={(value) => updateContent({ quotesLabel: value })} />
-            <Field label="Quotes metric text" value={content.quotesValue} onChange={(value) => updateContent({ quotesValue: value })} />
+            <Field label="Top text" value={content.imageEyebrow} onChange={(value) => updateContent({ imageEyebrow: value })} />
+            <Field label="Headline" value={content.imageTitle} onChange={(value) => updateContent({ imageTitle: value })} />
+            <Field label="Info 1 title" value={content.storeLabel} onChange={(value) => updateContent({ storeLabel: value })} />
+            <Field label="Info 1 text" value={content.storeValue} onChange={(value) => updateContent({ storeValue: value })} />
+            <Field label="Info 2 title" value={content.catalogLabel} onChange={(value) => updateContent({ catalogLabel: value })} />
+            <Field label="Info 2 text" value={content.catalogValue} onChange={(value) => updateContent({ catalogValue: value })} />
+            <Field label="Info 3 title" value={content.quotesLabel} onChange={(value) => updateContent({ quotesLabel: value })} />
+            <Field label="Info 3 text" value={content.quotesValue} onChange={(value) => updateContent({ quotesValue: value })} />
           </div>
         </div>
         <div className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
-          <h4 className="mb-3 text-sm font-bold text-primary-950">Homepage badges and vehicle chips</h4>
+          <h4 className="mb-3 text-sm font-bold text-primary-950">Homepage Search And Badges</h4>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Badge 1" value={content.badgeOne} onChange={(value) => updateContent({ badgeOne: value })} />
             <Field label="Badge 2" value={content.badgeTwo} onChange={(value) => updateContent({ badgeTwo: value })} />
@@ -946,38 +952,38 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
     return (
       <div className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Small label" value={content.eyebrow} onChange={(value) => updateContent({ eyebrow: value })} />
+          <Field label="Top text" value={content.eyebrow} onChange={(value) => updateContent({ eyebrow: value })} />
           <Field label="Headline" value={content.title} onChange={(value) => updateContent({ title: value })} />
-          <Field label="Section button label" value={content.ctaLabel} onChange={(value) => updateContent({ ctaLabel: value })} />
-          <Field label="Section button link" value={content.ctaHref} onChange={(value) => updateContent({ ctaHref: value })} />
-          <Field label="Card action label" value={content.cardCtaLabel} onChange={(value) => updateContent({ cardCtaLabel: value })} />
-          <Field label="Primary action label" value={content.primaryActionLabel} onChange={(value) => updateContent({ primaryActionLabel: value })} />
-          <Field label="Secondary action label" value={content.secondaryActionLabel} onChange={(value) => updateContent({ secondaryActionLabel: value })} />
-          <Field label="Step label" value={content.stepLabel} onChange={(value) => updateContent({ stepLabel: value })} />
-          <Field label="Kicker label" value={content.kicker} onChange={(value) => updateContent({ kicker: value })} />
-          <Field label="Badge label" value={content.badgeLabel} onChange={(value) => updateContent({ badgeLabel: value })} />
-          <Field label="Trust label" value={content.trustLabel} onChange={(value) => updateContent({ trustLabel: value })} />
-          <Field label="Trust tags" value={content.trustTags} onChange={(value) => updateContent({ trustTags: value })} helper="Comma-separated list." />
+          {isHomeFeatures && <Field label="Button text" value={content.ctaLabel} onChange={(value) => updateContent({ ctaLabel: value })} />}
+          {isHomeFeatures && <Field label="Button link" value={content.ctaHref} onChange={(value) => updateContent({ ctaHref: value })} />}
+          {isHomeFeatures && <Field label="Card button text" value={content.cardCtaLabel} onChange={(value) => updateContent({ cardCtaLabel: value })} />}
+          {isBestSellers && <Field label="Main button text" value={content.primaryActionLabel} onChange={(value) => updateContent({ primaryActionLabel: value })} />}
+          {isBestSellers && <Field label="Second button text" value={content.secondaryActionLabel} onChange={(value) => updateContent({ secondaryActionLabel: value })} />}
+          {isServiceProcess && <Field label="Step text" value={content.stepLabel} onChange={(value) => updateContent({ stepLabel: value })} />}
+          {isTrustSection && <Field label="Top panel text" value={content.kicker} onChange={(value) => updateContent({ kicker: value })} />}
+          {isTrustSection && <Field label="Highlight badge" value={content.badgeLabel} onChange={(value) => updateContent({ badgeLabel: value })} />}
+          {isTrustSection && <Field label="Trust heading" value={content.trustLabel} onChange={(value) => updateContent({ trustLabel: value })} />}
+          {isTrustSection && <Field label="Trust badges" value={content.trustTags} onChange={(value) => updateContent({ trustTags: value })} helper="Comma-separated list." />}
         </div>
         <TextAreaField label="Subtitle" value={content.subtitle} rows={3} onChange={(value) => updateContent({ subtitle: value })} />
-        <TextAreaField label="Summary text" value={content.summary} rows={2} onChange={(value) => updateContent({ summary: value })} />
-        <TextAreaField label="Body / quote text" value={content.body} rows={3} onChange={(value) => updateContent({ body: value })} />
+        {isTrustSection && <TextAreaField label="Top panel headline" value={content.summary} rows={2} onChange={(value) => updateContent({ summary: value })} />}
+        {isTrustSection && <TextAreaField label="Quote text" value={content.body} rows={3} onChange={(value) => updateContent({ body: value })} />}
         <RepeatableRows
-          title="Feature cards"
+          title={isBestSellers ? 'Featured products' : isServiceProcess ? 'Service steps' : 'Cards'}
           items={content.items}
           emptyItem={{ title: '', description: '', href: '', imageUrl: '', imageAlt: '' }}
           onChange={(items) => updateContent({ items })}
           renderItem={(item, updateItem, itemIndex) => (
             <>
-              <Field label="Small label / vehicle" value={item.eyebrow} onChange={(value) => updateItem({ eyebrow: value })} placeholder="Montero Sport" />
-              <Field label="Badge" value={item.badge} onChange={(value) => updateItem({ badge: value })} placeholder="Best Seller" />
-              <Field label="Card title" value={item.title} onChange={(value) => updateItem({ title: value })} />
-              <Field label="Optional link" value={item.href} onChange={(value) => updateItem({ href: value })} placeholder="/catalog" />
-              <Field label="Part number" value={item.partNo} onChange={(value) => updateItem({ partNo: value })} placeholder="ME-013307" />
-              <Field label="Price" value={item.price} onChange={(value) => updateItem({ price: value })} placeholder="PHP 1,245" />
-              <Field label="Image alt text" value={item.imageAlt} onChange={(value) => updateItem({ imageAlt: value })} />
+              {isBestSellers && <Field label="Vehicle" value={item.eyebrow} onChange={(value) => updateItem({ eyebrow: value })} placeholder="Montero Sport" />}
+              {isBestSellers && <Field label="Badge" value={item.badge} onChange={(value) => updateItem({ badge: value })} placeholder="Best Seller" />}
+              <Field label="Title" value={item.title} onChange={(value) => updateItem({ title: value })} />
+              <Field label="Link" value={item.href} onChange={(value) => updateItem({ href: value })} placeholder="/catalog" />
+              {isBestSellers && <Field label="Part number" value={item.partNo} onChange={(value) => updateItem({ partNo: value })} placeholder="ME-013307" />}
+              {isBestSellers && <Field label="Price" value={item.price} onChange={(value) => updateItem({ price: value })} placeholder="PHP 1,245" />}
+              {isBestSellers && <Field label="Image alt text" value={item.imageAlt} onChange={(value) => updateItem({ imageAlt: value })} />}
               <TextAreaField label="Description" value={item.description} rows={2} onChange={(value) => updateItem({ description: value })} />
-              <div className="md:col-span-2">
+              {isBestSellers && <div className="md:col-span-2">
                 <ImageUploadField
                   label="Card image"
                   value={item.imageUrl}
@@ -987,7 +993,7 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
                   uploadingKey={uploadingKey}
                   helper="Optional. Use this for Best Sellers, service visuals, or any public card that needs an editable image."
                 />
-              </div>
+              </div>}
             </>
           )}
         />
@@ -1019,17 +1025,8 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
     return (
       <div className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Small label" value={content.eyebrow} onChange={(value) => updateContent({ eyebrow: value })} />
+          <Field label="Top text" value={content.eyebrow} onChange={(value) => updateContent({ eyebrow: value })} />
           <Field label="Headline" value={content.title} onChange={(value) => updateContent({ title: value })} />
-          <Field label="Loading text" value={content.loadingText} onChange={(value) => updateContent({ loadingText: value })} />
-          <Field label="Empty text" value={content.emptyText} onChange={(value) => updateContent({ emptyText: value })} />
-          <Field label="Team label" value={content.teamLabel} onChange={(value) => updateContent({ teamLabel: value })} />
-          <Field label="Fallback bio" value={content.fallbackBio} onChange={(value) => updateContent({ fallbackBio: value })} />
-          <Field label="Schedule label" value={content.scheduleLabel} onChange={(value) => updateContent({ scheduleLabel: value })} />
-          <Field label="Available date label" value={content.dateLabel} onChange={(value) => updateContent({ dateLabel: value })} />
-          <Field label="Available date fallback" value={content.dateFallback} onChange={(value) => updateContent({ dateFallback: value })} />
-          <Field label="Contact label" value={content.contactLabel} onChange={(value) => updateContent({ contactLabel: value })} />
-          <Field label="Contact fallback" value={content.contactFallback} onChange={(value) => updateContent({ contactFallback: value })} />
         </div>
         <TextAreaField label="Subtitle" value={content.subtitle} rows={3} onChange={(value) => updateContent({ subtitle: value })} />
         <div className="grid gap-4 md:grid-cols-2">
@@ -1037,13 +1034,12 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
           <Field label="Landline" value={content.landline} onChange={(value) => updateContent({ landline: value })} />
           <Field label="Business hours" value={content.hours} onChange={(value) => updateContent({ hours: value })} />
           <Field label="Address" value={content.address} onChange={(value) => updateContent({ address: value })} />
-          <Field label="Map embed URL" value={content.mapUrl} onChange={(value) => updateContent({ mapUrl: value })} />
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Primary button label" value={content.primaryCta?.label} onChange={(value) => updatePrimaryCta({ label: value })} />
-          <Field label="Primary button link" value={content.primaryCta?.href} onChange={(value) => updatePrimaryCta({ href: value })} />
-          <Field label="Secondary button label" value={content.secondaryCta?.label} onChange={(value) => updateSecondaryCta({ label: value })} />
-          <Field label="Secondary button link" value={content.secondaryCta?.href} onChange={(value) => updateSecondaryCta({ href: value })} />
+          <Field label="Main button text" value={content.primaryCta?.label} onChange={(value) => updatePrimaryCta({ label: value })} />
+          <Field label="Main button link" value={content.primaryCta?.href} onChange={(value) => updatePrimaryCta({ href: value })} />
+          <Field label="Second button text" value={content.secondaryCta?.label} onChange={(value) => updateSecondaryCta({ label: value })} />
+          <Field label="Second button link" value={content.secondaryCta?.href} onChange={(value) => updateSecondaryCta({ href: value })} />
         </div>
       </div>
     );
@@ -1072,8 +1068,11 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Small label" value={content.eyebrow} onChange={(value) => updateContent({ eyebrow: value })} />
+        <Field label="Top text" value={content.eyebrow} onChange={(value) => updateContent({ eyebrow: value })} />
         <Field label="Headline" value={content.title} onChange={(value) => updateContent({ title: value })} />
+        {isMechanicsSection && <Field label="Loading message" value={content.loadingText} onChange={(value) => updateContent({ loadingText: value })} />}
+        {isMechanicsSection && <Field label="No mechanics message" value={content.emptyText} onChange={(value) => updateContent({ emptyText: value })} />}
+        {isMechanicsSection && <Field label="Team text" value={content.teamLabel} onChange={(value) => updateContent({ teamLabel: value })} />}
       </div>
       <TextAreaField label="Body text" value={content.body} rows={6} onChange={(value) => updateContent({ body: value })} />
     </div>
@@ -1108,25 +1107,8 @@ function SectionEditor({ section, index, total, onChange, onMove, onRemove, onIm
       </div>
 
       <div className="space-y-5 p-4 lg:p-5">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Field label="Internal name" value={section.title} onChange={(value) => updateSection({ title: value })} />
-          <SelectField
-            label="Section type"
-            value={section.sectionType}
-            options={SECTION_TYPES}
-            onChange={(value) => {
-              const nextDefault = createDefaultSection(value, index);
-              updateSection({
-                sectionType: value,
-                content: {
-                  ...nextDefault.content,
-                  ...(section.sectionType === value ? section.content : {}),
-                },
-              });
-            }}
-          />
-          <SelectField label="Status" value={section.status} options={SECTION_STATUS_OPTIONS} onChange={(value) => updateSection({ status: value })} />
-          <Field label="Order" type="number" value={section.sortOrder} onChange={(value) => updateSection({ sortOrder: value })} />
+        <div className="max-w-sm">
+          <SelectField label="Visibility" value={section.status} options={SECTION_STATUS_OPTIONS} onChange={(value) => updateSection({ status: value })} />
         </div>
         <SectionContentEditor
           section={section}
@@ -1508,11 +1490,9 @@ export default function CmsAdmin() {
                   <Field label="Page title" value={pageDraft.title} onChange={(value) => updatePageField('title', value)} />
                   <Field label="Page link" value={pageDraft.slug} onChange={(value) => updatePageField('slug', makeSlug(value))} helper="Example: about creates /about" />
                   <SelectField label="Page status" value={pageDraft.status} options={STATUS_OPTIONS} onChange={(value) => updatePageField('status', value)} />
-                  <Field label="Template" value={pageDraft.templateKey} onChange={(value) => updatePageField('templateKey', value)} helper="Keep default unless a developer adds a custom template." />
-                  <Field label="SEO title" value={pageDraft.seo?.title} onChange={(value) => updateSeoField('title', value)} />
-                  <Field label="SEO keywords" value={pageDraft.seo?.keywords} onChange={(value) => updateSeoField('keywords', value)} placeholder="parts, mitsubishi, pasay" />
+                  <Field label="Browser title" value={pageDraft.seo?.title} onChange={(value) => updateSeoField('title', value)} />
                   <div className="md:col-span-2">
-                    <TextAreaField label="SEO description" value={pageDraft.seo?.description} rows={3} onChange={(value) => updateSeoField('description', value)} />
+                    <TextAreaField label="Search description" value={pageDraft.seo?.description} rows={3} onChange={(value) => updateSeoField('description', value)} />
                   </div>
                 </div>
               </section>
