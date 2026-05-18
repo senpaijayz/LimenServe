@@ -27,6 +27,13 @@ describe('3D Locator redesign store behavior', () => {
             preset: 'overview',
             sequence: 2,
         });
+
+        useLocator3DStore.getState().requestCameraPreset('topDown');
+
+        expect(useLocator3DStore.getState().cameraPresetRequest).toEqual({
+            preset: 'topDown',
+            sequence: 3,
+        });
     });
 
     it('adds objects from the library and selects the new object', () => {

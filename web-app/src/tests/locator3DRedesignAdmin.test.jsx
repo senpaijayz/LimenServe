@@ -74,6 +74,7 @@ describe('3D Locator premium redesign', () => {
         expect(screen.getByRole('region', { name: 'Camera and scene controls' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Overview camera' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Counter View camera' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Top-down camera' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Focus on Selected camera' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Show Labels' }).getAttribute('aria-pressed')).toBe('true');
         expect(screen.getByRole('button', { name: 'Show Paths' }).getAttribute('aria-pressed')).toBe('true');

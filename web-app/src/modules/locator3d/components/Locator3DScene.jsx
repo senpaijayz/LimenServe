@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { ContactShadows, Edges, Environment, Grid, Html, Line, OrbitControls, Text, TransformControls } from '@react-three/drei';
+import { ContactShadows, Edges, Environment, Grid, Html, Line, OrbitControls, TransformControls } from '@react-three/drei';
 import { Bloom, EffectComposer } from '@react-three/postprocessing';
 import {
     FLOOR_HEIGHT,
@@ -18,6 +18,7 @@ const SELECTED_EMISSIVE = '#38bdf8';
 const LOCKED_EDGE = '#f59e0b';
 const LOCATED_EDGE = '#facc15';
 const LOCATED_EMISSIVE = '#fde047';
+const SHARED_FLOOR_TYPES = new Set(['floor', 'walls', 'stairs']);
 
 const CAMERA_TARGETS = {
     1: {
@@ -29,6 +30,39 @@ const CAMERA_TARGETS = {
         position: [10.5, FLOOR_HEIGHT + 7.2, 10.5],
     },
 };
+
+function buildFloorCameraTarget(activeFloor) {
+    const floorTarget = CAMERA_TARGETS[activeFloor] ?? CAMERA_TARGETS[1];
+
+    return {
+        lookAt: new THREE.Vector3(...floorTarget.lookAt),
+        position: new THREE.Vector3(...floorTarget.position),
+    };
+}
+
+function buildTopDownCameraTarget(activeFloor) {
+    const floorTarget = CAMERA_TARGETS[activeFloor] ?? CAMERA_TARGETS[1];
+    const [x, y, z] = floorTarget.lookAt;
+
+    return {
+        lookAt: new THREE.Vector3(x, y, z),
+        position: new THREE.Vector3(x, y + 16, z + 0.01),
+    };
+}
+
+function buildObjectCameraTarget(object, offset = [5.8, 3.6, 5.8]) {
+    if (!object) {
+        return null;
+    }
+
+    const [x, y, z] = object.position;
+    const height = Number(object.dimensions?.height || 1);
+
+    return {
+        lookAt: new THREE.Vector3(x, y + (height / 2), z),
+        position: new THREE.Vector3(x + offset[0], y + height + offset[1], z + offset[2]),
+    };
+}
 
 function Block({
     args,
@@ -49,12 +83,12 @@ function Block({
         <mesh castShadow receiveShadow={receiveShadow} position={position} rotation={rotation}>
             <boxGeometry args={args} />
             <meshStandardMaterial
-                color={located ? '#fef3c7' : selected ? '#1e3a5f' : color}
+                color={located ? '#fff7a8' : selected ? '#1e3a5f' : color}
                 emissive={located ? LOCATED_EMISSIVE : selected ? SELECTED_EMISSIVE : emissive}
-                emissiveIntensity={located ? 0.7 : selected ? 0.34 : 0.02}
-                metalness={0.08}
+                emissiveIntensity={located ? 1.05 : selected ? 0.34 : 0.02}
+                metalness={located ? 0.18 : 0.1}
                 opacity={locked ? Math.min(opacity, 0.68) : opacity}
-                roughness={0.58}
+                roughness={located ? 0.38 : 0.56}
                 transparent={opacity < 1 || locked}
             />
             {(active || locked) && <Edges color={edgeColor} scale={active ? 1.045 : 1.015} threshold={12} />}
@@ -62,7 +96,7 @@ function Block({
     );
 }
 
-function Label({ children, position, rotation = [-Math.PI / 2, 0, 0] }) {
+function Label({ children, position, rotation = [0, 0, 0], testId, tone = 'default' }) {
     const showLabels = useLocator3DStore((state) => state.showLabels);
 
     if (!showLabels) {
@@ -70,18 +104,23 @@ function Label({ children, position, rotation = [-Math.PI / 2, 0, 0] }) {
     }
 
     return (
-        <Text
-            anchorX="center"
-            anchorY="middle"
-            color="#cbd5e1"
-            fontSize={0.32}
-            fontWeight={700}
-            letterSpacing={0}
+        <Html
+            center
+            data-testid={testId}
+            distanceFactor={8}
             position={position}
             rotation={rotation}
+            zIndexRange={[20, 0]}
         >
-            {children}
-        </Text>
+            <div className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] font-black tracking-[0.08em] shadow-lg backdrop-blur ${
+                tone === 'floor'
+                    ? 'border-slate-500/40 bg-slate-950/78 text-slate-300'
+                    : 'border-sky-200/30 bg-slate-950/82 text-sky-100'
+            }`}
+            >
+                {children}
+            </div>
+        </Html>
     );
 }
 
@@ -90,6 +129,81 @@ function LockBadge({ position }) {
         <Html center position={position}>
             <div className="rounded-full border border-amber-300 bg-amber-100/95 px-2 py-1 text-[10px] font-black tracking-[0.18em] text-amber-800 shadow-lg">
                 LOCKED
+            </div>
+        </Html>
+    );
+}
+
+function objectVisibleOnFloor(object, activeFloor) {
+    const floor = Number(activeFloor) === 2 ? 2 : 1;
+
+    if (Array.isArray(object.floors)) {
+        return object.floors.map(Number).includes(floor);
+    }
+
+    if (SHARED_FLOOR_TYPES.has(object.type)) {
+        return true;
+    }
+
+    return Number(object.floor || 1) === floor;
+}
+
+function HighlightHalo({ object }) {
+    const haloRef = useRef();
+    const width = Number(object.dimensions?.width || 1);
+    const height = Number(object.dimensions?.height || 1);
+    const depth = Number(object.dimensions?.depth || 1);
+
+    useFrame(({ clock }) => {
+        if (!haloRef.current) {
+            return;
+        }
+
+        const pulse = 1 + (Math.sin(clock.elapsedTime * 3.2) * 0.035);
+        haloRef.current.scale.setScalar(pulse);
+
+        if (haloRef.current.material) {
+            haloRef.current.material.opacity = 0.18 + (Math.sin(clock.elapsedTime * 3.2) * 0.045);
+        }
+    });
+
+    return (
+        <mesh data-testid={`locator-highlight-${object.id}`} position={[0, height / 2, 0]} ref={haloRef}>
+            <boxGeometry args={[width + 0.58, height + 0.54, depth + 0.58]} />
+            <meshBasicMaterial color="#fde047" depthWrite={false} opacity={0.2} transparent wireframe />
+        </mesh>
+    );
+}
+
+function ObjectInfoBadge({ object }) {
+    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
+    const productLocations = useLocator3DStore((state) => state.productLocations);
+    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
+
+    if (isDesignMode || selectedObjectId !== object.id) {
+        return null;
+    }
+
+    const height = Number(object.dimensions?.height || 1);
+    const isShelf = object.type === 'shelf-2-layer' || object.type === 'shelf-4-layer';
+    const matchingLocations = productLocations.filter((location) => (
+        location.shelfObjectId === object.id
+        || (normalizeAisle(location.aisle) === normalizeAisle(object.aisle) && Number(location.shelfNumber) === Number(object.shelfNumber))
+    ));
+    const subtitle = isShelf
+        ? `Shelf ${object.shelfNumber || '-'} / ${object.binCount || 0} bins`
+        : object.type?.replace(/-/g, ' ') || 'Scene object';
+
+    return (
+        <Html center data-testid={`locator-info-${object.id}`} distanceFactor={7} position={[0, height + 0.78, 0]} zIndexRange={[40, 0]}>
+            <div className="min-w-[180px] rounded-xl border border-sky-200/30 bg-slate-950/90 p-3 text-left text-white shadow-2xl backdrop-blur">
+                <p className="text-[11px] font-black text-slate-100">{object.name || object.id}</p>
+                <p className="mt-1 text-[10px] font-bold text-sky-200">{subtitle}</p>
+                {isShelf && (
+                    <p className="mt-2 text-[10px] font-semibold text-slate-400">
+                        {matchingLocations.length} assigned item{matchingLocations.length === 1 ? '' : 's'}
+                    </p>
+                )}
             </div>
         </Html>
     );
@@ -154,7 +268,9 @@ function TransformableObject({ children, object, onTransformingChange }) {
                 rotation={object.rotation}
             >
                 {children({ located, locked: object.isLocked, selected })}
+                {located && <HighlightHalo object={object} />}
                 {object.isLocked && <LockBadge position={[0, (object.dimensions?.height ?? 1) + 0.45, 0]} />}
+                <ObjectInfoBadge object={object} />
             </group>
             {canTransform && (
                 <TransformControls
@@ -198,8 +314,8 @@ function FloorObject({ object, onTransformingChange }) {
                     ].map((position) => (
                         <Block key={position.join('-')} args={[0.28, FLOOR_HEIGHT, 0.28]} color="#4b5563" located={located} locked={locked} position={position} selected={selected} />
                     ))}
-                    <Label position={[-5.7, 0.05, 5.4]}>FLOOR 1</Label>
-                    <Label position={[3.7, FLOOR_HEIGHT + 0.18, -5.9]}>FLOOR 2</Label>
+                    <Label position={[-5.7, 0.05, 5.4]} tone="floor">FLOOR 1</Label>
+                    <Label position={[3.7, FLOOR_HEIGHT + 0.18, -5.9]} tone="floor">FLOOR 2</Label>
                 </>
             )}
         </TransformableObject>
@@ -334,8 +450,8 @@ function ShelfObject({ object, onTransformingChange }) {
                         );
                     })}
                     <Block args={[width + 0.4, 0.18, depth + 0.22]} color="#111827" located={located} locked={locked} position={[0, 0.09, 0]} selected={selected} />
-                    <Label position={[0, height + 0.18, depth / 2 + 0.28]} rotation={[-0.5, 0, 0]}>
-                        {`Aisle ${object.aisle}-${object.shelfNumber}`}
+                    <Label position={[0, height + 0.18, depth / 2 + 0.28]} rotation={[-0.5, 0, 0]} testId={`locator-label-${object.id}`}>
+                        {`Aisle ${object.aisle} Shelf ${object.shelfNumber}`}
                     </Label>
                 </>
             )}
@@ -532,15 +648,28 @@ function LocatorPath() {
         <group>
             <Line
                 color="#22c55e"
-                lineWidth={5}
-                opacity={0.88}
+                data-testid="locator-path-glow"
+                lineWidth={6}
+                opacity={0.42}
+                points={points}
+                transparent
+            />
+            <Line
+                color="#dcfce7"
+                dashScale={1}
+                dashSize={0.72}
+                dashed
+                data-testid="locator-path-dashed"
+                gapSize={0.34}
+                lineWidth={2.25}
+                opacity={0.98}
                 points={points}
                 transparent
             />
             <Line
                 color="#bbf7d0"
-                lineWidth={1.5}
-                opacity={0.9}
+                lineWidth={0.9}
+                opacity={0.62}
                 points={points}
                 transparent
             />
@@ -560,25 +689,12 @@ function CameraRig({ controlsRef }) {
     const activeTargetRef = useRef(null);
     const isAnimatingRef = useRef(true);
     const target = useMemo(() => {
-        const buildObjectTarget = (object) => {
-            if (!object) {
-                return null;
-            }
-
-            const [x, y, z] = object.position;
-            const height = Number(object.dimensions?.height || 1);
-
-            return {
-                lookAt: new THREE.Vector3(x, y + (height / 2), z),
-                position: new THREE.Vector3(x + 5.8, y + height + 3.6, z + 5.8),
-            };
-        };
-
         if (cameraPresetRequest?.preset === 'overview') {
-            return {
-                lookAt: new THREE.Vector3(...CAMERA_TARGETS[activeFloor].lookAt),
-                position: new THREE.Vector3(...CAMERA_TARGETS[activeFloor].position),
-            };
+            return buildFloorCameraTarget(activeFloor);
+        }
+
+        if (cameraPresetRequest?.preset === 'topDown') {
+            return buildTopDownCameraTarget(activeFloor);
         }
 
         if (cameraPresetRequest?.preset === 'counter') {
@@ -598,7 +714,7 @@ function CameraRig({ controlsRef }) {
         if (cameraPresetRequest?.preset === 'selected') {
             const selectedObject = sceneObjects.find((object) => object.id === selectedObjectId)
                 ?? sceneObjects.find((object) => object.id === locatedProduct?.shelfObjectId);
-            const selectedTarget = buildObjectTarget(selectedObject);
+            const selectedTarget = buildObjectCameraTarget(selectedObject);
 
             if (selectedTarget) {
                 return selectedTarget;
@@ -617,16 +733,13 @@ function CameraRig({ controlsRef }) {
         const focusedObject = cameraFocusRequest?.objectId
             ? sceneObjects.find((object) => object.id === cameraFocusRequest.objectId)
             : null;
-        const focusedTarget = buildObjectTarget(focusedObject);
+        const focusedTarget = buildObjectCameraTarget(focusedObject);
 
         if (focusedTarget) {
             return focusedTarget;
         }
 
-        return {
-            lookAt: new THREE.Vector3(...CAMERA_TARGETS[activeFloor].lookAt),
-            position: new THREE.Vector3(...CAMERA_TARGETS[activeFloor].position),
-        };
+        return buildFloorCameraTarget(activeFloor);
     }, [activeFloor, cameraFocusRequest, cameraPresetRequest, locatedProduct, sceneObjects, selectedObjectId]);
 
     useEffect(() => {
@@ -662,15 +775,22 @@ function SceneContents() {
     const showGrid = useLocator3DStore((state) => state.showGrid);
     const controlsRef = useRef();
     const [isTransforming, setIsTransforming] = useState(false);
+    const visibleSceneObjects = useMemo(
+        () => sceneObjects.filter((object) => objectVisibleOnFloor(object, activeFloor)),
+        [activeFloor, sceneObjects],
+    );
+    const activeGridY = activeFloor === 2 ? FLOOR_HEIGHT + 0.012 : 0.012;
 
     return (
         <>
             <color args={['#0b1120']} attach="background" />
-            <ambientLight intensity={0.38} />
-            <hemisphereLight args={['#93c5fd', '#111827', 0.48]} />
-            <directionalLight castShadow intensity={1.28} position={[7, 11, 6]} shadow-mapSize={[2048, 2048]} />
-            <spotLight angle={0.42} intensity={1.35} penumbra={0.55} position={[-7, 9, 7]} />
-            <pointLight color="#38bdf8" intensity={0.45} position={[-4, 4, 3]} />
+            <ambientLight intensity={0.44} />
+            <hemisphereLight args={['#bfdbfe', '#111827', 0.56]} />
+            <directionalLight castShadow intensity={1.45} position={[7, 11, 6]} shadow-mapSize={[2048, 2048]} />
+            <spotLight angle={0.42} color="#e0f2fe" intensity={1.35} penumbra={0.55} position={[-7, 9, 7]} />
+            <pointLight color="#38bdf8" intensity={0.42} position={[-4, 4, 3]} />
+            <pointLight color="#facc15" intensity={locatedProduct ? 0.58 : 0.24} position={[5.6, activeFloor === 2 ? FLOOR_HEIGHT + 4 : 4, -5.6]} />
+            <pointLight color="#22c55e" intensity={locatedProduct ? 0.42 : 0.16} position={[-6, activeFloor === 2 ? FLOOR_HEIGHT + 3 : 3, 5.2]} />
             {showGrid && (
                 <Grid
                     cellColor="#334155"
@@ -679,7 +799,7 @@ function SceneContents() {
                     fadeDistance={24}
                     fadeStrength={1.2}
                     infiniteGrid
-                    position={[0, 0.012, 0]}
+                    position={[0, activeGridY, 0]}
                     sectionColor="#475569"
                     sectionSize={4}
                     sectionThickness={0.9}
@@ -713,7 +833,7 @@ function SceneContents() {
                     />
                 </>
             )}
-            {sceneObjects.map((object) => (
+            {visibleSceneObjects.map((object) => (
                 <LocatorObject key={object.id} object={object} onTransformingChange={setIsTransforming} />
             ))}
             <LocatorPath />
@@ -727,7 +847,7 @@ function SceneContents() {
                     {isDesignMode ? 'Design Mode / 0.5 Snap' : 'View Mode'}
                 </div>
             </Html>
-            <ContactShadows blur={2.8} far={16} frames={1} opacity={0.38} position={[0, 0.015, 0]} scale={20} />
+            <ContactShadows blur={2.8} far={16} frames={1} opacity={0.38} position={[0, activeGridY + 0.003, 0]} scale={20} />
             <Environment preset="city" />
             <EffectComposer multisampling={2}>
                 <Bloom intensity={locatedProduct ? 0.58 : 0.26} luminanceThreshold={0.48} mipmapBlur />

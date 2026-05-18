@@ -119,7 +119,7 @@ export const useLocator3DStore = create((set, get) => ({
         }));
     },
     requestCameraPreset: (preset) => {
-        const safePreset = ['counter', 'overview', 'selected'].includes(preset) ? preset : 'overview';
+        const safePreset = ['counter', 'overview', 'selected', 'topDown'].includes(preset) ? preset : 'overview';
 
         set((state) => ({
             cameraPresetRequest: {

@@ -1168,6 +1168,10 @@ function SceneControlsDock({ canvasShellRef }) {
                         <Navigation className="h-4 w-4" />
                         Counter View
                     </SceneControlButton>
+                    <SceneControlButton aria-label="Top-down camera" onClick={() => requestCameraPreset('topDown')}>
+                        <Grid3X3 className="h-4 w-4" />
+                        Top-down
+                    </SceneControlButton>
                     <SceneControlButton
                         aria-label="Focus on Selected camera"
                         disabled={!selectedObjectId && !locatedProduct}
