@@ -39,8 +39,7 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                     useBarCodeDetectorIfSupported: true,
                     supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
                     showTorchButtonIfSupported: true,
-                    showZoomSliderIfSupported: true,
-                    defaultZoomValueIfSupported: 2,
+                    showZoomSliderIfSupported: false,
                     formatsToSupport: [
                         Html5QrcodeSupportedFormats.CODABAR,
                         Html5QrcodeSupportedFormats.CODE_39,
@@ -118,10 +117,10 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                             <p className="font-semibold text-primary-900">Keep the printed part number and barcode bars inside the guide.</p>
                             <div className="flex flex-wrap gap-2 text-xs uppercase tracking-wide text-primary-500">
                                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
-                                    <Camera className="h-3.5 w-3.5" /> Code 39
+                                    <Camera className="h-3.5 w-3.5" /> Code 128 / 39
                                 </span>
                                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
-                                    <Zap className="h-3.5 w-3.5" /> Torch / zoom when supported
+                                    <Zap className="h-3.5 w-3.5" /> Torch when supported
                                 </span>
                             </div>
                         </div>
