@@ -246,11 +246,11 @@ const PublicAbout = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                         {mechanicsLoading ? (
                             <div className="surface p-8 bg-white border border-primary-200 shadow-sm md:col-span-2 xl:col-span-3">
-                                <p className="text-sm text-primary-500">Loading mechanics from the database...</p>
+                                <p className="text-sm text-primary-500">{mechanicsCms.loadingText || 'Loading mechanics from the database...'}</p>
                             </div>
                         ) : mechanics.length === 0 ? (
                             <div className="surface p-8 bg-white border border-primary-200 shadow-sm md:col-span-2 xl:col-span-3">
-                                <p className="text-sm text-primary-500">No public mechanic profiles have been published yet.</p>
+                                <p className="text-sm text-primary-500">{mechanicsCms.emptyText || 'No public mechanic profiles have been published yet.'}</p>
                             </div>
                         ) : mechanics.map((mechanic) => (
                             <div key={mechanic.id} className="surface overflow-hidden bg-white border border-primary-200 shadow-sm">
@@ -271,7 +271,7 @@ const PublicAbout = () => {
                                             </div>
                                         )}
                                         <div className="min-w-0">
-                                            <p className="text-xs uppercase tracking-[0.22em] text-primary-400">Limen service team</p>
+                                            <p className="text-xs uppercase tracking-[0.22em] text-primary-400">{mechanicsCms.teamLabel || 'Limen service team'}</p>
                                             <h3 className="mt-2 text-xl font-display font-semibold text-primary-950">{mechanic.full_name}</h3>
                                             <p className="mt-2 text-sm font-medium text-accent-primary">{mechanic.specialization}</p>
                                         </div>
@@ -280,19 +280,19 @@ const PublicAbout = () => {
                                         {String(mechanic.availability_status || 'available').replace('_', ' ')}
                                     </span>
                                 </div>
-                                <p className="mt-4 text-sm leading-relaxed text-primary-600">{mechanic.bio || 'Experienced Mitsubishi service technician.'}</p>
+                                <p className="mt-4 text-sm leading-relaxed text-primary-600">{mechanic.bio || mechanicsCms.fallbackBio || 'Experienced Mitsubishi service technician.'}</p>
                                 <div className="mt-5 grid gap-3 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600">
                                     <p className="flex items-start gap-2">
                                         <CalendarDays className="mt-0.5 h-4 w-4 text-accent-primary" />
-                                        <span><span className="font-semibold text-primary-950">Schedule:</span> {shiftLabel(mechanic)}</span>
+                                        <span><span className="font-semibold text-primary-950">{mechanicsCms.scheduleLabel || 'Schedule:'}</span> {shiftLabel(mechanic)}</span>
                                     </p>
                                     <p className="flex items-start gap-2">
                                         <CalendarDays className="mt-0.5 h-4 w-4 text-accent-primary" />
-                                        <span><span className="font-semibold text-primary-950">Available date:</span> {mechanic.available_date || 'General availability'}</span>
+                                        <span><span className="font-semibold text-primary-950">{mechanicsCms.dateLabel || 'Available date:'}</span> {mechanic.available_date || mechanicsCms.dateFallback || 'General availability'}</span>
                                     </p>
                                     <p className="flex items-start gap-2">
                                         <Phone className="mt-0.5 h-4 w-4 text-accent-primary" />
-                                        <span><span className="font-semibold text-primary-950">Contact:</span> {mechanic.contact_number || 'Contact shop for assignment'}</span>
+                                        <span><span className="font-semibold text-primary-950">{mechanicsCms.contactLabel || 'Contact:'}</span> {mechanic.contact_number || mechanicsCms.contactFallback || 'Contact shop for assignment'}</span>
                                     </p>
                                 </div>
                                 </div>

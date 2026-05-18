@@ -170,7 +170,7 @@ const PublicServiceOrders = () => {
                                                 <Icon className="w-5 h-5 text-accent-primary" />
                                             </div>
                                             <span className="text-xs font-semibold tracking-[0.2em] text-primary-400 uppercase">
-                                                Step {index + 1}
+                                                {processCms.stepLabel || 'Step'} {index + 1}
                                             </span>
                                         </div>
                                         <h3 className="text-xl font-display font-semibold text-primary-950 mb-2">{step.title}</h3>

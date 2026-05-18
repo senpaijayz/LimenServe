@@ -197,6 +197,10 @@ const PublicHome = () => {
         .split(',')
         .map((item) => item.trim())
         .filter(Boolean);
+    const editableTrustTags = String(trustCms.trustTags || 'Genuine Parts, Secure Payments, Local Store Pickup')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
     const heroBadges = [
         { label: heroCms.badgeOne || 'Genuine Parts', icon: ShieldCheck, tone: 'text-accent-primary' },
         { label: heroCms.badgeTwo || 'Fast Delivery in PH', icon: Truck, tone: 'text-accent-danger' },
@@ -263,24 +267,24 @@ const PublicHome = () => {
                                                 handleSearch();
                                             }
                                         }}
-                                        placeholder="Search by part name, vehicle make/model/year, or part number"
+                                        placeholder={heroCms.searchPlaceholder || 'Search by part name, vehicle make/model/year, or part number'}
                                         className="w-full bg-transparent px-3 py-4 text-sm text-primary-900 outline-none placeholder:text-primary-500"
                                     />
                                 </div>
                                 <button type="button" onClick={handleSearch} className="btn btn-primary min-w-[170px]">
-                                    Search Parts
+                                    {heroCms.searchButtonLabel || 'Search Parts'}
                                     <ArrowRight className="h-4 w-4" />
                                 </button>
                             </div>
                         </div>
 
                         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                            <Link to="/catalog" className="btn btn-primary">
-                                Shop Parts
+                            <Link to={heroCms.primaryCta?.href || '/catalog'} className="btn btn-primary">
+                                {heroCms.primaryCta?.label || 'Shop Parts'}
                                 <ArrowRight className="h-4 w-4" />
                             </Link>
-                            <Link to="/estimate" className="btn border border-red-200 bg-red-50 text-accent-danger hover:bg-red-100">
-                                Request a Quote
+                            <Link to={heroCms.secondaryCta?.href || '/estimate'} className="btn border border-red-200 bg-red-50 text-accent-danger hover:bg-red-100">
+                                {heroCms.secondaryCta?.label || 'Request a Quote'}
                             </Link>
                         </div>
                     </Motion.div>
@@ -321,12 +325,12 @@ const PublicHome = () => {
                         <div className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,_#0f172a,_#172554_55%,_#1e3a8a)] px-6 py-6 text-white shadow-[0_24px_50px_rgba(15,23,42,0.12)]">
                             <div className="flex flex-wrap items-center justify-between gap-4">
                                 <div>
-                                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/60">{trustCms.eyebrow || 'Why customers buy here'}</p>
-                                    <p className="mt-3 text-2xl font-bold">{trustCms.body || 'Reliable parts, visible pricing, and store-backed support.'}</p>
+                                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/60">{trustCms.kicker || 'Why customers buy here'}</p>
+                                    <p className="mt-3 text-2xl font-bold">{trustCms.summary || 'Reliable parts, visible pricing, and store-backed support.'}</p>
                                 </div>
                                 <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-semibold">
                                     <Star className="h-4 w-4 text-red-300" />
-                                    Serious fitment and quotation support
+                                    {trustCms.badgeLabel || 'Serious fitment and quotation support'}
                                 </div>
                             </div>
                         </div>
@@ -370,7 +374,7 @@ const PublicHome = () => {
                                         <h3 className="mt-5 text-xl font-bold text-primary-950">{category.title}</h3>
                                         <p className="mt-3 text-sm leading-relaxed text-primary-600">{category.description}</p>
                                         <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-accent-primary group-hover:text-accent-blueDark">
-                                            Browse category
+                                            {featureCms.cardCtaLabel || 'Browse category'}
                                             <ArrowRight className="h-4 w-4" />
                                         </div>
                                     </Link>
@@ -421,10 +425,10 @@ const PublicHome = () => {
                                     <p className="mt-4 text-2xl font-bold text-accent-primary">{part.price}</p>
                                     <div className="mt-6 flex gap-3">
                                         <Link to={part.href || `/catalog?q=${encodeURIComponent(part.catalogQuery)}`} className="btn btn-primary flex-1 px-4 py-3">
-                                            Add to Quote
+                                            {bestSellersCms.primaryActionLabel || 'Add to Quote'}
                                         </Link>
                                         <Link to={part.href || `/catalog?q=${encodeURIComponent(part.catalogQuery)}`} className="btn btn-secondary px-4 py-3">
-                                            Quick View
+                                            {bestSellersCms.secondaryActionLabel || 'Quick View'}
                                         </Link>
                                     </div>
                                 </div>
@@ -473,11 +477,11 @@ const PublicHome = () => {
                         </div>
 
                         <div className="mt-8 rounded-2xl border border-primary-200 bg-primary-100 p-5">
-                            <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-500">Trust signals</p>
+                            <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-500">{trustCms.trustLabel || 'Trust signals'}</p>
                             <div className="mt-4 flex flex-wrap gap-3 text-sm font-semibold text-primary-700">
-                                <span className="rounded-full border border-primary-200 bg-white px-4 py-2">Genuine Parts</span>
-                                <span className="rounded-full border border-primary-200 bg-white px-4 py-2">Secure Payments</span>
-                                <span className="rounded-full border border-primary-200 bg-white px-4 py-2">Local Store Pickup</span>
+                                {editableTrustTags.map((tag) => (
+                                    <span key={tag} className="rounded-full border border-primary-200 bg-white px-4 py-2">{tag}</span>
+                                ))}
                             </div>
                         </div>
                     </div>

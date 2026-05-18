@@ -96,6 +96,12 @@ function createDefaultSection(sectionType = 'rich_text', index = 0) {
         catalogValue: '',
         quotesLabel: '',
         quotesValue: '',
+        searchPlaceholder: '',
+        searchButtonLabel: '',
+        badgeOne: '',
+        badgeTwo: '',
+        badgeThree: '',
+        vehicleTags: '',
       },
     };
   }
@@ -208,6 +214,8 @@ function createHomePageDraft() {
           badgeTwo: 'Fast Delivery in PH',
           badgeThree: 'Search by Vehicle',
           vehicleTags: 'Montero Sport, Triton, Xforce, Xpander, Mirage, L300',
+          searchPlaceholder: 'Search by part name, vehicle make/model/year, or part number',
+          searchButtonLabel: 'Search Parts',
         },
       },
       {
@@ -221,6 +229,7 @@ function createHomePageDraft() {
           subtitle: 'Start with the part family customers usually ask for, then narrow by Mitsubishi model or exact part number inside the catalog.',
           ctaLabel: 'View full catalog',
           ctaHref: '/catalog',
+          cardCtaLabel: 'Browse category',
           items: [
             { title: 'Engine Parts', description: 'Filters, timing components, gaskets, and cooling parts.', href: '/catalog?q=engine' },
             { title: 'Brakes', description: 'Pads, rotors, brake hardware, and wear items for daily safety.', href: '/catalog?q=brake' },
@@ -239,6 +248,8 @@ function createHomePageDraft() {
         content: {
           eyebrow: 'Best Sellers',
           title: 'Featured parts anchored to real Mitsubishi vehicle lines',
+          primaryActionLabel: 'Add to Quote',
+          secondaryActionLabel: 'Quick View',
           items: [
             { title: 'Montero Sport Oil Filter', description: 'Best for PMS and daily service visits', eyebrow: 'Montero Sport', badge: 'Best Seller', partNo: 'ME-013307', price: 'PHP 1,245', href: '/catalog?q=Montero%20Sport%20Oil%20Filter', imageUrl: '', imageAlt: 'Montero Sport Oil Filter' },
             { title: 'Triton Front Brake Pads', description: 'Fast-moving pickup wear-item replacement', eyebrow: 'Triton', badge: 'Best Seller', partNo: 'MB-699200', price: 'PHP 3,980', href: '/catalog?q=Triton%20Front%20Brake%20Pads', imageUrl: '', imageAlt: 'Triton Front Brake Pads' },
@@ -257,6 +268,11 @@ function createHomePageDraft() {
           title: 'Built to look credible before the customer even asks for a quote.',
           subtitle: 'Customers shopping for vehicle parts need clarity first.',
           body: 'Fast responses, correct fitment help, and a better quote process.',
+          kicker: 'Why customers buy here',
+          summary: 'Reliable parts, visible pricing, and store-backed support.',
+          badgeLabel: 'Serious fitment and quotation support',
+          trustLabel: 'Trust signals',
+          trustTags: 'Genuine Parts, Secure Payments, Local Store Pickup',
           items: [
             { title: 'Genuine Parts Available', description: 'OEM-focused inventory for Mitsubishi and other popular vehicle lines.' },
             { title: 'Fast Delivery in the Philippines', description: 'Quick quotation support and local fulfillment for urgent repair needs.' },
@@ -367,6 +383,15 @@ function createAboutPageDraft() {
         content: {
           title: 'Meet Our Mechanics',
           body: 'Published mechanic profiles are loaded from the mechanics database.',
+          loadingText: 'Loading mechanics from the database...',
+          emptyText: 'No public mechanic profiles have been published yet.',
+          teamLabel: 'Limen service team',
+          fallbackBio: 'Experienced Mitsubishi service technician.',
+          scheduleLabel: 'Schedule:',
+          dateLabel: 'Available date:',
+          dateFallback: 'General availability',
+          contactLabel: 'Contact:',
+          contactFallback: 'Contact shop for assignment',
         },
       },
       {
@@ -417,6 +442,7 @@ function createServiceOrdersPageDraft() {
         content: {
           title: 'How the service-order process works',
           subtitle: "Aligned with the system's service management module",
+          stepLabel: 'Step',
           items: [
             { title: 'Initial Assessment', description: 'Bring your vehicle concerns to our team so we can review the issue, required parts, and recommended service scope.' },
             { title: 'Estimate and Approval', description: 'We prepare a service estimate covering parts and labor before work proceeds.' },
@@ -882,6 +908,8 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
             <Field label="Badge 2" value={content.badgeTwo} onChange={(value) => updateContent({ badgeTwo: value })} />
             <Field label="Badge 3" value={content.badgeThree} onChange={(value) => updateContent({ badgeThree: value })} />
             <Field label="Vehicle chips" value={content.vehicleTags} onChange={(value) => updateContent({ vehicleTags: value })} helper="Comma-separated list, e.g. Montero Sport, Triton, Xforce." />
+            <Field label="Search placeholder" value={content.searchPlaceholder} onChange={(value) => updateContent({ searchPlaceholder: value })} />
+            <Field label="Search button label" value={content.searchButtonLabel} onChange={(value) => updateContent({ searchButtonLabel: value })} />
           </div>
         </div>
       </div>
@@ -896,8 +924,17 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
           <Field label="Headline" value={content.title} onChange={(value) => updateContent({ title: value })} />
           <Field label="Section button label" value={content.ctaLabel} onChange={(value) => updateContent({ ctaLabel: value })} />
           <Field label="Section button link" value={content.ctaHref} onChange={(value) => updateContent({ ctaHref: value })} />
+          <Field label="Card action label" value={content.cardCtaLabel} onChange={(value) => updateContent({ cardCtaLabel: value })} />
+          <Field label="Primary action label" value={content.primaryActionLabel} onChange={(value) => updateContent({ primaryActionLabel: value })} />
+          <Field label="Secondary action label" value={content.secondaryActionLabel} onChange={(value) => updateContent({ secondaryActionLabel: value })} />
+          <Field label="Step label" value={content.stepLabel} onChange={(value) => updateContent({ stepLabel: value })} />
+          <Field label="Kicker label" value={content.kicker} onChange={(value) => updateContent({ kicker: value })} />
+          <Field label="Badge label" value={content.badgeLabel} onChange={(value) => updateContent({ badgeLabel: value })} />
+          <Field label="Trust label" value={content.trustLabel} onChange={(value) => updateContent({ trustLabel: value })} />
+          <Field label="Trust tags" value={content.trustTags} onChange={(value) => updateContent({ trustTags: value })} helper="Comma-separated list." />
         </div>
         <TextAreaField label="Subtitle" value={content.subtitle} rows={3} onChange={(value) => updateContent({ subtitle: value })} />
+        <TextAreaField label="Summary text" value={content.summary} rows={2} onChange={(value) => updateContent({ summary: value })} />
         <TextAreaField label="Body / quote text" value={content.body} rows={3} onChange={(value) => updateContent({ body: value })} />
         <RepeatableRows
           title="Feature cards"
@@ -958,6 +995,15 @@ function SectionContentEditor({ section, onContentChange, onImageUpload, uploadi
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Small label" value={content.eyebrow} onChange={(value) => updateContent({ eyebrow: value })} />
           <Field label="Headline" value={content.title} onChange={(value) => updateContent({ title: value })} />
+          <Field label="Loading text" value={content.loadingText} onChange={(value) => updateContent({ loadingText: value })} />
+          <Field label="Empty text" value={content.emptyText} onChange={(value) => updateContent({ emptyText: value })} />
+          <Field label="Team label" value={content.teamLabel} onChange={(value) => updateContent({ teamLabel: value })} />
+          <Field label="Fallback bio" value={content.fallbackBio} onChange={(value) => updateContent({ fallbackBio: value })} />
+          <Field label="Schedule label" value={content.scheduleLabel} onChange={(value) => updateContent({ scheduleLabel: value })} />
+          <Field label="Available date label" value={content.dateLabel} onChange={(value) => updateContent({ dateLabel: value })} />
+          <Field label="Available date fallback" value={content.dateFallback} onChange={(value) => updateContent({ dateFallback: value })} />
+          <Field label="Contact label" value={content.contactLabel} onChange={(value) => updateContent({ contactLabel: value })} />
+          <Field label="Contact fallback" value={content.contactFallback} onChange={(value) => updateContent({ contactFallback: value })} />
         </div>
         <TextAreaField label="Subtitle" value={content.subtitle} rows={3} onChange={(value) => updateContent({ subtitle: value })} />
         <div className="grid gap-4 md:grid-cols-2">
@@ -1081,6 +1127,7 @@ export default function CmsAdmin() {
   const [uploadingKey, setUploadingKey] = useState('');
   const [pages, setPages] = useState([]);
   const [selectedSlug, setSelectedSlug] = useState('');
+  const [activeSectionKey, setActiveSectionKey] = useState('');
   const [pageDraft, setPageDraft] = useState(createPageDraft());
   const [settingsDraft, setSettingsDraft] = useState(DEFAULT_SETTINGS);
   const [navigationDraft, setNavigationDraft] = useState([]);
@@ -1089,6 +1136,14 @@ export default function CmsAdmin() {
     () => pages.find((page) => page.slug === selectedSlug),
     [pages, selectedSlug],
   );
+  const activeSectionIndex = useMemo(() => {
+    const sections = pageDraft.sections ?? [];
+    if (sections.length === 0) return -1;
+
+    const foundIndex = sections.findIndex((section) => (section.sectionKey || section.id) === activeSectionKey);
+    return foundIndex >= 0 ? foundIndex : 0;
+  }, [activeSectionKey, pageDraft.sections]);
+  const activeSection = activeSectionIndex >= 0 ? pageDraft.sections[activeSectionIndex] : null;
 
   useEffect(() => {
     let active = true;
@@ -1162,6 +1217,19 @@ export default function CmsAdmin() {
     };
   }, [selectedSlug, showError]);
 
+  useEffect(() => {
+    const sections = pageDraft.sections ?? [];
+    if (sections.length === 0) {
+      setActiveSectionKey('');
+      return;
+    }
+
+    const stillExists = sections.some((section) => (section.sectionKey || section.id) === activeSectionKey);
+    if (!stillExists) {
+      setActiveSectionKey(sections[0].sectionKey || sections[0].id || '');
+    }
+  }, [activeSectionKey, pageDraft.sections]);
+
   const refreshPages = async (slugToSelect) => {
     const pageRows = await listCmsPages();
     const editablePages = ensureEditablePublicPages(pageRows);
@@ -1217,10 +1285,12 @@ export default function CmsAdmin() {
   };
 
   const handleAddSection = (sectionType) => {
+    const nextSection = createDefaultSection(sectionType, pageDraft.sections.length);
     setPageDraft((draft) => ({
       ...draft,
-      sections: [...draft.sections, createDefaultSection(sectionType, draft.sections.length)],
+      sections: [...draft.sections, nextSection],
     }));
+    setActiveSectionKey(nextSection.sectionKey);
   };
 
   const handleImageUpload = async (file, uploadKey, onUrlReady) => {
@@ -1428,7 +1498,7 @@ export default function CmsAdmin() {
                 <div className="flex flex-col gap-4 rounded-3xl border border-primary-200 bg-primary-50 p-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <h2 className="text-xl font-display font-semibold text-primary-950">Page sections</h2>
-                    <p className="mt-1 text-sm text-primary-500">Add or edit the content blocks shown on this public page.</p>
+                    <p className="mt-1 text-sm text-primary-500">Choose one section card to edit at a time, so the page stays clean and easy to work through.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {SECTION_TYPES.map((type) => (
@@ -1449,19 +1519,53 @@ export default function CmsAdmin() {
                   <div className="rounded-3xl border border-dashed border-primary-300 bg-white p-8 text-center text-primary-500">
                     No sections yet. Add a hero, text block, feature cards, stats, CTA, or FAQ block.
                   </div>
-                ) : pageDraft.sections.map((section, index) => (
-                  <SectionEditor
-                    key={section.id || section.sectionKey || index}
-                    section={section}
-                    index={index}
-                    total={pageDraft.sections.length}
-                    onChange={(nextSection) => updateSection(index, nextSection)}
-                    onMove={moveSection}
-                    onRemove={() => removeSection(index)}
-                    onImageUpload={handleImageUpload}
-                    uploadingKey={uploadingKey}
-                  />
-                ))}
+                ) : (
+                  <>
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {pageDraft.sections.map((section, index) => {
+                        const sectionKey = section.sectionKey || section.id || `section-${index}`;
+                        const isActive = index === activeSectionIndex;
+                        const typeLabel = SECTION_TYPES.find((type) => type.value === section.sectionType)?.label || section.sectionType;
+
+                        return (
+                          <button
+                            key={sectionKey}
+                            type="button"
+                            onClick={() => setActiveSectionKey(sectionKey)}
+                            className={`rounded-3xl border p-4 text-left transition ${
+                              isActive
+                                ? 'border-accent-primary bg-white shadow-md'
+                                : 'border-primary-200 bg-white/75 hover:border-primary-300 hover:bg-white'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-400">Section {index + 1}</p>
+                                <h3 className="mt-2 truncate text-base font-display font-semibold text-primary-950">{section.title || 'Untitled section'}</h3>
+                                <p className="mt-1 text-xs font-semibold text-primary-500">{typeLabel}</p>
+                              </div>
+                              <StatusBadge status={section.status} />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {activeSection && (
+                      <SectionEditor
+                        key={activeSection.id || activeSection.sectionKey || activeSectionIndex}
+                        section={activeSection}
+                        index={activeSectionIndex}
+                        total={pageDraft.sections.length}
+                        onChange={(nextSection) => updateSection(activeSectionIndex, nextSection)}
+                        onMove={moveSection}
+                        onRemove={() => removeSection(activeSectionIndex)}
+                        onImageUpload={handleImageUpload}
+                        uploadingKey={uploadingKey}
+                      />
+                    )}
+                  </>
+                )}
                 {selectedPage && <p className="text-xs text-primary-500">Last saved page: {selectedPage.updatedAt || 'not available'}</p>}
               </section>
             </main>
