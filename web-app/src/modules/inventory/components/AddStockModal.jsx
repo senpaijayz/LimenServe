@@ -33,6 +33,7 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products })
     const [searching, setSearching] = useState(false);
     const [searchError, setSearchError] = useState('');
     const [showCamera, setShowCamera] = useState(false);
+    const [showSuggestions, setShowSuggestions] = useState(true);
 
     const doSearch = useCallback(async (q) => {
         const id = q.trim();
@@ -66,6 +67,10 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products })
     const currentQty = Number(item.product?.quantity ?? item.product?.stock ?? 0);
     const addQty = Number(item.quantity) || 0;
     const suggestions = useMemo(() => getPartNumberSearchSuggestions(products || [], query, 5), [products, query]);
+    const selectedPartNumber = (getProductPartNumber(item.product) || '').toUpperCase();
+    const normalizedQuery = query.trim().toUpperCase();
+    const isSelectionLocked = Boolean(item.product && normalizedQuery && normalizedQuery === selectedPartNumber);
+    const canShowSuggestions = query.trim() && suggestions.length > 0 && showSuggestions && !isSelectionLocked;
 
     return (
         <div className="rounded-xl border border-primary-200 bg-white p-4 space-y-3 relative">
@@ -88,8 +93,18 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products })
                         placeholder="Scan barcode or type part number..."
                         value={query}
                         onChange={(e) => {
-                            setQuery(e.target.value);
-                            onUpdate(index, { searchQuery: e.target.value });
+                            const nextQuery = e.target.value;
+                            const nextNormalized = nextQuery.trim().toUpperCase();
+                            setQuery(nextQuery);
+                            setShowSuggestions(true);
+
+                            if (item.product && nextNormalized !== selectedPartNumber) {
+                                onUpdate(index, { product: null, searchQuery: nextQuery });
+                                setSearchError('');
+                                return;
+                            }
+
+                            onUpdate(index, { searchQuery: nextQuery });
                         }}
                         className={`w-full pl-10 pr-4 py-2.5 bg-white border rounded-xl text-sm placeholder-primary-400 focus:outline-none focus:ring-2 shadow-sm transition-all ${
                             searchError ? 'border-red-300 focus:border-red-400 focus:ring-red-100' :
@@ -97,7 +112,7 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products })
                             'border-primary-200 focus:border-accent-blue focus:ring-accent-blue/10'
                         } text-primary-950`}
                     />
-                    {query.trim() && suggestions.length > 0 && (
+                    {canShowSuggestions && (
                         <div className="absolute z-20 mt-2 max-h-48 w-full overflow-y-auto rounded-xl border border-primary-200 bg-white py-1 shadow-lg">
                             {suggestions.map((product) => (
                                 <button
@@ -108,6 +123,7 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products })
                                         setQuery(partNumber);
                                         onUpdate(index, { product, searchQuery: partNumber });
                                         setSearchError('');
+                                        setShowSuggestions(false);
                                     }}
                                     className="flex w-full flex-col px-3 py-2 text-left transition hover:bg-primary-50"
                                 >
