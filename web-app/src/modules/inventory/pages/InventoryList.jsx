@@ -16,10 +16,11 @@ import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
 import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
 import { getCatalogSummary, getProductStockHistory, receiveInventoryStock, updateCatalogProduct } from '../../../services/catalogApi';
-import { saveInventoryProductLocation } from '../../../services/stockroomApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
 import { getPartNumberSearchSuggestions, getProductPartNumber, productMatchesIdentifier } from '../../../utils/barcode';
+import { LOCATOR_SCENE_OBJECTS, isShelfObject, normalizeAisle } from '../../locator3d/data/locatorScene';
+import { assignProductLocation } from '../../locator3d/services/locator3DApi';
 import { buildLocator3DUrl } from '../../locator3d/utils/locatorNavigation';
 
 const PAGE_SIZE = 12;
@@ -89,7 +90,7 @@ function normalizeLocationForDisplay(rawLocation) {
         : '';
     const shelfNumber = location.shelfNumber ?? location.shelf_number ?? location.shelf;
     const level = location.level;
-    const bin = location.bin || location.binLabel || location.slot;
+    const bin = location.bin || location.binNumber || location.bin_number || location.binLabel || location.slot;
 
     if (location.label) {
         return location.label;
@@ -114,18 +115,41 @@ function normalizeLocationForDisplay(rawLocation) {
 }
 
 const inputClassName = 'w-full rounded-xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-950 shadow-sm outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15';
+const stockroomShelfOptions = LOCATOR_SCENE_OBJECTS
+    .filter(isShelfObject)
+    .map((object) => ({
+        aisle: normalizeAisle(object.aisle),
+        binCount: Number(object.binCount || 1),
+        floor: Number(object.floor || 1),
+        id: object.id,
+        label: `${object.name} / Floor ${object.floor || 1} / Aisle ${normalizeAisle(object.aisle)} Shelf ${object.shelfNumber}`,
+        shelfNumber: Number(object.shelfNumber || 1),
+    }));
+
+function getShelfOptionByLocation(location = {}) {
+    const shelfObjectId = location.shelfObjectId || location.shelf_object_id;
+
+    return stockroomShelfOptions.find((option) => option.id === shelfObjectId)
+        ?? stockroomShelfOptions.find((option) => (
+            option.aisle === normalizeAisle(location.aisle)
+            && option.shelfNumber === Number(location.shelfNumber ?? location.shelf_number ?? location.shelf)
+        ))
+        ?? null;
+}
 
 function extractLocationFormValues(product = {}) {
     const location = product.location && typeof product.location === 'object' ? product.location : {};
+    const shelfOption = getShelfOptionByLocation(location);
     const aisle = location.aisle
         ? String(location.aisle).replace(/^aisle\s+/i, '').toUpperCase()
         : '';
 
     return {
         locationAisle: aisle,
+        locationShelfObjectId: shelfOption?.id || location.shelfObjectId || location.shelf_object_id || '',
         locationShelfNumber: String(location.shelfNumber ?? location.shelf_number ?? location.shelf ?? ''),
         locationLevel: String(location.level ?? ''),
-        locationBin: String(location.bin ?? location.binNumber ?? location.binLabel ?? location.slot ?? ''),
+        locationBin: String(location.bin ?? location.binNumber ?? location.bin_number ?? location.binLabel ?? location.slot ?? ''),
     };
 }
 
@@ -163,9 +187,24 @@ function EditProductModal({ isOpen, product, isSaving, onClose, onSave }) {
 
 function EditProductModalContent({ isOpen, product, isSaving, onClose, onSave }) {
     const [form, setForm] = useState(() => buildEditProductForm(product));
+    const selectedShelf = stockroomShelfOptions.find((option) => option.id === form.locationShelfObjectId) ?? null;
+    const binOptions = Array.from({ length: selectedShelf?.binCount || 0 }, (_, index) => String(index + 1));
 
     const updateForm = (field, value) => {
         setForm((current) => ({ ...current, [field]: value }));
+    };
+
+    const handleShelfChange = (value) => {
+        const shelf = stockroomShelfOptions.find((option) => option.id === value);
+
+        setForm((current) => ({
+            ...current,
+            locationAisle: shelf?.aisle || '',
+            locationBin: shelf ? '1' : '',
+            locationLevel: '',
+            locationShelfNumber: shelf ? String(shelf.shelfNumber) : '',
+            locationShelfObjectId: value,
+        }));
     };
 
     const handleSubmit = (event) => {
@@ -247,23 +286,39 @@ function EditProductModalContent({ isOpen, product, isSaving, onClose, onSave })
                         <Crosshair className="h-4 w-4 text-accent-blue" />
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Stockroom location</p>
                     </div>
-                    <div className="grid gap-4 md:grid-cols-4">
+                    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
                         <label className="block">
-                            <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Aisle</span>
-                            <input className={`${inputClassName} mt-2`} value={form.locationAisle} onChange={(event) => updateForm('locationAisle', event.target.value)} placeholder="A" />
-                        </label>
-                        <label className="block">
-                            <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Shelf</span>
-                            <input className={`${inputClassName} mt-2`} value={form.locationShelfNumber} onChange={(event) => updateForm('locationShelfNumber', event.target.value)} placeholder="1" />
-                        </label>
-                        <label className="block">
-                            <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Level</span>
-                            <input className={`${inputClassName} mt-2`} value={form.locationLevel} onChange={(event) => updateForm('locationLevel', event.target.value)} placeholder="1" />
+                            <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Shelf object</span>
+                            <select
+                                className={`${inputClassName} mt-2`}
+                                value={form.locationShelfObjectId}
+                                onChange={(event) => handleShelfChange(event.target.value)}
+                            >
+                                <option value="">Unassigned</option>
+                                {stockroomShelfOptions.map((option) => (
+                                    <option key={option.id} value={option.id}>{option.label}</option>
+                                ))}
+                            </select>
                         </label>
                         <label className="block">
                             <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Bin</span>
-                            <input className={`${inputClassName} mt-2`} value={form.locationBin} onChange={(event) => updateForm('locationBin', event.target.value)} placeholder="1" />
+                            <select
+                                className={`${inputClassName} mt-2`}
+                                disabled={!selectedShelf}
+                                value={selectedShelf ? form.locationBin || '1' : ''}
+                                onChange={(event) => updateForm('locationBin', event.target.value)}
+                            >
+                                {!selectedShelf && <option value="">Select shelf first</option>}
+                                {binOptions.map((bin) => (
+                                    <option key={bin} value={bin}>Bin {bin}</option>
+                                ))}
+                            </select>
                         </label>
+                        {selectedShelf && (
+                            <div className="md:col-span-2 rounded-xl border border-accent-blue/15 bg-accent-blue/5 px-4 py-3 text-sm font-semibold text-primary-700">
+                                Floor {selectedShelf.floor} / Aisle {selectedShelf.aisle} / Shelf {selectedShelf.shelfNumber} / {selectedShelf.binCount} bins available
+                            </div>
+                        )}
                     </div>
                 </div>
             </form>
@@ -479,18 +534,18 @@ const InventoryList = () => {
 
         setSavingProductDetails(true);
         try {
-            const {
-                locationAisle,
-                locationShelfNumber,
-                locationLevel,
-                locationBin,
-                ...productForm
-            } = form;
-            const hasLocationInput = [locationAisle, locationShelfNumber, locationLevel, locationBin]
-                .some((value) => String(value || '').trim());
+            const productForm = { ...form };
+            const { locationBin, locationShelfObjectId } = productForm;
+            delete productForm.locationAisle;
+            delete productForm.locationShelfNumber;
+            delete productForm.locationLevel;
+            delete productForm.locationBin;
+            delete productForm.locationShelfObjectId;
+            const hasLocationInput = Boolean(String(locationShelfObjectId || '').trim());
+            const selectedShelf = stockroomShelfOptions.find((option) => option.id === locationShelfObjectId);
 
-            if (hasLocationInput && (!String(locationAisle || '').trim() || !String(locationShelfNumber || '').trim())) {
-                throw new Error('Aisle and shelf are required when saving a stockroom location.');
+            if (hasLocationInput && !selectedShelf) {
+                throw new Error('Choose an available shelf before saving a stockroom location.');
             }
 
             const updatedProduct = await updateCatalogProduct(editingProduct.id, {
@@ -500,15 +555,26 @@ const InventoryList = () => {
             });
             let updatedLocation = editingProduct.location;
 
-            if (hasLocationInput) {
-                const locationResult = await saveInventoryProductLocation(editingProduct.id, {
-                    aisle: String(locationAisle || '').trim().toUpperCase(),
-                    shelfNumber: String(locationShelfNumber || '').trim(),
-                    level: String(locationLevel || '').trim() || '1',
-                    bin: String(locationBin || '').trim() || '1',
-                    binNumber: String(locationBin || '').trim() || '1',
+            if (selectedShelf) {
+                const savedLocation = await assignProductLocation({
+                    aisle: selectedShelf.aisle,
+                    binNumber: Number(locationBin || 1),
+                    floor: selectedShelf.floor,
+                    productId: editingProduct.id,
+                    productName: productForm.name || editingProduct.name,
+                    shelfNumber: selectedShelf.shelfNumber,
+                    shelfObjectId: selectedShelf.id,
+                    sku: productForm.sku || editingProduct.sku,
                 });
-                updatedLocation = locationResult?.catalogLocation ?? locationResult?.location ?? updatedLocation;
+                updatedLocation = {
+                    ...savedLocation,
+                    aisle: savedLocation?.aisle ?? selectedShelf.aisle,
+                    bin: String(savedLocation?.binNumber ?? locationBin ?? 1),
+                    binNumber: savedLocation?.binNumber ?? Number(locationBin || 1),
+                    floor: savedLocation?.floor ?? selectedShelf.floor,
+                    shelfNumber: savedLocation?.shelfNumber ?? selectedShelf.shelfNumber,
+                    shelfObjectId: savedLocation?.shelfObjectId ?? selectedShelf.id,
+                };
             }
 
             const normalizedProduct = {
@@ -941,14 +1007,7 @@ const InventoryList = () => {
                 title="Inventory Activity"
                 stockHistory={previewStockHistory}
                 historyLoading={previewHistoryLoading}
-                locationEditAction={isAdmin ? {
-                    label: 'Edit Location',
-                    onClick: () => {
-                        if (selectedPreviewProduct) {
-                            openEditProduct(selectedPreviewProduct);
-                        }
-                    },
-                } : null}
+                locationEditAction={null}
                 locateAction={selectedPreviewProduct ? {
                     label: 'Locate in 3D',
                     onClick: () => handleLocateIn3D(selectedPreviewProduct),

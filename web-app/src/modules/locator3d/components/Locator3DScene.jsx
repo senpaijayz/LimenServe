@@ -678,7 +678,7 @@ function LocatorPath() {
     );
 }
 
-function CameraRig({ controlsRef }) {
+function CameraRig({ controlsRef, isTransforming }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const cameraFocusRequest = useLocator3DStore((state) => state.cameraFocusRequest);
     const cameraPresetRequest = useLocator3DStore((state) => state.cameraPresetRequest);
@@ -688,6 +688,7 @@ function CameraRig({ controlsRef }) {
     const { camera } = useThree();
     const activeTargetRef = useRef(null);
     const isAnimatingRef = useRef(true);
+    const targetTriggerRef = useRef('');
     const target = useMemo(() => {
         if (cameraPresetRequest?.preset === 'overview') {
             return buildFloorCameraTarget(activeFloor);
@@ -742,10 +743,24 @@ function CameraRig({ controlsRef }) {
         return buildFloorCameraTarget(activeFloor);
     }, [activeFloor, cameraFocusRequest, cameraPresetRequest, locatedProduct, sceneObjects, selectedObjectId]);
 
+    const targetTrigger = [
+        activeFloor,
+        cameraFocusRequest?.sequence || 0,
+        cameraPresetRequest?.sequence || 0,
+        locatedProduct?.productId || '',
+        locatedProduct?.shelfObjectId || '',
+        locatedProduct?.binNumber || '',
+    ].join(':');
+
     useEffect(() => {
+        if (isTransforming || targetTriggerRef.current === targetTrigger) {
+            return;
+        }
+
+        targetTriggerRef.current = targetTrigger;
         activeTargetRef.current = target;
         isAnimatingRef.current = true;
-    }, [target]);
+    }, [isTransforming, target, targetTrigger]);
 
     useFrame(() => {
         if (!isAnimatingRef.current || !activeTargetRef.current) {
@@ -852,7 +867,7 @@ function SceneContents() {
             <EffectComposer multisampling={2}>
                 <Bloom intensity={locatedProduct ? 0.58 : 0.26} luminanceThreshold={0.48} mipmapBlur />
             </EffectComposer>
-            <CameraRig controlsRef={controlsRef} />
+            <CameraRig controlsRef={controlsRef} isTransforming={isTransforming} />
             <OrbitControls
                 dampingFactor={0.08}
                 enabled={!isTransforming}

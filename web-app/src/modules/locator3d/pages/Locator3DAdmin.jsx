@@ -783,12 +783,17 @@ function ShelfEditor({ object }) {
 
 function ProductAssignmentModal({ isOpen, onClose, shelf }) {
     const { success, error: showError } = useToast();
+    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
     const upsertProductLocation = useLocator3DStore((state) => state.upsertProductLocation);
     const [products, setProducts] = useState([]);
     const [isLoadingProducts, setIsLoadingProducts] = useState(false);
     const [isSavingLocation, setIsSavingLocation] = useState(false);
     const [selectedProductId, setSelectedProductId] = useState('');
+    const [selectedShelfId, setSelectedShelfId] = useState(shelf?.id || '');
     const [binNumber, setBinNumber] = useState(1);
+    const availableShelves = useMemo(() => sceneObjects.filter(isShelfObject), [sceneObjects]);
+    const selectedShelf = availableShelves.find((object) => object.id === selectedShelfId) ?? shelf ?? null;
+    const binOptions = Array.from({ length: selectedShelf?.binCount || 0 }, (_, index) => index + 1);
 
     useEffect(() => {
         if (!isOpen) {
@@ -806,6 +811,7 @@ function ProductAssignmentModal({ isOpen, onClose, shelf }) {
 
                 setProducts(catalogProducts);
                 setSelectedProductId(catalogProducts[0]?.id || '');
+                setSelectedShelfId(shelf?.id || availableShelves[0]?.id || '');
                 setBinNumber(1);
             })
             .catch((loadError) => {
@@ -822,7 +828,7 @@ function ProductAssignmentModal({ isOpen, onClose, shelf }) {
         return () => {
             active = false;
         };
-    }, [isOpen, showError]);
+    }, [availableShelves, isOpen, shelf?.id, showError]);
 
     const selectedProduct = useMemo(() => (
         products.find((product) => product.id === selectedProductId) ?? null
@@ -831,20 +837,20 @@ function ProductAssignmentModal({ isOpen, onClose, shelf }) {
     const handleSubmit = async (event) => {
         event.preventDefault();
 
-        if (!shelf || !selectedProduct) {
+        if (!selectedShelf || !selectedProduct) {
             return;
         }
 
         setIsSavingLocation(true);
         try {
             const savedLocation = await assignProductLocation({
-                aisle: shelf.aisle,
+                aisle: selectedShelf.aisle,
                 binNumber,
-                floor: shelf.floor,
+                floor: selectedShelf.floor,
                 productId: selectedProduct.id,
                 productName: selectedProduct.name,
-                shelfNumber: shelf.shelfNumber,
-                shelfObjectId: shelf.id,
+                shelfNumber: selectedShelf.shelfNumber,
+                shelfObjectId: selectedShelf.id,
                 sku: selectedProduct.sku,
             });
 
@@ -878,16 +884,36 @@ function ProductAssignmentModal({ isOpen, onClose, shelf }) {
                     </select>
                 </label>
                 <label className="block">
-                    <span className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-primary-500">Bin Number</span>
-                    <input
+                    <span className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-primary-500">Shelf object</span>
+                    <select
+                        aria-label="Shelf object"
+                        className="min-h-11 w-full rounded-xl border border-primary-200 bg-white px-3 text-sm font-bold text-primary-950"
+                        onChange={(event) => {
+                            setSelectedShelfId(event.target.value);
+                            setBinNumber(1);
+                        }}
+                        value={selectedShelfId}
+                    >
+                        {availableShelves.map((shelfObject) => (
+                            <option key={shelfObject.id} value={shelfObject.id}>
+                                {shelfObject.name} / Floor {shelfObject.floor || 1} / Aisle {normalizeAisle(shelfObject.aisle)} Shelf {shelfObject.shelfNumber}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                <label className="block">
+                    <span className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-primary-500">Bin</span>
+                    <select
                         aria-label="Bin Number"
                         className="min-h-11 w-full rounded-xl border border-primary-200 bg-white px-3 text-sm font-bold text-primary-950"
-                        max={shelf?.binCount || SHELF_BIN_RANGE.MAX}
-                        min="1"
+                        disabled={!selectedShelf}
                         onChange={(event) => setBinNumber(Number(event.target.value))}
-                        type="number"
                         value={binNumber}
-                    />
+                    >
+                        {binOptions.map((bin) => (
+                            <option key={bin} value={bin}>Bin {bin}</option>
+                        ))}
+                    </select>
                 </label>
                 <div className="flex justify-end gap-3">
                     <button className="min-h-11 rounded-xl border border-primary-200 bg-white px-4 text-sm font-black text-primary-700" onClick={onClose} type="button">
@@ -896,7 +922,7 @@ function ProductAssignmentModal({ isOpen, onClose, shelf }) {
                     <button
                         aria-label="Save Product Location"
                         className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary-950 px-4 text-sm font-black text-white disabled:cursor-wait disabled:opacity-60"
-                        disabled={!selectedProduct || isSavingLocation}
+                        disabled={!selectedProduct || !selectedShelf || isSavingLocation}
                         type="submit"
                     >
                         <CheckCircle2 className="h-4 w-4" />
