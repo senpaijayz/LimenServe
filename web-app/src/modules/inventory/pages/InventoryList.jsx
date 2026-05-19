@@ -477,9 +477,7 @@ const InventoryList = () => {
     };
 
     const totalProducts = catalogSummary?.totalProducts ?? pagination.totalCount ?? visibleProducts.length;
-    const uniqueProducts = catalogSummary?.uniqueProducts ?? pagination.totalCount ?? visibleProducts.length;
-    const currentPrices = catalogSummary?.currentPrices ?? pagination.totalCount ?? visibleProducts.length;
-    const lowStockCount = filteredProducts.filter((product) => product.quantity <= 5).length;
+    const inStockProducts = catalogSummary?.inStockProducts ?? visibleProducts.filter((product) => product.quantity > 0).length;
     const pageInventoryValue = filteredProducts.reduce((sum, product) => sum + (product.price * product.quantity), 0);
     const summaryInventoryValue = Number(catalogSummary?.inventoryValue);
     const totalValue = Number.isFinite(summaryInventoryValue) ? summaryInventoryValue : pageInventoryValue;
@@ -666,7 +664,6 @@ const InventoryList = () => {
                     <div className="min-w-0">
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500 mb-0.5">Total Products</p>
                         <p className="text-2xl font-bold font-display text-primary-950 leading-none">{formatNumber(totalProducts)}</p>
-                        <p className="text-xs text-primary-400 mt-1">{formatNumber(uniqueProducts)} unique part numbers loaded</p>
                     </div>
                 </div>
 
@@ -676,8 +673,7 @@ const InventoryList = () => {
                     </div>
                     <div className="min-w-0">
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500 mb-0.5">In Stock</p>
-                        <p className="text-2xl font-bold font-display text-primary-950 leading-none">{lowStockCount}</p>
-                        <p className="text-xs text-primary-400 mt-1">{formatNumber(currentPrices)} current price rows active</p>
+                        <p className="text-2xl font-bold font-display text-primary-950 leading-none">{formatNumber(inStockProducts)}</p>
                     </div>
                 </div>
 

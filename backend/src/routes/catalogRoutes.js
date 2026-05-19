@@ -2165,14 +2165,23 @@ function calculateInventoryValue(products = []) {
   }, 0);
 }
 
-async function getCatalogInventoryValueSafely() {
+async function getCatalogStockSummarySafely() {
   try {
-    return calculateInventoryValue(await getCachedProductCatalog());
+    const products = await getCachedProductCatalog();
+    return {
+      inStockProducts: products.filter((product) => Number(product.stock ?? product.quantity ?? 0) > 0).length,
+      inventoryValue: calculateInventoryValue(products),
+      totalProducts: products.length,
+    };
   } catch (error) {
     if (!isPrivateSchemaAccessError(error)) {
-      console.warn('Unable to calculate inventory value for catalog summary:', error?.message || error);
+      console.warn('Unable to calculate stock summary for catalog:', error?.message || error);
     }
-    return 0;
+    return {
+      inStockProducts: 0,
+      inventoryValue: 0,
+      totalProducts: 0,
+    };
   }
 }
 
@@ -2642,7 +2651,7 @@ router.get('/products/:productId/stock-history', requireRole('admin', 'stock_cle
 
 router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, next) => {
   try {
-    const inventoryValue = await getCatalogInventoryValueSafely();
+    const stockSummary = await getCatalogStockSummarySafely();
 
     try {
       const summaryRows = await callRpc('get_catalog_summary');
@@ -2654,7 +2663,8 @@ router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, ne
           pricelistRows: Number(summary?.pricelist_rows ?? 0),
           uniqueProducts: Number(summary?.unique_products ?? 0),
           currentPrices: Number(summary?.current_prices ?? 0),
-          inventoryValue,
+          inStockProducts: stockSummary.inStockProducts,
+          inventoryValue: stockSummary.inventoryValue,
         },
       });
       return;
@@ -2674,7 +2684,8 @@ router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, ne
         pricelistRows: totalProducts,
         uniqueProducts: totalProducts,
         currentPrices: totalProducts,
-        inventoryValue,
+        inStockProducts: stockSummary.inStockProducts,
+        inventoryValue: stockSummary.inventoryValue,
       },
     });
   } catch (error) {
@@ -2887,14 +2898,14 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
     const modelName = normalizeOptionalText(req.body?.model, 140);
     const brand = normalizeOptionalText(req.body?.brand, 80) || 'Mitsubishi';
     const uom = normalizeOptionalText(req.body?.uom, 20) || 'PC';
-    const requestedStock = Object.prototype.hasOwnProperty.call(req.body ?? {}, 'stock')
-      ? parseStockLevel(req.body?.stock)
-      : null;
     const sourceCategory = normalizeOptionalText(req.body?.sourceCategory, 140);
     const supplierId = normalizeOptionalText(req.body?.supplierId, 80);
     const supplierName = normalizeOptionalText(req.body?.supplierName, 180);
     const imageUrl = normalizeOptionalText(req.body?.imageUrl, 1000);
     const price = parsePrice(req.body?.price);
+    const requestedStock = Object.prototype.hasOwnProperty.call(req.body ?? {}, 'stock')
+      ? parseStockLevel(req.body?.stock)
+      : null;
 
     if (!name || !category || !sku) {
       res.status(400).json({ error: 'Product name, part number, and category are required.' });
@@ -3031,6 +3042,9 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
     const supplierName = normalizeOptionalText(req.body?.supplierName, 180);
     const imageUrl = normalizeOptionalText(req.body?.imageUrl, 1000);
     const price = parsePrice(req.body?.price);
+    const requestedStock = Object.prototype.hasOwnProperty.call(req.body ?? {}, 'stock')
+      ? parseStockLevel(req.body?.stock)
+      : null;
 
     if (!productId) {
       res.status(400).json({ error: 'Product is required.' });
@@ -3049,6 +3063,11 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
 
     if (price === null) {
       res.status(400).json({ error: 'Retail price must be zero or greater.' });
+      return;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'stock') && requestedStock === null) {
+      res.status(400).json({ error: 'Stock available must be zero or greater.' });
       return;
     }
 
