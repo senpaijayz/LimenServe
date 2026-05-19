@@ -3,7 +3,6 @@ import { useAuth } from '../../context/useAuth';
 import { useTheme } from '../../context/ThemeContext';
 import Sidebar from './Sidebar';
 import Header from './Header';
-import MobileBottomNav from './MobileBottomNav';
 import { NAV_ITEMS, ROLE_LABELS, ROLES } from '../../utils/constants';
 
 const privateRouteRoles = new Map([
@@ -67,11 +66,10 @@ const MainLayout = () => {
             <Header />
 
             <main className={`main-content ${sidebarCollapsed ? 'main-content-collapsed' : ''} bg-primary-50`}>
-                <div className="mx-auto w-full max-w-[1600px] p-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] transition-all duration-300 sm:p-6 sm:pb-24 lg:p-10">
+                <div className="mx-auto w-full max-w-[1600px] p-3 transition-all duration-300 sm:p-6 lg:p-10">
                     {canAccessRoute ? <Outlet /> : <PermissionDenied role={user?.role} />}
                 </div>
             </main>
-            <MobileBottomNav />
         </div>
     );
 };
