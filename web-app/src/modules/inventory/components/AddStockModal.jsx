@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, Camera, CheckCircle, ClipboardCheck, FileText, ListPlus, LoaderCircle, Package, Plus, Search, Trash2, UploadCloud } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
@@ -195,6 +195,9 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
     const [bulkResults, setBulkResults] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
     const [loadingSuppliers, setLoadingSuppliers] = useState(false);
+    const [showInvoiceImageChoices, setShowInvoiceImageChoices] = useState(false);
+    const invoiceCameraInputRef = useRef(null);
+    const invoiceUploadInputRef = useRef(null);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -211,6 +214,7 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
         setSubmitProgress({ done: 0, total: 0 });
         setBulkSuccess(false);
         setBulkResults([]);
+        setShowInvoiceImageChoices(false);
 
         const loadSuppliers = async () => {
             setLoadingSuppliers(true);
@@ -333,6 +337,7 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
     const handleInvoiceImage = async (event) => {
         const file = event.target.files?.[0];
         event.target.value = '';
+        setShowInvoiceImageChoices(false);
 
         if (!file) {
             return;
@@ -567,12 +572,61 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                                                 <p className="mt-1 text-sm text-primary-600">Capture the full page. The system detects stock numbers, quantities, invoice number, order number, and date, then lets you review before posting.</p>
                                             </div>
                                         </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-accent-blue px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700">
+                                        <div className="relative flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                className="inline-flex items-center gap-2 rounded-xl bg-accent-blue px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                                disabled={isReadingInvoice}
+                                                onClick={() => setShowInvoiceImageChoices((current) => !current)}
+                                            >
                                                 <UploadCloud className="h-4 w-4" />
                                                 Camera / Upload
-                                                <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={handleInvoiceImage} />
-                                            </label>
+                                            </button>
+                                            <input
+                                                ref={invoiceCameraInputRef}
+                                                type="file"
+                                                accept="image/*"
+                                                capture="environment"
+                                                className="sr-only"
+                                                onChange={handleInvoiceImage}
+                                            />
+                                            <input
+                                                ref={invoiceUploadInputRef}
+                                                type="file"
+                                                accept="image/*"
+                                                className="sr-only"
+                                                onChange={handleInvoiceImage}
+                                            />
+                                            {showInvoiceImageChoices && (
+                                                <div className="absolute right-0 top-12 z-20 w-72 overflow-hidden rounded-2xl border border-primary-200 bg-white p-2 shadow-xl">
+                                                    <button
+                                                        type="button"
+                                                        className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-primary-50"
+                                                        onClick={() => invoiceCameraInputRef.current?.click()}
+                                                    >
+                                                        <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent-blue/10 text-accent-blue">
+                                                            <Camera className="h-5 w-5" />
+                                                        </span>
+                                                        <span>
+                                                            <span className="block text-sm font-black text-primary-950">Use Camera</span>
+                                                            <span className="mt-0.5 block text-xs text-primary-500">Take a new photo of the printed invoice.</span>
+                                                        </span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="mt-1 flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-primary-50"
+                                                        onClick={() => invoiceUploadInputRef.current?.click()}
+                                                    >
+                                                        <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary-100 text-primary-700">
+                                                            <UploadCloud className="h-5 w-5" />
+                                                        </span>
+                                                        <span>
+                                                            <span className="block text-sm font-black text-primary-950">Upload Image</span>
+                                                            <span className="mt-0.5 block text-xs text-primary-500">Choose an invoice photo from your files.</span>
+                                                        </span>
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                     {isReadingInvoice && (
