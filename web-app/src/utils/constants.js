@@ -23,6 +23,18 @@ export const ROLE_LABELS = {
     [ROLES.STOCK_CLERK]: 'Clerk',
 };
 
+export function getDefaultAuthenticatedPath(role) {
+    if (role === ROLES.CASHIER) {
+        return '/pos';
+    }
+
+    if (role === ROLES.STOCK_CLERK) {
+        return '/inventory';
+    }
+
+    return '/dashboard';
+}
+
 // Order/Service Status
 export const SERVICE_STATUS = {
     PENDING: 'pending',
@@ -88,19 +100,19 @@ export const PAGINATION = {
 // Navigation Items
 export const NAV_ITEMS = {
     main: [
-        { path: '/dashboard', label: 'Dashboard', icon: 'LayoutDashboard', roles: [ROLES.ADMIN, ROLES.CASHIER, ROLES.STOCK_CLERK] },
+        { path: '/dashboard', label: 'Dashboard', icon: 'LayoutDashboard', roles: [ROLES.ADMIN] },
         { path: '/pos', label: 'Point of Sale', icon: 'ShoppingCart', roles: [ROLES.ADMIN, ROLES.CASHIER] },
         { path: '/inventory', label: 'Inventory', icon: 'Package', roles: [ROLES.ADMIN, ROLES.STOCK_CLERK] },
-        { path: '/products', label: 'Products', icon: 'Boxes', roles: [ROLES.ADMIN, ROLES.STOCK_CLERK] },
-        { path: '/suppliers', label: 'Suppliers', icon: 'Truck', roles: [ROLES.ADMIN, ROLES.STOCK_CLERK] },
-        { path: '/quotation', label: 'Quotation', icon: 'FileText', roles: [ROLES.ADMIN, ROLES.CASHIER] },
-        { path: '/services', label: 'Service Orders', icon: 'Wrench', roles: [ROLES.ADMIN, ROLES.CASHIER, ROLES.STOCK_CLERK] },
+        { path: '/services', label: 'Service Orders', icon: 'Wrench', roles: [ROLES.ADMIN, ROLES.CASHIER] },
     ],
     admin: [
+        { path: '/products', label: 'Products', icon: 'Boxes', roles: [ROLES.ADMIN] },
+        { path: '/suppliers', label: 'Suppliers', icon: 'Truck', roles: [ROLES.ADMIN] },
+        { path: '/quotation', label: 'Quotation', icon: 'FileText', roles: [ROLES.ADMIN] },
         { path: '/reports', label: 'Reports', icon: 'BarChart3', roles: [ROLES.ADMIN] },
         { path: '/users', label: 'User Management', icon: 'Users', roles: [ROLES.ADMIN] },
         { path: '/cms', label: 'Content CMS', icon: 'FileText', roles: [ROLES.ADMIN] },
-        { path: '/locator-3d', label: '3D Locator', icon: 'Box', roles: [ROLES.ADMIN] },
+        { path: '/locator-3d', label: '3D Locator', icon: 'Box', roles: [ROLES.ADMIN, ROLES.STOCK_CLERK] },
     ],
 };
 

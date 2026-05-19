@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import {
     Search, X, Package, ShoppingCart, Wrench, FileText,
-    BarChart3, Users, LayoutDashboard, ArrowRight, Command
+    BarChart3, Box, Boxes, Truck, Users, LayoutDashboard, ArrowRight, Command
 } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 import useDataStore from '../../store/useDataStore';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../utils/barcode';
+import { useAuth } from '../../context/useAuth';
+import { NAV_ITEMS } from '../../utils/constants';
 
 const searchableOrders = [
     { id: 'SVC-001', name: 'Juan Dela Cruz - Oil Change', status: 'in_progress', type: 'service' },
@@ -15,16 +17,18 @@ const searchableOrders = [
     { id: 'SVC-003', name: 'Pedro Reyes - Engine Tune-up', status: 'completed', type: 'service' },
 ];
 
-const searchablePages = [
-    { id: 'nav-dash', name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, type: 'page' },
-    { id: 'nav-inv', name: 'Inventory Management', path: '/inventory', icon: Package, type: 'page' },
-    { id: 'nav-pos', name: 'Point of Sale', path: '/pos', icon: ShoppingCart, type: 'page' },
-    { id: 'nav-quote', name: 'Cost Estimation & Quotation', path: '/quotation', icon: FileText, type: 'page' },
-    { id: 'nav-svc', name: 'Service Orders', path: '/services', icon: Wrench, type: 'page' },
-    { id: 'nav-reports', name: 'Reports & Analytics', path: '/reports', icon: BarChart3, type: 'page' },
-    { id: 'nav-inventory-report', name: 'Inventory Report', path: '/reports/inventory', icon: BarChart3, type: 'page' },
-    { id: 'nav-users', name: 'User Management', path: '/users', icon: Users, type: 'page' },
-];
+const iconMap = {
+    BarChart3,
+    Box,
+    Boxes,
+    FileText,
+    LayoutDashboard,
+    Package,
+    ShoppingCart,
+    Truck,
+    Users,
+    Wrench,
+};
 
 const typeLabels = {
     product: 'Products',
@@ -44,6 +48,7 @@ const typeIcons = {
  */
 const GlobalSearch = () => {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const { products: storeProducts } = useDataStore();
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -70,7 +75,10 @@ const GlobalSearch = () => {
     const results = useMemo(() => {
         if (!query.trim()) return [];
 
-        const searchableProducts = storeProducts.map(p => ({
+        const canSearchProducts = ['admin', 'stock_clerk'].includes(user?.role);
+        const canSearchOrders = ['admin', 'cashier'].includes(user?.role);
+
+        const searchableProducts = canSearchProducts ? storeProducts.map(p => ({
             id: `p${p.id}`,
             name: p.name,
             sku: getProductPartNumber(p),
@@ -78,21 +86,31 @@ const GlobalSearch = () => {
             category: p.category,
             model: p.model,
             type: 'product',
-        }));
+        })) : [];
 
         const q = query.toLowerCase();
         const products = getPartNumberSearchSuggestions(searchableProducts, query, 5);
 
-        const orders = searchableOrders.filter(o =>
+        const orders = canSearchOrders ? searchableOrders.filter(o =>
             o.name.toLowerCase().includes(q) || o.id.toLowerCase().includes(q)
-        ).slice(0, 3);
+        ).slice(0, 3) : [];
+
+        const searchablePages = [...NAV_ITEMS.main, ...NAV_ITEMS.admin]
+            .filter((item) => item.roles.includes(user?.role))
+            .map((item) => ({
+                id: `nav-${item.path}`,
+                name: item.label,
+                path: item.path,
+                icon: iconMap[item.icon] || LayoutDashboard,
+                type: 'page',
+            }));
 
         const pages = searchablePages.filter(p =>
             p.name.toLowerCase().includes(q)
         ).slice(0, 4);
 
         return [...pages, ...products, ...orders];
-    }, [query, storeProducts]);
+    }, [query, storeProducts, user?.role]);
 
     // Keyboard shortcut to open (Ctrl+K)
     useEffect(() => {

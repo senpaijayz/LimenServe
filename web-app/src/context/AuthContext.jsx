@@ -208,7 +208,7 @@ export function AuthProvider({ children }) {
             const session = data?.session ?? await ensureSessionLoaded();
             applySession(session, { force: true });
 
-            return { success: true };
+            return { success: true, user: session?.user ? mapSupabaseUser(session.user, null) : null };
         } catch (loginError) {
             const message = loginError.message || 'Invalid email or password.';
             setError(message);

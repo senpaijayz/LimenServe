@@ -257,7 +257,7 @@ async function completeServiceOrder(orderId, operatorId) {
   };
 }
 
-router.use(requireRole('admin', 'cashier', 'stock_clerk'));
+router.use(requireRole('admin', 'cashier'));
 
 router.get('/', async (req, res, next) => {
   try {

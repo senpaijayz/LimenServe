@@ -29,7 +29,7 @@ function mapNotification(row = {}) {
   };
 }
 
-router.use(requireRole('admin', 'cashier'));
+router.use(requireRole('admin'));
 
 router.get('/', async (req, res, next) => {
   try {

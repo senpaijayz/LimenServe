@@ -12,7 +12,7 @@ const Header = () => {
     const { sidebarCollapsed, toggleMobileSidebar } = useTheme();
     const { user, isProfileReady, profileWarning } = useAuth();
     const location = useLocation();
-    const canViewQuotationNotifications = ['admin', 'cashier'].includes(user?.role);
+    const canViewQuotationNotifications = user?.role === 'admin';
 
     // Get page title from path
     const getPageTitle = () => {

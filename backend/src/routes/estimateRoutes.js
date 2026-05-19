@@ -80,7 +80,7 @@ async function createQuotationNotification(estimate = {}) {
   }
 }
 
-router.get('/', requireRole('admin', 'cashier'), async (req, res, next) => {
+router.get('/', requireRole('admin'), async (req, res, next) => {
   try {
     const estimates = await callRpc('list_estimates', {
       p_search: req.query.search || null,
@@ -132,7 +132,7 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-router.get('/:estimateId', requireRole('admin', 'cashier'), async (req, res, next) => {
+router.get('/:estimateId', requireRole('admin'), async (req, res, next) => {
   try {
     const estimate = await callRpc('get_estimate_detail', {
       p_estimate_id: req.params.estimateId,
@@ -149,7 +149,7 @@ router.get('/:estimateId', requireRole('admin', 'cashier'), async (req, res, nex
   }
 });
 
-router.get('/:estimateId/revisions', requireRole('admin', 'cashier'), async (req, res, next) => {
+router.get('/:estimateId/revisions', requireRole('admin'), async (req, res, next) => {
   try {
     const revisions = await callRpc('get_estimate_revisions', {
       p_estimate_id: req.params.estimateId,
@@ -161,7 +161,7 @@ router.get('/:estimateId/revisions', requireRole('admin', 'cashier'), async (req
   }
 });
 
-router.patch('/:estimateId', requireRole('admin', 'cashier'), async (req, res, next) => {
+router.patch('/:estimateId', requireRole('admin'), async (req, res, next) => {
   try {
     const revisionId = await callRpc('revise_estimate', {
       p_estimate_id: req.params.estimateId,
@@ -176,7 +176,7 @@ router.patch('/:estimateId', requireRole('admin', 'cashier'), async (req, res, n
   }
 });
 
-router.post('/:estimateId/revise', requireRole('admin', 'cashier'), async (req, res, next) => {
+router.post('/:estimateId/revise', requireRole('admin'), async (req, res, next) => {
   try {
     const revisionId = await callRpc('revise_estimate', {
       p_estimate_id: req.params.estimateId,
@@ -191,7 +191,7 @@ router.post('/:estimateId/revise', requireRole('admin', 'cashier'), async (req, 
   }
 });
 
-router.post('/:estimateId/convert-sale', requireRole('admin', 'cashier'), async (req, res, next) => {
+router.post('/:estimateId/convert-sale', requireRole('admin'), async (req, res, next) => {
   try {
     const saleId = await callRpc('convert_estimate_to_sale', {
       p_estimate_id: req.params.estimateId,
@@ -204,7 +204,7 @@ router.post('/:estimateId/convert-sale', requireRole('admin', 'cashier'), async 
   }
 });
 
-router.post('/:estimateId/convert-service-order', requireRole('admin', 'cashier'), async (req, res, next) => {
+router.post('/:estimateId/convert-service-order', requireRole('admin'), async (req, res, next) => {
   try {
     const serviceOrderId = await callRpc('convert_estimate_to_service_order', {
       p_estimate_id: req.params.estimateId,

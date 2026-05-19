@@ -4,6 +4,7 @@ import { CarFront, Clock, MapPin, Menu, Phone, ShieldCheck, X } from 'lucide-rea
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
 import usePublicCmsSite from '../../hooks/usePublicCmsSite';
+import { getDefaultAuthenticatedPath } from '../../utils/constants';
 
 const primaryNav = [
     { label: 'Home', to: '/' },
@@ -14,7 +15,7 @@ const primaryNav = [
 ];
 
 const PublicLayout = () => {
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, user } = useAuth();
     const location = useLocation();
     const [scrolled, setScrolled] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -27,7 +28,7 @@ const PublicLayout = () => {
     }, []);
 
     if (isAuthenticated) {
-        return <Navigate to="/dashboard" replace />;
+        return <Navigate to={getDefaultAuthenticatedPath(user?.role)} replace />;
     }
 
     const isNavItemActive = (to) => {

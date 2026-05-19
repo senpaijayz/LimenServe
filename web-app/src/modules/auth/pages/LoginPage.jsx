@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
 import { Mail, Lock, LogIn, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../../context/useAuth';
+import { getDefaultAuthenticatedPath } from '../../../utils/constants';
 import { loginSchema } from '../../../utils/validators';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
@@ -16,7 +17,7 @@ import Input from '../../../components/ui/Input';
 const LoginPage = () => {
     const MotionDiv = motion.div;
     const navigate = useNavigate();
-    const { login, error: authError, isAuthenticated, isLoadingAuth } = useAuth();
+    const { login, error: authError, isAuthenticated, isLoadingAuth, user } = useAuth();
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const {
@@ -33,9 +34,9 @@ const LoginPage = () => {
 
     useEffect(() => {
         if (!isLoadingAuth && isAuthenticated) {
-            navigate('/dashboard', { replace: true });
+            navigate(getDefaultAuthenticatedPath(user?.role), { replace: true });
         }
-    }, [isAuthenticated, isLoadingAuth, navigate]);
+    }, [isAuthenticated, isLoadingAuth, navigate, user?.role]);
 
     const onSubmit = async (data) => {
         setIsSubmitting(true);
@@ -43,7 +44,7 @@ const LoginPage = () => {
         setIsSubmitting(false);
 
         if (result.success) {
-            navigate('/dashboard', { replace: true });
+            navigate(getDefaultAuthenticatedPath(result.user?.role), { replace: true });
         }
     };
 
