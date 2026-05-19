@@ -859,6 +859,16 @@ function matchesCatalogFilters(product, { searchQuery = '', selectedCategory = '
 
 function sortCatalogProducts(products = [], sortBy = 'name-asc') {
   return [...products].sort((left, right) => {
+    if (sortBy === 'stock-desc') {
+      return Number(right.stock ?? right.quantity ?? 0) - Number(left.stock ?? left.quantity ?? 0)
+        || String(left.name || '').localeCompare(String(right.name || ''));
+    }
+
+    if (sortBy === 'stock-asc') {
+      return Number(left.stock ?? left.quantity ?? 0) - Number(right.stock ?? right.quantity ?? 0)
+        || String(left.name || '').localeCompare(String(right.name || ''));
+    }
+
     if (sortBy === 'name-desc') {
       return String(right.name || '').localeCompare(String(left.name || '')) || String(left.sku || '').localeCompare(String(right.sku || ''));
     }
@@ -2503,7 +2513,31 @@ router.get('/products', async (req, res, next) => {
     let totalCount = 0;
     let totalPages = 1;
 
-    if (!vehicleContext) {
+    if (!vehicleContext && !useStagingCatalog && ['stock-desc', 'stock-asc'].includes(sortBy)) {
+      const catalog = await getCachedProductCatalog();
+      const scopedProducts = catalog.filter((product) => matchesCatalogFilters(product, {
+        searchQuery,
+        selectedCategory,
+      }));
+      const sortedProducts = sortCatalogProducts(scopedProducts, sortBy);
+
+      totalCount = sortedProducts.length;
+      totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+      products = await enrichCatalogProducts(sortedProducts.slice((page - 1) * pageSize, page * pageSize));
+
+      if (includeCategories) {
+        const categoryScopedProducts = catalog.filter((product) => matchesCatalogFilters(product, {
+          searchQuery,
+          selectedCategory: 'all',
+        }));
+        const categoryRows = buildCategoryRows(categoryScopedProducts);
+        const categoryCountTotal = categoryRows.reduce((sum, row) => sum + Number(row.count ?? 0), 0);
+        categories = [
+          { value: 'all', label: 'All Categories', count: categoryCountTotal || totalCount },
+          ...categoryRows,
+        ];
+      }
+    } else if (!vehicleContext) {
       const [catalogPage, categoryRows] = await Promise.all([
         useStagingCatalog
           ? fetchPricelistCatalogPage({

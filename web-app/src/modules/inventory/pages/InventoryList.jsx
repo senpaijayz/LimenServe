@@ -375,7 +375,7 @@ const InventoryList = () => {
         pageSize: PAGE_SIZE,
         searchQuery,
         selectedCategory,
-        sortBy: 'name-asc',
+        sortBy: 'stock-desc',
         refreshKey,
     });
 
@@ -423,24 +423,20 @@ const InventoryList = () => {
     ), [catalogCategories]);
 
     const stockFilters = useMemo(() => {
-        const allCount = visibleProducts.length;
-        const outOfStockCount = visibleProducts.filter((product) => product.quantity <= 0).length;
-        const lowStockOnlyCount = visibleProducts.filter((product) => product.quantity > 0 && product.quantity <= 5).length;
-        const mediumStockCount = visibleProducts.filter((product) => product.quantity >= 6 && product.quantity <= 20).length;
-        const highStockCount = visibleProducts.filter((product) => product.quantity > 20).length;
-
         return [
-            { value: 'all', label: `All Stock Levels (${allCount})` },
-            { value: 'out', label: `Out of Stock (0 qty) (${outOfStockCount})` },
-            { value: 'low', label: `Low Stock (1-5 qty) (${lowStockOnlyCount})` },
-            { value: 'medium', label: `Medium Stock (6-20 qty) (${mediumStockCount})` },
-            { value: 'high', label: `High Stock (21+ qty) (${highStockCount})` },
+            { value: 'all', label: 'All Items' },
+            { value: 'available', label: 'Available Stock' },
+            { value: 'high', label: 'Strong Stock' },
+            { value: 'medium', label: 'Standard Stock' },
+            { value: 'low', label: 'Low Stock' },
+            { value: 'out', label: 'Out of Stock' },
         ];
-    }, [visibleProducts]);
+    }, []);
 
     const filteredProducts = useMemo(() => (
         visibleProducts.filter((product) => {
             const matchesStock = selectedStockFilter === 'all'
+                || (selectedStockFilter === 'available' && product.quantity > 0)
                 || (selectedStockFilter === 'out' && product.quantity <= 0)
                 || (selectedStockFilter === 'low' && product.quantity > 0 && product.quantity <= 5)
                 || (selectedStockFilter === 'medium' && product.quantity >= 6 && product.quantity <= 20)
