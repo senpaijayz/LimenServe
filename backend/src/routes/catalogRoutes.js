@@ -402,6 +402,30 @@ function parsePositiveStockQuantity(value) {
   return Number(quantity.toFixed(2));
 }
 
+function parseStockLevel(value) {
+  const quantity = Number(value);
+
+  if (!Number.isFinite(quantity) || quantity < 0) {
+    return null;
+  }
+
+  return Number(quantity.toFixed(2));
+}
+
+function getStatusForStockLevel(stock) {
+  const quantity = Number(stock ?? 0);
+
+  if (quantity <= 0) {
+    return 'out_of_stock';
+  }
+
+  if (quantity <= 5) {
+    return 'low_stock';
+  }
+
+  return 'in_stock';
+}
+
 function buildStockReceiveNotes({ supplierName, referenceNumber, reason }) {
   return [
     supplierName ? `Supplier: ${supplierName}` : null,
@@ -2863,7 +2887,9 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
     const modelName = normalizeOptionalText(req.body?.model, 140);
     const brand = normalizeOptionalText(req.body?.brand, 80) || 'Mitsubishi';
     const uom = normalizeOptionalText(req.body?.uom, 20) || 'PC';
-    const status = normalizeOptionalText(req.body?.status, 40) || 'in_stock';
+    const requestedStock = Object.prototype.hasOwnProperty.call(req.body ?? {}, 'stock')
+      ? parseStockLevel(req.body?.stock)
+      : null;
     const sourceCategory = normalizeOptionalText(req.body?.sourceCategory, 140);
     const supplierId = normalizeOptionalText(req.body?.supplierId, 80);
     const supplierName = normalizeOptionalText(req.body?.supplierName, 180);
@@ -2875,8 +2901,8 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
       return;
     }
 
-    if (!['in_stock', 'low_stock', 'out_of_stock', 'discontinued'].includes(status)) {
-      res.status(400).json({ error: 'Invalid product status.' });
+    if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'stock') && requestedStock === null) {
+      res.status(400).json({ error: 'Stock quantity must be zero or greater.' });
       return;
     }
 
@@ -2887,6 +2913,7 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
 
     const nowIso = new Date().toISOString();
     const businessDate = nowIso.slice(0, 10);
+    const initialStock = requestedStock ?? 0;
     const classification = classifyInventoryItem({
       sku,
       name,
@@ -2906,7 +2933,7 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
         category: classification.category,
         brand,
         uom,
-        status,
+        status: getStatusForStockLevel(initialStock),
         source_category: sourceCategory,
         metadata: {
           sourceCategory,
@@ -2950,7 +2977,7 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
       .from('inventory_balances')
       .insert({
         product_id: product.id,
-        on_hand: 0,
+        on_hand: initialStock,
         reserved: 0,
         reorder_point: 5,
         reorder_quantity: 10,
@@ -2977,7 +3004,7 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
         category: product.category,
         source_category: product.source_category,
         price,
-        stock: 0,
+        stock: initialStock,
         status: product.status,
         uom: product.uom,
         brand: product.brand,
@@ -3047,6 +3074,29 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
       throw currentProductError;
     }
 
+    const { data: currentBalance, error: currentBalanceError } = await supabaseAdmin
+      .schema('catalog')
+      .from('inventory_balances')
+      .select('on_hand')
+      .eq('product_id', productId)
+      .maybeSingle();
+
+    if (currentBalanceError) {
+      throw currentBalanceError;
+    }
+
+    const targetStock = requestedStock ?? Number(currentBalance?.on_hand ?? 0);
+    let stockAdjustment = null;
+
+    if (requestedStock !== null && requestedStock !== Number(currentBalance?.on_hand ?? 0)) {
+      stockAdjustment = await callRpc('set_product_stock_level', {
+        p_product_id: productId,
+        p_stock: requestedStock,
+        p_reason: 'Manual stock available edit from Inventory Details',
+        p_performed_by: req.user?.id ?? null,
+      });
+    }
+
     const { data: product, error: productError } = await supabaseAdmin
       .schema('catalog')
       .from('products')
@@ -3057,7 +3107,7 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
         category: classification.category,
         brand,
         uom,
-        status,
+        status: getStatusForStockLevel(stockAdjustment?.updatedStock ?? targetStock),
         source_category: sourceCategory,
         metadata: mergeProductMetadata(currentProduct?.metadata, {
           sourceCategory,
@@ -3129,7 +3179,7 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
         category: product.category,
         source_category: product.source_category,
         price,
-        stock: Number(req.body?.stock ?? 0),
+        stock: Number(stockAdjustment?.updatedStock ?? targetStock),
         status: product.status,
         uom: product.uom,
         brand: product.brand,

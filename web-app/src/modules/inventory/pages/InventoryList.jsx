@@ -24,13 +24,6 @@ import { assignProductLocation } from '../../locator3d/services/locator3DApi';
 import { buildLocator3DUrl } from '../../locator3d/utils/locatorNavigation';
 
 const PAGE_SIZE = 12;
-const PRODUCT_STATUS_OPTIONS = [
-    { value: 'in_stock', label: 'In Stock' },
-    { value: 'low_stock', label: 'Low Stock' },
-    { value: 'out_of_stock', label: 'Out of Stock' },
-    { value: 'discontinued', label: 'Discontinued' },
-];
-
 const INVENTORY_CATEGORY_OPTIONS = [
     'Engine System',
     'Electrical & Lighting',
@@ -154,6 +147,8 @@ function extractLocationFormValues(product = {}) {
 }
 
 function buildEditProductForm(product = {}) {
+    const stock = Number(product.quantity ?? product.stock ?? 0);
+
     return {
         sku: product.sku || '',
         name: product.name || '',
@@ -162,10 +157,24 @@ function buildEditProductForm(product = {}) {
         sourceCategory: product.sourceCategory || '',
         brand: product.brand || 'Mitsubishi',
         uom: product.uom || 'PC',
-        status: product.status || (Number(product.quantity ?? product.stock ?? 0) <= 0 ? 'out_of_stock' : 'in_stock'),
+        stock: String(Number.isFinite(stock) ? stock : 0),
         price: String(product.price ?? 0),
         ...extractLocationFormValues(product),
     };
+}
+
+function getStockStatusLabel(stock) {
+    const quantity = Number(stock ?? 0);
+
+    if (quantity <= 0) {
+        return 'Out of Stock';
+    }
+
+    if (quantity <= 5) {
+        return 'Low Stock';
+    }
+
+    return 'In Stock';
 }
 
 function EditProductModal({ isOpen, product, isSaving, onClose, onSave }) {
@@ -189,6 +198,7 @@ function EditProductModalContent({ isOpen, product, isSaving, onClose, onSave })
     const [form, setForm] = useState(() => buildEditProductForm(product));
     const selectedShelf = stockroomShelfOptions.find((option) => option.id === form.locationShelfObjectId) ?? null;
     const binOptions = Array.from({ length: selectedShelf?.binCount || 0 }, (_, index) => String(index + 1));
+    const stockStatusLabel = getStockStatusLabel(form.stock);
 
     const updateForm = (field, value) => {
         setForm((current) => ({ ...current, [field]: value }));
@@ -256,12 +266,19 @@ function EditProductModalContent({ isOpen, product, isSaving, onClose, onSave })
                         </select>
                     </label>
                     <label className="block">
-                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Status</span>
-                        <select className={`${inputClassName} mt-2`} value={form.status} onChange={(event) => updateForm('status', event.target.value)} required>
-                            {PRODUCT_STATUS_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>{option.label}</option>
-                            ))}
-                        </select>
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Stock available</span>
+                        <input
+                            className={`${inputClassName} mt-2`}
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={form.stock}
+                            onChange={(event) => updateForm('stock', event.target.value)}
+                            required
+                        />
+                        <span className="mt-2 inline-flex rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-bold text-primary-700">
+                            Status: {stockStatusLabel}
+                        </span>
                     </label>
                     <label className="block">
                         <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Vehicle model</span>
@@ -551,7 +568,7 @@ const InventoryList = () => {
             const updatedProduct = await updateCatalogProduct(editingProduct.id, {
                 ...productForm,
                 price: Number(productForm.price ?? 0),
-                stock: editingProduct.quantity ?? editingProduct.stock ?? 0,
+                stock: Number(productForm.stock ?? 0),
             });
             let updatedLocation = editingProduct.location;
 
@@ -581,7 +598,7 @@ const InventoryList = () => {
                 ...editingProduct,
                 ...formatCatalogProduct({
                     ...updatedProduct,
-                    stock: editingProduct.quantity ?? editingProduct.stock ?? updatedProduct?.stock ?? 0,
+                    stock: updatedProduct?.stock ?? productForm.stock ?? 0,
                     location: updatedLocation,
                 }),
             };
