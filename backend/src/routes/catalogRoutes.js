@@ -897,6 +897,22 @@ function buildCategoryRows(products = []) {
     .map(([value, count]) => ({ value, label: value, count }));
 }
 
+async function buildFullCatalogCategoryOptions({ searchQuery = '', vehicleContext = null } = {}) {
+  const catalog = await getCachedProductCatalog();
+  const categoryScopedProducts = catalog.filter((product) => matchesCatalogFilters(product, {
+    searchQuery,
+    selectedCategory: 'all',
+    vehicleContext,
+  }));
+  const categoryRows = buildCategoryRows(categoryScopedProducts);
+  const categoryCountTotal = categoryRows.reduce((sum, row) => sum + Number(row.count ?? 0), 0);
+
+  return [
+    { value: 'all', label: 'All Categories', count: categoryCountTotal },
+    ...categoryRows,
+  ];
+}
+
 function mapVehicleFitmentRow(row) {
   return {
     modelName: row.model_name,
@@ -2609,6 +2625,13 @@ router.get('/products', async (req, res, next) => {
           ...categoryRows,
         ];
       }
+    }
+
+    if (includeCategories && !useStagingCatalog) {
+      categories = await buildFullCatalogCategoryOptions({
+        searchQuery,
+        vehicleContext,
+      });
     }
 
     res.json({
