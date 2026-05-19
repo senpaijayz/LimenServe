@@ -2,6 +2,7 @@ import { useLocation } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/useAuth';
+import NotificationsDropdown from '../ui/NotificationsDropdown';
 
 /**
  * Header Component
@@ -11,6 +12,7 @@ const Header = () => {
     const { sidebarCollapsed, toggleMobileSidebar } = useTheme();
     const { user, isProfileReady, profileWarning } = useAuth();
     const location = useLocation();
+    const canViewQuotationNotifications = ['admin', 'cashier'].includes(user?.role);
 
     // Get page title from path
     const getPageTitle = () => {
@@ -56,6 +58,8 @@ const Header = () => {
 
             {/* Right Section */}
             <div className="flex items-center gap-3">
+                {canViewQuotationNotifications && <NotificationsDropdown />}
+
                 {!isProfileReady && (
                     <div className="hidden rounded-full border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-500 md:inline-flex">
                         Syncing profile...

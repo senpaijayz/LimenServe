@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireRole } from '../middleware/auth.js';
+import { supabaseAdmin } from '../config/supabase.js';
 import { callRpc } from '../services/supabaseRpc.js';
 
 const router = Router();
@@ -32,6 +33,51 @@ async function loadEstimateSnapshot(estimateId) {
   return callRpc('get_estimate_detail', {
     p_estimate_id: estimateId,
   });
+}
+
+function formatCurrency(value) {
+  const amount = Number(value ?? 0);
+
+  return new Intl.NumberFormat('en-PH', {
+    currency: 'PHP',
+    style: 'currency',
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+async function createQuotationNotification(estimate = {}) {
+  const estimateNumber = estimate?.estimate?.estimate_number;
+  const source = estimate?.estimate?.source || estimate?.customer?.metadata?.source;
+
+  if (!estimateNumber || source !== 'public') {
+    return;
+  }
+
+  const customerName = estimate?.customer?.name || 'Walk-in Customer';
+  const total = formatCurrency(estimate?.estimate?.grand_total);
+  const lineCount = Array.isArray(estimate?.items) ? estimate.items.length : 0;
+
+  const { error } = await supabaseAdmin
+    .schema('catalog')
+    .from('admin_notifications')
+    .insert({
+      category: 'quotation',
+      type: 'info',
+      title: 'New Public Quotation',
+      message: `${customerName} created quotation ${estimateNumber} for ${total}.`,
+      target_path: '/quotation',
+      metadata: {
+        customerName,
+        estimateId: estimate?.estimate?.id ?? null,
+        estimateNumber,
+        grandTotal: Number(estimate?.estimate?.grand_total ?? 0),
+        lineCount,
+        source,
+      },
+    });
+
+  if (error) {
+    throw error;
+  }
 }
 
 router.get('/', requireRole('admin', 'cashier'), async (req, res, next) => {
@@ -75,6 +121,10 @@ router.post('/', async (req, res, next) => {
   try {
     const estimateId = await createEstimatePersisted(req.body);
     const estimate = await loadEstimateSnapshot(estimateId);
+
+    createQuotationNotification(estimate).catch((error) => {
+      console.error('Failed to create quotation notification:', error);
+    });
 
     res.status(201).json({ estimateId, estimate });
   } catch (error) {
