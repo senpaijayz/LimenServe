@@ -134,7 +134,7 @@ describe('3D Locator premium redesign', () => {
         resetLocator3DStore();
         useLocator3DStore.getState().setRecentlyReceivedStock({
             receiptId: 'receipt-1',
-            returnTo: '/inventory/receive-stock',
+            returnTo: '/inventory',
             items: [
                 { productId: 'product-1', partNumber: 'OF-1', description: 'Oil Filter', quantity: 12 },
                 { productId: 'product-2', partNumber: 'BP-2', description: 'Brake Pad', quantity: 4 },

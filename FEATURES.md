@@ -2,11 +2,11 @@
 
 ## Receive Stock from Supplier Invoice
 
-Staff can post incoming supplier invoices into inventory from `Inventory > Receive Stock`. The flow captures invoice header details, merges duplicate part numbers, validates line quantities and unit costs, then posts the receipt through the backend route `POST /catalog/stock/receive-invoice`.
+Staff can post incoming supplier invoices from `Inventory > Add Stock > Scan Parts Invoice`. The flow captures invoice header details, detects stock numbers and quantities from a camera/uploaded invoice image, merges duplicate part numbers, validates line quantities and unit costs, then posts the receipt through the backend route `POST /catalog/stock/receive-invoice`.
 
 Posting is handled by the Supabase RPC `receive_supplier_invoice_stock`, which runs product upserts, inventory balance updates, inventory movement creation, receipt item creation, supplier linking, cost-price history updates, and receiving logs in a single database transaction.
 
-After a receipt is posted, the success screen summarizes the received item count and total quantity. The recommended next action, `Assign Locations in 3D Stockroom`, stores the newly received items in the existing locator Zustand store and opens `/locator-3d?mode=stock-receipt`. The 3D stockroom highlights matching products and shows a focused assignment panel so staff can update aisle, shelf, and bin mappings.
+After a receipt is posted, the Add Stock success screen summarizes the received item count and total quantity. The recommended next action, `Assign Locations in 3D Stockroom`, stores the newly received items in the existing locator Zustand store and opens `/locator-3d?mode=stock-receipt`. The 3D stockroom highlights matching products and shows a focused assignment panel so staff can update aisle, shelf, and bin mappings.
 
 ### Production Rollout
 

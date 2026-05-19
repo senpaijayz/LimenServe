@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Camera, Search, Plus, Package, CheckCircle, Trash2, ListPlus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowRight, Camera, CheckCircle, ClipboardCheck, FileText, ListPlus, LoaderCircle, Package, Plus, Search, Trash2, UploadCloud, Wand2 } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
@@ -8,6 +9,13 @@ import useDataStore from '../../../store/useDataStore';
 import { getSuppliers } from '../../../services/catalogApi';
 import { formatNumber } from '../../../utils/formatters';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
+import { useLocator3DStore } from '../../locator3d/store/useLocator3DStore';
+import { receiveStockFromSupplierInvoice } from '../services/receiveStock';
+import {
+    DIAMOND_INVOICE_SAMPLE_TEXT,
+    parseSupplierInvoiceText,
+    recognizeInvoiceImage,
+} from '../utils/invoiceOcr';
 
 const EMPTY_SUPPLIER = {
     id: '',
@@ -163,11 +171,28 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products })
     );
 }
 
-const AddStockModal = ({ isOpen, onClose, onSave }) => {
+const emptyInvoiceDraft = () => ({
+    invoiceNumber: '',
+    invoiceDate: new Date().toISOString().slice(0, 10),
+    orderNumber: '',
+    supplierName: 'Diamond Motor Corporation',
+    rawText: '',
+    items: [],
+});
+
+const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
     const { findProduct, products } = useDataStore();
+    const navigate = useNavigate();
+    const setRecentlyReceivedStock = useLocator3DStore((state) => state.setRecentlyReceivedStock);
     const emptyItem = () => ({ product: null, searchQuery: '', quantity: '' });
+    const [mode, setMode] = useState('barcode');
     const [bulkItems, setBulkItems] = useState([emptyItem()]);
     const [supplier, setSupplier] = useState(EMPTY_SUPPLIER);
+    const [invoiceDraft, setInvoiceDraft] = useState(emptyInvoiceDraft());
+    const [invoiceReceipt, setInvoiceReceipt] = useState(null);
+    const [invoiceOcrText, setInvoiceOcrText] = useState('');
+    const [ocrProgress, setOcrProgress] = useState({ status: '', progress: 0 });
+    const [isReadingInvoice, setIsReadingInvoice] = useState(false);
     const [error, setError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitProgress, setSubmitProgress] = useState({ done: 0, total: 0 });
@@ -181,7 +206,13 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
         let isActive = true;
 
         setBulkItems([emptyItem()]);
+        setMode('barcode');
         setSupplier(EMPTY_SUPPLIER);
+        setInvoiceDraft(emptyInvoiceDraft());
+        setInvoiceReceipt(null);
+        setInvoiceOcrText('');
+        setOcrProgress({ status: '', progress: 0 });
+        setIsReadingInvoice(false);
         setError('');
         setIsSubmitting(false);
         setSubmitProgress({ done: 0, total: 0 });
@@ -248,6 +279,97 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
 
     const addBulkItem = () => setBulkItems((items) => [...items, emptyItem()]);
     const validBulkItems = bulkItems.filter((item) => item.product && Number(item.quantity) > 0);
+    const invoiceTotals = useMemo(() => {
+        const totalQuantity = invoiceDraft.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+        const totalCost = invoiceDraft.items.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitCost) || 0)), 0);
+
+        return {
+            totalCost,
+            totalQuantity,
+        };
+    }, [invoiceDraft.items]);
+
+    const applyParsedInvoice = useCallback((parsedInvoice) => {
+        const supplierName = parsedInvoice.supplierName || 'Diamond Motor Corporation';
+        const matchedSupplier = suppliers.find((item) => item.name?.toLowerCase().includes(supplierName.toLowerCase().replace(' corporation', '')));
+
+        setInvoiceDraft({
+            invoiceNumber: parsedInvoice.invoiceNumber || '',
+            invoiceDate: parsedInvoice.invoiceDate || new Date().toISOString().slice(0, 10),
+            orderNumber: parsedInvoice.orderNumber || '',
+            supplierName,
+            rawText: parsedInvoice.rawText || '',
+            items: parsedInvoice.items,
+        });
+        setSupplier((current) => ({
+            ...current,
+            id: matchedSupplier?.id || current.id,
+            name: matchedSupplier?.name || supplierName,
+            contact: matchedSupplier ? getSupplierContactDetails(matchedSupplier) : current.contact,
+            address: matchedSupplier?.address || current.address,
+            referenceNumber: parsedInvoice.invoiceNumber || current.referenceNumber,
+            receivedDate: parsedInvoice.invoiceDate || current.receivedDate,
+            reason: 'Supplier invoice stock receiving',
+        }));
+        setInvoiceOcrText(parsedInvoice.rawText || '');
+        setError(parsedInvoice.items.length ? '' : 'No line items were detected. Check the image or paste clearer OCR text.');
+    }, [suppliers]);
+
+    const updateInvoiceItem = (index, changes) => {
+        setInvoiceDraft((current) => ({
+            ...current,
+            items: current.items.map((item, itemIndex) => (itemIndex === index ? { ...item, ...changes } : item)),
+        }));
+    };
+
+    const removeInvoiceItem = (index) => {
+        setInvoiceDraft((current) => ({
+            ...current,
+            items: current.items.filter((_, itemIndex) => itemIndex !== index),
+        }));
+    };
+
+    const addInvoiceItem = () => {
+        setInvoiceDraft((current) => ({
+            ...current,
+            items: [...current.items, { partNumber: '', description: '', quantity: 1, unitCost: 0 }],
+        }));
+    };
+
+    const handleInvoiceImage = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+
+        if (!file) {
+            return;
+        }
+
+        setIsReadingInvoice(true);
+        setError('');
+        setOcrProgress({ status: 'Reading invoice image', progress: 0.05 });
+
+        try {
+            const parsedInvoice = await recognizeInvoiceImage(file, (progress) => {
+                setOcrProgress({
+                    status: progress.status || 'Reading invoice image',
+                    progress: progress.progress || 0,
+                });
+            });
+            applyParsedInvoice(parsedInvoice);
+        } catch (scanError) {
+            setError(scanError.message || 'Unable to read the invoice image.');
+        } finally {
+            setIsReadingInvoice(false);
+        }
+    };
+
+    const parsePastedInvoiceText = () => {
+        applyParsedInvoice(parseSupplierInvoiceText(invoiceOcrText));
+    };
+
+    const loadSampleInvoice = () => {
+        applyParsedInvoice(parseSupplierInvoiceText(DIAMOND_INVOICE_SAMPLE_TEXT));
+    };
 
     const handleSaveBulk = async () => {
         if (validBulkItems.length === 0) {
@@ -292,6 +414,83 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
         }
     };
 
+    const handlePostInvoice = async () => {
+        const items = invoiceDraft.items
+            .map((item) => ({
+                partNumber: String(item.partNumber || '').trim().toUpperCase(),
+                description: String(item.description || item.partNumber || '').trim(),
+                quantity: Number(item.quantity),
+                unitCost: Number(item.unitCost || 0),
+                uom: 'PC',
+                brand: 'Mitsubishi',
+            }))
+            .filter((item) => item.partNumber && item.quantity > 0);
+
+        if (!invoiceDraft.invoiceNumber.trim()) {
+            setError('Invoice number is required before posting.');
+            return;
+        }
+
+        if (!supplier.name.trim() && !invoiceDraft.supplierName.trim()) {
+            setError('Supplier name is required before posting.');
+            return;
+        }
+
+        if (!items.length) {
+            setError('Add or detect at least one invoice line item with quantity greater than zero.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        setError('');
+
+        try {
+            const receipt = await receiveStockFromSupplierInvoice({
+                invoiceNumber: invoiceDraft.invoiceNumber,
+                invoiceDate: invoiceDraft.invoiceDate,
+                supplierId: supplier.id || undefined,
+                supplierName: supplier.name || invoiceDraft.supplierName,
+                poReference: invoiceDraft.orderNumber,
+                notes: supplier.reason || 'Supplier invoice stock receiving',
+                source: 'ocr_upload',
+                ocrReady: true,
+                items,
+            });
+            const receiptItems = (receipt.items || []).map((item) => ({
+                productId: item.productId,
+                partNumber: item.partNumber,
+                description: item.description,
+                quantity: Number(item.quantity) || 0,
+                receiptId: receipt.receiptId,
+            }));
+
+            setRecentlyReceivedStock({
+                createdAt: new Date().toISOString(),
+                items: receiptItems,
+                receiptId: receipt.receiptId,
+                returnTo: '/inventory',
+                source: 'supplier_invoice',
+            });
+            setInvoiceReceipt(receipt);
+            setBulkResults(receiptItems.map((item) => ({
+                name: item.description || item.partNumber,
+                sku: item.partNumber,
+                qty: item.quantity,
+            })));
+            setBulkSuccess(true);
+            onInvoicePosted?.(receipt);
+        } catch (postError) {
+            setError(postError.message || 'Failed to post supplier invoice stock.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const open3DStockroom = () => {
+        onClose();
+        navigate('/locator-3d?mode=stock-receipt');
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -312,36 +511,165 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                                 </div>
                             ))}
                         </div>
-                        <Button variant="primary" onClick={onClose}>Done</Button>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            <Button variant="secondary" onClick={onClose}>Back to Inventory</Button>
+                            {invoiceReceipt && (
+                                <Button variant="primary" onClick={open3DStockroom} rightIcon={<ArrowRight className="h-4 w-4" />}>
+                                    Assign Locations in 3D Stockroom
+                                </Button>
+                            )}
+                        </div>
                     </div>
                 ) : (
                     <>
-                        <p className="text-sm text-primary-500">
-                            Scan barcodes or type part numbers to add stock to existing products. Register brand-new products from Product Management.
-                        </p>
-
-                        <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
-                            {bulkItems.map((item, index) => (
-                                <BulkItemRow
-                                    key={index}
-                                    item={item}
-                                    index={index}
-                                    onUpdate={updateBulkItem}
-                                    onRemove={removeBulkItem}
-                                    findProduct={findProduct}
-                                    products={products}
-                                />
-                            ))}
+                        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-primary-200 bg-primary-50 p-1">
+                            <button
+                                type="button"
+                                onClick={() => setMode('barcode')}
+                                className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition ${mode === 'barcode' ? 'bg-white text-primary-950 shadow-sm' : 'text-primary-500 hover:text-primary-800'}`}
+                            >
+                                <Package className="h-4 w-4" />
+                                Add Existing Stock
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setMode('invoice')}
+                                className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition ${mode === 'invoice' ? 'bg-white text-primary-950 shadow-sm' : 'text-primary-500 hover:text-primary-800'}`}
+                            >
+                                <FileText className="h-4 w-4" />
+                                Scan Parts Invoice
+                            </button>
                         </div>
 
-                        <button
-                            type="button"
-                            onClick={addBulkItem}
-                            className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-primary-200 rounded-xl text-sm font-bold text-primary-500 hover:border-accent-blue hover:text-accent-blue transition-colors"
-                        >
-                            <ListPlus className="w-4 h-4" />
-                            Add Another Product
-                        </button>
+                        {mode === 'barcode' ? (
+                            <>
+                                <p className="text-sm text-primary-500">
+                                    Scan barcodes or type part numbers to add stock to existing products. Register brand-new products from Product Management.
+                                </p>
+
+                                <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
+                                    {bulkItems.map((item, index) => (
+                                        <BulkItemRow
+                                            key={index}
+                                            item={item}
+                                            index={index}
+                                            onUpdate={updateBulkItem}
+                                            onRemove={removeBulkItem}
+                                            findProduct={findProduct}
+                                            products={products}
+                                        />
+                                    ))}
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={addBulkItem}
+                                    className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-primary-200 rounded-xl text-sm font-bold text-primary-500 hover:border-accent-blue hover:text-accent-blue transition-colors"
+                                >
+                                    <ListPlus className="w-4 h-4" />
+                                    Add Another Product
+                                </button>
+                            </>
+                        ) : (
+                            <div className="space-y-4">
+                                <div className="rounded-2xl border border-accent-blue/20 bg-blue-50/80 p-4">
+                                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                        <div className="flex items-start gap-3">
+                                            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-accent-blue shadow-sm">
+                                                <Camera className="h-5 w-5" />
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-primary-950">Scan a printed Diamond parts invoice</p>
+                                                <p className="mt-1 text-sm text-primary-600">Capture the full page. The system detects stock numbers, quantities, invoice number, order number, and date, then lets you review before posting.</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-accent-blue px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700">
+                                                <UploadCloud className="h-4 w-4" />
+                                                Camera / Upload
+                                                <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={handleInvoiceImage} />
+                                            </label>
+                                            <Button variant="secondary" type="button" onClick={loadSampleInvoice} leftIcon={<Wand2 className="h-4 w-4" />}>
+                                                Use Sample
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    {isReadingInvoice && (
+                                        <div className="mt-4 space-y-2">
+                                            <div className="flex items-center gap-2 text-sm font-semibold text-primary-700">
+                                                <LoaderCircle className="h-4 w-4 animate-spin" />
+                                                {ocrProgress.status || 'Reading invoice image'}
+                                            </div>
+                                            <div className="h-2 overflow-hidden rounded-full bg-white">
+                                                <div className="h-full rounded-full bg-accent-blue transition-all" style={{ width: `${Math.max(8, Math.round((ocrProgress.progress || 0) * 100))}%` }} />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                    <Input label="Invoice No." value={invoiceDraft.invoiceNumber} onChange={(event) => setInvoiceDraft((current) => ({ ...current, invoiceNumber: event.target.value }))} placeholder="PSI-HO-A0089610" />
+                                    <Input label="Order No." value={invoiceDraft.orderNumber} onChange={(event) => setInvoiceDraft((current) => ({ ...current, orderNumber: event.target.value }))} placeholder="PRS-HO-A0068334" />
+                                    <Input label="Invoice Date" type="date" value={invoiceDraft.invoiceDate} onChange={(event) => setInvoiceDraft((current) => ({ ...current, invoiceDate: event.target.value }))} />
+                                </div>
+
+                                <div className="overflow-hidden rounded-2xl border border-primary-200 bg-white">
+                                    <div className="flex items-center justify-between border-b border-primary-100 px-4 py-3">
+                                        <div>
+                                            <p className="text-sm font-black text-primary-950">Detected Line Items</p>
+                                            <p className="text-xs text-primary-500">{invoiceDraft.items.length} parts / {formatNumber(invoiceTotals.totalQuantity)} total qty</p>
+                                        </div>
+                                        <Button variant="secondary" type="button" onClick={addInvoiceItem} leftIcon={<ListPlus className="h-4 w-4" />}>Add Row</Button>
+                                    </div>
+                                    <div className="max-h-[300px] overflow-y-auto">
+                                        {invoiceDraft.items.length === 0 ? (
+                                            <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+                                                <ClipboardCheck className="h-10 w-10 text-primary-300" />
+                                                <p className="font-bold text-primary-700">No parts detected yet</p>
+                                                <p className="max-w-sm text-sm text-primary-500">Use the camera/upload button, paste OCR text below, or add rows manually.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="min-w-[760px]">
+                                                <div className="grid grid-cols-[150px_1fr_90px_120px_44px] gap-2 bg-primary-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-primary-500">
+                                                    <span>Part Number</span>
+                                                    <span>Description</span>
+                                                    <span>Qty</span>
+                                                    <span>Unit Cost</span>
+                                                    <span />
+                                                </div>
+                                                {invoiceDraft.items.map((item, index) => (
+                                                    <div key={`${item.partNumber}-${index}`} className="grid grid-cols-[150px_1fr_90px_120px_44px] gap-2 border-t border-primary-100 px-3 py-2">
+                                                        <input className="input px-3 py-2 font-mono text-xs uppercase" value={item.partNumber} onChange={(event) => updateInvoiceItem(index, { partNumber: event.target.value })} />
+                                                        <input className="input px-3 py-2 text-sm" value={item.description} onChange={(event) => updateInvoiceItem(index, { description: event.target.value })} />
+                                                        <input className="input px-3 py-2 text-sm" type="number" min="1" value={item.quantity} onChange={(event) => updateInvoiceItem(index, { quantity: event.target.value })} />
+                                                        <input className="input px-3 py-2 text-sm" type="number" min="0" step="0.01" value={item.unitCost} onChange={(event) => updateInvoiceItem(index, { unitCost: event.target.value })} />
+                                                        <button type="button" className="flex h-10 w-10 items-center justify-center rounded-lg text-primary-400 hover:bg-red-50 hover:text-red-600" onClick={() => removeInvoiceItem(index)} aria-label="Remove invoice row">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-2xl border border-primary-200 bg-primary-50/70 p-3">
+                                    <label className="text-xs font-bold uppercase tracking-[0.14em] text-primary-500" htmlFor="invoice-ocr-text">OCR Text Review</label>
+                                    <textarea
+                                        id="invoice-ocr-text"
+                                        className="mt-2 min-h-24 w-full rounded-xl border border-primary-200 bg-white p-3 text-xs text-primary-800 outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15"
+                                        value={invoiceOcrText}
+                                        onChange={(event) => setInvoiceOcrText(event.target.value)}
+                                        placeholder="Paste OCR text here if the camera result needs correction..."
+                                    />
+                                    <div className="mt-2 flex justify-end">
+                                        <Button variant="secondary" type="button" onClick={parsePastedInvoiceText} disabled={!invoiceOcrText.trim()}>
+                                            Re-detect from Text
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="rounded-xl border border-primary-200 p-4 space-y-4">
                             <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Supplier Information</p>
@@ -362,6 +690,17 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                                         ))}
                                     </select>
                                 </label>
+                                {mode === 'invoice' && (
+                                    <Input
+                                        label="Supplier Name from Invoice"
+                                        placeholder="Diamond Motor Corporation"
+                                        value={supplier.name || invoiceDraft.supplierName}
+                                        onChange={(event) => {
+                                            updateSupplier('name', event.target.value);
+                                            setInvoiceDraft((current) => ({ ...current, supplierName: event.target.value }));
+                                        }}
+                                    />
+                                )}
                                 <div className="rounded-xl border border-primary-100 bg-primary-50/70 p-3 sm:col-span-2">
                                     {supplier.id ? (
                                         <div className="grid gap-3 text-sm sm:grid-cols-3">
@@ -400,18 +739,24 @@ const AddStockModal = ({ isOpen, onClose, onSave }) => {
                         )}
 
                         <div className="flex items-center justify-between pt-2 border-t border-primary-100">
-                            <p className="text-xs text-primary-400">{validBulkItems.length} product{validBulkItems.length !== 1 ? 's' : ''} ready</p>
+                            <p className="text-xs text-primary-400">
+                                {mode === 'invoice'
+                                    ? `${invoiceDraft.items.length} invoice line${invoiceDraft.items.length !== 1 ? 's' : ''} / ${formatNumber(invoiceTotals.totalQuantity)} qty`
+                                    : `${validBulkItems.length} product${validBulkItems.length !== 1 ? 's' : ''} ready`}
+                            </p>
                             <div className="flex gap-3">
                                 <Button variant="secondary" onClick={onClose} type="button">Cancel</Button>
                                 <Button
                                     variant="primary"
                                     type="button"
-                                    onClick={handleSaveBulk}
+                                    onClick={mode === 'invoice' ? handlePostInvoice : handleSaveBulk}
                                     isLoading={isSubmitting}
-                                    disabled={validBulkItems.length === 0 || !supplier.id || isSubmitting}
+                                    disabled={mode === 'invoice'
+                                        ? invoiceDraft.items.length === 0 || isSubmitting || isReadingInvoice
+                                        : validBulkItems.length === 0 || !supplier.id || isSubmitting}
                                     leftIcon={<Plus className="w-4 h-4" />}
                                 >
-                                    Receive Stock ({validBulkItems.length})
+                                    {mode === 'invoice' ? `Post Invoice Stock (${invoiceDraft.items.length})` : `Receive Stock (${validBulkItems.length})`}
                                 </Button>
                             </div>
                         </div>

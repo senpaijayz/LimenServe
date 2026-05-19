@@ -8,6 +8,6 @@ LimenServe is now structured around the deployment stack you specified:
 
 ## Current Production Feature
 
-The inventory module includes **Receive Stock from Supplier Invoice**, a stock-in workflow for posting printed supplier invoices, upserting products, creating stock-in movements, updating inventory balances, and handing newly received products to the 3D stockroom locator for aisle/shelf/bin assignment.
+The inventory module includes **Receive Stock from Supplier Invoice** inside the existing Add Stock workflow, with camera/upload OCR for printed supplier invoices, product upserts, stock-in movements, inventory balance updates, and 3D stockroom aisle/shelf/bin assignment.
 
 See [FEATURES.md](FEATURES.md) for rollout notes, environment variables, and the production verification checklist.

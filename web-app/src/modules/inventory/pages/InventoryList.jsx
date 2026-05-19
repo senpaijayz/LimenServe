@@ -950,6 +950,11 @@ const InventoryList = () => {
             <AddStockModal
                 isOpen={showAddModal}
                 onClose={() => setShowAddModal(false)}
+                onInvoicePosted={async (receipt) => {
+                    setRefreshKey((value) => value + 1);
+                    await refreshInventoryMeta();
+                    success(`Posted invoice ${receipt.invoiceNumber}. Received ${formatNumber(receipt.totalQuantity)} units across ${formatNumber(receipt.totalLines)} parts.`);
+                }}
                 onSave={async ({ product, quantity, supplierId, supplierName, supplierContact, supplierAddress, referenceNumber, receivedDate, reason, _bulkMode }) => {
                     const result = await receiveInventoryStock({
                         productId: product.id,
