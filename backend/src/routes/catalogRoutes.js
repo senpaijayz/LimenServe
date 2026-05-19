@@ -2808,6 +2808,24 @@ router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, r
   }
 });
 
+router.post('/stock/receive-invoice', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
+  try {
+    const receipt = await callRpc('receive_supplier_invoice_stock', {
+      p_invoice: req.body,
+      p_performed_by: req.user?.id ?? null,
+    });
+
+    invalidateProductCatalogCache();
+
+    res.status(201).json({
+      receipt,
+      items: receipt?.items ?? [],
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/products', requireRole('admin'), async (req, res, next) => {
   try {
     const name = normalizeRequiredText(req.body?.name, 220);

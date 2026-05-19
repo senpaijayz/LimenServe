@@ -130,6 +130,30 @@ describe('3D Locator premium redesign', () => {
         expect(useLocator3DStore.getState().locatedProduct).toBeNull();
     });
 
+    it('surfaces recently received stock for quick 3D location assignment', async () => {
+        resetLocator3DStore();
+        useLocator3DStore.getState().setRecentlyReceivedStock({
+            receiptId: 'receipt-1',
+            returnTo: '/inventory/receive-stock',
+            items: [
+                { productId: 'product-1', partNumber: 'OF-1', description: 'Oil Filter', quantity: 12 },
+                { productId: 'product-2', partNumber: 'BP-2', description: 'Brake Pad', quantity: 4 },
+            ],
+        });
+
+        renderLocator('/locator-3d?mode=stock-receipt');
+
+        await screen.findByText('Newly Received Stock');
+        expect(screen.getByText('2 items / 16 units')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Assign Oil Filter from recent receipt' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Clear received stock context' })).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Assign Oil Filter from recent receipt' }));
+
+        await waitFor(() => expect(useLocator3DStore.getState().selectedProductForLocation?.id).toBe('product-1'));
+        expect(screen.getAllByText('Edit Layout mode').length).toBeGreaterThan(0);
+    });
+
     it('shows design controls only in design mode and supports layout names, object adds, and property edits', async () => {
         resetLocator3DStore();
         renderLocator();

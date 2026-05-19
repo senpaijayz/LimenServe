@@ -350,9 +350,11 @@ function WallsObject({ object, onTransformingChange }) {
 function ProductMarker({ highlighted, location, position }) {
     const markerRef = useRef();
     const showLabels = useLocator3DStore((state) => state.showLabels);
+    const isRecentlyReceived = useLocator3DStore((state) => state.isRecentlyReceivedProduct(location.productId || location.sku));
+    const activeHighlight = highlighted || isRecentlyReceived;
 
     useFrame(({ clock }) => {
-        if (!highlighted || !markerRef.current?.material) {
+        if (!activeHighlight || !markerRef.current?.material) {
             return;
         }
 
@@ -365,17 +367,17 @@ function ProductMarker({ highlighted, location, position }) {
             <mesh ref={markerRef} castShadow>
                 <boxGeometry args={[0.24, 0.22, 0.22]} />
                 <meshStandardMaterial
-                    color={highlighted ? '#fde047' : '#fb7185'}
-                    emissive={highlighted ? '#facc15' : '#be123c'}
-                    emissiveIntensity={highlighted ? 0.8 : 0.25}
+                    color={activeHighlight ? '#fde047' : '#fb7185'}
+                    emissive={activeHighlight ? '#facc15' : '#be123c'}
+                    emissiveIntensity={activeHighlight ? 0.8 : 0.25}
                     roughness={0.42}
                 />
-                {highlighted && <Edges color="#facc15" scale={1.25} threshold={8} />}
+                {activeHighlight && <Edges color="#facc15" scale={1.25} threshold={8} />}
             </mesh>
-            {highlighted && showLabels && (
+            {activeHighlight && showLabels && (
                 <Html center position={[0, 0.42, 0]}>
                     <div className="rounded-full border border-yellow-200 bg-yellow-100 px-2 py-1 text-[10px] font-black text-yellow-900 shadow-lg">
-                        Bin {location.binNumber}
+                        {isRecentlyReceived ? 'Newly Received' : `Bin ${location.binNumber}`}
                     </div>
                 </Html>
             )}

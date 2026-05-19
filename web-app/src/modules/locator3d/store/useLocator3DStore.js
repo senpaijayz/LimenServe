@@ -26,6 +26,13 @@ function createInitialState() {
         objects: sceneObjects,
         pathAnimationRequest: 0,
         productLocations: [],
+        recentlyReceivedStock: {
+            createdAt: null,
+            items: [],
+            receiptId: null,
+            returnTo: '/inventory',
+            source: null,
+        },
         sceneObjects,
         selectedObjectId: null,
         selectedProductForLocation: null,
@@ -128,6 +135,15 @@ export const useLocator3DStore = create((set, get) => ({
             },
         }));
     },
+    clearRecentlyReceivedStock: () => set({
+        recentlyReceivedStock: {
+            createdAt: null,
+            items: [],
+            receiptId: null,
+            returnTo: '/inventory',
+            source: null,
+        },
+    }),
     resetCamera: () => {
         get().requestCameraPreset('overview');
     },
@@ -227,7 +243,41 @@ export const useLocator3DStore = create((set, get) => ({
         isDesignMode,
     })),
     setProductLocations: (productLocations) => set({ productLocations: Array.isArray(productLocations) ? productLocations : [] }),
+    setRecentlyReceivedStock: (receiptContext = {}) => {
+        const items = Array.isArray(receiptContext.items)
+            ? receiptContext.items
+                .map((item) => ({
+                    description: String(item.description || item.name || '').trim(),
+                    partNumber: String(item.partNumber || item.sku || '').trim().toUpperCase(),
+                    productId: String(item.productId || item.id || '').trim(),
+                    quantity: Number(item.quantity || 0),
+                }))
+                .filter((item) => item.productId || item.partNumber)
+            : [];
+
+        set({
+            recentlyReceivedStock: {
+                createdAt: new Date().toISOString(),
+                items,
+                receiptId: receiptContext.receiptId || null,
+                returnTo: receiptContext.returnTo || '/inventory',
+                source: receiptContext.source || 'stock_receipt',
+            },
+        });
+    },
     setSelectedProductForLocation: (product) => set({ selectedProductForLocation: product || null }),
+    getRecentlyReceivedProduct: (productIdOrSku) => {
+        const needle = String(productIdOrSku || '').trim().toUpperCase();
+        if (!needle) {
+            return null;
+        }
+
+        return get().recentlyReceivedStock.items.find((item) => (
+            String(item.productId || '').toUpperCase() === needle
+            || String(item.partNumber || '').toUpperCase() === needle
+        )) ?? null;
+    },
+    isRecentlyReceivedProduct: (productIdOrSku) => Boolean(get().getRecentlyReceivedProduct(productIdOrSku)),
     toggleSceneOption: (option) => {
         if (!['showGrid', 'showLabels', 'showPaths'].includes(option)) {
             return;

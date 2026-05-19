@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
 import {
     AlertTriangle,
@@ -785,6 +785,7 @@ function ProductAssignmentModal({ isOpen, onClose, shelf }) {
     const { success, error: showError } = useToast();
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
     const upsertProductLocation = useLocator3DStore((state) => state.upsertProductLocation);
+    const selectedProductForLocation = useLocator3DStore((state) => state.selectedProductForLocation);
     const [products, setProducts] = useState([]);
     const [isLoadingProducts, setIsLoadingProducts] = useState(false);
     const [isSavingLocation, setIsSavingLocation] = useState(false);
@@ -810,7 +811,7 @@ function ProductAssignmentModal({ isOpen, onClose, shelf }) {
                 }
 
                 setProducts(catalogProducts);
-                setSelectedProductId(catalogProducts[0]?.id || '');
+                setSelectedProductId(selectedProductForLocation?.id || catalogProducts[0]?.id || '');
                 setSelectedShelfId(shelf?.id || availableShelves[0]?.id || '');
                 setBinNumber(1);
             })
@@ -828,7 +829,7 @@ function ProductAssignmentModal({ isOpen, onClose, shelf }) {
         return () => {
             active = false;
         };
-    }, [availableShelves, isOpen, shelf?.id, showError]);
+    }, [availableShelves, isOpen, selectedProductForLocation?.id, shelf?.id, showError]);
 
     const selectedProduct = useMemo(() => (
         products.find((product) => product.id === selectedProductId) ?? null
@@ -1097,6 +1098,87 @@ function SceneStats() {
             {isDesignMode && <span className="rounded-full border border-sky-400/30 bg-sky-400/15 px-3 py-1 text-xs font-black text-sky-100 backdrop-blur">0.5 snap grid</span>}
             {locatedProduct && <span className="rounded-full border border-emerald-400/30 bg-emerald-400/15 px-3 py-1 text-xs font-black text-emerald-100 backdrop-blur">Locate mode</span>}
         </div>
+    );
+}
+
+function RecentlyReceivedPanel({ onFocusProduct, products }) {
+    const navigate = useNavigate();
+    const recentlyReceivedStock = useLocator3DStore((state) => state.recentlyReceivedStock);
+    const clearRecentlyReceivedStock = useLocator3DStore((state) => state.clearRecentlyReceivedStock);
+    const items = recentlyReceivedStock.items || [];
+    const totalQuantity = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const productsById = useMemo(() => new Map((products || []).map((product) => [product.id, product])), [products]);
+
+    if (items.length === 0) {
+        return null;
+    }
+
+    return (
+        <Motion.section
+            animate={{ opacity: 1, y: 0 }}
+            aria-label="Newly received stock assignment"
+            className="rounded-2xl border border-emerald-300/25 bg-emerald-400/10 p-4 text-white shadow-[0_18px_60px_rgba(2,6,23,0.18)]"
+            initial={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-emerald-200">Newly Received Stock</p>
+                    <h2 className="mt-1 text-lg font-black text-white">Assign these invoice items to shelf bins</h2>
+                    <p className="mt-1 text-sm font-bold text-emerald-50/80">
+                        {items.length} item{items.length === 1 ? '' : 's'} / {formatNumber(totalQuantity)} units
+                    </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        aria-label="Back to Inventory"
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-xs font-black text-slate-100 transition hover:bg-white/[0.1]"
+                        onClick={() => navigate('/inventory')}
+                        type="button"
+                    >
+                        <ArrowLeft className="h-4 w-4" />
+                        Back to Inventory
+                    </button>
+                    <button
+                        aria-label="Clear received stock context"
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300/25 bg-emerald-400/12 px-3 text-xs font-black text-emerald-50 transition hover:bg-emerald-400/18"
+                        onClick={clearRecentlyReceivedStock}
+                        type="button"
+                    >
+                        <CheckCircle2 className="h-4 w-4" />
+                        Done assigning
+                    </button>
+                </div>
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                {items.map((item) => {
+                    const product = productsById.get(item.productId) ?? {
+                        id: item.productId,
+                        name: item.description || item.partNumber,
+                        sku: item.partNumber,
+                        stock: item.quantity,
+                    };
+
+                    return (
+                        <button
+                            aria-label={`Assign ${product.name || item.partNumber} from recent receipt`}
+                            className="min-w-0 rounded-xl border border-emerald-300/20 bg-slate-950/58 p-3 text-left shadow-sm transition hover:border-emerald-200/50 hover:bg-slate-950/74 focus:outline-none focus:ring-2 focus:ring-emerald-200/45"
+                            key={`${item.productId || item.partNumber}-${item.quantity}`}
+                            onClick={() => onFocusProduct(product)}
+                            type="button"
+                        >
+                            <span className="flex items-start justify-between gap-2">
+                                <span className="min-w-0">
+                                    <span className="block truncate text-sm font-black text-white">{product.name || item.description || item.partNumber}</span>
+                                    <span className="mt-1 block truncate font-mono text-xs font-bold text-emerald-100/70">{item.partNumber || product.sku}</span>
+                                </span>
+                                <span className="rounded-full bg-emerald-300 px-2 py-1 text-[10px] font-black text-slate-950">+{formatNumber(item.quantity)}</span>
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
+        </Motion.section>
     );
 }
 
@@ -1586,6 +1668,12 @@ export default function Locator3DAdmin() {
         info('Design mode enabled. Select a shelf to assign this product.');
     }, [info, setDesignMode]);
 
+    const handleFocusRecentlyReceivedProduct = useCallback((product) => {
+        handleLocateProductFromSearch(product);
+        setDesignMode(true);
+        info('Select a shelf, then use Assign to save this newly received item to a bin.');
+    }, [handleLocateProductFromSearch, info, setDesignMode]);
+
     useEffect(() => {
         void loadLayoutOptions();
     }, [loadLayoutOptions]);
@@ -1647,6 +1735,11 @@ export default function Locator3DAdmin() {
                 onSelectLayout={setSelectedLayoutName}
                 onToggleSidebar={() => setIsSidebarOpen((value) => !value)}
                 selectedLayoutName={selectedLayoutName}
+            />
+
+            <RecentlyReceivedPanel
+                onFocusProduct={handleFocusRecentlyReceivedProduct}
+                products={products}
             />
 
             <div

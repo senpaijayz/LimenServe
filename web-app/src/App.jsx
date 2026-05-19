@@ -12,6 +12,7 @@ const LoginPage = lazy(() => import('./modules/auth/pages/LoginPage'));
 const AdminDashboard = lazy(() => import('./modules/dashboard/pages/AdminDashboard'));
 const InventoryList = lazy(() => import('./modules/inventory/pages/InventoryList'));
 const InventoryLogs = lazy(() => import('./modules/inventory/pages/InventoryLogs'));
+const ReceiveStockFromInvoice = lazy(() => import('./modules/inventory/pages/ReceiveStockFromInvoice'));
 const ProductManagement = lazy(() => import('./modules/products/pages/ProductManagement'));
 const SupplierManagement = lazy(() => import('./modules/suppliers/pages/SupplierManagement'));
 const POSTerminal = lazy(() => import('./modules/pos/pages/POSTerminal'));
@@ -80,6 +81,7 @@ function App() {
                 <Route element={<MainLayout />}>
                   <Route path="/dashboard" element={renderRoute(AdminDashboard, <WorkspaceRouteFallback title="Loading dashboard" />)} />
                   <Route path="/inventory" element={renderRoute(InventoryList, <WorkspaceRouteFallback title="Loading inventory" />)} />
+                  <Route path="/inventory/receive-stock" element={renderRoute(ReceiveStockFromInvoice, <WorkspaceRouteFallback title="Loading stock receiving" />)} />
                   <Route path="/inventory/logs" element={renderRoute(InventoryLogs, <WorkspaceRouteFallback title="Loading inventory logs" />)} />
                   <Route path="/products" element={renderRoute(ProductManagement, <WorkspaceRouteFallback title="Loading products" />)} />
                   <Route path="/suppliers" element={renderRoute(SupplierManagement, <WorkspaceRouteFallback title="Loading suppliers" />)} />
