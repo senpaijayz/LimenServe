@@ -755,9 +755,9 @@ const PublicEstimate = () => {
                                 : 'Your selected parts and services stay visible while you browse.'}
                         </p>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-right">
+                    <div className="min-w-[140px] rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-right">
                         <span className="block text-[0.62rem] font-bold uppercase tracking-[0.22em] text-white/50">Total</span>
-                        <span className="mt-1 block text-lg font-display font-bold text-white">{formatCurrency(total)}</span>
+                        <span className="mt-1 block whitespace-nowrap text-lg font-display font-bold tabular-nums text-white">{formatCurrency(total)}</span>
                     </div>
                 </div>
 
@@ -1027,10 +1027,6 @@ const PublicEstimate = () => {
                         </div>
                     </div>
                     <div className="mt-5 grid gap-3 text-sm">
-                        <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-4 py-3">
-                            <span className="block text-[0.65rem] font-bold uppercase tracking-[0.18em] text-primary-400">Source</span>
-                            <span className="mt-1 block font-semibold text-primary-950">Current Supabase parts and service catalog</span>
-                        </div>
                         <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-4 py-3">
                             <span className="block text-[0.65rem] font-bold uppercase tracking-[0.18em] text-primary-400">Validity</span>
                             <span className="mt-1 block font-semibold text-primary-950">{QUOTE_VALID_DAYS} days after quote generation</span>
