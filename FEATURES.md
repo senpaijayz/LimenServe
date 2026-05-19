@@ -2,9 +2,11 @@
 
 ## Receive Stock from Supplier Invoice
 
-Staff can post incoming supplier invoices from `Inventory > Add Stock > Scan Parts Invoice`. The flow captures invoice header details, detects stock numbers and quantities from a camera/uploaded invoice image, merges duplicate part numbers, validates line quantities and unit costs, then posts the receipt through the backend route `POST /catalog/stock/receive-invoice`.
+Staff can post incoming supplier invoices from `Inventory > Add Stock > Scan Parts Invoice`. The frontend captures or uploads the invoice image, then sends it to the backend route `POST /catalog/stock/invoice-ocr` for PaddleOCR processing. The backend extracts only invoice number, order number, date, stock number, and quantity, then separates detected rows into existing products and new product part numbers before any stock is posted.
 
 Posting is handled by the Supabase RPC `receive_supplier_invoice_stock`, which runs product upserts, inventory balance updates, inventory movement creation, receipt item creation, supplier linking, cost-price history updates, and receiving logs in a single database transaction.
+
+OCR-posted receipts use `receive_existing_supplier_invoice_stock`, a stricter RPC wrapper that rejects any part number not already present in `catalog.products`. New product part numbers are shown separately in the UI for manual product creation and are not auto-created by OCR.
 
 After a receipt is posted, the Add Stock success screen summarizes the received item count and total quantity. The recommended next action, `Assign Locations in 3D Stockroom`, stores the newly received items in the existing locator Zustand store and opens `/locator-3d?mode=stock-receipt`. The 3D stockroom highlights matching products and shows a focused assignment panel so staff can update aisle, shelf, and bin mappings.
 
@@ -25,6 +27,15 @@ Required existing variables:
 - Backend: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, auth/JWT configuration already used by existing protected routes
 
 Never expose `SUPABASE_SERVICE_ROLE_KEY` in Vercel frontend variables.
+
+Backend OCR dependencies:
+
+```bash
+cd backend
+npm install ppu-paddle-ocr onnxruntime-node multer
+```
+
+The OCR endpoint accepts `multipart/form-data` with an `invoice` image field. Supported image types are JPG, PNG, and WEBP.
 
 ### Verification Checklist
 

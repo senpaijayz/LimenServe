@@ -38,6 +38,47 @@ export type FlexibleSupplierInvoicePayload = Partial<SupplierInvoiceStockReceipt
   items?: FlexibleInvoiceLineItem[];
 };
 
+export interface InvoiceOcrExistingProduct {
+  status: 'existing';
+  productId: string;
+  partNumber: string;
+  description: string;
+  detectedDescription?: string;
+  quantity: number;
+  unitCost?: number;
+  brand?: string;
+  uom?: string;
+}
+
+export interface InvoiceOcrNewProduct {
+  status: 'new';
+  productId: null;
+  partNumber: string;
+  description: string;
+  detectedDescription?: string;
+  quantity: number;
+  unitCost?: number;
+  requiredAction: string;
+}
+
+export interface InvoiceOcrAnalysisResult {
+  invoice: {
+    invoiceNumber: string;
+    orderNumber: string;
+    invoiceDate: string;
+    supplierName: string;
+  };
+  existingProducts: InvoiceOcrExistingProduct[];
+  newProducts: InvoiceOcrNewProduct[];
+  rawText: string;
+  summary: {
+    detectedCount: number;
+    existingCount: number;
+    newCount: number;
+    totalQuantity: number;
+  };
+}
+
 export interface StockReceiptProcessingIssue {
   partNumber?: string;
   path?: Array<string | number>;
@@ -109,6 +150,7 @@ function buildCandidatePayload(payload: FlexibleSupplierInvoicePayload): Supplie
     notes: asText(payload.notes),
     source: payload.source ?? 'manual_invoice',
     ocrReady: Boolean(payload.ocrReady),
+    allowNewProducts: payload.allowNewProducts ?? true,
     items: rawItems.map((item) => ({
       lineId: asText(item.lineId),
       partNumber: normalizePartNumber(item.partNumber ?? item.part_number),
@@ -192,6 +234,24 @@ async function postStockReceipt(payload: SupplierInvoiceStockReceiptInput): Prom
     return data.receipt as StockReceiptPostResult;
   } catch (error) {
     extractApiError(error, 'Failed to receive stock from invoice.');
+  }
+}
+
+export async function analyzeSupplierInvoiceImage(file: File): Promise<InvoiceOcrAnalysisResult> {
+  const formData = new FormData();
+  formData.append('invoice', file);
+
+  try {
+    const { data } = await apiClient.post('/catalog/stock/invoice-ocr', formData, {
+      timeout: 90_000,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    return data as InvoiceOcrAnalysisResult;
+  } catch (error) {
+    extractApiError(error, 'Failed to analyze supplier invoice image.');
   }
 }
 

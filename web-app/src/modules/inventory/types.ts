@@ -28,6 +28,7 @@ export interface SupplierInvoiceLineItem {
 export interface SupplierInvoiceStockReceiptInput extends SupplierInvoiceHeader {
   items: SupplierInvoiceLineItem[];
   ocrReady?: boolean;
+  allowNewProducts?: boolean;
 }
 
 export interface StockReceiptItemResult {

@@ -1,13 +1,29 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireRole } from '../middleware/auth.js';
 import { clearPublicResponseCache } from '../middleware/cache.js';
+import { analyzeSupplierInvoiceImage } from '../services/invoiceOcrService.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
 const router = Router();
+const invoiceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 8 * 1024 * 1024,
+  },
+  fileFilter(_req, file, callback) {
+    if (!/^image\/(jpeg|png|webp)$/i.test(file.mimetype || '')) {
+      callback(new Error('Upload a JPG, PNG, or WEBP invoice image.'));
+      return;
+    }
+
+    callback(null, true);
+  },
+});
 const PRODUCT_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const FULL_CATALOG_PAGE_SIZE = 250;
 const FULL_CATALOG_PAGE_BATCH_SIZE = 3;
@@ -2810,7 +2826,10 @@ router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, r
 
 router.post('/stock/receive-invoice', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
-    const receipt = await callRpc('receive_supplier_invoice_stock', {
+    const rpcName = req.body?.allowNewProducts === false
+      ? 'receive_existing_supplier_invoice_stock'
+      : 'receive_supplier_invoice_stock';
+    const receipt = await callRpc(rpcName, {
       p_invoice: req.body,
       p_performed_by: req.user?.id ?? null,
     });
@@ -2821,6 +2840,16 @@ router.post('/stock/receive-invoice', requireRole('admin', 'stock_clerk'), async
       receipt,
       items: receipt?.items ?? [],
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/stock/invoice-ocr', requireRole('admin', 'stock_clerk'), invoiceUpload.single('invoice'), async (req, res, next) => {
+  try {
+    const result = await analyzeSupplierInvoiceImage(req.file);
+
+    res.json(result);
   } catch (error) {
     next(error);
   }

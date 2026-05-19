@@ -66,6 +66,7 @@ export const supplierInvoiceStockReceiptSchema = supplierInvoiceHeaderSchema
       .array(supplierInvoiceLineItemSchema)
       .min(1, 'Add at least one invoice line item.'),
     ocrReady: z.boolean().optional().default(false),
+    allowNewProducts: z.boolean().optional().default(true),
   }) satisfies z.ZodType<SupplierInvoiceStockReceiptInput>;
 
 export type SupplierInvoiceLineItemFormValues = z.input<typeof supplierInvoiceLineItemSchema>;

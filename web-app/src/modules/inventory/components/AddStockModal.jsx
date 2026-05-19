@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Camera, CheckCircle, ClipboardCheck, FileText, ListPlus, LoaderCircle, Package, Plus, Search, Trash2, UploadCloud, Wand2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Camera, CheckCircle, ClipboardCheck, FileText, ListPlus, LoaderCircle, Package, Plus, Search, Trash2, UploadCloud } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
@@ -10,12 +10,7 @@ import { getSuppliers } from '../../../services/catalogApi';
 import { formatNumber } from '../../../utils/formatters';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 import { useLocator3DStore } from '../../locator3d/store/useLocator3DStore';
-import { receiveStockFromSupplierInvoice } from '../services/receiveStock';
-import {
-    DIAMOND_INVOICE_SAMPLE_TEXT,
-    parseSupplierInvoiceText,
-    recognizeInvoiceImage,
-} from '../utils/invoiceOcr';
+import { analyzeSupplierInvoiceImage, receiveStockFromSupplierInvoice } from '../services/receiveStock';
 
 const EMPTY_SUPPLIER = {
     id: '',
@@ -178,6 +173,8 @@ const emptyInvoiceDraft = () => ({
     supplierName: 'Diamond Motor Corporation',
     rawText: '',
     items: [],
+    newProducts: [],
+    previewUrl: '',
 });
 
 const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
@@ -190,8 +187,6 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
     const [supplier, setSupplier] = useState(EMPTY_SUPPLIER);
     const [invoiceDraft, setInvoiceDraft] = useState(emptyInvoiceDraft());
     const [invoiceReceipt, setInvoiceReceipt] = useState(null);
-    const [invoiceOcrText, setInvoiceOcrText] = useState('');
-    const [ocrProgress, setOcrProgress] = useState({ status: '', progress: 0 });
     const [isReadingInvoice, setIsReadingInvoice] = useState(false);
     const [error, setError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -210,8 +205,6 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
         setSupplier(EMPTY_SUPPLIER);
         setInvoiceDraft(emptyInvoiceDraft());
         setInvoiceReceipt(null);
-        setInvoiceOcrText('');
-        setOcrProgress({ status: '', progress: 0 });
         setIsReadingInvoice(false);
         setError('');
         setIsSubmitting(false);
@@ -289,30 +282,31 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
         };
     }, [invoiceDraft.items]);
 
-    const applyParsedInvoice = useCallback((parsedInvoice) => {
-        const supplierName = parsedInvoice.supplierName || 'Diamond Motor Corporation';
+    const applyInvoiceAnalysis = useCallback((analysis) => {
+        const supplierName = analysis.invoice?.supplierName || 'Diamond Motor Corporation';
         const matchedSupplier = suppliers.find((item) => item.name?.toLowerCase().includes(supplierName.toLowerCase().replace(' corporation', '')));
 
-        setInvoiceDraft({
-            invoiceNumber: parsedInvoice.invoiceNumber || '',
-            invoiceDate: parsedInvoice.invoiceDate || new Date().toISOString().slice(0, 10),
-            orderNumber: parsedInvoice.orderNumber || '',
+        setInvoiceDraft((current) => ({
+            ...current,
+            invoiceNumber: analysis.invoice?.invoiceNumber || '',
+            invoiceDate: analysis.invoice?.invoiceDate || new Date().toISOString().slice(0, 10),
+            orderNumber: analysis.invoice?.orderNumber || '',
             supplierName,
-            rawText: parsedInvoice.rawText || '',
-            items: parsedInvoice.items,
-        });
+            rawText: analysis.rawText || '',
+            items: analysis.existingProducts || [],
+            newProducts: analysis.newProducts || [],
+        }));
         setSupplier((current) => ({
             ...current,
             id: matchedSupplier?.id || current.id,
             name: matchedSupplier?.name || supplierName,
             contact: matchedSupplier ? getSupplierContactDetails(matchedSupplier) : current.contact,
             address: matchedSupplier?.address || current.address,
-            referenceNumber: parsedInvoice.invoiceNumber || current.referenceNumber,
-            receivedDate: parsedInvoice.invoiceDate || current.receivedDate,
+            referenceNumber: analysis.invoice?.invoiceNumber || current.referenceNumber,
+            receivedDate: analysis.invoice?.invoiceDate || current.receivedDate,
             reason: 'Supplier invoice stock receiving',
         }));
-        setInvoiceOcrText(parsedInvoice.rawText || '');
-        setError(parsedInvoice.items.length ? '' : 'No line items were detected. Check the image or paste clearer OCR text.');
+        setError(analysis.summary?.detectedCount ? '' : 'No stock numbers and quantities were detected. Capture the full invoice table and try again.');
     }, [suppliers]);
 
     const updateInvoiceItem = (index, changes) => {
@@ -332,7 +326,7 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
     const addInvoiceItem = () => {
         setInvoiceDraft((current) => ({
             ...current,
-            items: [...current.items, { partNumber: '', description: '', quantity: 1, unitCost: 0 }],
+            items: [...current.items, { status: 'existing', productId: '', partNumber: '', description: '', quantity: 1, unitCost: 0, uom: 'PC', brand: 'Mitsubishi' }],
         }));
     };
 
@@ -346,29 +340,18 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
 
         setIsReadingInvoice(true);
         setError('');
-        setOcrProgress({ status: 'Reading invoice image', progress: 0.05 });
+        const previewUrl = URL.createObjectURL(file);
+        setInvoiceDraft((current) => ({ ...current, previewUrl }));
 
         try {
-            const parsedInvoice = await recognizeInvoiceImage(file, (progress) => {
-                setOcrProgress({
-                    status: progress.status || 'Reading invoice image',
-                    progress: progress.progress || 0,
-                });
-            });
-            applyParsedInvoice(parsedInvoice);
+            const analysis = await analyzeSupplierInvoiceImage(file);
+            setInvoiceDraft((current) => ({ ...current, previewUrl }));
+            applyInvoiceAnalysis(analysis);
         } catch (scanError) {
             setError(scanError.message || 'Unable to read the invoice image.');
         } finally {
             setIsReadingInvoice(false);
         }
-    };
-
-    const parsePastedInvoiceText = () => {
-        applyParsedInvoice(parseSupplierInvoiceText(invoiceOcrText));
-    };
-
-    const loadSampleInvoice = () => {
-        applyParsedInvoice(parseSupplierInvoiceText(DIAMOND_INVOICE_SAMPLE_TEXT));
     };
 
     const handleSaveBulk = async () => {
@@ -454,6 +437,7 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                 notes: supplier.reason || 'Supplier invoice stock receiving',
                 source: 'ocr_upload',
                 ocrReady: true,
+                allowNewProducts: false,
                 items,
             });
             const receiptItems = (receipt.items || []).map((item) => ({
@@ -589,21 +573,21 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                                                 Camera / Upload
                                                 <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={handleInvoiceImage} />
                                             </label>
-                                            <Button variant="secondary" type="button" onClick={loadSampleInvoice} leftIcon={<Wand2 className="h-4 w-4" />}>
-                                                Use Sample
-                                            </Button>
                                         </div>
                                     </div>
                                     {isReadingInvoice && (
                                         <div className="mt-4 space-y-2">
                                             <div className="flex items-center gap-2 text-sm font-semibold text-primary-700">
                                                 <LoaderCircle className="h-4 w-4 animate-spin" />
-                                                {ocrProgress.status || 'Reading invoice image'}
+                                                Reading invoice image on the backend
                                             </div>
                                             <div className="h-2 overflow-hidden rounded-full bg-white">
-                                                <div className="h-full rounded-full bg-accent-blue transition-all" style={{ width: `${Math.max(8, Math.round((ocrProgress.progress || 0) * 100))}%` }} />
+                                                <div className="h-full w-2/3 animate-pulse rounded-full bg-accent-blue" />
                                             </div>
                                         </div>
+                                    )}
+                                    {invoiceDraft.previewUrl && (
+                                        <img src={invoiceDraft.previewUrl} alt="Invoice preview" className="mt-4 max-h-52 w-full rounded-xl border border-white/70 object-cover shadow-sm" />
                                     )}
                                 </div>
 
@@ -616,17 +600,17 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                                 <div className="overflow-hidden rounded-2xl border border-primary-200 bg-white">
                                     <div className="flex items-center justify-between border-b border-primary-100 px-4 py-3">
                                         <div>
-                                            <p className="text-sm font-black text-primary-950">Detected Line Items</p>
-                                            <p className="text-xs text-primary-500">{invoiceDraft.items.length} parts / {formatNumber(invoiceTotals.totalQuantity)} total qty</p>
+                                            <p className="text-sm font-black text-primary-950">Existing Products Ready to Receive</p>
+                                            <p className="text-xs text-primary-500">{invoiceDraft.items.length} existing parts / {formatNumber(invoiceTotals.totalQuantity)} total qty</p>
                                         </div>
-                                        <Button variant="secondary" type="button" onClick={addInvoiceItem} leftIcon={<ListPlus className="h-4 w-4" />}>Add Row</Button>
+                                        <Button variant="secondary" type="button" onClick={addInvoiceItem} leftIcon={<ListPlus className="h-4 w-4" />}>Add Existing Row</Button>
                                     </div>
                                     <div className="max-h-[300px] overflow-y-auto">
                                         {invoiceDraft.items.length === 0 ? (
                                             <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
                                                 <ClipboardCheck className="h-10 w-10 text-primary-300" />
-                                                <p className="font-bold text-primary-700">No parts detected yet</p>
-                                                <p className="max-w-sm text-sm text-primary-500">Use the camera/upload button, paste OCR text below, or add rows manually.</p>
+                                                <p className="font-bold text-primary-700">No existing products detected yet</p>
+                                                <p className="max-w-sm text-sm text-primary-500">Upload a clear invoice image. New product part numbers will be listed separately for manual product creation.</p>
                                             </div>
                                         ) : (
                                             <div className="min-w-[760px]">
@@ -653,19 +637,26 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                                     </div>
                                 </div>
 
-                                <div className="rounded-2xl border border-primary-200 bg-primary-50/70 p-3">
-                                    <label className="text-xs font-bold uppercase tracking-[0.14em] text-primary-500" htmlFor="invoice-ocr-text">OCR Text Review</label>
-                                    <textarea
-                                        id="invoice-ocr-text"
-                                        className="mt-2 min-h-24 w-full rounded-xl border border-primary-200 bg-white p-3 text-xs text-primary-800 outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15"
-                                        value={invoiceOcrText}
-                                        onChange={(event) => setInvoiceOcrText(event.target.value)}
-                                        placeholder="Paste OCR text here if the camera result needs correction..."
-                                    />
-                                    <div className="mt-2 flex justify-end">
-                                        <Button variant="secondary" type="button" onClick={parsePastedInvoiceText} disabled={!invoiceOcrText.trim()}>
-                                            Re-detect from Text
-                                        </Button>
+                                <div className="overflow-hidden rounded-2xl border border-amber-200 bg-amber-50">
+                                    <div className="flex items-start gap-3 border-b border-amber-200 px-4 py-3">
+                                        <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-600" />
+                                        <div>
+                                            <p className="text-sm font-black text-amber-950">New Products Detected</p>
+                                            <p className="text-xs text-amber-700">These part numbers are not in Products yet. They will not be received into stock until staff create and complete the product record.</p>
+                                        </div>
+                                    </div>
+                                    <div className="max-h-52 overflow-y-auto">
+                                        {invoiceDraft.newProducts.length === 0 ? (
+                                            <p className="px-4 py-5 text-sm font-medium text-amber-700">No new product part numbers detected.</p>
+                                        ) : (
+                                            invoiceDraft.newProducts.map((item) => (
+                                                <div key={item.partNumber} className="grid gap-1 border-t border-amber-200 px-4 py-3 sm:grid-cols-[150px_1fr_80px] sm:items-center">
+                                                    <span className="font-mono text-sm font-black text-amber-950">{item.partNumber}</span>
+                                                    <span className="text-sm text-amber-800">{item.detectedDescription || 'Needs product description'}</span>
+                                                    <span className="text-sm font-bold text-amber-950">Qty {formatNumber(item.quantity)}</span>
+                                                </div>
+                                            ))
+                                        )}
                                     </div>
                                 </div>
                             </div>
