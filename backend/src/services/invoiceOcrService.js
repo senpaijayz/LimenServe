@@ -18,8 +18,23 @@ function normalizePartNumber(value) {
 }
 
 function parseMoney(value) {
-  const parsed = Number(String(value || '').replace(/,/g, ''));
+  const normalized = String(value || '')
+    .replace(/,/g, '')
+    .replace(/\.(?=.*\.)/g, '');
+  const parsed = Number(normalized);
   return Number.isFinite(parsed) && parsed >= 0 ? Number(parsed.toFixed(2)) : 0;
+}
+
+function getErrorMessage(error) {
+  if (!error) {
+    return 'Unknown OCR error';
+  }
+
+  if (Array.isArray(error)) {
+    return error.filter(Boolean).join(' ');
+  }
+
+  return error.message || String(error);
 }
 
 function toIsoDate(value) {
@@ -55,6 +70,38 @@ function findHeaderValue(text, label) {
   return text.match(regex)?.[1]?.trim() || '';
 }
 
+function findLineAfterLabel(lines, label, matcher) {
+  const labelIndex = lines.findIndex((line) => new RegExp(`^${label}\\b:?$`, 'i').test(line));
+
+  if (labelIndex < 0) {
+    return '';
+  }
+
+  for (let index = labelIndex + 1; index < Math.min(lines.length, labelIndex + 8); index += 1) {
+    const candidate = lines[index]?.trim();
+
+    if (candidate && matcher(candidate)) {
+      return candidate;
+    }
+  }
+
+  return '';
+}
+
+function findInvoiceNumber(compactText, lines) {
+  return findLineAfterLabel(lines, 'No', (value) => /^PSI[-A-Z0-9]+$/i.test(value))
+    || compactText.match(/\b(PSI[-A-Z0-9]+)\b/i)?.[1]?.trim()
+    || findHeaderValue(compactText, 'Invoice')
+    || '';
+}
+
+function findOrderNumber(compactText, lines) {
+  return findLineAfterLabel(lines, 'Order', (value) => /^PRS[-A-Z0-9]+$/i.test(value))
+    || compactText.match(/\b(PRS[-A-Z0-9]+)\b/i)?.[1]?.trim()
+    || findHeaderValue(compactText, 'Order')
+    || '';
+}
+
 function looksLikePartNumber(token) {
   const normalized = normalizePartNumber(token);
   return /^(?:[A-Z]{1,4}\d[A-Z0-9-]{4,}|\d{3,}[A-Z][A-Z0-9-]{2,})$/.test(normalized);
@@ -73,7 +120,7 @@ function parseInvoiceLine(line) {
   const moneyMatches = [...cleaned.matchAll(/\b\d{1,3}(?:,\d{3})*\.\d{2}\b/g)].map((match) => match[0]);
   const unitCost = parseMoney(moneyMatches[0]);
   const beforeMoney = moneyMatches[0] ? cleaned.slice(0, cleaned.indexOf(moneyMatches[0])).trim() : cleaned;
-  const qtyMatch = beforeMoney.match(/\s(\d{1,4})(?:\s*)$/);
+  const qtyMatch = beforeMoney.match(/\s\.?(\d{1,4})(?:\s*)$/);
   const quantity = qtyMatch ? Number(qtyMatch[1]) : Number.NaN;
 
   if (!Number.isFinite(quantity) || quantity <= 0) {
@@ -118,17 +165,83 @@ function mergeDetectedItems(items) {
   return [...merged.values()];
 }
 
+function collectColumn(lines, startLabel, stopLabels) {
+  const startIndex = lines.findIndex((line) => new RegExp(`^${startLabel}\\b:?$`, 'i').test(line));
+
+  if (startIndex < 0) {
+    return [];
+  }
+
+  const values = [];
+
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+
+    if (stopLabels.some((label) => new RegExp(`^${label}\\b:?`, 'i').test(line))) {
+      break;
+    }
+
+    values.push(line);
+  }
+
+  return values;
+}
+
+function collectMoneyColumn(lines, startLabel, stopLabels) {
+  return collectColumn(lines, startLabel, stopLabels)
+    .filter((line) => /\d+(?:[,.]\d{3})*\.\d{2}/.test(line))
+    .map(parseMoney)
+    .filter((value) => value > 0);
+}
+
+function collectQuantityColumn(lines) {
+  return collectColumn(lines, 'Qty', ['UNIT PRICE', 'Unit Price', 'AMOUNT', 'Discount'])
+    .map((line) => Number(String(line).replace(/[^\d]/g, '')))
+    .filter((value) => Number.isFinite(value) && value > 0);
+}
+
+function parseColumnarInvoiceItems(lines) {
+  const stockNumbers = collectColumn(lines, 'Stock No', ['Description'])
+    .map(normalizePartNumber)
+    .filter(looksLikePartNumber);
+  const descriptions = collectColumn(lines, 'Description', ['Qty', 'I/We', 'RECEIVED ABOVE', 'Supplier'])
+    .filter((line) => !looksLikePartNumber(line));
+  const quantities = collectQuantityColumn(lines);
+  const unitCosts = collectMoneyColumn(lines, 'UNIT PRICE', ['Discount', 'Vatable Sales', 'AMOUNT']);
+  const amounts = collectMoneyColumn(lines, 'AMOUNT', ['Printed Date', 'PMIS', 'Acknowledgement', 'Range']);
+
+  if (stockNumbers.length < 2 || descriptions.length < 2) {
+    return [];
+  }
+
+  return stockNumbers.map((partNumber, index) => {
+    const unitCost = unitCosts[index] || 0;
+    const amount = amounts[index] || 0;
+    const inferredQuantity = unitCost > 0 && amount > 0 ? Math.round(amount / unitCost) : 0;
+    const quantity = quantities.length === stockNumbers.length ? quantities[index] : inferredQuantity;
+
+    return {
+      partNumber,
+      detectedDescription: descriptions[index] || '',
+      quantity,
+      unitCost,
+    };
+  }).filter((item) => Number.isFinite(item.quantity) && item.quantity > 0);
+}
+
 export function parseSupplierInvoiceOcrText(rawText) {
   const text = String(rawText || '');
   const compactText = text.replace(/\s+/g, ' ');
   const lines = text.split(/\r?\n/).map(cleanOcrLine).filter(Boolean);
+  const lineItems = lines.map(parseInvoiceLine).filter(Boolean);
+  const columnItems = parseColumnarInvoiceItems(lines);
 
   return {
-    invoiceNumber: findHeaderValue(compactText, 'No') || findHeaderValue(compactText, 'Invoice') || '',
-    orderNumber: findHeaderValue(compactText, 'Order') || '',
+    invoiceNumber: findInvoiceNumber(compactText, lines),
+    orderNumber: findOrderNumber(compactText, lines),
     invoiceDate: toIsoDate(compactText.match(/Date\s*[:#-]?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/i)?.[1]),
     supplierName: /Diamond/i.test(compactText) ? 'Diamond Motor Corporation' : 'Supplier',
-    detectedItems: mergeDetectedItems(lines.map(parseInvoiceLine).filter(Boolean)),
+    detectedItems: mergeDetectedItems(columnItems.length > lineItems.length ? columnItems : lineItems),
     rawText: text,
   };
 }
@@ -164,6 +277,85 @@ async function recognizeImage(filePath) {
   });
 
   return result?.text || '';
+}
+
+async function recognizeImageWithOcrSpace(file) {
+  const apiKey = process.env.OCR_SPACE_API_KEY || 'helloworld';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 75_000);
+  const formData = new FormData();
+
+  formData.append('file', new Blob([file.buffer], { type: file.mimetype || 'image/jpeg' }), file.originalname || 'invoice.jpg');
+  formData.append('language', 'eng');
+  formData.append('isOverlayRequired', 'true');
+  formData.append('scale', 'true');
+  formData.append('OCREngine', '2');
+
+  try {
+    const response = await fetch('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      headers: {
+        apikey: apiKey,
+      },
+      body: formData,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`OCR.space responded with ${response.status}.`);
+    }
+
+    const payload = await response.json();
+
+    if (payload?.IsErroredOnProcessing) {
+      throw new Error(getErrorMessage(payload?.ErrorMessage || payload?.ErrorDetails));
+    }
+
+    return (payload?.ParsedResults || [])
+      .map((result) => result?.ParsedText || '')
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function recognizeInvoiceText(file) {
+  let paddleError = null;
+
+  try {
+    const paddleText = await withTempImage(file, recognizeImage);
+
+    if (paddleText.trim()) {
+      return {
+        rawText: paddleText,
+        engine: 'paddle',
+      };
+    }
+  } catch (error) {
+    paddleError = error;
+    console.warn('Paddle invoice OCR failed, falling back to OCR.space:', getErrorMessage(error));
+  }
+
+  try {
+    const fallbackText = await recognizeImageWithOcrSpace(file);
+
+    if (fallbackText.trim()) {
+      return {
+        rawText: fallbackText,
+        engine: 'ocr_space',
+      };
+    }
+  } catch (fallbackError) {
+    const error = new Error(`Invoice OCR failed. Paddle: ${getErrorMessage(paddleError)} OCR.space: ${getErrorMessage(fallbackError)}`);
+    error.cause = fallbackError;
+    throw error;
+  }
+
+  const error = new Error(`Invoice OCR returned no readable text. Paddle: ${getErrorMessage(paddleError)}`);
+  error.cause = paddleError;
+  throw error;
 }
 
 async function withTempImage(file, callback) {
@@ -247,17 +439,19 @@ export async function analyzeSupplierInvoiceImage(file) {
     throw error;
   }
 
-  let rawText = '';
+  let recognition = null;
 
   try {
-    rawText = await withTempImage(file, recognizeImage);
+    recognition = await recognizeInvoiceText(file);
   } catch (cause) {
-    const error = new Error('The invoice OCR engine could not read this image. Please try a clearer full-page photo or upload the image again.');
+    console.error('Supplier invoice OCR failed:', cause);
+    const error = new Error('The invoice OCR service could not read this invoice right now. Please try again, or enter the stock numbers and quantities manually.');
     error.statusCode = 503;
     error.cause = cause;
     throw error;
   }
 
+  const rawText = recognition.rawText;
   const parsed = parseSupplierInvoiceOcrText(rawText);
   const classified = await classifyDetectedProducts(parsed.detectedItems);
 
@@ -271,6 +465,7 @@ export async function analyzeSupplierInvoiceImage(file) {
     existingProducts: classified.existingProducts,
     newProducts: classified.newProducts,
     rawText: parsed.rawText,
+    ocrEngine: recognition.engine,
     summary: {
       detectedCount: parsed.detectedItems.length,
       existingCount: classified.existingProducts.length,
