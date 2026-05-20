@@ -5,7 +5,6 @@ import {
     AlertTriangle,
     Package,
     RefreshCw,
-    Sparkles,
     TrendingUp,
 } from 'lucide-react';
 import Card, { KPICard } from '../../../components/ui/Card';
@@ -105,7 +104,6 @@ const AdminDashboard = () => {
     const latestRefresh = snapshot?.latestRefresh;
     const topProductForecasts = snapshot?.topProductForecasts || [];
     const topServiceForecasts = snapshot?.topServiceForecasts || [];
-    const topUpsellOpportunities = snapshot?.topUpsellOpportunities || [];
     const topSellingItems = snapshot?.topSellingItems || [];
     const itemTrend = snapshot?.itemTrend || [];
     const peakPeriods = snapshot?.peakPeriods || [];
@@ -184,11 +182,10 @@ const AdminDashboard = () => {
                 </Card>
             )}
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <KPICard title="Predicted Revenue" value={loading ? 'Loading...' : formatCurrency(predictedRevenue)} icon={<DollarSign className="w-6 h-6" />} trend="up" trendValue={`${topProductForecasts.length} top products`} accentColor="border-accent-blue" iconBg="bg-blue-50 text-accent-blue" />
                 <KPICard title="Forecasted Units" value={loading ? 'Loading...' : formatNumber(forecastedProductCount)} icon={<Package className="w-6 h-6" />} trend="up" trendValue="Next month demand" accentColor="border-indigo-500" iconBg="bg-indigo-50 text-indigo-600" />
                 <KPICard title="Top Selling Items" value={loading ? 'Loading...' : formatNumber(topSellingItems.length)} icon={<TrendingUp className="w-6 h-6" />} trend="up" trendValue={topSellingLeader?.product_name || 'No item leader yet'} accentColor="border-emerald-500" iconBg="bg-emerald-50 text-emerald-600" />
-                <KPICard title="Upsell Opportunities" value={loading ? 'Loading...' : formatNumber(topUpsellOpportunities.length)} icon={<Sparkles className="w-6 h-6" />} trend="up" trendValue="Curated and mined rules" accentColor="border-amber-500" iconBg="bg-amber-50 text-amber-600" />
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
