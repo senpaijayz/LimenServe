@@ -232,6 +232,10 @@ export function extractApiError(error, fallbackMessage) {
     throw new Error(getFriendlyApiErrorMessage(error.response.data.error, fallbackMessage));
   }
 
+  if ([502, 503, 504].includes(error.response.status)) {
+    throw new Error(SERVICE_UNAVAILABLE_MESSAGE);
+  }
+
   if (error?.message) {
     throw new Error(getFriendlyApiErrorMessage(error.message, fallbackMessage));
   }

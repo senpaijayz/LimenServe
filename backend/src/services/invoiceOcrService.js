@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { supabaseAdmin } from '../config/supabase.js';
@@ -138,7 +138,14 @@ async function getPaddleService() {
     paddleServicePromise = import('ppu-paddle-ocr').then(async ({ PaddleOcrService }) => {
       const service = new PaddleOcrService({
         debugging: { debug: false, verbose: false },
+        processing: { engine: 'canvas-native' },
         recognition: { strategy: 'per-line' },
+        session: {
+          executionProviders: ['cpu'],
+          executionMode: 'sequential',
+          interOpNumThreads: 1,
+          intraOpNumThreads: 1,
+        },
       });
       await service.initialize();
       return service;
@@ -150,11 +157,10 @@ async function getPaddleService() {
 
 async function recognizeImage(filePath) {
   const service = await getPaddleService();
-  const image = await readFile(filePath);
-  const imageBuffer = image.buffer.slice(image.byteOffset, image.byteOffset + image.byteLength);
-  const result = await service.recognize(imageBuffer, {
+  const result = await service.recognize(filePath, {
     flatten: true,
     strategy: 'per-line',
+    noCache: true,
   });
 
   return result?.text || '';
@@ -241,7 +247,17 @@ export async function analyzeSupplierInvoiceImage(file) {
     throw error;
   }
 
-  const rawText = await withTempImage(file, recognizeImage);
+  let rawText = '';
+
+  try {
+    rawText = await withTempImage(file, recognizeImage);
+  } catch (cause) {
+    const error = new Error('The invoice OCR engine could not read this image. Please try a clearer full-page photo or upload the image again.');
+    error.statusCode = 503;
+    error.cause = cause;
+    throw error;
+  }
+
   const parsed = parseSupplierInvoiceOcrText(rawText);
   const classified = await classifyDetectedProducts(parsed.detectedItems);
 
