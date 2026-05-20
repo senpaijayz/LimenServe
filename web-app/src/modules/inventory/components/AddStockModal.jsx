@@ -28,6 +28,15 @@ const getSupplierContactDetails = (supplier = {}) => [
     supplier.email,
 ].filter(Boolean).join(' | ');
 
+const normalizeInvoicePartNumber = (value = '') => String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/^\*+|\*+$/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[^A-Z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+
 function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products }) {
     const [query, setQuery] = useState(item.searchQuery || '');
     const [searching, setSearching] = useState(false);
@@ -300,9 +309,45 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
         };
     }, [invoiceDraft.items]);
 
+    const catalogProductByPartNumber = useMemo(() => {
+        const lookup = new Map();
+        (products || []).forEach((product) => {
+            const partNumber = normalizeInvoicePartNumber(getProductPartNumber(product));
+            if (partNumber && !lookup.has(partNumber)) {
+                lookup.set(partNumber, product);
+            }
+        });
+        return lookup;
+    }, [products]);
+
+    const getPricelistProduct = useCallback((partNumber) => (
+        catalogProductByPartNumber.get(normalizeInvoicePartNumber(partNumber)) || null
+    ), [catalogProductByPartNumber]);
+
+    const getPricelistDescription = useCallback((partNumber, fallback = '') => {
+        const product = getPricelistProduct(partNumber);
+        return product?.name || fallback || '';
+    }, [getPricelistProduct]);
+
+    const buildInvoiceItemFromCatalog = useCallback((item) => {
+        const partNumber = normalizeInvoicePartNumber(item.partNumber);
+        const product = getPricelistProduct(partNumber);
+
+        return {
+            ...item,
+            partNumber,
+            productId: product?.id || item.productId || '',
+            description: product?.name || item.description || '',
+            status: product?.id ? 'existing' : item.status,
+            uom: item.uom || 'PC',
+            brand: item.brand || 'Mitsubishi',
+        };
+    }, [getPricelistProduct]);
+
     const applyInvoiceAnalysis = useCallback((analysis) => {
         const supplierName = analysis.invoice?.supplierName || 'Diamond Motor Corporation';
         const matchedSupplier = suppliers.find((item) => item.name?.toLowerCase().includes(supplierName.toLowerCase().replace(' corporation', '')));
+        const existingProducts = (analysis.existingProducts || []).map(buildInvoiceItemFromCatalog);
 
         setInvoiceDraft((current) => ({
             ...current,
@@ -311,7 +356,7 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
             orderNumber: analysis.invoice?.orderNumber || '',
             supplierName,
             rawText: analysis.rawText || '',
-            items: analysis.existingProducts || [],
+            items: existingProducts,
             newProducts: analysis.newProducts || [],
         }));
         setSupplier((current) => ({
@@ -325,14 +370,63 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
             reason: 'Supplier invoice stock receiving',
         }));
         setError(analysis.summary?.detectedCount ? '' : 'No stock numbers and quantities were detected. Capture the full invoice table and try again.');
-    }, [suppliers]);
+    }, [buildInvoiceItemFromCatalog, suppliers]);
 
-    const updateInvoiceItem = (index, changes) => {
+    const updateInvoiceItem = useCallback((index, changes) => {
         setInvoiceDraft((current) => ({
             ...current,
             items: current.items.map((item, itemIndex) => (itemIndex === index ? { ...item, ...changes } : item)),
         }));
-    };
+    }, []);
+
+    const resolveInvoicePartNumber = useCallback(async (index, value) => {
+        const partNumber = normalizeInvoicePartNumber(value);
+
+        if (!partNumber) {
+            updateInvoiceItem(index, {
+                partNumber: '',
+                productId: '',
+                description: '',
+                status: 'existing',
+            });
+            return;
+        }
+
+        const localProduct = getPricelistProduct(partNumber);
+        if (localProduct) {
+            updateInvoiceItem(index, {
+                partNumber,
+                productId: localProduct.id,
+                description: localProduct.name || '',
+                status: 'existing',
+            });
+            return;
+        }
+
+        updateInvoiceItem(index, {
+            partNumber,
+            productId: '',
+            description: 'Looking up imported pricelist...',
+            status: 'checking',
+        });
+
+        try {
+            const product = await findProduct(partNumber);
+            updateInvoiceItem(index, {
+                partNumber,
+                productId: product?.id || '',
+                description: product?.name || '',
+                status: product?.id ? 'existing' : 'new',
+            });
+        } catch {
+            updateInvoiceItem(index, {
+                partNumber,
+                productId: '',
+                description: '',
+                status: 'new',
+            });
+        }
+    }, [findProduct, getPricelistProduct, updateInvoiceItem]);
 
     const removeInvoiceItem = (index) => {
         setInvoiceDraft((current) => ({
@@ -419,8 +513,9 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
     const handlePostInvoice = async () => {
         const items = invoiceDraft.items
             .map((item) => ({
-                partNumber: String(item.partNumber || '').trim().toUpperCase(),
-                description: String(item.description || item.partNumber || '').trim(),
+                partNumber: normalizeInvoicePartNumber(item.partNumber),
+                productId: item.productId,
+                description: String(getPricelistDescription(item.partNumber, item.description) || item.partNumber || '').trim(),
                 quantity: Number(item.quantity),
                 unitCost: 0,
                 uom: 'PC',
@@ -440,6 +535,13 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
 
         if (!items.length) {
             setError('Add or detect at least one invoice line item with quantity greater than zero.');
+            return;
+        }
+
+        const unresolvedItems = items.filter((item) => !item.productId && !getPricelistProduct(item.partNumber));
+        if (unresolvedItems.length > 0) {
+            const missingPartNumbers = unresolvedItems.map((item) => item.partNumber).slice(0, 6).join(', ');
+            setError(`These part numbers are not in the imported price list yet: ${missingPartNumbers}. Add them to Products first, then post the invoice stock.`);
             return;
         }
 
@@ -681,17 +783,49 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                                                 <p className="max-w-sm text-sm text-primary-500">Upload a clear invoice image. New product part numbers will be listed separately for manual product creation.</p>
                                             </div>
                                         ) : (
-                                            <div className="min-w-[620px]">
-                                                <div className="grid grid-cols-[150px_1fr_90px_44px] gap-2 bg-primary-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-primary-500">
+                                            <div className="min-w-[660px]">
+                                                <div className="grid grid-cols-[160px_1fr_90px_44px] gap-2 bg-primary-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-primary-500">
                                                     <span>Part Number</span>
-                                                    <span>Description</span>
+                                                    <span>Pricelist Description</span>
                                                     <span>Qty</span>
                                                     <span />
                                                 </div>
                                                 {invoiceDraft.items.map((item, index) => (
-                                                    <div key={`${item.partNumber}-${index}`} className="grid grid-cols-[150px_1fr_90px_44px] gap-2 border-t border-primary-100 px-3 py-2">
-                                                        <input className="input px-3 py-2 font-mono text-xs uppercase" value={item.partNumber} onChange={(event) => updateInvoiceItem(index, { partNumber: event.target.value })} />
-                                                        <input className="input px-3 py-2 text-sm" value={item.description} onChange={(event) => updateInvoiceItem(index, { description: event.target.value })} />
+                                                    <div key={`${item.partNumber}-${index}`} className="grid grid-cols-[160px_1fr_90px_44px] gap-2 border-t border-primary-100 px-3 py-2">
+                                                        <input
+                                                            className={`input px-3 py-2 font-mono text-xs uppercase ${
+                                                                item.status === 'new' ? 'border-amber-300 bg-amber-50 text-amber-950' : ''
+                                                            }`}
+                                                            value={item.partNumber}
+                                                            aria-label="Invoice part number"
+                                                            onChange={(event) => {
+                                                                const partNumber = event.target.value;
+                                                                const product = getPricelistProduct(partNumber);
+                                                                updateInvoiceItem(index, {
+                                                                    partNumber,
+                                                                    productId: product?.id || '',
+                                                                    description: product?.name || '',
+                                                                    status: product?.id ? 'existing' : 'new',
+                                                                });
+                                                            }}
+                                                            onBlur={(event) => {
+                                                                void resolveInvoicePartNumber(index, event.target.value);
+                                                            }}
+                                                        />
+                                                        <div className={`min-h-10 rounded-xl border px-3 py-2 text-sm ${
+                                                            item.status === 'new'
+                                                                ? 'border-amber-200 bg-amber-50 text-amber-900'
+                                                                : item.status === 'checking'
+                                                                    ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                                                    : 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                                                        }`}>
+                                                            <p className="truncate font-semibold">
+                                                                {item.description || (item.partNumber ? 'Not found in imported price list' : 'Enter part number')}
+                                                            </p>
+                                                            <p className="text-[11px] font-medium uppercase tracking-wide opacity-70">
+                                                                {item.status === 'new' ? 'Needs product record first' : item.status === 'checking' ? 'Checking catalog' : 'Auto-filled from price list'}
+                                                            </p>
+                                                        </div>
                                                         <input className="input px-3 py-2 text-sm" type="number" min="1" value={item.quantity} onChange={(event) => updateInvoiceItem(index, { quantity: event.target.value })} />
                                                         <button type="button" className="flex h-10 w-10 items-center justify-center rounded-lg text-primary-400 hover:bg-red-50 hover:text-red-600" onClick={() => removeInvoiceItem(index)} aria-label="Remove invoice row">
                                                             <Trash2 className="h-4 w-4" />
