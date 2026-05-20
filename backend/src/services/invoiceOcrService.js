@@ -139,7 +139,7 @@ function parseInvoiceLine(line) {
     partNumber,
     detectedDescription: description || '',
     quantity,
-    unitCost,
+    unitCost: 0,
   };
 }
 
@@ -158,7 +158,7 @@ function mergeDetectedItems(items) {
       ...current,
       detectedDescription: current.detectedDescription || item.detectedDescription,
       quantity: Number(current.quantity) + Number(item.quantity),
-      unitCost: current.unitCost || item.unitCost,
+      unitCost: 0,
     });
   });
 
@@ -224,7 +224,7 @@ function parseColumnarInvoiceItems(lines) {
       partNumber,
       detectedDescription: descriptions[index] || '',
       quantity,
-      unitCost,
+      unitCost: 0,
     };
   }).filter((item) => Number.isFinite(item.quantity) && item.quantity > 0);
 }
@@ -407,7 +407,6 @@ async function classifyDetectedProducts(detectedItems) {
         description: product.name,
         detectedDescription: item.detectedDescription,
         quantity: item.quantity,
-        unitCost: item.unitCost,
         brand: product.brand || 'Mitsubishi',
         uom: product.uom || 'PC',
       });
@@ -421,7 +420,6 @@ async function classifyDetectedProducts(detectedItems) {
       description: '',
       detectedDescription: item.detectedDescription,
       quantity: item.quantity,
-      unitCost: item.unitCost,
       requiredAction: 'Create product manually before receiving stock.',
     });
   });

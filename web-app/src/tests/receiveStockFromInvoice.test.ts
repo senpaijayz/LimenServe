@@ -49,7 +49,7 @@ describe('receiveStockFromSupplierInvoice', () => {
         expect.objectContaining({
           partNumber: 'MD360935',
           quantity: 5,
-          unitCost: 140,
+          unitCost: 0,
         }),
       ],
     }));
@@ -89,7 +89,7 @@ describe('receiveStockFromSupplierInvoice', () => {
       expect.objectContaining({
         partNumber: 'MR984204',
         quantity: 4,
-        unitCost: 500,
+        unitCost: 0,
       }),
     ]);
   });

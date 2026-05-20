@@ -45,7 +45,6 @@ export interface InvoiceOcrExistingProduct {
   description: string;
   detectedDescription?: string;
   quantity: number;
-  unitCost?: number;
   brand?: string;
   uom?: string;
 }
@@ -57,7 +56,6 @@ export interface InvoiceOcrNewProduct {
   description: string;
   detectedDescription?: string;
   quantity: number;
-  unitCost?: number;
   requiredAction: string;
 }
 
@@ -109,10 +107,6 @@ function asNumber(value: unknown): number {
   return Number.isFinite(numeric) ? numeric : Number.NaN;
 }
 
-function roundCurrency(value: number): number {
-  return Number(value.toFixed(2));
-}
-
 function normalizePartNumber(value: unknown): string {
   return String(value ?? '')
     .trim()
@@ -156,7 +150,7 @@ function buildCandidatePayload(payload: FlexibleSupplierInvoicePayload): Supplie
       partNumber: normalizePartNumber(item.partNumber ?? item.part_number),
       description: asText(item.description) ?? normalizePartNumber(item.partNumber ?? item.part_number),
       quantity: asNumber(item.quantity ?? item.qty),
-      unitCost: asNumber(item.unitCost ?? item.unit_cost ?? 0),
+      unitCost: 0,
       uom: asText(item.uom) ?? 'PC',
       brand: asText(item.brand) ?? 'Mitsubishi',
     })),
@@ -164,13 +158,11 @@ function buildCandidatePayload(payload: FlexibleSupplierInvoicePayload): Supplie
 }
 
 function mergeDuplicatePartNumbers(invoice: SupplierInvoiceStockReceiptInput): SupplierInvoiceStockReceiptInput {
-  const mergedItems = new Map<string, SupplierInvoiceLineItem & { totalCost: number }>();
+  const mergedItems = new Map<string, SupplierInvoiceLineItem>();
 
   invoice.items.forEach((item) => {
     const partNumber = normalizePartNumber(item.partNumber);
     const quantity = Number(item.quantity);
-    const unitCost = Number(item.unitCost ?? 0);
-    const totalCost = quantity * unitCost;
     const current = mergedItems.get(partNumber);
 
     if (!current) {
@@ -178,26 +170,23 @@ function mergeDuplicatePartNumbers(invoice: SupplierInvoiceStockReceiptInput): S
         ...item,
         partNumber,
         quantity,
-        unitCost,
-        totalCost,
+        unitCost: 0,
       });
       return;
     }
 
     const nextQuantity = current.quantity + quantity;
-    const nextTotalCost = current.totalCost + totalCost;
     mergedItems.set(partNumber, {
       ...current,
       description: current.description || item.description,
       quantity: nextQuantity,
-      unitCost: nextQuantity > 0 ? roundCurrency(nextTotalCost / nextQuantity) : 0,
-      totalCost: nextTotalCost,
+      unitCost: 0,
     });
   });
 
   return {
     ...invoice,
-    items: [...mergedItems.values()].map(({ totalCost: _totalCost, ...item }) => item),
+    items: [...mergedItems.values()],
   };
 }
 

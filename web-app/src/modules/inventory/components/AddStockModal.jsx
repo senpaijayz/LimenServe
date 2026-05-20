@@ -294,10 +294,8 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
     const validBulkItems = bulkItems.filter((item) => item.product && Number(item.quantity) > 0);
     const invoiceTotals = useMemo(() => {
         const totalQuantity = invoiceDraft.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
-        const totalCost = invoiceDraft.items.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitCost) || 0)), 0);
 
         return {
-            totalCost,
             totalQuantity,
         };
     }, [invoiceDraft.items]);
@@ -346,7 +344,7 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
     const addInvoiceItem = () => {
         setInvoiceDraft((current) => ({
             ...current,
-            items: [...current.items, { status: 'existing', productId: '', partNumber: '', description: '', quantity: 1, unitCost: 0, uom: 'PC', brand: 'Mitsubishi' }],
+            items: [...current.items, { status: 'existing', productId: '', partNumber: '', description: '', quantity: 1, uom: 'PC', brand: 'Mitsubishi' }],
         }));
     };
 
@@ -424,7 +422,7 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                 partNumber: String(item.partNumber || '').trim().toUpperCase(),
                 description: String(item.description || item.partNumber || '').trim(),
                 quantity: Number(item.quantity),
-                unitCost: Number(item.unitCost || 0),
+                unitCost: 0,
                 uom: 'PC',
                 brand: 'Mitsubishi',
             }))
@@ -585,7 +583,7 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                                             </div>
                                             <div>
                                                 <p className="font-bold text-primary-950">Scan a printed Diamond parts invoice</p>
-                                                <p className="mt-1 text-sm text-primary-600">Capture the full page. The system detects stock numbers, quantities, invoice number, order number, and date, then lets you review before posting.</p>
+                                                <p className="mt-1 text-sm text-primary-600">Capture the full page. The system detects stock numbers, delivered quantities, invoice number, order number, and date, then lets you review before posting.</p>
                                             </div>
                                         </div>
                                         <div className="relative flex flex-wrap gap-2">
@@ -683,20 +681,18 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                                                 <p className="max-w-sm text-sm text-primary-500">Upload a clear invoice image. New product part numbers will be listed separately for manual product creation.</p>
                                             </div>
                                         ) : (
-                                            <div className="min-w-[760px]">
-                                                <div className="grid grid-cols-[150px_1fr_90px_120px_44px] gap-2 bg-primary-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-primary-500">
+                                            <div className="min-w-[620px]">
+                                                <div className="grid grid-cols-[150px_1fr_90px_44px] gap-2 bg-primary-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-primary-500">
                                                     <span>Part Number</span>
                                                     <span>Description</span>
                                                     <span>Qty</span>
-                                                    <span>Unit Cost</span>
                                                     <span />
                                                 </div>
                                                 {invoiceDraft.items.map((item, index) => (
-                                                    <div key={`${item.partNumber}-${index}`} className="grid grid-cols-[150px_1fr_90px_120px_44px] gap-2 border-t border-primary-100 px-3 py-2">
+                                                    <div key={`${item.partNumber}-${index}`} className="grid grid-cols-[150px_1fr_90px_44px] gap-2 border-t border-primary-100 px-3 py-2">
                                                         <input className="input px-3 py-2 font-mono text-xs uppercase" value={item.partNumber} onChange={(event) => updateInvoiceItem(index, { partNumber: event.target.value })} />
                                                         <input className="input px-3 py-2 text-sm" value={item.description} onChange={(event) => updateInvoiceItem(index, { description: event.target.value })} />
                                                         <input className="input px-3 py-2 text-sm" type="number" min="1" value={item.quantity} onChange={(event) => updateInvoiceItem(index, { quantity: event.target.value })} />
-                                                        <input className="input px-3 py-2 text-sm" type="number" min="0" step="0.01" value={item.unitCost} onChange={(event) => updateInvoiceItem(index, { unitCost: event.target.value })} />
                                                         <button type="button" className="flex h-10 w-10 items-center justify-center rounded-lg text-primary-400 hover:bg-red-50 hover:text-red-600" onClick={() => removeInvoiceItem(index)} aria-label="Remove invoice row">
                                                             <Trash2 className="h-4 w-4" />
                                                         </button>
