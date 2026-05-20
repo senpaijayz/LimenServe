@@ -2665,7 +2665,7 @@ router.get('/products/:productId/stock-history', requireRole('admin', 'stock_cle
     const { data: movements, error: movementsError } = await supabaseAdmin
       .schema('catalog')
       .from('inventory_movements')
-      .select('id, product_id, movement_type, quantity, reference_type, notes, performed_by, business_date, created_at')
+      .select('id, product_id, movement_type, quantity, reference_type, reference_id, notes, performed_by, business_date, created_at')
       .eq('product_id', productId)
       .order('created_at', { ascending: false })
       .limit(limit);
@@ -2694,6 +2694,7 @@ router.get('/products/:productId/stock-history', requireRole('admin', 'stock_cle
           movementType: movement.movement_type,
           quantity: Number(movement.quantity ?? 0),
           referenceType: movement.reference_type,
+          referenceId: movement.reference_id,
           notes: movement.notes,
           performedBy: profile.full_name || profile.email || 'System',
           businessDate: movement.business_date,
@@ -3421,7 +3422,7 @@ router.get('/stock/movements', requireRole('admin', 'stock_clerk'), async (req, 
     const { data: movements, error: movementsError } = await supabaseAdmin
       .schema('catalog')
       .from('inventory_movements')
-      .select('id, product_id, movement_type, quantity, reference_type, notes, performed_by, business_date, created_at')
+      .select('id, product_id, movement_type, quantity, reference_type, reference_id, notes, performed_by, business_date, created_at')
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -3473,6 +3474,7 @@ router.get('/stock/movements', requireRole('admin', 'stock_clerk'), async (req, 
           movementType: movement.movement_type,
           quantity: Number(movement.quantity ?? 0),
           referenceType: movement.reference_type,
+          referenceId: movement.reference_id,
           notes: movement.notes,
           performedBy: profile.full_name || profile.email || 'System',
           businessDate: movement.business_date,

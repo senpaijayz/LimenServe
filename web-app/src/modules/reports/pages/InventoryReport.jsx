@@ -12,6 +12,11 @@ const MOVEMENT_LABELS = {
     reservation: 'Reservation', release: 'Release', sale: 'Sale', service_usage: 'Service Usage',
 };
 
+const REFERENCE_LABELS = {
+    supplier_invoice: 'Parts Invoice',
+    supplier_receipt: 'Add Stock',
+};
+
 const MOVEMENT_COLORS = {
     stock_in: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     stock_out: 'bg-red-50 text-red-700 border-red-200',
@@ -33,11 +38,24 @@ function isWithinRange(dateStr, range) {
     return Date.now() - date.getTime() <= ms[range];
 }
 
+function getReferenceLabel(referenceType) {
+    if (!referenceType) return '';
+    return REFERENCE_LABELS[referenceType] || String(referenceType).replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getMovementActionLabel(movement) {
+    if (movement?.referenceType === 'supplier_invoice') {
+        return 'Parts Invoice';
+    }
+
+    return MOVEMENT_LABELS[movement?.movementType] || movement?.movementType || '';
+}
+
 function exportMovementsCsv(movements) {
     const headers = ['Product', 'Part Number', 'Action', 'Qty', 'Reference', 'Staff', 'Date', 'Notes'];
     const rows = movements.map((m) => [
-        m.productName || '', m.sku || '', MOVEMENT_LABELS[m.movementType] || m.movementType || '',
-        m.quantity ?? '', m.referenceType || '', m.performedBy || '', formatDateTime(m.createdAt), m.notes || '',
+        m.productName || '', m.sku || '', getMovementActionLabel(m),
+        m.quantity ?? '', getReferenceLabel(m.referenceType), m.performedBy || '', formatDateTime(m.createdAt), m.notes || '',
     ]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -90,13 +108,25 @@ function buildPrintableInventoryReport({
         String(idx + 1),
         m.productName || '',
         m.sku || 'No part number',
-        MOVEMENT_LABELS[m.movementType] || m.movementType || '',
+        getMovementActionLabel(m),
         formatNumber(m.quantity),
-        m.referenceType || '—',
+        getReferenceLabel(m.referenceType) || '-',
         m.performedBy || 'System',
         formatDateTime(m.createdAt),
-        m.notes || '—',
+        m.notes || '-',
     ]);
+
+    const partsInvoiceRows = movements
+        .filter((m) => m.referenceType === 'supplier_invoice')
+        .map((m, idx) => [
+            String(idx + 1),
+            m.productName || '',
+            m.sku || 'No part number',
+            formatNumber(m.quantity),
+            m.notes || '-',
+            m.performedBy || 'System',
+            formatDateTime(m.createdAt),
+        ]);
 
     const archivedRows = archivedProducts.map((p) => [
         p.name || '',
@@ -325,6 +355,12 @@ function buildPrintableInventoryReport({
             ${renderReportTable(['#', 'Product', 'Part Number', 'Action', 'Qty', 'Reference', 'Performed By', 'Date', 'Notes'], movementRows, 'No inventory movement records found for this period.')}
         </section>
 
+        <section>
+            <h2>Parts Invoice Stock-Ins</h2>
+            <div class="section-sub">Supplier invoice receipts are separated from normal Add Stock entries for audit review.</div>
+            ${renderReportTable(['#', 'Product', 'Part Number', 'Qty', 'Invoice Details', 'Performed By', 'Date'], partsInvoiceRows, 'No parts invoice stock-ins found for this period.')}
+        </section>
+
         ${archivedProducts.length > 0 ? `
         <section>
             <h2>Archived Products</h2>
@@ -358,6 +394,7 @@ export default function InventoryReport() {
     const [isExporting, setIsExporting] = useState(false);
 
     const filteredMovements = useMemo(() => movements.filter((m) => isWithinRange(m.createdAt, dateRange)), [movements, dateRange]);
+    const partsInvoiceMovements = useMemo(() => filteredMovements.filter((m) => m.referenceType === 'supplier_invoice'), [filteredMovements]);
     const dateRangeLabel = DATE_RANGE_OPTIONS.find((o) => o.value === dateRange)?.label || dateRange;
 
     const movementStats = useMemo(() => {
@@ -459,6 +496,40 @@ export default function InventoryReport() {
                 <KPICard title="Archived Products" value={formatNumber(archivedProducts.length)} icon={<Archive className="h-6 w-6" />} />
             </div>
 
+            <Card title="Parts Invoice Stock-Ins" subtitle="Supplier invoice receipts are separated from normal Add Stock entries.">
+                {loading ? (
+                    <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">Loading...</div>
+                ) : partsInvoiceMovements.length === 0 ? (
+                    <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">No parts invoice stock-ins in selected range.</div>
+                ) : (
+                    <div className="overflow-x-auto rounded-2xl border border-primary-200">
+                        <table className="min-w-full divide-y divide-primary-100 bg-white text-sm">
+                            <thead className="bg-blue-50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-blue-700">Product</th>
+                                    <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-[0.14em] text-blue-700">Qty</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-blue-700">Invoice Details</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-blue-700">Date</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-primary-100">
+                                {partsInvoiceMovements.slice(0, 12).map((m) => (
+                                    <tr key={m.id} className="hover:bg-blue-50/50">
+                                        <td className="px-4 py-3">
+                                            <p className="font-bold text-primary-950">{m.productName}</p>
+                                            <p className="font-mono text-xs text-primary-500">{m.sku || 'No part number'}</p>
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-bold text-primary-950">+{formatNumber(m.quantity)}</td>
+                                        <td className="px-4 py-3 text-primary-600">{m.notes || 'Parts Invoice'}</td>
+                                        <td className="px-4 py-3 text-primary-600">{formatDateTime(m.createdAt)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </Card>
+
             {/* Quick movement preview */}
             <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
                 <Card title="Recent Inventory Movements" subtitle={`Total moved: ${formatNumber(movementStats.movedQuantity)} across ${formatNumber(movementStats.types)} action types.`}>
@@ -487,8 +558,11 @@ export default function InventoryReport() {
                                             </td>
                                             <td className="px-4 py-3">
                                                 <span className={`inline-block rounded-full border px-2 py-0.5 text-xs font-bold ${MOVEMENT_COLORS[m.movementType] || 'bg-primary-50 text-primary-600 border-primary-200'}`}>
-                                                    {MOVEMENT_LABELS[m.movementType] || m.movementType}
+                                                    {getMovementActionLabel(m)}
                                                 </span>
+                                                {m.referenceType && (
+                                                    <p className="mt-1 text-xs font-semibold text-primary-400">{getReferenceLabel(m.referenceType)}</p>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3 text-right font-bold text-primary-950">{formatNumber(m.quantity)}</td>
                                             <td className="px-4 py-3 text-primary-600">{m.performedBy}</td>
