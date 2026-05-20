@@ -311,6 +311,7 @@ const PublicCatalogView = () => {
               title="Vehicle-first service packages"
               subtitle="Visual service-led offers tuned to the Mitsubishi you selected. Open a bundle to build it as an estimate with one click."
               emptyLabel={`No featured packages are ready for ${vehicle.displayLabel} yet.`}
+              compactTabs
             />
           )}
 

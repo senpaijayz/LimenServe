@@ -5,9 +5,24 @@ import inventoryClassifier from '../lib/inventoryClassifier';
 const { OPERATIONAL_CATEGORIES, classifyInventoryItem } = inventoryClassifier;
 
 const CURRENT_YEAR = new Date().getFullYear();
+const MODEL_YEAR_LOOKAHEAD = 1;
 const FITMENT_CACHE_TTL_MS = 10 * 60 * 1000;
 const CATALOG_CACHE_TTL_MS = 2 * 60 * 1000;
 const PACKAGE_CACHE_TTL_MS = 5 * 60 * 1000;
+const VEHICLE_MODEL_ALIASES = {
+  'montero sport': ['montero qx', 'montero'],
+  'montero sports': ['montero qx', 'montero'],
+  'pajero sport': ['montero qx', 'montero'],
+  'xpander cross': ['xpander'],
+  mirage: ['mirage hb', 'mirage g4'],
+  'mirage hatchback': ['mirage hb', 'mirage'],
+  'mirage hb': ['mirage hatchback', 'mirage'],
+  'outlander sport': ['asx', 'outlander'],
+  adventure: ['kz'],
+  l300: ['l300', 'l300 vv'],
+  strada: ['strada cr', 'strada su', 'strada k64 k74', 'strada l200', 'triton'],
+  triton: ['triton', 'strada cr', 'strada su', 'strada l200'],
+};
 
 const requestCache = new Map();
 const inflightRequests = new Map();
@@ -59,6 +74,55 @@ async function withCachedRequest(key, ttlMs, loader) {
 
 function normalizeText(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+export function getVehicleModelAliases(modelName) {
+  const normalized = normalizeText(cleanVehicleModelLabel(modelName)).replace(/\s+/g, ' ').trim();
+  const aliases = new Set(normalized ? [normalized] : []);
+
+  (VEHICLE_MODEL_ALIASES[normalized] ?? []).forEach((alias) => aliases.add(normalizeText(alias)));
+
+  if (normalized.includes('montero') && normalized.includes('sport')) {
+    aliases.add('montero qx');
+    aliases.add('montero');
+  }
+
+  if (normalized.includes('mirage') && normalized.includes('hatch')) {
+    aliases.add('mirage hb');
+    aliases.add('mirage');
+  }
+
+  return Array.from(aliases).filter(Boolean);
+}
+
+function parseModelYearRange(value) {
+  const match = String(value || '').match(/(\d{4})\s*(?:-|\/|to)\s*(present|\d{4})/i);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    start: Number(match[1]),
+    end: match[2].toLowerCase() === 'present' ? CURRENT_YEAR + MODEL_YEAR_LOOKAHEAD : Number(match[2]),
+  };
+}
+
+export function catalogProductMatchesVehicle(product, selectedVehicleModel, selectedVehicleYear) {
+  if (!selectedVehicleModel) {
+    return true;
+  }
+
+  const productModel = normalizeText(cleanVehicleModelLabel(product.model)).replace(/\s+/g, ' ').trim();
+  const requestedAliases = getVehicleModelAliases(selectedVehicleModel);
+
+  if (!requestedAliases.some((alias) => productModel.includes(alias) || alias.includes(productModel))) {
+    return false;
+  }
+
+  const year = Number.parseInt(selectedVehicleYear, 10);
+  const yearRange = parseModelYearRange(product.model);
+
+  return !Number.isFinite(year) || !yearRange || (year >= yearRange.start && year <= yearRange.end);
 }
 
 export function cleanVehicleModelLabel(modelName) {
@@ -198,10 +262,9 @@ async function getFallbackCatalog(params = {}) {
     ].some((field) => normalizeText(field).includes(searchQuery));
 
     const matchesCategory = selectedCategory === 'all' || normalizeText(product.category) === selectedCategory;
-    const matchesVehicleModel = !selectedVehicleModel || normalizeText(product.model).includes(selectedVehicleModel);
-    const matchesVehicleYear = !selectedVehicleYear || normalizeText(product.model).includes(selectedVehicleYear);
+    const matchesVehicle = catalogProductMatchesVehicle(product, selectedVehicleModel, selectedVehicleYear);
 
-    return matchesSearch && matchesCategory && matchesVehicleModel && matchesVehicleYear;
+    return matchesSearch && matchesCategory && matchesVehicle;
   });
 
   const sortedProducts = sortFallbackProducts(filteredProducts, params.sortBy);
@@ -214,10 +277,9 @@ async function getFallbackCatalog(params = {}) {
       product.category,
     ].some((field) => normalizeText(field).includes(searchQuery));
 
-    const matchesVehicleModel = !selectedVehicleModel || normalizeText(product.model).includes(selectedVehicleModel);
-    const matchesVehicleYear = !selectedVehicleYear || normalizeText(product.model).includes(selectedVehicleYear);
+    const matchesVehicle = catalogProductMatchesVehicle(product, selectedVehicleModel, selectedVehicleYear);
 
-    return matchesSearch && matchesVehicleModel && matchesVehicleYear;
+    return matchesSearch && matchesVehicle;
   });
 
   return {
@@ -236,7 +298,7 @@ function buildFallbackYearOptions(model) {
   }
 
   const startYear = Number(rangeMatch[1]);
-  const endYear = rangeMatch[2].toUpperCase() === 'PRESENT' ? CURRENT_YEAR : Number(rangeMatch[2]);
+  const endYear = rangeMatch[2].toUpperCase() === 'PRESENT' ? CURRENT_YEAR + MODEL_YEAR_LOOKAHEAD : Number(rangeMatch[2]);
 
   if (!Number.isFinite(startYear) || !Number.isFinite(endYear) || endYear < startYear) {
     return [];

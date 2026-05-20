@@ -1,4 +1,4 @@
-import { BatteryCharging, Droplets, Gauge, ShieldCheck, Sparkles, Thermometer, Wrench, ArrowRight, Filter } from 'lucide-react';
+import { BatteryCharging, Droplets, Gauge, ShieldCheck, Sparkles, Thermometer, Wrench, ArrowRight, Filter, Shuffle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatCurrency } from '../../../utils/formatters';
@@ -28,7 +28,7 @@ function renderPreviewList(items = []) {
     return 'None yet';
   }
 
-  const preview = items.slice(0, 2).join(' • ');
+  const preview = items.slice(0, 2).join(' / ');
   return items.length > 2 ? `${preview} +${items.length - 2} more` : preview;
 }
 
@@ -101,29 +101,25 @@ export default function VehiclePackageShowcase({
       ) : (
         <div className="space-y-4">
           {compactTabs && normalizedPackages.length > 1 && (
-            <div className="rounded-[22px] border border-primary-200 bg-primary-50/80 p-2">
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                {normalizedPackages.slice(0, 4).map((pkg, index) => {
-                  const isActive = pkg.packageKey === resolvedActivePackageKey;
-                  return (
-                    <button
-                      key={`${pkg.packageKey}-vehicle-tab`}
-                      type="button"
-                      onClick={() => setActivePackageKey(pkg.packageKey)}
-                      className={`min-h-[68px] rounded-2xl px-3 py-2 text-left transition ${
-                        isActive
-                          ? 'bg-primary-950 text-white shadow-sm'
-                          : 'bg-white text-primary-600 hover:text-primary-950'
-                      }`}
-                      aria-pressed={isActive}
-                    >
-                      <span className={`block text-[0.62rem] font-bold uppercase tracking-[0.2em] ${isActive ? 'text-white/55' : 'text-primary-400'}`}>
-                        Bundle {index + 1}
-                      </span>
-                      <span className="mt-1 line-clamp-1 block text-sm font-semibold">{pkg.packageName}</span>
-                    </button>
-                  );
-                })}
+            <div className="rounded-[22px] border border-primary-200 bg-primary-50/80 p-3">
+              <label htmlFor="vehicle-package-switcher" className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-primary-500">
+                <Shuffle className="h-4 w-4 text-accent-blue" />
+                Change package
+              </label>
+              <div className="relative">
+                <select
+                  id="vehicle-package-switcher"
+                  value={resolvedActivePackageKey}
+                  onChange={(event) => setActivePackageKey(event.target.value)}
+                  className="min-h-12 w-full appearance-none rounded-2xl border border-primary-200 bg-white py-3 pl-4 pr-12 text-sm font-semibold text-primary-950 outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15"
+                >
+                  {normalizedPackages.map((pkg, index) => (
+                    <option key={`${pkg.packageKey}-vehicle-option`} value={pkg.packageKey}>
+                      {index + 1}. {pkg.packageName}
+                    </option>
+                  ))}
+                </select>
+                <Shuffle className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
               </div>
             </div>
           )}

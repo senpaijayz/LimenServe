@@ -35,6 +35,7 @@ const DEFAULT_PACKAGE_DESCRIPTION = 'Smart upsell bundle of Mitsubishi-matched p
 const SMART_PART_DISCOUNT_RATE = 0.05;
 const SMART_SERVICE_DISCOUNT_RATE = 0.03;
 const SMART_RECOMMENDATION_LABEL = 'Smart Recommendation';
+const MODEL_YEAR_LOOKAHEAD = 1;
 
 function isPrivateSchemaAccessError(error) {
   const message = [
@@ -312,13 +313,15 @@ function resolveSmartPricing({ recommendation, matchedProduct = null, matchedSer
   );
   const explicitPricingMode = recommendation.pricingMode ?? recommendation.pricing_mode ?? null;
   const explicitResolvedPrice = recommendation.resolvedPrice ?? recommendation.resolved_price ?? null;
+  const complimentaryEligible = recommendation.complimentaryEligible ?? recommendation.complimentary_eligible ?? false;
   let pricingMode = explicitPricingMode;
   let resolvedPrice = explicitResolvedPrice !== null && explicitResolvedPrice !== undefined
     ? roundCurrency(explicitResolvedPrice)
     : null;
+  let forcedCatalogPricing = false;
 
   if (!pricingMode) {
-    if (consequentKind === 'service' && serviceGroup === 'oil_change' && serviceCode === 'SVC-OIL') {
+    if (consequentKind === 'service' && serviceGroup === 'oil_change' && serviceCode === 'SVC-OIL' && complimentaryEligible) {
       pricingMode = 'complimentary';
       resolvedPrice = 0;
     } else {
@@ -328,6 +331,12 @@ function resolveSmartPricing({ recommendation, matchedProduct = null, matchedSer
         ? roundCurrency(catalogPrice * (1 - discountRate))
         : catalogPrice;
     }
+  }
+
+  if (pricingMode === 'complimentary' && consequentKind === 'service' && serviceGroup === 'oil_change' && serviceCode === 'SVC-OIL' && !complimentaryEligible) {
+    pricingMode = 'catalog';
+    resolvedPrice = catalogPrice;
+    forcedCatalogPricing = true;
   }
 
   if (pricingMode === 'complimentary') {
@@ -350,7 +359,7 @@ function resolveSmartPricing({ recommendation, matchedProduct = null, matchedSer
       : pricingMode === 'override'
         ? 'Smart Package Rate'
         : null;
-  const providedLabel = recommendation.displayPriceLabel ?? recommendation.display_price_label ?? null;
+  const providedLabel = forcedCatalogPricing ? null : (recommendation.displayPriceLabel ?? recommendation.display_price_label ?? null);
 
   return {
     catalogPrice,
@@ -783,7 +792,7 @@ function parseModelYearRange(value) {
 
   return {
     start: Number(match[1]),
-    end: match[2].toLowerCase() === 'present' ? new Date().getFullYear() : Number(match[2]),
+    end: match[2].toLowerCase() === 'present' ? new Date().getFullYear() + MODEL_YEAR_LOOKAHEAD : Number(match[2]),
   };
 }
 
@@ -800,6 +809,7 @@ function buildVehicleFilterContext({ vehicleModel = '', vehicleYear = '', vehicl
     rawModel: vehicleModel || '',
     rawYear: vehicleYear || '',
     model,
+    modelAliases: getVehicleModelAliases(vehicleModel),
     family,
     year: Number.isFinite(parsedYear) ? parsedYear : null,
   };
@@ -810,17 +820,17 @@ function buildVehicleDisplayLabel({ model, year }) {
 }
 
 function matchesVehicleModel(productModel, context) {
-  if (!context.model) {
+  const requestedAliases = context.modelAliases?.length ? context.modelAliases : getVehicleModelAliases(context.rawModel || context.model);
+  if (requestedAliases.length === 0) {
     return true;
   }
 
-  const normalizedModel = normalizeVehicleSelectorValue(productModel);
+  const normalizedModel = normalizeVehicleSelectorValue(cleanVehicleModelLabel(productModel));
   if (!normalizedModel) {
     return false;
   }
 
-  return normalizedModel.includes(context.model)
-    || context.model.includes(normalizedModel)
+  return requestedAliases.some((alias) => normalizedModel.includes(alias) || alias.includes(normalizedModel))
     || Boolean(context.family && normalizedModel.includes(context.family));
 }
 
@@ -951,6 +961,20 @@ async function getCachedVehicleFitments() {
 }
 
 const VEHICLE_MODEL_EXCLUSION_TERMS = ['various', 'universal', 'tools', 'manuals', 'collaterals', 'merchandise', 'accessories'];
+const VEHICLE_MODEL_ALIASES = {
+  'montero sport': ['montero qx', 'montero'],
+  'montero sports': ['montero qx', 'montero'],
+  'pajero sport': ['montero qx', 'montero'],
+  'xpander cross': ['xpander'],
+  mirage: ['mirage hb', 'mirage g4'],
+  'mirage hatchback': ['mirage hb', 'mirage'],
+  'mirage hb': ['mirage hatchback', 'mirage'],
+  'outlander sport': ['asx', 'outlander'],
+  adventure: ['kz'],
+  l300: ['l300', 'l300 vv'],
+  strada: ['strada cr', 'strada su', 'strada k64 k74', 'strada l200', 'triton'],
+  triton: ['triton', 'strada cr', 'strada su', 'strada l200'],
+};
 
 function isCatalogVehicleModel(modelName) {
   const normalized = normalizeVehicleSelectorValue(modelName);
@@ -965,6 +989,25 @@ function cleanVehicleModelLabel(modelName) {
     .replace(/\(\s*\)/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function getVehicleModelAliases(modelName) {
+  const normalized = normalizeVehicleSelectorValue(cleanVehicleModelLabel(modelName));
+  const aliases = new Set(normalized ? [normalized] : []);
+
+  (VEHICLE_MODEL_ALIASES[normalized] ?? []).forEach((alias) => aliases.add(normalizeVehicleSelectorValue(alias)));
+
+  if (normalized.includes('montero') && normalized.includes('sport')) {
+    aliases.add('montero qx');
+    aliases.add('montero');
+  }
+
+  if (normalized.includes('mirage') && normalized.includes('hatch')) {
+    aliases.add('mirage hb');
+    aliases.add('mirage');
+  }
+
+  return Array.from(aliases).filter(Boolean);
 }
 
 function expandYearRange(range) {
@@ -1241,6 +1284,7 @@ function buildVehiclePackageServiceItem(service, vehicleContext, serviceGroup, i
       catalogPrice: service.price,
       recommendedPrice: service.price,
       recommendedServiceCode: service.code,
+      complimentaryEligible: Boolean(service.complimentaryEligible),
     },
     matchedService: service,
     consequentKind: 'service',
@@ -1276,9 +1320,19 @@ function buildVehiclePackages({ catalog, serviceCatalog, vehicleContext }) {
   return VEHICLE_PACKAGE_ORDER
     .map((serviceGroup, index) => {
       const products = pickVehiclePackageProducts({ catalog, vehicleContext, serviceGroup, limitCount: 4 });
-      const services = findMatchingServices({ serviceCatalog, serviceGroup, limitCount: 2 });
+      const hasDedicatedOil = serviceGroup !== 'oil_change'
+        || products.some((candidate) => candidate.profile.partFunction === 'engine_oil');
+      const hasOilFilter = serviceGroup !== 'oil_change'
+        || products.some((candidate) => candidate.profile.partFunction === 'oil_filter');
+      const services = findMatchingServices({ serviceCatalog, serviceGroup, limitCount: 2 })
+        .map((service) => ({
+          ...service,
+          complimentaryEligible: serviceGroup === 'oil_change'
+            && service.code === 'SVC-OIL'
+            && hasDedicatedOil,
+        }));
 
-      if (products.length === 0 && services.length === 0) {
+      if (products.length === 0 || (serviceGroup === 'oil_change' && (!hasDedicatedOil || !hasOilFilter))) {
         return null;
       }
 
@@ -1724,6 +1778,9 @@ function normalizeRecommendationRecord({ recommendation, clickedProduct, matched
     recommendedService: matchedService ?? recommendation.recommendedService ?? null,
     recommendedProductSku: recommendation.recommendedProductSku ?? recommendation.recommended_product_sku ?? matchedProduct?.sku ?? null,
     recommendedServiceCode: recommendation.recommendedServiceCode ?? recommendation.recommended_service_code ?? matchedService?.code ?? null,
+    complimentaryEligible: recommendation.complimentaryEligible
+      ?? recommendation.complimentary_eligible
+      ?? (rawServiceGroup === 'oil_change' && clickedProfile.partFunction === 'engine_oil'),
   };
   const normalizedRecord = normalizeMatchMetadata(baseRecord, clickedProduct, matchedProduct);
   const smartPricing = resolveSmartPricing({
