@@ -10,6 +10,26 @@ import Modal from './Modal';
 import Button from './Button';
 import { normalizeBarcodeToken, stripProductBarcodeSuffix } from '../../utils/barcode';
 
+const ALL_SUPPORTED_BARCODE_FORMATS = [
+    Html5QrcodeSupportedFormats.QR_CODE,
+    Html5QrcodeSupportedFormats.AZTEC,
+    Html5QrcodeSupportedFormats.CODABAR,
+    Html5QrcodeSupportedFormats.CODE_39,
+    Html5QrcodeSupportedFormats.CODE_93,
+    Html5QrcodeSupportedFormats.CODE_128,
+    Html5QrcodeSupportedFormats.DATA_MATRIX,
+    Html5QrcodeSupportedFormats.MAXICODE,
+    Html5QrcodeSupportedFormats.ITF,
+    Html5QrcodeSupportedFormats.EAN_13,
+    Html5QrcodeSupportedFormats.EAN_8,
+    Html5QrcodeSupportedFormats.PDF_417,
+    Html5QrcodeSupportedFormats.RSS_14,
+    Html5QrcodeSupportedFormats.RSS_EXPANDED,
+    Html5QrcodeSupportedFormats.UPC_A,
+    Html5QrcodeSupportedFormats.UPC_E,
+    Html5QrcodeSupportedFormats.UPC_EAN_EXTENSION,
+].filter((format) => format !== undefined);
+
 const getBarcodeScanBox = (viewfinderWidth, viewfinderHeight) => {
     const width = Math.max(300, Math.min(Math.floor(viewfinderWidth * 0.96), 680));
     const height = Math.max(280, Math.min(Math.round(viewfinderHeight * 0.69), 500));
@@ -114,17 +134,7 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                     supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
                     showTorchButtonIfSupported: true,
                     showZoomSliderIfSupported: false,
-                    formatsToSupport: [
-                        Html5QrcodeSupportedFormats.CODABAR,
-                        Html5QrcodeSupportedFormats.CODE_39,
-                        Html5QrcodeSupportedFormats.CODE_93,
-                        Html5QrcodeSupportedFormats.CODE_128,
-                        Html5QrcodeSupportedFormats.ITF,
-                        Html5QrcodeSupportedFormats.EAN_13,
-                        Html5QrcodeSupportedFormats.EAN_8,
-                        Html5QrcodeSupportedFormats.UPC_A,
-                        Html5QrcodeSupportedFormats.UPC_E,
-                    ],
+                    formatsToSupport: ALL_SUPPORTED_BARCODE_FORMATS,
                 },
                 /* verbose= */ false
             );
@@ -176,7 +186,10 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
         let imageScanner = null;
 
         try {
-            imageScanner = new Html5Qrcode('reader-file-scanner');
+            imageScanner = new Html5Qrcode('reader-file-scanner', {
+                formatsToSupport: ALL_SUPPORTED_BARCODE_FORMATS,
+                useBarCodeDetectorIfSupported: true,
+            });
             let decodedText;
 
             try {

@@ -42,15 +42,23 @@ vi.mock('html5-qrcode', () => ({
     Html5Qrcode: MockHtml5Qrcode,
     Html5QrcodeScanner: MockHtml5QrcodeScanner,
     Html5QrcodeSupportedFormats: {
+        QR_CODE: 'QR_CODE',
+        AZTEC: 'AZTEC',
         CODABAR: 'CODABAR',
         CODE_39: 'CODE_39',
         CODE_93: 'CODE_93',
         CODE_128: 'CODE_128',
+        DATA_MATRIX: 'DATA_MATRIX',
+        MAXICODE: 'MAXICODE',
         ITF: 'ITF',
         EAN_13: 'EAN_13',
         EAN_8: 'EAN_8',
+        PDF_417: 'PDF_417',
+        RSS_14: 'RSS_14',
+        RSS_EXPANDED: 'RSS_EXPANDED',
         UPC_A: 'UPC_A',
         UPC_E: 'UPC_E',
+        UPC_EAN_EXTENSION: 'UPC_EAN_EXTENSION',
     },
     Html5QrcodeScanType: {
         SCAN_TYPE_CAMERA: 'SCAN_TYPE_CAMERA',
@@ -96,7 +104,25 @@ describe('CameraScannerModal', () => {
                 videoConstraints: {
                     facingMode: { ideal: 'environment' },
                 },
-                formatsToSupport: ['CODABAR', 'CODE_39', 'CODE_93', 'CODE_128', 'ITF', 'EAN_13', 'EAN_8', 'UPC_A', 'UPC_E'],
+                formatsToSupport: [
+                    'QR_CODE',
+                    'AZTEC',
+                    'CODABAR',
+                    'CODE_39',
+                    'CODE_93',
+                    'CODE_128',
+                    'DATA_MATRIX',
+                    'MAXICODE',
+                    'ITF',
+                    'EAN_13',
+                    'EAN_8',
+                    'PDF_417',
+                    'RSS_14',
+                    'RSS_EXPANDED',
+                    'UPC_A',
+                    'UPC_E',
+                    'UPC_EAN_EXTENSION',
+                ],
                 supportedScanTypes: ['SCAN_TYPE_CAMERA'],
             }),
             false
@@ -153,6 +179,29 @@ describe('CameraScannerModal', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
+    it('accepts Mitsubishi physical barcodes that encode the fixed quantity suffix', async () => {
+        const onClose = vi.fn();
+        const onScan = vi.fn();
+
+        render(
+            <CameraScannerModal
+                isOpen
+                onClose={onClose}
+                onScan={onScan}
+            />
+        );
+
+        await waitFor(() => {
+            expect(renderSpy).toHaveBeenCalledTimes(1);
+        });
+
+        const [handleSuccess] = renderSpy.mock.calls[0];
+        handleSuccess('1810A4270001');
+
+        expect(onScan).toHaveBeenCalledWith('1810A427');
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
     it('scans an uploaded barcode image as a fallback when camera scanning is unreliable', async () => {
         const onClose = vi.fn();
         const onScan = vi.fn();
@@ -174,6 +223,10 @@ describe('CameraScannerModal', () => {
         await waitFor(() => {
             expect(scanFileSpy).toHaveBeenCalledWith(file, true);
         });
+        expect(fileScannerConstructorSpy).toHaveBeenCalledWith('reader-file-scanner', expect.objectContaining({
+            useBarCodeDetectorIfSupported: true,
+            formatsToSupport: expect.arrayContaining(['QR_CODE', 'DATA_MATRIX', 'PDF_417', 'CODE_128']),
+        }));
         expect(onScan).toHaveBeenCalledWith('DP010374');
         expect(onClose).toHaveBeenCalledTimes(1);
     });

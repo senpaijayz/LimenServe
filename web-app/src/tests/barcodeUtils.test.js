@@ -27,6 +27,10 @@ describe('barcode utilities', () => {
             '21305W010P0001',
             '21305W010P',
         ]);
+        expect(getBarcodeLookupCandidates('1810A4270001')).toEqual([
+            '1810A4270001',
+            '1810A427',
+        ]);
     });
 
     it('matches either the raw sku or the scanned barcode payload to the same product', () => {
