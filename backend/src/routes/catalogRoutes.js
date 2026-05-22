@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import zlib from 'node:zlib';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireRole } from '../middleware/auth.js';
 import { clearPublicResponseCache } from '../middleware/cache.js';
@@ -22,6 +23,12 @@ const invoiceUpload = multer({
     }
 
     callback(null, true);
+  },
+});
+const priceListUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 20 * 1024 * 1024,
   },
 });
 const PRODUCT_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
@@ -90,12 +97,6 @@ const SERVICE_GROUP_CONFIG = {
     packageDescription: 'Upsell bundle of replacement filters and labor with light package savings for this Mitsubishi model.',
     serviceKeywords: ['filter', 'maintenance', 'inspection'],
   },
-  tire_service: {
-    packageKey: 'tire-service-package',
-    packageName: 'Smart Tire Care Bundle',
-    packageDescription: 'Upsell bundle of tire, wheel, balancing, and alignment services for this Mitsubishi model.',
-    serviceKeywords: ['tire', 'wheel alignment', 'wheel balancing', 'installation', 'alignment', 'balancing'],
-  },
   general_service: {
     packageKey: 'general-service-package',
     packageName: 'Smart Inspection Bundle',
@@ -111,7 +112,6 @@ const VEHICLE_PACKAGE_ORDER = [
   'brake_service',
   'cooling_service',
   'battery_service',
-  'tire_service',
   'general_service',
 ];
 
@@ -144,10 +144,6 @@ const PART_FUNCTION_RULES = [
   { partFunction: 'thermostat', serviceGroup: 'cooling_service', keywords: ['thermostat'] },
   { partFunction: 'water_pump', serviceGroup: 'cooling_service', keywords: ['water pump'] },
   { partFunction: 'radiator_hose', serviceGroup: 'cooling_service', keywords: ['radiator hose', 'water feed', 'water pump inlet', 'hose,throt body water', 'hose'] },
-  { partFunction: 'tire', serviceGroup: 'tire_service', keywords: ['tire', 'tyre'] },
-  { partFunction: 'wheel', serviceGroup: 'tire_service', keywords: ['wheel'] },
-  { partFunction: 'wheel_valve', serviceGroup: 'tire_service', keywords: ['valve'] },
-  { partFunction: 'lug_nut', serviceGroup: 'tire_service', keywords: ['lug nut', 'wheel nut', 'lug bolt'] },
 ];
 
 const COMPANION_FUNCTIONS = {
@@ -179,10 +175,6 @@ const COMPANION_FUNCTIONS = {
   thermostat: ['coolant', 'radiator', 'water_pump', 'radiator_hose'],
   water_pump: ['coolant', 'thermostat', 'radiator_hose', 'radiator'],
   radiator_hose: ['coolant', 'radiator', 'thermostat', 'water_pump'],
-  tire: ['wheel', 'wheel_valve', 'lug_nut'],
-  wheel: ['tire', 'wheel_valve', 'lug_nut'],
-  wheel_valve: ['tire', 'wheel'],
-  lug_nut: ['tire', 'wheel'],
 };
 
 const RECOMMENDATION_STOP_WORDS = new Set([
@@ -223,8 +215,193 @@ function normalizePriceListItems(items = []) {
     .map((item) => ({
       sku: String(item?.sku || '').trim().toUpperCase(),
       price: parsePrice(item?.price),
+      name: normalizeOptionalText(item?.name || item?.description, 220),
+      model: normalizeOptionalText(item?.model || item?.application, 140),
+      category: normalizeOptionalText(item?.category, 140),
+      sourceCategory: normalizeOptionalText(item?.sourceCategory || item?.category, 140),
     }))
     .filter((item) => item.sku && item.price !== null);
+}
+
+function decodeXmlEntities(value = '') {
+  return String(value)
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code) => String.fromCharCode(Number.parseInt(code, 16)));
+}
+
+function parseCsvRows(text = '') {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const nextChar = text[index + 1];
+
+    if (char === '"' && inQuotes && nextChar === '"') {
+      cell += '"';
+      index += 1;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      row.push(cell.trim());
+      cell = '';
+    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') {
+        index += 1;
+      }
+      row.push(cell.trim());
+      if (row.some(Boolean)) {
+        rows.push(row);
+      }
+      row = [];
+      cell = '';
+    } else {
+      cell += char;
+    }
+  }
+
+  row.push(cell.trim());
+  if (row.some(Boolean)) {
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+function findZipEntry(buffer, filename) {
+  for (let offset = buffer.length - 22; offset >= 0; offset -= 1) {
+    if (buffer.readUInt32LE(offset) !== 0x06054b50) {
+      continue;
+    }
+
+    const entryCount = buffer.readUInt16LE(offset + 10);
+    const centralDirectorySize = buffer.readUInt32LE(offset + 12);
+    const centralDirectoryOffset = buffer.readUInt32LE(offset + 16);
+    const end = centralDirectoryOffset + centralDirectorySize;
+    let cursor = centralDirectoryOffset;
+
+    for (let entryIndex = 0; entryIndex < entryCount && cursor < end; entryIndex += 1) {
+      if (buffer.readUInt32LE(cursor) !== 0x02014b50) {
+        break;
+      }
+
+      const compressionMethod = buffer.readUInt16LE(cursor + 10);
+      const compressedSize = buffer.readUInt32LE(cursor + 20);
+      const filenameLength = buffer.readUInt16LE(cursor + 28);
+      const extraLength = buffer.readUInt16LE(cursor + 30);
+      const commentLength = buffer.readUInt16LE(cursor + 32);
+      const localHeaderOffset = buffer.readUInt32LE(cursor + 42);
+      const entryName = buffer.toString('utf8', cursor + 46, cursor + 46 + filenameLength);
+
+      if (entryName === filename) {
+        const localFilenameLength = buffer.readUInt16LE(localHeaderOffset + 26);
+        const localExtraLength = buffer.readUInt16LE(localHeaderOffset + 28);
+        const dataStart = localHeaderOffset + 30 + localFilenameLength + localExtraLength;
+        const compressed = buffer.subarray(dataStart, dataStart + compressedSize);
+
+        if (compressionMethod === 0) {
+          return compressed.toString('utf8');
+        }
+
+        if (compressionMethod === 8) {
+          return zlib.inflateRawSync(compressed).toString('utf8');
+        }
+
+        throw new Error(`Unsupported XLSX compression method ${compressionMethod}.`);
+      }
+
+      cursor += 46 + filenameLength + extraLength + commentLength;
+    }
+  }
+
+  return '';
+}
+
+function parseSharedStrings(xml = '') {
+  return Array.from(xml.matchAll(/<si\b[\s\S]*?<\/si>/g)).map(([si]) => {
+    const values = Array.from(si.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)).map((match) => decodeXmlEntities(match[1]));
+    return values.join('');
+  });
+}
+
+function getCellIndex(cellRef = '') {
+  const letters = String(cellRef).replace(/\d+/g, '').toUpperCase();
+  return letters.split('').reduce((total, letter) => (total * 26) + letter.charCodeAt(0) - 64, 0) - 1;
+}
+
+function parseXlsxRows(buffer) {
+  const sharedStrings = parseSharedStrings(findZipEntry(buffer, 'xl/sharedStrings.xml'));
+  const sheetXml = findZipEntry(buffer, 'xl/worksheets/sheet1.xml');
+
+  if (!sheetXml) {
+    throw new Error('The Excel workbook does not contain a first worksheet.');
+  }
+
+  return Array.from(sheetXml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g))
+    .map((rowMatch) => {
+      const row = [];
+      for (const cellMatch of rowMatch[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
+        const attrs = cellMatch[1];
+        const body = cellMatch[2];
+        const ref = attrs.match(/\br="([^"]+)"/)?.[1] || '';
+        const type = attrs.match(/\bt="([^"]+)"/)?.[1] || '';
+        const index = Math.max(getCellIndex(ref), row.length);
+        const rawValue = body.match(/<v>([\s\S]*?)<\/v>/)?.[1] ?? body.match(/<t[^>]*>([\s\S]*?)<\/t>/)?.[1] ?? '';
+        const value = type === 's' ? sharedStrings[Number(rawValue)] ?? '' : decodeXmlEntities(rawValue);
+        row[index] = String(value).trim();
+      }
+      return row;
+    })
+    .filter((row) => row.some(Boolean));
+}
+
+function normalizeHeader(value = '') {
+  return String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function rowsToPriceListItems(rows = []) {
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const header = rows[0].map(normalizeHeader);
+  const hasHeader = header.some((value) => ['partnumber', 'sku', 'partno', 'price', 'retailprice', 'srp'].includes(value));
+  const dataRows = hasHeader ? rows.slice(1) : rows;
+  const findIndex = (names, fallback) => {
+    const found = header.findIndex((value) => names.includes(value));
+    return found >= 0 ? found : fallback;
+  };
+  const skuIndex = findIndex(['partnumber', 'partno', 'part', 'sku', 'itemcode', 'code'], 0);
+  const priceIndex = findIndex(['price', 'retailprice', 'srp', 'listprice', 'amount'], 1);
+  const nameIndex = findIndex(['name', 'description', 'partname', 'itemdescription'], 2);
+  const modelIndex = findIndex(['model', 'application', 'vehicle', 'modelname'], 3);
+  const categoryIndex = findIndex(['category', 'sourcecategory', 'group'], 4);
+
+  return normalizePriceListItems(dataRows.map((row) => ({
+    sku: row[skuIndex],
+    price: row[priceIndex],
+    name: row[nameIndex],
+    model: row[modelIndex],
+    category: row[categoryIndex],
+  })));
+}
+
+function parsePriceListUpload(file) {
+  const filename = String(file?.originalname || '').toLowerCase();
+  const mimetype = String(file?.mimetype || '').toLowerCase();
+
+  if (filename.endsWith('.xlsx') || mimetype.includes('spreadsheetml')) {
+    return rowsToPriceListItems(parseXlsxRows(file.buffer));
+  }
+
+  return rowsToPriceListItems(parseCsvRows(file.buffer.toString('utf8').replace(/\t/g, ',')));
 }
 
 function getPreviousDate(isoDate) {
@@ -285,7 +462,7 @@ function buildSmartPackageCopy(serviceGroup, packageName, packageDescription) {
 
 function getSmartDiscountRate({ consequentKind, serviceGroup, matchLevel }) {
   if (consequentKind === 'service') {
-    return serviceGroup === 'brake_service' || serviceGroup === 'tire_service'
+    return serviceGroup === 'brake_service'
       ? SMART_PART_DISCOUNT_RATE
       : SMART_SERVICE_DISCOUNT_RATE;
   }
@@ -1163,11 +1340,6 @@ function buildVehiclePackageCopy(serviceGroup, fallbackName) {
         packageName: 'Filter Service Package',
         packageDescription: 'Replacement filters and service labor grouped into one cleaner maintenance visit.',
       };
-    case 'tire_service':
-      return {
-        packageName: 'Tire Care Package',
-        packageDescription: 'Tire support parts with balancing and alignment-ready labor for steadier road feel.',
-      };
     default:
       return {
         packageName: fallbackName || 'Smart Mitsubishi Bundle',
@@ -1371,9 +1543,6 @@ function inferHeuristicServiceGroup(text) {
   }
   if (matchesAnyKeyword(text, ['battery', 'terminal'])) {
     return 'battery_service';
-  }
-  if (matchesAnyKeyword(text, ['tire', 'tyre', 'wheel', 'lug', 'valve'])) {
-    return 'tire_service';
   }
   if (matchesAnyKeyword(text, ['filter'])) {
     return 'filter_service';
@@ -1632,9 +1801,6 @@ function pickFallbackServiceGroup(clickedProduct, clickedProfile) {
   const text = buildProductSearchText(clickedProduct);
   const category = normalizeText(clickedProduct?.category);
 
-  if (category.includes('tire') || category.includes('wheel')) {
-    return 'tire_service';
-  }
   if (category.includes('brake')) {
     return 'brake_service';
   }
@@ -3578,85 +3744,194 @@ router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next)
   try {
     const items = normalizePriceListItems(req.body?.items);
     const effectiveFrom = req.body?.effectiveFrom || new Date().toISOString().slice(0, 10);
+    const result = await replaceRetailPrices(items, effectiveFrom);
 
-    if (items.length === 0) {
-      return res.status(400).json({ error: 'Provide at least one valid part number and price.' });
-    }
-
-    const uniqueItems = Array.from(
-      items.reduce((map, item) => map.set(item.sku, item), new Map()).values()
-    );
-
-    const skuList = uniqueItems.map((item) => item.sku);
-    const { data: products, error: productsError } = await supabaseAdmin
-      .schema('catalog')
-      .from('products')
-      .select('id, sku, name')
-      .in('sku', skuList);
-
-    if (productsError) {
-      throw productsError;
-    }
-
-    const productMap = new Map((products ?? []).map((product) => [product.sku, product]));
-    const matchedItems = uniqueItems.filter((item) => productMap.has(item.sku));
-    const skippedItems = uniqueItems.filter((item) => !productMap.has(item.sku));
-
-    if (matchedItems.length === 0) {
-      return res.status(404).json({ error: 'No matching part numbers were found in the catalog.', skippedItems });
-    }
-
-    const matchedProductIds = matchedItems.map((item) => productMap.get(item.sku).id);
-    const previousDate = getPreviousDate(effectiveFrom);
-
-    const { error: archiveError } = await supabaseAdmin
-      .schema('catalog')
-      .from('product_prices')
-      .update({
-        is_current: false,
-        effective_to: previousDate,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('price_type', 'retail')
-      .eq('is_current', true)
-      .in('product_id', matchedProductIds);
-
-    if (archiveError) {
-      throw archiveError;
-    }
-
-    const newPrices = matchedItems.map((item) => ({
-      product_id: productMap.get(item.sku).id,
-      price_type: 'retail',
-      amount: item.price,
-      currency: 'PHP',
-      effective_from: effectiveFrom,
-      effective_to: null,
-      is_current: true,
-      business_date: effectiveFrom,
-    }));
-
-    const { error: insertError } = await supabaseAdmin
-      .schema('catalog')
-      .from('product_prices')
-      .insert(newPrices);
-
-    if (insertError) {
-      throw insertError;
-    }
-
-    invalidateProductCatalogCache();
-
-    res.json({
-      updatedCount: matchedItems.length,
-      skippedCount: skippedItems.length,
-      skippedItems,
-      effectiveFrom,
-    });
+    res.json(result);
   } catch (error) {
     next(error);
   }
 });
+
+router.post('/prices/bulk-replace-file', requireRole('admin'), priceListUpload.single('priceList'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Upload a CSV or Excel price list file.' });
+    }
+
+    const items = parsePriceListUpload(req.file);
+    const effectiveFrom = req.body?.effectiveFrom || new Date().toISOString().slice(0, 10);
+    const result = await replaceRetailPrices(items, effectiveFrom);
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+async function replaceRetailPrices(items, effectiveFrom) {
+  if (items.length === 0) {
+    const error = new Error('Provide at least one valid part number and price.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const uniqueItems = Array.from(
+    items.reduce((map, item) => map.set(item.sku, item), new Map()).values()
+  );
+
+  const skuList = uniqueItems.map((item) => item.sku);
+  const { data: currentProducts, error: productsError } = await supabaseAdmin
+    .schema('catalog')
+    .from('products')
+    .select('id, sku, name, model_name, category, brand, uom, status, source_category, metadata')
+    .in('sku', skuList);
+
+  if (productsError) {
+    throw productsError;
+  }
+
+  let productMap = new Map((currentProducts ?? []).map((product) => [product.sku, product]));
+  const nowIso = new Date().toISOString();
+  const businessDate = effectiveFrom;
+  const productRows = uniqueItems
+    .filter((item) => item.name || item.model || item.category || !productMap.has(item.sku))
+    .map((item) => {
+      const currentProduct = productMap.get(item.sku) ?? {};
+      const sourceCategory = item.sourceCategory || item.category || currentProduct.source_category || '';
+      const name = item.name || currentProduct.name || item.sku;
+      const modelName = item.model || currentProduct.model_name || '';
+      const classification = classifyInventoryItem({
+        sku: item.sku,
+        name,
+        model_name: modelName,
+        category: item.category || currentProduct.category || sourceCategory,
+        sourceCategory,
+        metadata: { sourceCategory },
+      });
+
+      return {
+        sku: item.sku,
+        name,
+        model_name: modelName || null,
+        category: classification.category,
+        brand: currentProduct.brand || 'Mitsubishi',
+        uom: currentProduct.uom || 'PC',
+        status: currentProduct.status || 'out_of_stock',
+        source_category: sourceCategory || null,
+        metadata: mergeProductMetadata(currentProduct.metadata, {
+          sourceCategory,
+          classification: classification.trace,
+          priceListUpload: {
+            source: 'bulk_replace',
+            effectiveFrom: businessDate,
+            uploadedAt: nowIso,
+          },
+        }),
+        is_active: true,
+        updated_at: nowIso,
+      };
+    });
+
+  if (productRows.length > 0) {
+    const { data: upsertedProducts, error: upsertError } = await supabaseAdmin
+      .schema('catalog')
+      .from('products')
+      .upsert(productRows, { onConflict: 'sku' })
+      .select('id, sku, name, model_name, category, source_category, metadata');
+
+    if (upsertError) {
+      throw upsertError;
+    }
+
+    productMap = new Map([
+      ...productMap,
+      ...(upsertedProducts ?? []).map((product) => [product.sku, product]),
+    ]);
+
+    const newBalanceRows = (upsertedProducts ?? [])
+      .filter((product) => !currentProducts?.some((currentProduct) => currentProduct.id === product.id))
+      .map((product) => ({
+        product_id: product.id,
+        on_hand: 0,
+        reserved: 0,
+        reorder_point: 0,
+        reorder_quantity: 0,
+        location: {},
+        as_of_date: businessDate,
+        business_date: businessDate,
+      }));
+
+    if (newBalanceRows.length > 0) {
+      const { error: balanceError } = await supabaseAdmin
+        .schema('catalog')
+        .from('inventory_balances')
+        .upsert(newBalanceRows, { onConflict: 'product_id', ignoreDuplicates: true });
+
+      if (balanceError) {
+        throw balanceError;
+      }
+    }
+  }
+
+  const matchedItems = uniqueItems.filter((item) => productMap.has(item.sku));
+  const skippedItems = uniqueItems.filter((item) => !productMap.has(item.sku));
+
+  if (matchedItems.length === 0) {
+    const error = new Error('No matching part numbers were found in the catalog.');
+    error.statusCode = 404;
+    error.skippedItems = skippedItems;
+    throw error;
+  }
+
+  const matchedProductIds = matchedItems.map((item) => productMap.get(item.sku).id);
+  const previousDate = getPreviousDate(effectiveFrom);
+
+  const { error: archiveError } = await supabaseAdmin
+    .schema('catalog')
+    .from('product_prices')
+    .update({
+      is_current: false,
+      effective_to: previousDate,
+      updated_at: nowIso,
+    })
+    .eq('price_type', 'retail')
+    .eq('is_current', true)
+    .in('product_id', matchedProductIds);
+
+  if (archiveError) {
+    throw archiveError;
+  }
+
+  const newPrices = matchedItems.map((item) => ({
+    product_id: productMap.get(item.sku).id,
+    price_type: 'retail',
+    amount: item.price,
+    currency: 'PHP',
+    effective_from: effectiveFrom,
+    effective_to: null,
+    is_current: true,
+    business_date: effectiveFrom,
+  }));
+
+  const { error: insertError } = await supabaseAdmin
+    .schema('catalog')
+    .from('product_prices')
+    .insert(newPrices);
+
+  if (insertError) {
+    throw insertError;
+  }
+
+  invalidateProductCatalogCache();
+
+  return {
+    updatedCount: matchedItems.length,
+    skippedCount: skippedItems.length,
+    skippedItems,
+    createdOrUpdatedProducts: productRows.length,
+    effectiveFrom,
+  };
+}
 
 router.get('/products/:productId/recommendations', async (req, res, next) => {
   try {

@@ -1,81 +1,61 @@
-export const CLASSIFIER_VERSION = '2026-04-20-v1';
+export const CLASSIFIER_VERSION = '2026-05-22-v2';
 
 export const OPERATIONAL_CATEGORIES = [
   'Brakes & Suspension',
-  'Electrical & Sensors',
+  'Electrical & Lighting',
   'Filters & Fluids',
-  'Ignition & Engine Components',
-  'Cooling System',
+  'Engine & Ignition',
+  'Cooling & A/C',
   'Transmission & Drivetrain',
-  'Body & Interior',
+  'Body & Exterior',
+  'Interior & Trim',
+  'Hardware & Fasteners',
+  'Tools & Consumables',
   'General Parts & Accessories',
-  'Wheels & Tires',
 ];
 
 const OPERATIONAL_CATEGORY_SET = new Set(OPERATIONAL_CATEGORIES);
 
 export const LEGACY_CATEGORY_MAP = {
   accessories: 'General Parts & Accessories',
-  'air conditioning': 'Cooling System',
-  'belts & pulleys': 'Ignition & Engine Components',
-  'body parts': 'Body & Interior',
+  'air conditioning': 'Cooling & A/C',
+  'belts & pulleys': 'Engine & Ignition',
+  'body parts': 'Body & Exterior',
   brakes: 'Brakes & Suspension',
   clutch: 'Transmission & Drivetrain',
-  cooling: 'Cooling System',
-  electrical: 'Electrical & Sensors',
-  engine: 'Ignition & Engine Components',
-  exhaust: 'Ignition & Engine Components',
+  cooling: 'Cooling & A/C',
+  electrical: 'Electrical & Lighting',
+  engine: 'Engine & Ignition',
+  exhaust: 'Engine & Ignition',
   filters: 'Filters & Fluids',
   'fluids & oils': 'Filters & Fluids',
   'general parts': 'General Parts & Accessories',
-  ignition: 'Ignition & Engine Components',
-  lighting: 'Electrical & Sensors',
+  ignition: 'Engine & Ignition',
+  lighting: 'Electrical & Lighting',
   steering: 'Brakes & Suspension',
   suspension: 'Brakes & Suspension',
   transmission: 'Transmission & Drivetrain',
-  wheels: 'Wheels & Tires',
-  tires: 'Wheels & Tires',
-  'wheels & tires': 'Wheels & Tires',
+  wheels: 'General Parts & Accessories',
+  tires: 'General Parts & Accessories',
+  'wheels & tires': 'General Parts & Accessories',
 };
 
 const SKU_EXACT_OVERRIDES = {
-  DP010712: 'Electrical & Sensors',
+  DP010712: 'Electrical & Lighting',
   MZ691066: 'Filters & Fluids',
 };
 
 const SKU_PREFIX_OVERRIDES = [
   { prefix: 'BL', category: 'General Parts & Accessories', ruleKey: 'sku-prefix:bl' },
-  { prefix: 'TYR', category: 'Wheels & Tires', ruleKey: 'sku-prefix:tyr' },
-  { prefix: 'WHL', category: 'Wheels & Tires', ruleKey: 'sku-prefix:whl' },
+  { prefix: 'TYR', category: 'General Parts & Accessories', ruleKey: 'sku-prefix:tyr' },
+  { prefix: 'WHL', category: 'General Parts & Accessories', ruleKey: 'sku-prefix:whl' },
 ];
 
 const CATEGORY_RULES = [
   {
-    category: 'Wheels & Tires',
-    ruleKey: 'keywords:wheels-tires',
-    priority: 1,
-    keywords: [
-      'wheel ',
-      ' wheel',
-      'alloy wheel',
-      'tire',
-      'tyre',
-      'lug nut',
-      'wheel nut',
-      'wheel bolt',
-      'valve stem',
-      'wheel valve',
-      'hub cap',
-      'hubcap',
-      'rim ',
-      ' rim',
-    ],
-    negativeKeywords: ['steering wheel'],
-  },
-  {
     category: 'Brakes & Suspension',
     ruleKey: 'keywords:brakes-suspension',
-    priority: 2,
+    priority: 1,
     keywords: [
       'brake',
       'disc rotor',
@@ -101,9 +81,10 @@ const CATEGORY_RULES = [
       'knuckle',
       'hub ',
       ' hub',
+      'hub bearing',
+      'wheel bearing',
       'tie rod',
       'rack end',
-      'steering',
       'power steering',
       'steering rack',
       'steering gear',
@@ -114,9 +95,9 @@ const CATEGORY_RULES = [
     negativeKeywords: ['sensor', 'switch', 'relay', 'harness'],
   },
   {
-    category: 'Cooling System',
+    category: 'Cooling & A/C',
     ruleKey: 'keywords:cooling',
-    priority: 3,
+    priority: 2,
     keywords: [
       'radiator',
       'coolant',
@@ -140,7 +121,7 @@ const CATEGORY_RULES = [
   {
     category: 'Transmission & Drivetrain',
     ruleKey: 'keywords:transmission-drivetrain',
-    priority: 4,
+    priority: 3,
     keywords: [
       'transmission',
       'gear',
@@ -170,9 +151,9 @@ const CATEGORY_RULES = [
     negativeKeywords: ['speedometer bulb', 'lamp', 'switch'],
   },
   {
-    category: 'Electrical & Sensors',
-    ruleKey: 'keywords:electrical-sensors',
-    priority: 5,
+    category: 'Electrical & Lighting',
+    ruleKey: 'keywords:electrical-lighting',
+    priority: 4,
     keywords: [
       'sensor',
       'switch',
@@ -207,7 +188,7 @@ const CATEGORY_RULES = [
   {
     category: 'Filters & Fluids',
     ruleKey: 'keywords:filters-fluids',
-    priority: 6,
+    priority: 5,
     keywords: [
       'filter',
       'strainer',
@@ -226,9 +207,9 @@ const CATEGORY_RULES = [
     negativeKeywords: ['oil seal', 'seal kit', 'gasket', 'oil cooler'],
   },
   {
-    category: 'Ignition & Engine Components',
+    category: 'Engine & Ignition',
     ruleKey: 'keywords:ignition-engine',
-    priority: 7,
+    priority: 6,
     keywords: [
       'engine',
       'cylinder',
@@ -261,9 +242,9 @@ const CATEGORY_RULES = [
     negativeKeywords: ['door', 'bumper', 'tailgate', 'seat', 'wheel nut'],
   },
   {
-    category: 'Body & Interior',
-    ruleKey: 'keywords:body-interior',
-    priority: 8,
+    category: 'Body & Exterior',
+    ruleKey: 'keywords:body-exterior',
+    priority: 7,
     keywords: [
       'door',
       'bumper',
@@ -273,32 +254,96 @@ const CATEGORY_RULES = [
       'mirror',
       'glass',
       'window',
+      'grille',
+      'weatherstrip',
+      'w/strip',
+      'tailgate',
+      'roof',
+      'wheelhouse',
+      'windshield',
+      'door lock',
+      'door lamp',
+      'quarter panel',
+      'side sill',
+      'apron',
+    ],
+    negativeKeywords: ['brake', 'radiator', 'alternator', 'spark plug'],
+  },
+  {
+    category: 'Interior & Trim',
+    ruleKey: 'keywords:interior-trim',
+    priority: 8,
+    keywords: [
       'seat',
       'trim',
       'garnish',
       'moulding',
       'molding',
-      'grille',
-      'weatherstrip',
-      'w/strip',
       'console',
       'instrument panel',
       'dashboard',
-      'tailgate',
-      'roof',
       'room mirror',
       'interior',
-      'wheelhouse',
-      'windshield',
-      'door lock',
-      'door lamp',
+      'steering wheel',
+      'seat belt',
+      'floor console',
+      'bezel',
+      'meter hood',
+      'sunvisor',
     ],
     negativeKeywords: ['brake', 'radiator', 'alternator', 'spark plug'],
   },
   {
+    category: 'Tools & Consumables',
+    ruleKey: 'keywords:tools-consumables',
+    priority: 9,
+    keywords: [
+      'sandpaper',
+      'cleaner',
+      'degreaser',
+      'adhesive',
+      'sealant',
+      'paint',
+      'spray',
+      'polish',
+      'compound',
+      'tape',
+      'terminal cleaner',
+    ],
+    negativeKeywords: [],
+  },
+  {
+    category: 'Hardware & Fasteners',
+    ruleKey: 'keywords:hardware-fasteners',
+    priority: 10,
+    keywords: [
+      'clip',
+      'screw',
+      'bolt',
+      'nut',
+      'washer',
+      'grommet',
+      'bracket',
+      'retainer',
+      'rivet',
+      'spacer',
+      'pin',
+      'plug',
+      'cap',
+      'lug nut',
+      'wheel nut',
+      'wheel bolt',
+      'valve stem',
+      'wheel valve',
+      'hub cap',
+      'hubcap',
+    ],
+    negativeKeywords: ['radiator cap', 'fuel cap', 'oil cap', 'cap,tailgate trim'],
+  },
+  {
     category: 'General Parts & Accessories',
     ruleKey: 'keywords:general-accessories',
-    priority: 9,
+    priority: 11,
     keywords: [
       'accessory',
       'kit',
@@ -324,7 +369,8 @@ const CATEGORY_RULES = [
   },
 ];
 
-const PCC_HINTS = {};
+const PCC_HINTS = {
+};
 
 function normalizeWhitespace(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -344,7 +390,7 @@ function uniqueTokens(tokens = []) {
   return Array.from(new Set(tokens.filter(Boolean)));
 }
 
-export function normalizeOperationalCategory(value) {
+function normalizeOperationalCategory(value) {
   const raw = normalizeWhitespace(value);
   if (!raw) {
     return null;
@@ -358,15 +404,15 @@ export function normalizeOperationalCategory(value) {
 }
 
 function getDerivedSourceCategory(item = {}) {
-  const categoryCandidates = [
-    item.sourceCategory,
-    item.source_category,
-    item.category,
-    item.metadata?.sourceCategory,
-  ];
-  const rawCategory = categoryCandidates
-    .map((value) => normalizeWhitespace(value))
-    .find(Boolean);
+  const explicitSourceCategory = normalizeWhitespace(item.source_category || item.sourceCategory || '');
+  if (explicitSourceCategory) {
+    return explicitSourceCategory;
+  }
+
+  const rawCategory = normalizeWhitespace(item.category || '');
+  if (!rawCategory) {
+    return null;
+  }
 
   return OPERATIONAL_CATEGORY_SET.has(rawCategory) ? null : rawCategory;
 }
@@ -411,7 +457,7 @@ function getKeywordMatch(searchText) {
   return bestMatch;
 }
 
-export function classifyInventoryItem(item = {}) {
+function classifyInventoryItem(item = {}) {
   const sku = normalizeSku(item.sku);
   const searchText = buildSearchText(item);
   const sourceCategory = getDerivedSourceCategory(item);
@@ -509,7 +555,7 @@ export function classifyInventoryItem(item = {}) {
   };
 }
 
-export function normalizeCatalogRecord(item = {}) {
+function normalizeCatalogRecord(item = {}) {
   const classification = classifyInventoryItem(item);
 
   return {
@@ -524,6 +570,12 @@ const inventoryClassifier = {
   CLASSIFIER_VERSION,
   LEGACY_CATEGORY_MAP,
   OPERATIONAL_CATEGORIES,
+  classifyInventoryItem,
+  normalizeCatalogRecord,
+  normalizeOperationalCategory,
+};
+
+export {
   classifyInventoryItem,
   normalizeCatalogRecord,
   normalizeOperationalCategory,

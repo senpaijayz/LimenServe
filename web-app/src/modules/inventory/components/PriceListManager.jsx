@@ -4,21 +4,34 @@ import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import Input from '../../../components/ui/Input';
 import { useToast } from '../../../components/ui/Toast';
-import { getCurrentRetailPriceList, replaceRetailPriceList } from '../../../services/catalogApi';
+import { getCurrentRetailPriceList, replaceRetailPriceList, replaceRetailPriceListFile } from '../../../services/catalogApi';
 
 function parsePriceListText(rawText) {
-    return rawText
+    const rows = rawText
         .split(/\r?\n/)
         .map((line) => line.trim())
         .filter(Boolean)
-        .map((line) => {
-            const normalized = line.replace(/\t/g, ',');
-            const [sku = '', price = ''] = normalized.split(',').map((part) => part.trim());
-            return {
-                sku: sku.toUpperCase(),
-                price: Number(price),
-            };
-        })
+        .map((line) => line.replace(/\t/g, ',').split(',').map((part) => part.trim()));
+    const normalizedHeader = (rows[0] || []).map((part) => part.toLowerCase().replace(/[^a-z0-9]+/g, ''));
+    const hasHeader = normalizedHeader.some((part) => ['partnumber', 'sku', 'partno', 'price', 'retailprice', 'srp'].includes(part));
+    const findIndex = (names, fallback) => {
+        const found = normalizedHeader.findIndex((part) => names.includes(part));
+        return found >= 0 ? found : fallback;
+    };
+    const skuIndex = findIndex(['partnumber', 'partno', 'part', 'sku', 'itemcode', 'code'], 0);
+    const priceIndex = findIndex(['price', 'retailprice', 'srp', 'listprice', 'amount'], 1);
+    const nameIndex = findIndex(['name', 'description', 'partname', 'itemdescription'], 2);
+    const modelIndex = findIndex(['model', 'application', 'vehicle', 'modelname'], 3);
+    const categoryIndex = findIndex(['category', 'sourcecategory', 'group'], 4);
+
+    return (hasHeader ? rows.slice(1) : rows)
+        .map((row) => ({
+            sku: String(row[skuIndex] || '').toUpperCase(),
+            price: Number(row[priceIndex]),
+            name: row[nameIndex] || '',
+            model: row[modelIndex] || '',
+            category: row[categoryIndex] || '',
+        }))
         .filter((item) => item.sku && Number.isFinite(item.price) && item.price >= 0);
 }
 
@@ -42,6 +55,7 @@ const PriceListManager = ({ onUpdated }) => {
     const [bulkText, setBulkText] = useState('');
     const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isUploadingFile, setIsUploadingFile] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
     const [lastResult, setLastResult] = useState(null);
 
@@ -68,15 +82,31 @@ const PriceListManager = ({ onUpdated }) => {
         }
     };
 
+    const applyResult = (result) => {
+        setLastResult(result);
+        success(`Updated ${result.updatedCount} catalog prices.`);
+        onUpdated?.();
+    };
+
     const handleFileUpload = async (event) => {
         const file = event.target.files?.[0];
         if (!file) {
             return;
         }
 
-        const text = await file.text();
-        setBulkText(text);
-        event.target.value = '';
+        setIsUploadingFile(true);
+        setLastResult(null);
+
+        try {
+            const result = await replaceRetailPriceListFile(file, effectiveFrom);
+            applyResult(result);
+            setBulkText('');
+        } catch (uploadError) {
+            error(uploadError.message || 'Failed to upload the price list file.');
+        } finally {
+            setIsUploadingFile(false);
+            event.target.value = '';
+        }
     };
 
     const handleSubmit = async (submitEvent) => {
@@ -92,10 +122,8 @@ const PriceListManager = ({ onUpdated }) => {
 
         try {
             const result = await replaceRetailPriceList(parsedItems, effectiveFrom);
-            setLastResult(result);
-            success(`Updated ${result.updatedCount} catalog prices.`);
+            applyResult(result);
             setBulkText('');
-            onUpdated?.();
         } catch (submitError) {
             error(submitError.message || 'Failed to replace the price list.');
         } finally {
@@ -123,7 +151,7 @@ const PriceListManager = ({ onUpdated }) => {
                     <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4">
                         <p className="text-sm font-semibold text-primary-950">Supabase retail price source</p>
                         <p className="mt-1 text-sm text-primary-600">
-                            Paste a full yearly price list using <span className="font-semibold">PART_NUMBER,PRICE</span> per line. The upload replaces the current retail prices in Supabase and keeps price history in <span className="font-semibold">app.product_prices</span>.
+                            Upload the yearly Excel or CSV price list from Mitsubishi, or paste rows manually. The live upload replaces current retail prices in Supabase, keeps price history, and creates newly listed part numbers when the file includes description data.
                         </p>
                     </div>
 
@@ -150,11 +178,12 @@ const PriceListManager = ({ onUpdated }) => {
 
                             <label className="btn btn-outline cursor-pointer">
                                 <Upload className="w-4 h-4" />
-                                <span>Upload CSV</span>
+                                <span>{isUploadingFile ? 'Uploading...' : 'Upload Excel/CSV'}</span>
                                 <input
                                     type="file"
-                                    accept=".csv,.txt"
+                                    accept=".xlsx,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain"
                                     className="hidden"
+                                    disabled={isUploadingFile}
                                     onChange={handleFileUpload}
                                 />
                             </label>
@@ -167,7 +196,7 @@ const PriceListManager = ({ onUpdated }) => {
                             value={bulkText}
                             onChange={(event) => setBulkText(event.target.value)}
                             rows={12}
-                            placeholder={`LF-OF-001,450\nLF-EO-004,1850\nLF-SP-410,1680`}
+                            placeholder={`PART_NUMBER,PRICE,NAME,MODEL,CATEGORY\nLF-OF-001,450,Oil Filter,Montero,Filters\nLF-EO-004,1850,Engine Oil 4L,All Models,Fluids & Oils`}
                             className="input min-h-[260px] font-mono text-sm"
                         />
                         <p className="mt-2 text-xs uppercase tracking-[0.18em] text-primary-400">
@@ -179,6 +208,7 @@ const PriceListManager = ({ onUpdated }) => {
                         <div className="rounded-2xl border border-primary-200 bg-white p-4 text-sm text-primary-700">
                             <p className="font-semibold text-primary-950">Upload summary</p>
                             <p className="mt-2">Updated: {lastResult.updatedCount}</p>
+                            <p>Product records touched: {lastResult.createdOrUpdatedProducts ?? 0}</p>
                             <p>Skipped: {lastResult.skippedCount}</p>
                             <p>Effective from: {lastResult.effectiveFrom}</p>
                             {lastResult.skippedItems?.length > 0 && (

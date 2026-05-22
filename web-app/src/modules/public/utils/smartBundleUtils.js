@@ -43,10 +43,6 @@ export const SERVICE_GROUP_MARKETING_COPY = {
     heroTitle: 'Filter Service Package',
     subtitle: 'Air, cabin, and fuel-flow maintenance grouped into one cleaner service stop.',
   },
-  tire_service: {
-    heroTitle: 'Tire Care Package',
-    subtitle: 'Tire support parts plus balancing and alignment-ready service bundle.',
-  },
 };
 
 export function toNumber(value, fallback = 0) {

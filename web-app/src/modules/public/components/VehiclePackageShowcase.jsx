@@ -1,4 +1,4 @@
-import { BatteryCharging, Droplets, Gauge, ShieldCheck, Sparkles, Thermometer, Wrench, ArrowRight, Filter, Shuffle } from 'lucide-react';
+import { BatteryCharging, Droplets, Gauge, ShieldCheck, Sparkles, Thermometer, ArrowRight, Filter, Shuffle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatCurrency } from '../../../utils/formatters';
@@ -15,7 +15,6 @@ const serviceGroupIconMap = {
   battery_service: BatteryCharging,
   tune_up: Gauge,
   filter_service: Filter,
-  tire_service: Wrench,
 };
 
 function summarizeIncluded(items = [], kind) {

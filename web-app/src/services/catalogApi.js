@@ -678,6 +678,25 @@ export async function replaceRetailPriceList(items, effectiveFrom) {
   }
 }
 
+export async function replaceRetailPriceListFile(file, effectiveFrom) {
+  try {
+    const formData = new FormData();
+    formData.append('priceList', file);
+    formData.append('effectiveFrom', effectiveFrom);
+
+    const { data } = await apiClient.post('/catalog/prices/bulk-replace-file', formData, {
+      timeout: INVENTORY_API_TIMEOUT_MS,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Failed to upload the price list file.');
+  }
+}
+
 export async function getAnalyticsRefreshRuns(limitCount = 10) {
   try {
     const { data } = await apiClient.get('/analytics/refresh-runs', {

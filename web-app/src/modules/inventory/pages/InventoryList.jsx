@@ -25,17 +25,16 @@ import { buildLocator3DUrl } from '../../locator3d/utils/locatorNavigation';
 
 const PAGE_SIZE = 12;
 const INVENTORY_CATEGORY_OPTIONS = [
-    'Engine System',
+    'Brakes & Suspension',
     'Electrical & Lighting',
-    'Suspension & Steering',
-    'Brake System',
-    'Cooling System',
+    'Filters & Fluids',
+    'Engine & Ignition',
+    'Cooling & A/C',
     'Transmission & Drivetrain',
     'Body & Exterior',
-    'Interior & Cabin',
-    'Filters & Maintenance',
-    'Tires & Wheels',
-    'Fluids & Chemicals',
+    'Interior & Trim',
+    'Hardware & Fasteners',
+    'Tools & Consumables',
     'General Parts & Accessories',
 ].map((category) => ({ value: category, label: category }));
 
