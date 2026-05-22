@@ -27,6 +27,7 @@ describe('Mitsubishi genuine parts label', () => {
         expect(screen.getByText('QTY: 1')).toBeTruthy();
         expect(labelRoot?.getAttribute('data-barcode-value')).toBe('DP010374 0001');
         expect(labelRoot?.getAttribute('data-barcode-format')).toBe('CODE128');
+        expect(screen.getByTestId('product-label-sku-block').style.minHeight).toBe('110px');
     });
 
     it('writes print output with sticker-specific sizing and print color fidelity', () => {

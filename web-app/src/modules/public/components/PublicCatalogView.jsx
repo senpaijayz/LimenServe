@@ -35,13 +35,13 @@ const SORT_OPTIONS = [
 ];
 
 const GenuinePartsLabel = ({ product, compact = false, dense = false }) => {
-  const labelHeight = dense ? 'min-h-[150px]' : compact ? 'min-h-[250px]' : 'min-h-[320px]';
+  const labelHeight = dense ? 'h-[158px]' : compact ? 'h-[360px]' : 'h-[380px]';
   const labelSize = dense ? 'dense' : compact ? 'compact' : 'default';
-  const previewScale = dense ? 'scale-[0.72] sm:scale-[0.78]' : compact ? 'scale-[0.96]' : 'scale-100';
+  const previewScale = dense ? 'scale-[0.72] sm:scale-[0.78]' : compact ? 'scale-[0.88] min-[420px]:scale-[0.9] sm:scale-[0.92] xl:scale-[0.94]' : 'scale-100';
 
   return (
-    <div className={`${labelHeight} flex items-center justify-center overflow-visible`}>
-      <div className={`origin-top ${previewScale}`}>
+    <div className={`${labelHeight} flex w-full items-center justify-center overflow-hidden`}>
+      <div className={`origin-center ${previewScale}`}>
         <MitsubishiGenuinePartsLabel
           product={product}
           quantity={1}
@@ -373,11 +373,12 @@ const PublicCatalogView = () => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: index * 0.05 }}
                     onClick={() => setSelectedProduct(product)}
+                    className="h-full"
                   >
                     <div className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
                       <div className="absolute bottom-0 left-0 w-full h-1 bg-accent-primary scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left z-20" />
 
-                      <div className="relative border-b border-primary-200 bg-gradient-to-b from-white to-primary-50/80 p-3">
+                      <div className="relative flex h-[386px] items-center justify-center border-b border-primary-200 bg-gradient-to-b from-white to-primary-50/80 p-3">
                         <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
                           {product.inStock && (
                             <span className="bg-accent-blue text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 shadow-[0_0_15px_rgba(37,99,235,0.4)] rounded-sm">Available</span>
@@ -487,20 +488,22 @@ const PublicCatalogView = () => {
               </button>
 
               <div className="max-h-[92dvh] overflow-y-auto">
-                <div className="grid xl:grid-cols-[minmax(190px,0.45fr)_minmax(0,1.55fr)]">
-                  <div className="relative flex min-h-[170px] flex-col overflow-hidden bg-gradient-to-br from-primary-50 to-white p-3 xl:min-h-[220px] xl:p-4">
+                <div className="grid lg:grid-cols-[minmax(320px,0.72fr)_minmax(0,1.28fr)] xl:grid-cols-[minmax(380px,0.78fr)_minmax(0,1.22fr)]">
+                  <div className="relative flex min-h-[420px] flex-col overflow-hidden bg-gradient-to-br from-primary-50 via-white to-primary-100/60 p-4 sm:p-5 lg:min-h-[640px] xl:p-6">
                     <div className="absolute inset-0 bg-grid-pattern opacity-10" />
-                    <div className="relative z-10 mb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-primary-500 sm:text-xs">ID: {selectedProduct.sku}</div>
-                    <div className="relative z-10 flex-1">
-                      <GenuinePartsLabel product={selectedProduct} dense />
+                    <div className="relative z-10 font-mono text-[11px] uppercase tracking-[0.18em] text-primary-500 sm:text-xs">ID: {selectedProduct.sku}</div>
+                    <div className="relative z-10 flex flex-1 items-center justify-center py-5 sm:py-6">
+                      <div className="w-full max-w-[430px] rounded-[28px] border border-primary-200 bg-white p-3 shadow-xl shadow-primary-950/10">
+                        <GenuinePartsLabel product={selectedProduct} />
+                      </div>
                     </div>
-                    <div className="relative z-10 mt-3 flex items-center gap-2">
+                    <div className="relative z-10 flex items-center gap-2">
                       <Award className="w-4 h-4 text-accent-primary" />
                       <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-600 sm:text-xs">OEM Verified</span>
                     </div>
                   </div>
 
-                  <div className="flex flex-col bg-white p-3 sm:p-4 xl:border-l xl:border-primary-200">
+                  <div className="flex flex-col bg-white p-4 sm:p-5 lg:border-l lg:border-primary-200 xl:p-6">
                     <div className="mb-2 flex flex-wrap gap-1.5">
                       <span className="rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary-600">{selectedProduct.category}</span>
                       {selectedProduct.inStock && (

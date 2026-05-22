@@ -81,7 +81,7 @@ const BarcodeDisplay = forwardRef(({
                     width: '100%',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    overflow: 'hidden',
+                    overflow: 'visible',
                 }}
             >
                 <Barcode
@@ -94,6 +94,11 @@ const BarcodeDisplay = forwardRef(({
                     displayValue={displayValue}
                     background={background}
                     lineColor={lineColor}
+                    style={{
+                        display: 'block',
+                        maxWidth: '100%',
+                        height: 'auto',
+                    }}
                     {...props}
                 />
             </div>

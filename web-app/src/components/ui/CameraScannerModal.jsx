@@ -21,6 +21,52 @@ const normalizeScannedBarcode = (value) => (
     stripProductBarcodeSuffix(normalizeBarcodeToken(value))
 );
 
+const createBarcodeImageWithQuietZone = async (file) => {
+    if (typeof document === 'undefined' || !file?.type?.startsWith('image/')) {
+        return null;
+    }
+
+    const imageUrl = URL.createObjectURL(file);
+
+    try {
+        const image = await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = imageUrl;
+        });
+
+        const quietZone = Math.max(48, Math.round(Math.min(image.naturalWidth, image.naturalHeight) * 0.24));
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth + quietZone * 2;
+        canvas.height = image.naturalHeight + quietZone * 2;
+
+        const context = canvas.getContext('2d');
+        if (!context) {
+            return null;
+        }
+
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, quietZone, quietZone);
+
+        const blob = await new Promise((resolve) => {
+            canvas.toBlob(resolve, file.type || 'image/png', 1);
+        });
+
+        if (!blob) {
+            return null;
+        }
+
+        return new File([blob], `quiet-zone-${file.name || 'barcode.png'}`, {
+            type: blob.type || file.type || 'image/png',
+            lastModified: Date.now(),
+        });
+    } finally {
+        URL.revokeObjectURL(imageUrl);
+    }
+};
+
 /**
  * Camera Scanner Modal Component
  * Displays a live camera feed for scanning barcodes using html5-qrcode.
@@ -127,15 +173,32 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
 
         setFileScanStatus('Scanning image...');
 
+        let imageScanner = null;
+
         try {
-            const imageScanner = new Html5Qrcode('reader-file-scanner');
-            const decodedText = await imageScanner.scanFile(file, true);
+            imageScanner = new Html5Qrcode('reader-file-scanner');
+            let decodedText;
+
+            try {
+                decodedText = await imageScanner.scanFile(file, true);
+            } catch (scanError) {
+                const paddedFile = await createBarcodeImageWithQuietZone(file);
+
+                if (!paddedFile) {
+                    throw scanError;
+                }
+
+                setFileScanStatus('Retrying with scanner-friendly padding...');
+                decodedText = await imageScanner.scanFile(paddedFile, true);
+            }
 
             if (!completeScan(decodedText)) {
                 setFileScanStatus('No barcode found in that image.');
             }
         } catch {
             setFileScanStatus('No barcode found. Try a sharper photo with the full barcode visible.');
+        } finally {
+            imageScanner?.clear?.().catch(() => {});
         }
     };
 

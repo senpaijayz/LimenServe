@@ -22,6 +22,7 @@ const SIZE_PRESETS = {
         descriptionFontSize: 16,
         quantityFontSize: 16,
         skuFontSize: 64,
+        skuBlockMinHeight: 110,
         barcodeTopMargin: 12,
         barcodeHeight: 96,
         barcodeWidth: 1.08,
@@ -49,6 +50,7 @@ const SIZE_PRESETS = {
         descriptionFontSize: 14,
         quantityFontSize: 14,
         skuFontSize: 52,
+        skuBlockMinHeight: 94,
         barcodeTopMargin: 10,
         barcodeHeight: 86,
         barcodeWidth: 0.98,
@@ -76,6 +78,7 @@ const SIZE_PRESETS = {
         descriptionFontSize: 12,
         quantityFontSize: 12,
         skuFontSize: 40,
+        skuBlockMinHeight: 72,
         barcodeTopMargin: 8,
         barcodeHeight: 72,
         barcodeWidth: 0.84,
@@ -264,14 +267,20 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
                 </div>
 
                 <div
+                    data-testid="product-label-sku-block"
                     style={{
                         marginTop: size === 'dense' ? '10px' : '12px',
+                        minHeight: `${preset.skuBlockMinHeight}px`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                         textAlign: 'center',
                         fontSize: `${preset.skuFontSize}px`,
                         lineHeight: 0.96,
                         fontWeight: 500,
                         letterSpacing: '0.02em',
                         color: '#131517',
+                        overflowWrap: 'anywhere',
                     }}
                 >
                     {sku}
@@ -315,6 +324,8 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
                 <div
                     style={{
                         marginTop: `${preset.footerTopMargin}px`,
+                        paddingTop: size === 'dense' ? '4px' : '6px',
+                        marginBlockStart: 'auto',
                         display: 'flex',
                         alignItems: 'flex-end',
                         justifyContent: 'space-between',

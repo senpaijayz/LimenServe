@@ -178,6 +178,77 @@ describe('CameraScannerModal', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
+    it('retries uploaded barcode images with a generated quiet zone when the raw crop is too tight', async () => {
+        const onClose = vi.fn();
+        const onScan = vi.fn();
+        const originalCreateObjectUrl = URL.createObjectURL;
+        const originalRevokeObjectUrl = URL.revokeObjectURL;
+        const OriginalImage = globalThis.Image;
+        const originalCreateElement = document.createElement.bind(document);
+        const createElementSpy = vi.spyOn(document, 'createElement');
+
+        URL.createObjectURL = vi.fn(() => 'blob:barcode');
+        URL.revokeObjectURL = vi.fn();
+        globalThis.Image = class {
+            naturalWidth = 210
+            naturalHeight = 88
+            onload = null
+            onerror = null
+
+            set src(_value) {
+                queueMicrotask(() => this.onload?.());
+            }
+        };
+        createElementSpy.mockImplementation((tagName, options) => {
+            if (tagName === 'canvas') {
+                return {
+                    width: 0,
+                    height: 0,
+                    getContext: () => ({
+                        fillStyle: '',
+                        fillRect: vi.fn(),
+                        drawImage: vi.fn(),
+                    }),
+                    toBlob: (callback) => callback(new Blob(['padded'], { type: 'image/png' })),
+                };
+            }
+
+            return originalCreateElement(tagName, options);
+        });
+
+        scanFileSpy
+            .mockRejectedValueOnce(new Error('too tight'))
+            .mockResolvedValueOnce('* DP010374 0001 *');
+
+        render(
+            <CameraScannerModal
+                isOpen
+                onClose={onClose}
+                onScan={onScan}
+            />
+        );
+
+        const file = new File(['barcode'], 'cropped-barcode.png', { type: 'image/png' });
+        fireEvent.change(screen.getByLabelText(/upload barcode image/i), {
+            target: { files: [file] },
+        });
+
+        await waitFor(() => {
+            expect(scanFileSpy).toHaveBeenCalledTimes(2);
+        });
+
+        expect(scanFileSpy.mock.calls[0]).toEqual([file, true]);
+        expect(scanFileSpy.mock.calls[1][0]).toBeInstanceOf(File);
+        expect(scanFileSpy.mock.calls[1][0].name).toBe('quiet-zone-cropped-barcode.png');
+        expect(onScan).toHaveBeenCalledWith('DP010374');
+        expect(onClose).toHaveBeenCalledTimes(1);
+
+        createElementSpy.mockRestore();
+        URL.createObjectURL = originalCreateObjectUrl;
+        URL.revokeObjectURL = originalRevokeObjectUrl;
+        globalThis.Image = OriginalImage;
+    });
+
     it('lets staff submit the printed part number when a damaged label will not decode', async () => {
         const onClose = vi.fn();
         const onScan = vi.fn();
