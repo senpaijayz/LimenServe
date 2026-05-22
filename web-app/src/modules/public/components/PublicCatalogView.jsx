@@ -6,6 +6,7 @@ import {
   ChevronRight,
   X,
   LayoutGrid,
+  List,
   Check,
   Award,
   ArrowUpDown,
@@ -14,8 +15,6 @@ import {
   Sparkles,
   CarFront,
   ScanLine,
-  Eye,
-  EyeOff,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatCurrency } from '../../../utils/formatters';
@@ -26,7 +25,6 @@ import useVehiclePackages from '../../../hooks/useVehiclePackages';
 import ProductPackageSuggestions from './ProductPackageSuggestions';
 import PublicVehicleSelector from './PublicVehicleSelector';
 import VehiclePackageShowcase from './VehiclePackageShowcase';
-import MitsubishiGenuinePartsLabel from '../../inventory/components/MitsubishiGenuinePartsLabel';
 import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 
 const PAGE_SIZE = 12;
@@ -37,25 +35,6 @@ const SORT_OPTIONS = [
   { value: 'price-asc', label: 'Price: Low to High' },
   { value: 'price-desc', label: 'Price: High to Low' },
 ];
-
-const GenuinePartsLabel = ({ product, compact = false, dense = false }) => {
-  const labelHeight = dense ? 'h-[190px]' : compact ? 'h-[330px]' : 'h-[400px]';
-  const labelSize = dense ? 'dense' : compact ? 'compact' : 'default';
-  const previewScale = dense ? 'scale-[0.82]' : compact ? 'scale-[0.94]' : 'scale-100';
-
-  return (
-    <div className={`${labelHeight} flex w-full items-center justify-center overflow-hidden`}>
-      <div className={`origin-center ${previewScale}`}>
-        <MitsubishiGenuinePartsLabel
-          product={product}
-          quantity={1}
-          size={labelSize}
-          showQuantity={false}
-        />
-      </div>
-    </div>
-  );
-};
 
 const PublicProductSummary = ({ product }) => {
   const statusLabel = product.inStock ? 'In Stock' : 'Out of Stock';
@@ -83,7 +62,7 @@ const PublicCatalogView = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [largeBarcodeProduct, setLargeBarcodeProduct] = useState(null);
-  const [showBarcodeLabels, setShowBarcodeLabels] = useState(false);
+  const [viewMode, setViewMode] = useState('grid');
   const { vehicle, updateVehicle, clearVehicle, hasVehicle } = usePublicVehicleSelection({
     persist: false,
     readFromSearch: false,
@@ -367,14 +346,26 @@ const PublicCatalogView = () => {
                   ))}
                 </select>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowBarcodeLabels((value) => !value)}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm font-semibold text-primary-800 transition hover:border-primary-300 hover:bg-white"
-              >
-                {showBarcodeLabels ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                {showBarcodeLabels ? 'Hide Barcodes' : 'Show Barcodes'}
-              </button>
+              <div className="inline-flex rounded-2xl border border-primary-200 bg-primary-50 p-1 shadow-sm" aria-label="Catalog view mode">
+                <button
+                  type="button"
+                  aria-label="Grid view"
+                  aria-pressed={viewMode === 'grid'}
+                  onClick={() => setViewMode('grid')}
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${viewMode === 'grid' ? 'border border-primary-200 bg-white text-accent-blue shadow-sm' : 'text-primary-400 hover:text-primary-700'}`}
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="List view"
+                  aria-pressed={viewMode === 'list'}
+                  onClick={() => setViewMode('list')}
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${viewMode === 'list' ? 'border border-primary-200 bg-white text-accent-blue shadow-sm' : 'text-primary-400 hover:text-primary-700'}`}
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -399,67 +390,81 @@ const PublicCatalogView = () => {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {visibleProducts.map((product, index) => (
-                  <Motion.div
-                    key={product.catalogEntryId || product.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: index * 0.05 }}
-                    onClick={() => setSelectedProduct(product)}
-                    className="h-full"
-                  >
-                    <div className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-                      <div className="absolute bottom-0 left-0 w-full h-1 bg-accent-primary scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left z-20" />
+              {viewMode === 'grid' ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {visibleProducts.map((product, index) => (
+                    <Motion.div
+                      key={product.catalogEntryId || product.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5, delay: index * 0.05 }}
+                      onClick={() => setSelectedProduct(product)}
+                      className="h-full"
+                    >
+                      <div className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+                        <div className="absolute bottom-0 left-0 w-full h-1 bg-accent-primary scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left z-20" />
 
-                      <div className="relative flex min-h-[340px] items-center justify-center border-b border-primary-200 bg-gradient-to-b from-white to-primary-50/80 p-4">
-                        <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
-                          {product.inStock && (
-                            <span className="bg-accent-blue text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 shadow-[0_0_15px_rgba(37,99,235,0.4)] rounded-sm">Available</span>
-                          )}
-                          {hasVehicle && (
-                            <span className="bg-primary-950 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-sm">Vehicle matched</span>
-                          )}
+                        <div className="relative flex min-h-[340px] items-center justify-center border-b border-primary-200 bg-gradient-to-b from-white to-primary-50/80 p-4">
+                          <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
+                            {product.inStock && (
+                              <span className="bg-accent-blue text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 shadow-[0_0_15px_rgba(37,99,235,0.4)] rounded-sm">Available</span>
+                            )}
+                            {hasVehicle && (
+                              <span className="bg-primary-950 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-sm">Vehicle matched</span>
+                            )}
+                          </div>
+
+                          <PublicProductSummary product={product} />
                         </div>
 
-                        {showBarcodeLabels ? (
-                          <GenuinePartsLabel product={product} compact />
-                        ) : (
-                          <PublicProductSummary product={product} />
-                        )}
-                      </div>
-
-                      <div className="flex flex-1 flex-col p-4">
-                        {showBarcodeLabels ? (
-                          <>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-[10px] font-semibold text-primary-500 uppercase tracking-wider">{product.category}</span>
-                              <span className="text-xs text-primary-400 font-mono">{product.sku}</span>
-                            </div>
-
-                            <h3 className="mb-2 line-clamp-2 text-base font-display font-semibold text-primary-950">{product.name}</h3>
-                            <p className="mb-3 line-clamp-2 flex-1 text-sm text-primary-600">{product.description}</p>
-                            {hasVehicle && (
-                              <div className="mb-4 rounded-xl border border-primary-200 bg-primary-50/70 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary-500">
-                                Compatible packages ready for {vehicle.model}
-                              </div>
-                            )}
-                          </>
-                        ) : (
+                        <div className="flex flex-1 flex-col p-4">
                           <p className="line-clamp-2 flex-1 text-sm text-primary-500">{product.description}</p>
-                        )}
 
-                        <div className="mt-auto flex items-center justify-between">
-                          <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary-400">View details</span>
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-50 text-primary-500 transition-colors group-hover:bg-accent-primary group-hover:text-white">
-                            <ChevronRight className="h-4 w-4" />
+                          <div className="mt-4 flex items-center justify-between">
+                            <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary-400">View details</span>
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-50 text-primary-500 transition-colors group-hover:bg-accent-primary group-hover:text-white">
+                              <ChevronRight className="h-4 w-4" />
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </Motion.div>
-                ))}
-              </div>
+                    </Motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-sm">
+                  <div className="hidden grid-cols-[minmax(240px,1.5fr)_150px_minmax(170px,1fr)_120px_120px_44px] gap-4 border-b border-primary-200 bg-primary-50 px-5 py-3 text-xs font-bold uppercase tracking-[0.18em] text-primary-500 xl:grid">
+                    <span>Product</span>
+                    <span>Part Number</span>
+                    <span>Category</span>
+                    <span className="text-right">Price</span>
+                    <span className="text-right">Status</span>
+                    <span />
+                  </div>
+                  <div className="divide-y divide-primary-100">
+                    {visibleProducts.map((product) => (
+                      <button
+                        key={product.catalogEntryId || product.id}
+                        type="button"
+                        onClick={() => setSelectedProduct(product)}
+                        className="grid w-full gap-3 px-5 py-4 text-left transition hover:bg-primary-50 xl:grid-cols-[minmax(240px,1.5fr)_150px_minmax(170px,1fr)_120px_120px_44px] xl:items-center xl:gap-4"
+                      >
+                        <div className="min-w-0">
+                          <p className="line-clamp-2 font-bold text-primary-950">{product.name}</p>
+                          <p className="mt-1 text-xs text-primary-500 xl:hidden">{product.category}</p>
+                        </div>
+                        <p className="font-mono text-sm text-primary-600">{product.sku}</p>
+                        <p className="hidden text-sm font-semibold text-primary-800 xl:block">{product.category}</p>
+                        <p className="text-sm font-bold text-accent-blue xl:text-right">{formatCurrency(product.price)}</p>
+                        <p className={`text-sm font-semibold xl:text-right ${product.inStock ? 'text-accent-success' : 'text-primary-500'}`}>{product.inStock ? 'In Stock' : 'Out of Stock'}</p>
+                        <span className="hidden h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-primary-500 xl:flex">
+                          <ChevronRight className="h-4 w-4" />
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-7 flex flex-col gap-4 rounded-2xl border border-primary-200 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-primary-600">
@@ -538,11 +543,7 @@ const PublicCatalogView = () => {
                     <div className="relative z-10 font-mono text-[11px] uppercase tracking-[0.18em] text-primary-500 sm:text-xs">ID: {selectedProduct.sku}</div>
                     <div className="relative z-10 flex flex-1 items-center justify-center py-5 sm:py-6">
                       <div className="w-full max-w-[430px] rounded-[28px] border border-primary-200 bg-white p-3 shadow-xl shadow-primary-950/10">
-                        {showBarcodeLabels ? (
-                          <GenuinePartsLabel product={selectedProduct} />
-                        ) : (
-                          <PublicProductSummary product={selectedProduct} />
-                        )}
+                        <PublicProductSummary product={selectedProduct} />
                       </div>
                     </div>
                     <div className="relative z-10 flex items-center gap-2">

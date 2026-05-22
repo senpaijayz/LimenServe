@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArchiveRestore, Edit2, Eye, EyeOff, Package, Plus, RefreshCw, Save, Search, ScanLine, Trash2 } from 'lucide-react';
+import { ArchiveRestore, Edit2, LayoutGrid, List, Package, Plus, RefreshCw, Save, Search, ScanLine, Trash2 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
@@ -119,7 +119,7 @@ export default function ProductManagement() {
   const [archivedProducts, setArchivedProducts] = useState([]);
   const [archivedLoading, setArchivedLoading] = useState(false);
   const [restoringProductId, setRestoringProductId] = useState(null);
-  const [showBarcodeLabels, setShowBarcodeLabels] = useState(false);
+  const [viewMode, setViewMode] = useState('grid');
 
   const { products, categories, pagination, loading, error } = useProductCatalog({
     page: currentPage,
@@ -340,46 +340,88 @@ export default function ProductManagement() {
                 </div>
               )}
             </div>
-            <Button
-              variant={showBarcodeLabels ? 'secondary' : 'outline'}
-              leftIcon={showBarcodeLabels ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              onClick={() => setShowBarcodeLabels((value) => !value)}
-            >
-              {showBarcodeLabels ? 'Hide Barcodes' : 'Show Barcodes'}
-            </Button>
+            <div className="inline-flex rounded-2xl border border-primary-200 bg-primary-50 p-1 shadow-sm" aria-label="Product view mode">
+              <button
+                type="button"
+                aria-label="Grid view"
+                aria-pressed={viewMode === 'grid'}
+                onClick={() => setViewMode('grid')}
+                className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${viewMode === 'grid' ? 'border border-primary-200 bg-white text-accent-blue shadow-sm' : 'text-primary-400 hover:text-primary-700'}`}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="List view"
+                aria-pressed={viewMode === 'list'}
+                onClick={() => setViewMode('list')}
+                className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${viewMode === 'list' ? 'border border-primary-200 bg-white text-accent-blue shadow-sm' : 'text-primary-400 hover:text-primary-700'}`}
+              >
+                <List className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {products.map((product) => (
-            <button key={product.id} type="button" onClick={() => openProductDetail(product)} className="overflow-hidden rounded-xl border border-primary-200 bg-white text-left shadow-sm transition hover:border-accent-blue hover:shadow-md">
-              <div className="border-b border-primary-200 p-4">
-                <div className={showBarcodeLabels ? 'h-[300px]' : 'h-[240px]'}>
-                  {showBarcodeLabels ? (
-                    <ProductLabelStage product={product} quantity={product.stock ?? product.quantity ?? 0} size="compact" />
-                  ) : (
+        {viewMode === 'grid' ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {products.map((product) => (
+              <div key={product.id} role="button" tabIndex={0} onClick={() => openProductDetail(product)} onKeyDown={(event) => { if (event.key === 'Enter') openProductDetail(product); }} className="overflow-hidden rounded-xl border border-primary-200 bg-white text-left shadow-sm transition hover:border-accent-blue hover:shadow-md">
+                <div className="border-b border-primary-200 p-4">
+                  <div className="h-[240px]">
                     <ProductInfoStage product={product} />
-                  )}
+                  </div>
+                </div>
+                <div className="space-y-3 p-4">
+                  <div>
+                    <p className="line-clamp-2 font-bold text-primary-950">{product.name}</p>
+                    <p className="mt-1 font-mono text-xs text-primary-500">{getProductPartNumber(product)}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <p><span className="text-primary-500">Category</span><br /><span className="font-semibold text-primary-950">{product.category}</span></p>
+                    <p className="text-right"><span className="text-primary-500">Price</span><br /><span className="font-semibold text-accent-blue">{formatCurrency(product.price)}</span></p>
+                    <p><span className="text-primary-500">Supplier</span><br /><span className="font-semibold text-primary-950">{product.supplierName || 'Unlinked'}</span></p>
+                    <p className="text-right"><span className="text-primary-500">Stock</span><br /><span className="font-semibold text-primary-950">{formatNumber(product.stock ?? product.quantity ?? 0)}</span></p>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="outline" size="sm" leftIcon={<Edit2 className="h-4 w-4" />} onClick={(event) => { event.stopPropagation(); openEdit(product); }}>Edit</Button>
+                    <Button variant="outline" size="sm" leftIcon={<Trash2 className="h-4 w-4" />} onClick={(event) => { event.stopPropagation(); handleArchive(product); }}>Archive</Button>
+                  </div>
                 </div>
               </div>
-              <div className="space-y-3 p-4">
-                <div>
-                  <p className="line-clamp-2 font-bold text-primary-950">{product.name}</p>
-                  <p className="mt-1 font-mono text-xs text-primary-500">{getProductPartNumber(product)}</p>
+            ))}
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-primary-200 bg-white">
+            <div className="hidden grid-cols-[minmax(220px,1.4fr)_150px_minmax(150px,0.8fr)_110px_90px_160px] gap-4 border-b border-primary-200 bg-primary-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-primary-500 xl:grid">
+              <span>Product</span>
+              <span>Part Number</span>
+              <span>Category</span>
+              <span className="text-right">Price</span>
+              <span className="text-right">Stock</span>
+              <span className="text-right">Actions</span>
+            </div>
+            <div className="divide-y divide-primary-100">
+              {products.map((product) => (
+                <div key={product.id} role="button" tabIndex={0} onClick={() => openProductDetail(product)} onKeyDown={(event) => { if (event.key === 'Enter') openProductDetail(product); }} className="grid gap-3 px-4 py-4 transition hover:bg-primary-50 xl:grid-cols-[minmax(220px,1.4fr)_150px_minmax(150px,0.8fr)_110px_90px_160px] xl:items-center xl:gap-4">
+                  <div className="min-w-0">
+                    <p className="line-clamp-2 font-bold text-primary-950">{product.name}</p>
+                    <p className="mt-1 text-xs text-primary-500 xl:hidden">{product.category}</p>
+                  </div>
+                  <p className="font-mono text-sm text-primary-600">{getProductPartNumber(product) || '-'}</p>
+                  <p className="hidden text-sm font-semibold text-primary-800 xl:block">{product.category || '-'}</p>
+                  <p className="text-sm font-bold text-accent-blue xl:text-right">{formatCurrency(product.price)}</p>
+                  <p className="text-sm font-semibold text-primary-950 xl:text-right">{formatNumber(product.stock ?? product.quantity ?? 0)}</p>
+                  <div className="flex gap-2 xl:justify-end">
+                    <Button variant="outline" size="sm" leftIcon={<Edit2 className="h-4 w-4" />} onClick={(event) => { event.stopPropagation(); openEdit(product); }}>Edit</Button>
+                    <Button variant="outline" size="sm" leftIcon={<Trash2 className="h-4 w-4" />} onClick={(event) => { event.stopPropagation(); handleArchive(product); }}>Archive</Button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <p><span className="text-primary-500">Category</span><br /><span className="font-semibold text-primary-950">{product.category}</span></p>
-                  <p className="text-right"><span className="text-primary-500">Price</span><br /><span className="font-semibold text-accent-blue">{formatCurrency(product.price)}</span></p>
-                  <p><span className="text-primary-500">Supplier</span><br /><span className="font-semibold text-primary-950">{product.supplierName || 'Unlinked'}</span></p>
-                  <p className="text-right"><span className="text-primary-500">Stock</span><br /><span className="font-semibold text-primary-950">{formatNumber(product.stock ?? product.quantity ?? 0)}</span></p>
-                </div>
-                <div className="flex gap-2 pt-2">
-                  <Button variant="outline" size="sm" leftIcon={<Edit2 className="h-4 w-4" />} onClick={(event) => { event.stopPropagation(); openEdit(product); }}>Edit</Button>
-                  <Button variant="outline" size="sm" leftIcon={<Trash2 className="h-4 w-4" />} onClick={(event) => { event.stopPropagation(); handleArchive(product); }}>Archive</Button>
-                </div>
-              </div>
-            </button>
-          ))}
+              ))}
+            </div>
+          </div>
+        )}
+        <div>
           {!loading && products.length === 0 && (
             <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-10 text-center text-sm text-primary-500 md:col-span-2 xl:col-span-3">No products found.</div>
           )}
@@ -415,11 +457,7 @@ export default function ProductManagement() {
             {archivedProducts.map((product) => (
               <div key={product.id} className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm">
                 <div className="mb-3 h-52">
-                  {showBarcodeLabels ? (
-                    <ProductLabelStage product={product} quantity={product.stock ?? product.quantity ?? 0} size="dense" />
-                  ) : (
-                    <ProductInfoStage product={product} />
-                  )}
+                  <ProductInfoStage product={product} />
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold text-primary-950">{product.name}</p>
