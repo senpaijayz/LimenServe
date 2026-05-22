@@ -1,20 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+    Html5Qrcode,
     Html5QrcodeScanner,
     Html5QrcodeSupportedFormats,
     Html5QrcodeScanType,
 } from 'html5-qrcode';
-import { Camera, Zap, ScanLine } from 'lucide-react';
+import { Camera, ImageUp, Zap, ScanLine } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
 import { normalizeBarcodeToken, stripProductBarcodeSuffix } from '../../utils/barcode';
 
 const getBarcodeScanBox = (viewfinderWidth, viewfinderHeight) => {
     const width = Math.max(300, Math.min(Math.floor(viewfinderWidth * 0.96), 680));
-    const height = Math.max(240, Math.min(Math.floor(viewfinderHeight * 0.58), 440));
+    const height = Math.max(280, Math.min(Math.round(viewfinderHeight * 0.69), 500));
 
     return { width, height };
 };
+
+const normalizeScannedBarcode = (value) => (
+    stripProductBarcodeSuffix(normalizeBarcodeToken(value))
+);
 
 /**
  * Camera Scanner Modal Component
@@ -22,6 +27,25 @@ const getBarcodeScanBox = (viewfinderWidth, viewfinderHeight) => {
  */
 const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
     const [manualCode, setManualCode] = useState('');
+    const [fileScanStatus, setFileScanStatus] = useState('');
+
+    const completeScan = useCallback((decodedText) => {
+        const normalizedCode = normalizeScannedBarcode(decodedText);
+
+        if (!normalizedCode) {
+            return false;
+        }
+
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+            navigator.vibrate(80);
+        }
+
+        onScan(normalizedCode);
+        setManualCode('');
+        setFileScanStatus('');
+        onClose();
+        return true;
+    }, [onClose, onScan]);
 
     useEffect(() => {
         let scanner = null;
@@ -37,6 +61,10 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                     disableFlip: true,
                     rememberLastUsedCamera: true,
                     useBarCodeDetectorIfSupported: true,
+                    preferredCamera: 'environment',
+                    videoConstraints: {
+                        facingMode: { ideal: 'environment' },
+                    },
                     supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
                     showTorchButtonIfSupported: true,
                     showZoomSliderIfSupported: false,
@@ -57,17 +85,13 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
 
             scanner.render(
                 (decodedText) => {
-                    const normalizedCode = stripProductBarcodeSuffix(normalizeBarcodeToken(decodedText));
-
-                    if (!normalizedCode) {
+                    if (!completeScan(decodedText)) {
                         return;
                     }
 
-                    onScan(normalizedCode);
                     scanner.clear().catch(error => {
                         console.error("Failed to clear html5QrcodeScanner. ", error);
                     });
-                    onClose();
                 },
                 () => {
                     // Failure callback - usually constantly firing as it fails to find a barcode every frame.
@@ -85,19 +109,34 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                 });
             }
         };
-    }, [isOpen, onClose, onScan]);
+    }, [completeScan, isOpen]);
 
     if (!isOpen) return null;
 
     const submitManualCode = () => {
-        const normalizedCode = stripProductBarcodeSuffix(normalizeBarcodeToken(manualCode));
-        if (!normalizedCode) {
+        completeScan(manualCode);
+    };
+
+    const scanUploadedFile = async (event) => {
+        const [file] = Array.from(event.target.files || []);
+        event.target.value = '';
+
+        if (!file) {
             return;
         }
 
-        onScan(normalizedCode);
-        setManualCode('');
-        onClose();
+        setFileScanStatus('Scanning image...');
+
+        try {
+            const imageScanner = new Html5Qrcode('reader-file-scanner');
+            const decodedText = await imageScanner.scanFile(file, true);
+
+            if (!completeScan(decodedText)) {
+                setFileScanStatus('No barcode found in that image.');
+            }
+        } catch {
+            setFileScanStatus('No barcode found. Try a sharper photo with the full barcode visible.');
+        }
     };
 
     return (
@@ -114,10 +153,10 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                             <ScanLine className="h-5 w-5" />
                         </div>
                         <div className="space-y-2 text-sm text-primary-600">
-                            <p className="font-semibold text-primary-900">Keep the printed part number and barcode bars inside the guide.</p>
+                            <p className="font-semibold text-primary-900">Keep the part number and barcode bars inside the guide.</p>
                             <div className="flex flex-wrap gap-2 text-xs uppercase tracking-wide text-primary-500">
                                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
-                                    <Camera className="h-3.5 w-3.5" /> Code 39 / 128
+                                    <Camera className="h-3.5 w-3.5" /> Back camera first
                                 </span>
                                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
                                     <Zap className="h-3.5 w-3.5" /> Torch when supported
@@ -131,6 +170,29 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                     {/* The div where html5-qrcode will render the video element */}
                     <div id="reader" className="w-full" />
 
+                </div>
+                <div id="reader-file-scanner" className="hidden" />
+
+                <div className="rounded-xl border border-primary-200 bg-white p-3">
+                    <label className="block text-xs font-semibold text-primary-500" htmlFor="barcode-image-upload">
+                        Upload barcode image
+                    </label>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <input
+                            id="barcode-image-upload"
+                            type="file"
+                            accept="image/*"
+                            className="block w-full text-sm text-primary-600 file:mr-3 file:rounded-lg file:border-0 file:bg-primary-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-primary-700 hover:file:bg-primary-200"
+                            onChange={scanUploadedFile}
+                        />
+                        <span className="inline-flex items-center gap-1 text-xs text-primary-500">
+                            <ImageUp className="h-3.5 w-3.5" />
+                            Use when camera access fails
+                        </span>
+                    </div>
+                    {fileScanStatus && (
+                        <p className="mt-2 text-xs font-medium text-primary-500">{fileScanStatus}</p>
+                    )}
                 </div>
 
                 <div className="rounded-xl border border-primary-200 bg-white p-3">

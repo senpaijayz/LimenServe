@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import Barcode from 'react-barcode';
+import BarcodeDisplay, { BARCODE_FORMAT } from '../../../components/ui/BarcodeDisplay';
 import mitsubishiLogo from '../../../assets/branding/mitsubishi-motors-logo.svg';
 import { buildProductBarcodeValue } from '../../../utils/barcode';
 
@@ -112,7 +112,7 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
             ref={ref}
             data-product-label-root="true"
             data-label-variant="mitsubishi-sticker"
-            data-barcode-format="CODE39"
+            data-barcode-format={BARCODE_FORMAT}
             data-barcode-value={barcodeValue}
             className={className}
             style={{
@@ -297,9 +297,10 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
                             background: '#ffffff',
                         }}
                     >
-                        <Barcode
+                        <BarcodeDisplay
                             value={barcodeValue}
-                            format="CODE39"
+                            format={BARCODE_FORMAT}
+                            size={size === 'default' ? 'normal' : 'small'}
                             width={preset.barcodeWidth}
                             height={preset.barcodeHeight}
                             fontSize={0}

@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, Check, Printer, Wrench, Camera, ChevronLeft, ChevronRight, AlertTriangle, Calculator, WalletCards } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, Check, Printer, Wrench, Camera, ChevronLeft, ChevronRight, AlertTriangle, Calculator, WalletCards, ScanLine } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import { useCart } from '../../../context/CartContext';
@@ -7,8 +7,9 @@ import { formatCurrency } from '../../../utils/formatters';
 import { useToast } from '../../../components/ui/Toast';
 import useBarcodeScanner from '../../../hooks/useBarcodeScanner';
 import useDataStore from '../../../store/useDataStore';
-import Barcode from 'react-barcode';
+import BarcodeDisplay from '../../../components/ui/BarcodeDisplay';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
+import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import AddServiceModal from '../../../components/ui/AddServiceModal';
 import { createPosSale } from '../../../services/posApi';
 import SaleReceiptPreview from '../components/SaleReceiptPreview.jsx';
@@ -76,6 +77,7 @@ const POSTerminal = () => {
     const [showServiceModal, setShowServiceModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showCameraScanner, setShowCameraScanner] = useState(false);
+    const [largeBarcodeProduct, setLargeBarcodeProduct] = useState(null);
     const [paymentAmount, setPaymentAmount] = useState('');
     const deferredSearchQuery = useDeferredValue(searchQuery);
     const [lastTransaction, setLastTransaction] = useState(null);
@@ -281,34 +283,46 @@ const POSTerminal = () => {
                     <div className="flex flex-1 flex-col">
                         <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                             {visibleProducts.map((product) => (
-                                <button
+                                <div
                                     key={product.id}
-                                    onClick={() => handleProductClick(product)}
                                     className="pos-item text-left"
                                 >
-                                    <div className="h-[4.5rem] bg-white rounded-lg mb-2 flex items-center justify-center border border-primary-100 p-2 overflow-hidden">
-                                        <div className="w-full flex items-center justify-center">
-                                            <Barcode
-                                                value={buildProductBarcodeValue(product.sku || 'UNKNOWN') || (product.sku || 'UNKNOWN')}
-                                                format="CODE39"
-                                                width={0.82}
-                                                height={48}
-                                                fontSize={10}
-                                                margin={16}
-                                                displayValue={false}
-                                                background="#ffffff"
-                                                lineColor="#0f172a"
-                                            />
+                                    <button
+                                        type="button"
+                                        onClick={() => handleProductClick(product)}
+                                        className="block w-full text-left"
+                                    >
+                                        <div className="h-[4.5rem] bg-white rounded-lg mb-2 flex items-center justify-center border border-primary-100 p-2 overflow-hidden">
+                                            <div className="w-full flex items-center justify-center">
+                                                <BarcodeDisplay
+                                                    value={buildProductBarcodeValue(product.sku || 'UNKNOWN') || (product.sku || 'UNKNOWN')}
+                                                    size="small"
+                                                    height={48}
+                                                    fontSize={0}
+                                                    margin={16}
+                                                />
+                                            </div>
                                         </div>
-                                    </div>
-                                    <p className="text-sm font-semibold text-primary-950 line-clamp-2 mb-1">
-                                        {product.name}
-                                    </p>
-                                    <p className="text-xs font-mono text-primary-500 mb-2">{product.sku}</p>
-                                    <p className="text-lg font-bold text-accent-blue">
-                                        {formatCurrency(product.price)}
-                                    </p>
-                                </button>
+                                        <p className="text-sm font-semibold text-primary-950 line-clamp-2 mb-1">
+                                            {product.name}
+                                        </p>
+                                        <p className="text-xs font-mono text-primary-500 mb-2">{product.sku}</p>
+                                        <p className="text-lg font-bold text-accent-blue">
+                                            {formatCurrency(product.price)}
+                                        </p>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            setLargeBarcodeProduct(product);
+                                        }}
+                                        className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary-200 bg-white px-3 py-2 text-xs font-semibold text-primary-600 transition hover:border-accent-blue hover:text-accent-blue"
+                                    >
+                                        <ScanLine className="h-4 w-4" />
+                                        Large barcode
+                                    </button>
+                                </div>
                             ))}
                         </div>
                         <div className="mt-4 rounded-xl border border-primary-200 bg-white px-4 py-3 shadow-sm">
@@ -667,6 +681,14 @@ const POSTerminal = () => {
                 isOpen={showCameraScanner}
                 onClose={() => setShowCameraScanner(false)}
                 onScan={handleBarcodeScanned}
+            />
+
+            <LargeBarcodeModal
+                isOpen={Boolean(largeBarcodeProduct)}
+                onClose={() => setLargeBarcodeProduct(null)}
+                barcodeValue={largeBarcodeProduct ? buildProductBarcodeValue(largeBarcodeProduct.sku || 'UNKNOWN') : ''}
+                productName={largeBarcodeProduct?.name}
+                title="Product Barcode"
             />
 
             {/* Add Service Modal */}

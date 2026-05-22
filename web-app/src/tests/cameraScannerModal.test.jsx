@@ -1,10 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { constructorSpy, renderSpy, MockHtml5QrcodeScanner } = vi.hoisted(() => {
+const { constructorSpy, renderSpy, fileScannerConstructorSpy, scanFileSpy, MockHtml5QrcodeScanner, MockHtml5Qrcode } = vi.hoisted(() => {
     const hoistedClearSpy = vi.fn().mockResolvedValue(undefined);
     const hoistedConstructorSpy = vi.fn();
     const hoistedRenderSpy = vi.fn();
+    const hoistedFileScannerConstructorSpy = vi.fn();
+    const hoistedScanFileSpy = vi.fn();
 
     class HoistedMockHtml5QrcodeScanner {
         constructor(...args) {
@@ -18,14 +20,26 @@ const { constructorSpy, renderSpy, MockHtml5QrcodeScanner } = vi.hoisted(() => {
         clear = hoistedClearSpy
     }
 
+    class HoistedMockHtml5Qrcode {
+        constructor(...args) {
+            hoistedFileScannerConstructorSpy(...args);
+        }
+
+        scanFile = hoistedScanFileSpy
+    }
+
     return {
         constructorSpy: hoistedConstructorSpy,
         renderSpy: hoistedRenderSpy,
+        fileScannerConstructorSpy: hoistedFileScannerConstructorSpy,
+        scanFileSpy: hoistedScanFileSpy,
         MockHtml5QrcodeScanner: HoistedMockHtml5QrcodeScanner,
+        MockHtml5Qrcode: HoistedMockHtml5Qrcode,
     };
 });
 
 vi.mock('html5-qrcode', () => ({
+    Html5Qrcode: MockHtml5Qrcode,
     Html5QrcodeScanner: MockHtml5QrcodeScanner,
     Html5QrcodeSupportedFormats: {
         CODABAR: 'CODABAR',
@@ -50,9 +64,11 @@ describe('CameraScannerModal', () => {
         cleanup();
         constructorSpy.mockClear();
         renderSpy.mockClear();
+        fileScannerConstructorSpy.mockClear();
+        scanFileSpy.mockReset();
     });
 
-    it('configures the scanner to support code 39 product barcodes', async () => {
+    it('configures the scanner to prefer the back camera and support code 128 product barcodes', async () => {
         render(
             <CameraScannerModal
                 isOpen
@@ -76,6 +92,10 @@ describe('CameraScannerModal', () => {
                 useBarCodeDetectorIfSupported: true,
                 showTorchButtonIfSupported: true,
                 showZoomSliderIfSupported: false,
+                preferredCamera: 'environment',
+                videoConstraints: {
+                    facingMode: { ideal: 'environment' },
+                },
                 formatsToSupport: ['CODABAR', 'CODE_39', 'CODE_93', 'CODE_128', 'ITF', 'EAN_13', 'EAN_8', 'UPC_A', 'UPC_E'],
                 supportedScanTypes: ['SCAN_TYPE_CAMERA'],
             }),
@@ -83,7 +103,7 @@ describe('CameraScannerModal', () => {
         );
 
         const [, scannerConfig] = constructorSpy.mock.calls[0];
-        expect(scannerConfig.qrbox(390, 640)).toEqual({ width: 374, height: 371 });
+        expect(scannerConfig.qrbox(390, 640)).toEqual({ width: 374, height: 442 });
     });
 
     it('ignores empty scan callbacks instead of closing with an invalid code', async () => {
@@ -130,6 +150,31 @@ describe('CameraScannerModal', () => {
         handleSuccess('* 4013A310 0001 *');
 
         expect(onScan).toHaveBeenCalledWith('4013A310');
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('scans an uploaded barcode image as a fallback when camera scanning is unreliable', async () => {
+        const onClose = vi.fn();
+        const onScan = vi.fn();
+        scanFileSpy.mockResolvedValue('* DP010374 0001 *');
+
+        render(
+            <CameraScannerModal
+                isOpen
+                onClose={onClose}
+                onScan={onScan}
+            />
+        );
+
+        const file = new File(['barcode'], 'barcode.png', { type: 'image/png' });
+        fireEvent.change(screen.getByLabelText(/upload barcode image/i), {
+            target: { files: [file] },
+        });
+
+        await waitFor(() => {
+            expect(scanFileSpy).toHaveBeenCalledWith(file, true);
+        });
+        expect(onScan).toHaveBeenCalledWith('DP010374');
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
