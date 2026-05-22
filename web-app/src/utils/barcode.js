@@ -1,4 +1,5 @@
 export const PRODUCT_BARCODE_SUFFIX = '0001';
+const PRODUCT_BARCODE_VENDOR_PREFIXES = ['PA'];
 const PART_NUMBER_FIELDS = [
     'partNumber',
     'part_number',
@@ -42,8 +43,18 @@ export function stripProductBarcodeSuffix(value) {
 export function getBarcodeLookupCandidates(value) {
     const normalizedValue = normalizeBarcodeToken(value);
     const strippedValue = stripProductBarcodeSuffix(normalizedValue);
+    const prefixStrippedValues = PRODUCT_BARCODE_VENDOR_PREFIXES
+        .filter((prefix) => strippedValue.startsWith(prefix) && strippedValue.length > prefix.length)
+        .flatMap((prefix) => {
+            const withoutPrefix = strippedValue.slice(prefix.length);
+            return [withoutPrefix, stripProductBarcodeSuffix(withoutPrefix)];
+        });
 
-    return Array.from(new Set([normalizedValue, strippedValue].filter(Boolean)));
+    return Array.from(new Set([
+        normalizedValue,
+        strippedValue,
+        ...prefixStrippedValues,
+    ].filter(Boolean)));
 }
 
 export function getBarcodeLookupQueries(value) {

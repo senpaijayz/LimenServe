@@ -31,6 +31,11 @@ describe('barcode utilities', () => {
             '1810A4270001',
             '1810A427',
         ]);
+        expect(getBarcodeLookupCandidates('PA1810A4270001')).toEqual([
+            'PA1810A4270001',
+            'PA1810A427',
+            '1810A427',
+        ]);
     });
 
     it('matches either the raw sku or the scanned barcode payload to the same product', () => {
@@ -43,6 +48,16 @@ describe('barcode utilities', () => {
         expect(productMatchesIdentifier(product, 'MD9729320001')).toBe(true);
         expect(productMatchesIdentifier(product, '*MD972932 0001*')).toBe(true);
         expect(productMatchesIdentifier(product, 'MD9729330001')).toBe(false);
+    });
+
+    it('matches Mitsubishi vendor-prefixed physical barcode payloads to the real part number', () => {
+        const product = {
+            id: 43,
+            sku: '1810A427',
+        };
+
+        expect(productMatchesIdentifier(product, 'PA1810A4270001')).toBe(true);
+        expect(productMatchesIdentifier(product, 'PA1810A4280001')).toBe(false);
     });
 
     it('treats part number fields as the primary searchable identifier', () => {

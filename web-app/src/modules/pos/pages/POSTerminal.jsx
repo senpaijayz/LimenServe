@@ -14,7 +14,7 @@ import AddServiceModal from '../../../components/ui/AddServiceModal';
 import { createPosSale } from '../../../services/posApi';
 import SaleReceiptPreview from '../components/SaleReceiptPreview.jsx';
 import useProductCatalog from '../../../hooks/useProductCatalog';
-import { buildProductBarcodeValue, productMatchesIdentifier } from '../../../utils/barcode';
+import { buildProductBarcodeValue, getBarcodeLookupCandidates, productMatchesIdentifier } from '../../../utils/barcode';
 
 const PAGE_SIZE = 14;
 
@@ -121,13 +121,17 @@ const POSTerminal = () => {
     const handleBarcodeScanned = async (barcode) => {
         if (!barcode) return;
 
+        const lookupCandidates = getBarcodeLookupCandidates(barcode);
+        const searchValue = lookupCandidates[lookupCandidates.length - 1] || String(barcode).trim();
+        setSearchQuery(searchValue);
+        setCurrentPage(1);
+
         const localProduct = visibleProducts.find((product) => productMatchesIdentifier(product, barcode));
         const product = localProduct || await findProduct(barcode);
 
         if (product) {
-            addItem(product, 1);
-            setSearchQuery(product.sku || String(barcode).trim());
-            success(`Scanned: ${product.name}`);
+            setSearchQuery(product.sku || searchValue);
+            success(`Scanned: ${product.name}. Select it from the results to add to cart.`);
         } else {
             console.warn(`Barcode not found in inventory: ${barcode}`);
         }
