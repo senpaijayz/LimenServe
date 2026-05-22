@@ -104,6 +104,8 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
     countryOfOrigin = 'MADE IN JAPAN',
     size = 'default',
     className = '',
+    showQuantity = true,
+    showBarcode = true,
 }, ref) => {
     const preset = SIZE_PRESETS[size] || SIZE_PRESETS.default;
     const description = formatLabelDescription(product?.name);
@@ -252,18 +254,20 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
                         {description}
                     </div>
 
-                    <div
-                        style={{
-                            fontSize: `${preset.quantityFontSize}px`,
-                            fontWeight: 700,
-                            letterSpacing: '0.06em',
-                            whiteSpace: 'nowrap',
-                            color: '#222428',
-                            textTransform: 'uppercase',
-                        }}
-                    >
-                        QTY: {quantity}
-                    </div>
+                    {showQuantity && (
+                        <div
+                            style={{
+                                fontSize: `${preset.quantityFontSize}px`,
+                                fontWeight: 700,
+                                letterSpacing: '0.06em',
+                                whiteSpace: 'nowrap',
+                                color: '#222428',
+                                textTransform: 'uppercase',
+                            }}
+                        >
+                            QTY: {quantity}
+                        </div>
+                    )}
                 </div>
 
                 <div
@@ -286,40 +290,42 @@ const MitsubishiGenuinePartsLabel = forwardRef(({
                     {sku}
                 </div>
 
-                <div
-                    style={{
-                        marginTop: `${preset.barcodeTopMargin}px`,
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        padding: `0 ${preset.barcodePadX}px`,
-                        background: '#ffffff',
-                        lineHeight: 0,
-                    }}
-                >
+                {showBarcode && (
                     <div
-                        data-testid="product-barcode"
                         style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
+                            marginTop: `${preset.barcodeTopMargin}px`,
+                            display: 'flex',
                             justifyContent: 'center',
+                            alignItems: 'center',
+                            padding: `0 ${preset.barcodePadX}px`,
                             background: '#ffffff',
+                            lineHeight: 0,
                         }}
                     >
-                        <BarcodeDisplay
-                            value={barcodeValue}
-                            format={BARCODE_FORMAT}
-                            size={size === 'default' ? 'normal' : 'small'}
-                            width={preset.barcodeWidth}
-                            height={preset.barcodeHeight}
-                            fontSize={0}
-                            margin={preset.barcodeMargin}
-                            displayValue={false}
-                            background="#ffffff"
-                            lineColor="#111214"
-                        />
+                        <div
+                            data-testid="product-barcode"
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: '#ffffff',
+                            }}
+                        >
+                            <BarcodeDisplay
+                                value={barcodeValue}
+                                format={BARCODE_FORMAT}
+                                size={size === 'default' ? 'normal' : 'small'}
+                                width={preset.barcodeWidth}
+                                height={preset.barcodeHeight}
+                                fontSize={0}
+                                margin={preset.barcodeMargin}
+                                displayValue={false}
+                                background="#ffffff"
+                                lineColor="#111214"
+                            />
+                        </div>
                     </div>
-                </div>
+                )}
 
                 <div
                     style={{

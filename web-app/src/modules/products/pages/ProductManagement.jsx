@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArchiveRestore, Edit2, Package, Plus, RefreshCw, Save, Search, ScanLine, Trash2 } from 'lucide-react';
+import { ArchiveRestore, Edit2, Eye, EyeOff, Package, Plus, RefreshCw, Save, Search, ScanLine, Trash2 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
@@ -44,6 +44,39 @@ const emptyForm = {
   uom: 'PC',
 };
 
+function ProductLabelStage({ product, quantity, size = 'compact', showQuantity = true }) {
+  return (
+    <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-xl border border-primary-200 bg-slate-950 p-4">
+      <MitsubishiGenuinePartsLabel
+        product={product}
+        quantity={quantity}
+        size={size}
+        showQuantity={showQuantity}
+        className="shrink-0"
+      />
+    </div>
+  );
+}
+
+function ProductInfoStage({ product }) {
+  const stock = Number(product.stock ?? product.quantity ?? 0);
+  const statusLabel = product.status ? product.status.replace(/_/g, ' ') : stock > 0 ? 'In Stock' : 'Out of Stock';
+
+  return (
+    <div className="flex h-full flex-col justify-between rounded-xl border border-primary-200 bg-gradient-to-br from-primary-50 via-white to-white p-5">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-blue">Product</p>
+        <h3 className="mt-3 line-clamp-3 text-xl font-display font-bold leading-tight text-primary-950">{product.name}</h3>
+        <p className="mt-3 font-mono text-sm text-primary-500">{getProductPartNumber(product) || product.sku}</p>
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+        <p><span className="text-primary-500">Category</span><br /><span className="font-semibold text-primary-950">{product.category || '-'}</span></p>
+        <p className="text-right"><span className="text-primary-500">Status</span><br /><span className="font-semibold capitalize text-primary-950">{statusLabel}</span></p>
+      </div>
+    </div>
+  );
+}
+
 function toForm(product = {}) {
   return {
     sku: product.sku || '',
@@ -86,6 +119,7 @@ export default function ProductManagement() {
   const [archivedProducts, setArchivedProducts] = useState([]);
   const [archivedLoading, setArchivedLoading] = useState(false);
   const [restoringProductId, setRestoringProductId] = useState(null);
+  const [showBarcodeLabels, setShowBarcodeLabels] = useState(false);
 
   const { products, categories, pagination, loading, error } = useProductCatalog({
     page: currentPage,
@@ -306,14 +340,27 @@ export default function ProductManagement() {
                 </div>
               )}
             </div>
+            <Button
+              variant={showBarcodeLabels ? 'secondary' : 'outline'}
+              leftIcon={showBarcodeLabels ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              onClick={() => setShowBarcodeLabels((value) => !value)}
+            >
+              {showBarcodeLabels ? 'Hide Barcodes' : 'Show Barcodes'}
+            </Button>
           </div>
         )}
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {products.map((product) => (
             <button key={product.id} type="button" onClick={() => openProductDetail(product)} className="overflow-hidden rounded-xl border border-primary-200 bg-white text-left shadow-sm transition hover:border-accent-blue hover:shadow-md">
-              <div className="flex h-56 items-center justify-center border-b border-primary-200 bg-[#0b1320] p-4">
-                <MitsubishiGenuinePartsLabel product={product} quantity={product.stock ?? product.quantity ?? 0} size="dense" />
+              <div className="border-b border-primary-200 p-4">
+                <div className={showBarcodeLabels ? 'h-[300px]' : 'h-[240px]'}>
+                  {showBarcodeLabels ? (
+                    <ProductLabelStage product={product} quantity={product.stock ?? product.quantity ?? 0} size="compact" />
+                  ) : (
+                    <ProductInfoStage product={product} />
+                  )}
+                </div>
               </div>
               <div className="space-y-3 p-4">
                 <div>
@@ -367,8 +414,12 @@ export default function ProductManagement() {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {archivedProducts.map((product) => (
               <div key={product.id} className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm">
-                <div className="mb-3 flex min-h-36 items-center justify-center rounded-xl bg-[#0b1320] p-3">
-                  <MitsubishiGenuinePartsLabel product={product} quantity={product.stock ?? product.quantity ?? 0} size="dense" />
+                <div className="mb-3 h-52">
+                  {showBarcodeLabels ? (
+                    <ProductLabelStage product={product} quantity={product.stock ?? product.quantity ?? 0} size="dense" />
+                  ) : (
+                    <ProductInfoStage product={product} />
+                  )}
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold text-primary-950">{product.name}</p>
@@ -457,8 +508,8 @@ export default function ProductManagement() {
         {selectedProduct && (
           <div className="space-y-5">
             <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-              <div className="flex h-64 items-center justify-center rounded-2xl border border-primary-200 bg-[#0b1320] p-4">
-                <MitsubishiGenuinePartsLabel product={selectedProduct} quantity={selectedProduct.stock ?? selectedProduct.quantity ?? 0} size="dense" />
+              <div className="h-[320px]">
+                <ProductLabelStage product={selectedProduct} quantity={selectedProduct.stock ?? selectedProduct.quantity ?? 0} size="compact" />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <p><span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Part Number</span><br /><span className="font-mono text-primary-950">{getProductPartNumber(selectedProduct)}</span></p>

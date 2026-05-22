@@ -14,6 +14,8 @@ import {
   Sparkles,
   CarFront,
   ScanLine,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatCurrency } from '../../../utils/formatters';
@@ -37,9 +39,9 @@ const SORT_OPTIONS = [
 ];
 
 const GenuinePartsLabel = ({ product, compact = false, dense = false }) => {
-  const labelHeight = dense ? 'h-[158px]' : compact ? 'h-[360px]' : 'h-[380px]';
+  const labelHeight = dense ? 'h-[190px]' : compact ? 'h-[330px]' : 'h-[400px]';
   const labelSize = dense ? 'dense' : compact ? 'compact' : 'default';
-  const previewScale = dense ? 'scale-[0.72] sm:scale-[0.78]' : compact ? 'scale-[0.88] min-[420px]:scale-[0.9] sm:scale-[0.92] xl:scale-[0.94]' : 'scale-100';
+  const previewScale = dense ? 'scale-[0.82]' : compact ? 'scale-[0.94]' : 'scale-100';
 
   return (
     <div className={`${labelHeight} flex w-full items-center justify-center overflow-hidden`}>
@@ -48,7 +50,27 @@ const GenuinePartsLabel = ({ product, compact = false, dense = false }) => {
           product={product}
           quantity={1}
           size={labelSize}
+          showQuantity={false}
         />
+      </div>
+    </div>
+  );
+};
+
+const PublicProductSummary = ({ product }) => {
+  const statusLabel = product.inStock ? 'In Stock' : 'Out of Stock';
+
+  return (
+    <div className="flex min-h-[300px] flex-col justify-between rounded-2xl border border-primary-200 bg-gradient-to-br from-white via-primary-50/70 to-white p-5">
+      <div>
+        <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-accent-blue">Product</p>
+        <h3 className="mt-3 line-clamp-3 text-xl font-display font-bold leading-tight text-primary-950">{product.name}</h3>
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+        <p><span className="text-primary-500">Part Number</span><br /><span className="font-mono font-semibold text-primary-950">{product.sku}</span></p>
+        <p><span className="text-primary-500">Category</span><br /><span className="font-semibold text-primary-950">{product.category}</span></p>
+        <p className="text-right"><span className="text-primary-500">Price</span><br /><span className="font-semibold text-accent-blue">{formatCurrency(product.price)}</span></p>
+        <p className="text-right"><span className="text-primary-500">Status</span><br /><span className={`font-semibold ${product.inStock ? 'text-accent-success' : 'text-primary-500'}`}>{statusLabel}</span></p>
       </div>
     </div>
   );
@@ -61,6 +83,7 @@ const PublicCatalogView = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [largeBarcodeProduct, setLargeBarcodeProduct] = useState(null);
+  const [showBarcodeLabels, setShowBarcodeLabels] = useState(false);
   const { vehicle, updateVehicle, clearVehicle, hasVehicle } = usePublicVehicleSelection({
     persist: false,
     readFromSearch: false,
@@ -344,6 +367,14 @@ const PublicCatalogView = () => {
                   ))}
                 </select>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowBarcodeLabels((value) => !value)}
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm font-semibold text-primary-800 transition hover:border-primary-300 hover:bg-white"
+              >
+                {showBarcodeLabels ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showBarcodeLabels ? 'Hide Barcodes' : 'Show Barcodes'}
+              </button>
             </div>
           </div>
 
@@ -381,7 +412,7 @@ const PublicCatalogView = () => {
                     <div className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
                       <div className="absolute bottom-0 left-0 w-full h-1 bg-accent-primary scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left z-20" />
 
-                      <div className="relative flex h-[386px] items-center justify-center border-b border-primary-200 bg-gradient-to-b from-white to-primary-50/80 p-3">
+                      <div className="relative flex min-h-[340px] items-center justify-center border-b border-primary-200 bg-gradient-to-b from-white to-primary-50/80 p-4">
                         <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
                           {product.inStock && (
                             <span className="bg-accent-blue text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 shadow-[0_0_15px_rgba(37,99,235,0.4)] rounded-sm">Available</span>
@@ -391,27 +422,37 @@ const PublicCatalogView = () => {
                           )}
                         </div>
 
-                        <GenuinePartsLabel product={product} compact />
+                        {showBarcodeLabels ? (
+                          <GenuinePartsLabel product={product} compact />
+                        ) : (
+                          <PublicProductSummary product={product} />
+                        )}
                       </div>
 
                       <div className="flex flex-1 flex-col p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] font-semibold text-primary-500 uppercase tracking-wider">{product.category}</span>
-                          <span className="text-xs text-primary-400 font-mono">{product.sku}</span>
-                        </div>
+                        {showBarcodeLabels ? (
+                          <>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-[10px] font-semibold text-primary-500 uppercase tracking-wider">{product.category}</span>
+                              <span className="text-xs text-primary-400 font-mono">{product.sku}</span>
+                            </div>
 
-                        <h3 className="mb-2 line-clamp-2 text-base font-display font-semibold text-primary-950">{product.name}</h3>
-                        <p className="mb-3 line-clamp-2 flex-1 text-sm text-primary-600">{product.description}</p>
-                        {hasVehicle && (
-                          <div className="mb-4 rounded-xl border border-primary-200 bg-primary-50/70 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary-500">
-                            Compatible packages ready for {vehicle.model}
-                          </div>
+                            <h3 className="mb-2 line-clamp-2 text-base font-display font-semibold text-primary-950">{product.name}</h3>
+                            <p className="mb-3 line-clamp-2 flex-1 text-sm text-primary-600">{product.description}</p>
+                            {hasVehicle && (
+                              <div className="mb-4 rounded-xl border border-primary-200 bg-primary-50/70 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary-500">
+                                Compatible packages ready for {vehicle.model}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <p className="line-clamp-2 flex-1 text-sm text-primary-500">{product.description}</p>
                         )}
 
-                        <div className="flex items-center justify-between mt-auto">
-                          <div className="text-xl font-bold text-accent-blue">{formatCurrency(product.price)}</div>
-                          <div className="w-8 h-8 rounded-full bg-primary-50 flex items-center justify-center text-primary-500 group-hover:bg-accent-primary group-hover:text-white transition-colors">
-                            <ChevronRight className="w-4 h-4" />
+                        <div className="mt-auto flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary-400">View details</span>
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-50 text-primary-500 transition-colors group-hover:bg-accent-primary group-hover:text-white">
+                            <ChevronRight className="h-4 w-4" />
                           </div>
                         </div>
                       </div>
@@ -497,7 +538,11 @@ const PublicCatalogView = () => {
                     <div className="relative z-10 font-mono text-[11px] uppercase tracking-[0.18em] text-primary-500 sm:text-xs">ID: {selectedProduct.sku}</div>
                     <div className="relative z-10 flex flex-1 items-center justify-center py-5 sm:py-6">
                       <div className="w-full max-w-[430px] rounded-[28px] border border-primary-200 bg-white p-3 shadow-xl shadow-primary-950/10">
-                        <GenuinePartsLabel product={selectedProduct} />
+                        {showBarcodeLabels ? (
+                          <GenuinePartsLabel product={selectedProduct} />
+                        ) : (
+                          <PublicProductSummary product={selectedProduct} />
+                        )}
                       </div>
                     </div>
                     <div className="relative z-10 flex items-center gap-2">
