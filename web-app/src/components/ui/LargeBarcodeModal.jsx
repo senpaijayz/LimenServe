@@ -3,6 +3,7 @@ import { Check, Copy, ScanLine } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
 import BarcodeDisplay from './BarcodeDisplay';
+import { stripProductBarcodeSuffix } from '../../utils/barcode';
 
 const LargeBarcodeModal = ({
     isOpen,
@@ -13,7 +14,7 @@ const LargeBarcodeModal = ({
     productName,
 }) => {
     const [copyState, setCopyState] = useState({ value: '', status: 'idle' });
-    const safeValue = String(barcodeValue ?? '').trim();
+    const safeValue = stripProductBarcodeSuffix(barcodeValue);
     const visibleCopyState = copyState.value === safeValue ? copyState.status : 'idle';
     const canCopy = Boolean(
         typeof navigator !== 'undefined'

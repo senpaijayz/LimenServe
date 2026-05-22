@@ -5,6 +5,7 @@ LimenServe now centralizes barcode rendering through `BarcodeDisplay.jsx`.
 ## What Changed
 
 - Default barcode format moved from `CODE39` to `CODE128`.
+- New product barcodes encode the part number only. Legacy scans that include the old fixed `0001` suffix are still normalized during lookup.
 - Shared size presets are available as `small`, `normal`, and `large`.
 - Quiet zones, bar height, contrast, and margins are managed in one component.
 - `LargeBarcodeModal.jsx` provides a screen-friendly barcode view for phone-to-screen scanning.
@@ -42,7 +43,7 @@ import BarcodeDisplay from '../../../components/ui/BarcodeDisplay';
 ## Updated Local Usages
 
 - `MitsubishiGenuinePartsLabel.jsx` now uses `BarcodeDisplay` and records `data-barcode-format="CODE128"`.
-- `POSTerminal.jsx` now uses `BarcodeDisplay` for product cards and exposes `LargeBarcodeModal` from each product tile.
+- `POSTerminal.jsx`, catalog product details, inventory cards, and label preview flows expose `LargeBarcodeModal` for screen scanning.
 
 ## Recommended Architecture
 

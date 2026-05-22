@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArchiveRestore, Edit2, Package, Plus, RefreshCw, Save, Search, Trash2 } from 'lucide-react';
+import { ArchiveRestore, Edit2, Package, Plus, RefreshCw, Save, Search, ScanLine, Trash2 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
+import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import { useToast } from '../../../components/ui/Toast';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import MitsubishiGenuinePartsLabel from '../../inventory/components/MitsubishiGenuinePartsLabel';
@@ -79,6 +80,7 @@ export default function ProductManagement() {
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [largeBarcodeProduct, setLargeBarcodeProduct] = useState(null);
   const [stockHistory, setStockHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [archivedProducts, setArchivedProducts] = useState([]);
@@ -467,6 +469,15 @@ export default function ProductManagement() {
                 <p><span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Model</span><br /><span className="font-semibold text-primary-950">{selectedProduct.model || '-'}</span></p>
               </div>
             </div>
+            <div className="flex justify-end">
+              <Button
+                variant="secondary"
+                leftIcon={<ScanLine className="h-4 w-4" />}
+                onClick={() => setLargeBarcodeProduct(selectedProduct)}
+              >
+                Large Barcode
+              </Button>
+            </div>
 
             <Card title="Stock History" subtitle="Stock additions and related inventory movements for this product.">
               {historyLoading ? (
@@ -496,6 +507,14 @@ export default function ProductManagement() {
           </div>
         )}
       </Modal>
+
+      <LargeBarcodeModal
+        isOpen={Boolean(largeBarcodeProduct)}
+        onClose={() => setLargeBarcodeProduct(null)}
+        barcodeValue={getProductPartNumber(largeBarcodeProduct || {})}
+        productName={largeBarcodeProduct?.name}
+        title="Product Barcode"
+      />
     </div>
   );
 }

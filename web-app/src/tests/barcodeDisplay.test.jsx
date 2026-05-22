@@ -13,12 +13,12 @@ import BarcodeDisplay from '../components/ui/BarcodeDisplay';
 
 describe('BarcodeDisplay', () => {
     it('renders CODE128 by default with scanning-friendly normal settings', () => {
-        render(<BarcodeDisplay value="DP010374 0001" />);
+        render(<BarcodeDisplay value="DP010374" />);
 
         expect(screen.getByTestId('mock-barcode')).toBeTruthy();
         expect(barcodeSpy).toHaveBeenCalledWith(
             expect.objectContaining({
-                value: 'DP010374 0001',
+                value: 'DP010374',
                 format: 'CODE128',
                 displayValue: false,
                 background: '#ffffff',
@@ -32,7 +32,7 @@ describe('BarcodeDisplay', () => {
     });
 
     it('uses larger bars and quiet zone for the large scan view', () => {
-        render(<BarcodeDisplay value="DP010374 0001" size="large" displayValue />);
+        render(<BarcodeDisplay value="DP010374" size="large" displayValue />);
 
         expect(barcodeSpy).toHaveBeenCalledWith(
             expect.objectContaining({

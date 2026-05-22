@@ -15,7 +15,7 @@ describe('LargeBarcodeModal', () => {
             <LargeBarcodeModal
                 isOpen
                 onClose={vi.fn()}
-                barcodeValue="DP010374 0001"
+                barcodeValue="DP010374"
                 title="Digital barcode"
             />
         );
@@ -23,10 +23,32 @@ describe('LargeBarcodeModal', () => {
         expect(screen.getByText('Digital barcode')).toBeTruthy();
         expect(screen.getByText(/point your camera here to scan/i)).toBeTruthy();
         expect(screen.getByTestId('barcode-display').getAttribute('data-size')).toBe('large');
-        expect(screen.getByTestId('barcode-display').getAttribute('data-value')).toBe('DP010374 0001');
+        expect(screen.getByTestId('barcode-display').getAttribute('data-value')).toBe('DP010374');
     });
 
     it('copies the barcode value when clipboard access is available', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.assign(navigator, {
+            clipboard: { writeText },
+        });
+
+        render(
+            <LargeBarcodeModal
+                isOpen
+                onClose={vi.fn()}
+                barcodeValue="DP010374"
+            />
+        );
+
+        fireEvent.click(screen.getByText(/copy barcode value/i));
+
+        await waitFor(() => {
+            expect(writeText).toHaveBeenCalledWith('DP010374');
+        });
+        expect(screen.getByText('Copied')).toBeTruthy();
+    });
+
+    it('strips legacy fixed suffixes before rendering and copying', async () => {
         const writeText = vi.fn().mockResolvedValue(undefined);
         Object.assign(navigator, {
             clipboard: { writeText },
@@ -40,11 +62,13 @@ describe('LargeBarcodeModal', () => {
             />
         );
 
+        expect(screen.getByTestId('barcode-display').getAttribute('data-value')).toBe('DP010374');
+        expect(screen.getByText('DP010374')).toBeTruthy();
+
         fireEvent.click(screen.getByText(/copy barcode value/i));
 
         await waitFor(() => {
-            expect(writeText).toHaveBeenCalledWith('DP010374 0001');
+            expect(writeText).toHaveBeenCalledWith('DP010374');
         });
-        expect(screen.getByText('Copied')).toBeTruthy();
     });
 });

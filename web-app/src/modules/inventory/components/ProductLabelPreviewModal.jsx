@@ -1,10 +1,12 @@
-import { useMemo, useRef } from 'react';
-import { Printer, ArrowDownCircle, ArrowUpCircle, Crosshair, PencilLine } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { Printer, ArrowDownCircle, ArrowUpCircle, Crosshair, PencilLine, ScanLine } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
 import Button from '../../../components/ui/Button';
+import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import MitsubishiGenuinePartsLabel from './MitsubishiGenuinePartsLabel';
 import { printProductLabelNode } from '../utils/printProductLabel';
 import { formatDateTime, formatNumber } from '../../../utils/formatters';
+import { getProductPartNumber } from '../../../utils/barcode';
 
 function formatLocation(location = {}) {
     if (location?.label) {
@@ -82,6 +84,7 @@ const ProductLabelPreviewModal = ({
     historyLoading = false,
 }) => {
     const labelRef = useRef(null);
+    const [showLargeBarcode, setShowLargeBarcode] = useState(false);
 
     const effectiveLocationLabel = useMemo(() => (
         locationLabel
@@ -237,6 +240,14 @@ const ProductLabelPreviewModal = ({
                         Close
                     </Button>
                     <Button
+                        variant="secondary"
+                        fullWidth
+                        leftIcon={<ScanLine className="h-4 w-4" />}
+                        onClick={() => setShowLargeBarcode(true)}
+                    >
+                        Large Barcode
+                    </Button>
+                    <Button
                         variant="primary"
                         fullWidth
                         leftIcon={<Printer className="h-4 w-4" />}
@@ -246,6 +257,13 @@ const ProductLabelPreviewModal = ({
                     </Button>
                 </div>
             </div>
+            <LargeBarcodeModal
+                isOpen={showLargeBarcode}
+                onClose={() => setShowLargeBarcode(false)}
+                barcodeValue={getProductPartNumber(product)}
+                productName={product.name}
+                title="Product Barcode"
+            />
         </Modal>
     );
 };

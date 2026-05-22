@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Sparkles,
   CarFront,
+  ScanLine,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatCurrency } from '../../../utils/formatters';
@@ -24,6 +25,7 @@ import ProductPackageSuggestions from './ProductPackageSuggestions';
 import PublicVehicleSelector from './PublicVehicleSelector';
 import VehiclePackageShowcase from './VehiclePackageShowcase';
 import MitsubishiGenuinePartsLabel from '../../inventory/components/MitsubishiGenuinePartsLabel';
+import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 
 const PAGE_SIZE = 12;
 
@@ -58,6 +60,7 @@ const PublicCatalogView = () => {
   const [sortBy, setSortBy] = useState('name-asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [largeBarcodeProduct, setLargeBarcodeProduct] = useState(null);
   const { vehicle, updateVehicle, clearVehicle, hasVehicle } = usePublicVehicleSelection({
     persist: false,
     readFromSearch: false,
@@ -549,6 +552,13 @@ const PublicCatalogView = () => {
 
                       <div className="flex flex-col gap-2.5 sm:flex-row">
                         <button type="button" onClick={() => setSelectedProduct(null)} className="btn btn-secondary w-full sm:w-auto">Back to Catalog</button>
+                        <button
+                          type="button"
+                          onClick={() => setLargeBarcodeProduct(selectedProduct)}
+                          className="btn btn-secondary w-full sm:w-auto"
+                        >
+                          <ScanLine className="h-5 w-5" /> Large Barcode
+                        </button>
                         <Link to={buildEstimateHref()} className="btn btn-primary w-full sm:w-auto px-8" onClick={() => setSelectedProduct(null)}>
                           <ShoppingCart className="w-5 h-5" /> Calculate Quote
                         </Link>
@@ -561,6 +571,14 @@ const PublicCatalogView = () => {
           </Motion.div>
         )}
       </AnimatePresence>
+
+      <LargeBarcodeModal
+        isOpen={Boolean(largeBarcodeProduct)}
+        onClose={() => setLargeBarcodeProduct(null)}
+        barcodeValue={largeBarcodeProduct?.sku || ''}
+        productName={largeBarcodeProduct?.name}
+        title="Product Barcode"
+      />
     </div>
   );
 };

@@ -9,9 +9,9 @@ import {
 } from '../utils/barcode';
 
 describe('barcode utilities', () => {
-    it('builds the Mitsubishi Code 39 payload with the fixed 0001 suffix', () => {
+    it('builds new product barcode payloads from the part number only', () => {
         expect(PRODUCT_BARCODE_SUFFIX).toBe('0001');
-        expect(buildProductBarcodeValue('MD972932')).toBe('MD972932 0001');
+        expect(buildProductBarcodeValue('MD972932')).toBe('MD972932');
     });
 
     it('normalizes code 39 scans with spaces and sentinel characters', () => {
