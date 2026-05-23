@@ -916,8 +916,15 @@ async function listCategoryRows() {
     throw error;
   }
 
-  const counts = buildCategoryRows(await getCachedProductCatalog());
-  const countMap = new Map(counts.map((category) => [category.value, category.count]));
+  let counts = [];
+  try {
+    counts = await fetchProductCatalogCategories({});
+  } catch (error) {
+    if (!isPrivateSchemaAccessError(error)) {
+      counts = [];
+    }
+  }
+  const countMap = new Map((counts ?? []).map((category) => [category.value, category.count]));
   return (data ?? []).map((category) => mapCategoryRow({
     ...category,
     count: countMap.get(category.name) ?? 0,
@@ -2568,11 +2575,12 @@ function calculateInventoryValue(products = []) {
 
 async function getCatalogStockSummarySafely() {
   try {
-    const products = await getCachedProductCatalog();
+    const summaryRows = await callRpc('get_catalog_summary');
+    const summary = Array.isArray(summaryRows) ? (summaryRows[0] ?? null) : summaryRows;
+
     return {
-      inStockProducts: products.filter((product) => Number(product.stock ?? product.quantity ?? 0) > 0).length,
-      inventoryValue: calculateInventoryValue(products),
-      totalProducts: products.length,
+      inStockProducts: Number(summary?.in_stock_products ?? 0),
+      inventoryValue: Number(summary?.inventory_value ?? 0),
     };
   } catch (error) {
     if (!isPrivateSchemaAccessError(error)) {
@@ -2581,7 +2589,6 @@ async function getCatalogStockSummarySafely() {
     return {
       inStockProducts: 0,
       inventoryValue: 0,
-      totalProducts: 0,
     };
   }
 }
@@ -2904,31 +2911,7 @@ router.get('/products', async (req, res, next) => {
     let totalCount = 0;
     let totalPages = 1;
 
-    if (!vehicleContext && !useStagingCatalog && ['stock-desc', 'stock-asc'].includes(sortBy)) {
-      const catalog = await getCachedProductCatalog();
-      const scopedProducts = catalog.filter((product) => matchesCatalogFilters(product, {
-        searchQuery,
-        selectedCategory,
-      }));
-      const sortedProducts = sortCatalogProducts(scopedProducts, sortBy);
-
-      totalCount = sortedProducts.length;
-      totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-      products = await enrichCatalogProducts(sortedProducts.slice((page - 1) * pageSize, page * pageSize));
-
-      if (includeCategories) {
-        const categoryScopedProducts = catalog.filter((product) => matchesCatalogFilters(product, {
-          searchQuery,
-          selectedCategory: 'all',
-        }));
-        const categoryRows = buildCategoryRows(categoryScopedProducts);
-        const categoryCountTotal = categoryRows.reduce((sum, row) => sum + Number(row.count ?? 0), 0);
-        categories = [
-          { value: 'all', label: 'All Categories', count: categoryCountTotal || totalCount },
-          ...categoryRows,
-        ];
-      }
-    } else if (!vehicleContext) {
+    if (!vehicleContext) {
       const [catalogPage, categoryRows] = await Promise.all([
         useStagingCatalog
           ? fetchPricelistCatalogPage({
@@ -3002,7 +2985,7 @@ router.get('/products', async (req, res, next) => {
       }
     }
 
-    if (includeCategories && !useStagingCatalog) {
+    if (includeCategories && !useStagingCatalog && vehicleContext) {
       categories = await buildFullCatalogCategoryOptions({
         searchQuery,
         vehicleContext,
@@ -3084,11 +3067,15 @@ router.get('/products/:productId/stock-history', requireRole('admin', 'stock_cle
 
 router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, next) => {
   try {
-    const stockSummary = await getCatalogStockSummarySafely();
-
     try {
       const summaryRows = await callRpc('get_catalog_summary');
       const summary = Array.isArray(summaryRows) ? (summaryRows[0] ?? null) : summaryRows;
+      const stockSummary = summary?.in_stock_products !== undefined && summary?.inventory_value !== undefined
+        ? {
+          inStockProducts: Number(summary.in_stock_products ?? 0),
+          inventoryValue: Number(summary.inventory_value ?? 0),
+        }
+        : await getCatalogStockSummarySafely();
 
       res.json({
         summary: {
@@ -3109,6 +3096,10 @@ router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, ne
     }
 
     const products = await getCachedProductCatalog();
+    const stockSummary = {
+      inStockProducts: products.filter((product) => Number(product.stock ?? product.quantity ?? 0) > 0).length,
+      inventoryValue: calculateInventoryValue(products),
+    };
     const totalProducts = Number(products?.length ?? 0);
 
     res.json({
