@@ -670,8 +670,11 @@ export async function replaceRetailPriceList(items, effectiveFrom) {
     const { data } = await apiClient.post('/catalog/prices/bulk-replace', {
       items,
       effectiveFrom,
+    }, {
+      timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS,
     });
 
+    clearApiClientCache('/catalog/products');
     return data;
   } catch (error) {
     extractApiError(error, 'Failed to replace the price list.');
@@ -691,6 +694,7 @@ export async function replaceRetailPriceListFile(file, effectiveFrom) {
       },
     });
 
+    clearApiClientCache('/catalog/products');
     return data;
   } catch (error) {
     extractApiError(error, 'Failed to upload the price list file.');

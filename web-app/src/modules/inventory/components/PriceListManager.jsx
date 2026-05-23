@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Download, FileSpreadsheet, RefreshCcw, Upload } from 'lucide-react';
+import { CheckCircle2, Download, FileSpreadsheet, RefreshCcw, Upload } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import Input from '../../../components/ui/Input';
@@ -39,6 +39,34 @@ function formatUploadCount(value) {
     return Number(value ?? 0).toLocaleString('en-PH');
 }
 
+function formatPeso(value) {
+    if (value === null || value === undefined || value === '') {
+        return 'New';
+    }
+
+    return Number(value ?? 0).toLocaleString('en-PH', {
+        style: 'currency',
+        currency: 'PHP',
+        minimumFractionDigits: 2,
+    });
+}
+
+function getChangeLabel(status) {
+    if (status === 'new_part') {
+        return 'New part';
+    }
+
+    if (status === 'new_price') {
+        return 'New price';
+    }
+
+    if (status === 'unchanged') {
+        return 'Same price';
+    }
+
+    return 'Changed';
+}
+
 function downloadCsv(filename, rows) {
     const csv = rows.map((row) => row.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -64,6 +92,8 @@ const PriceListManager = ({ onUpdated }) => {
     const [lastResult, setLastResult] = useState(null);
 
     const parsedItems = useMemo(() => parsePriceListText(bulkText), [bulkText]);
+    const parsedPreviewRows = useMemo(() => parsedItems.slice(0, 10), [parsedItems]);
+    const priceChangeRows = lastResult?.priceChanges ?? [];
 
     const handleClose = () => {
         setIsOpen(false);
@@ -88,7 +118,7 @@ const PriceListManager = ({ onUpdated }) => {
 
     const applyResult = (result) => {
         setLastResult(result);
-        success(`Updated ${formatUploadCount(result.updatedCount)} catalog prices.`);
+        success(`Price list applied: ${formatUploadCount(result.changedCount ?? result.updatedCount)} changed, ${formatUploadCount(result.unchangedCount ?? 0)} already matched.`);
         onUpdated?.();
     };
 
@@ -153,9 +183,9 @@ const PriceListManager = ({ onUpdated }) => {
             >
                 <form onSubmit={handleSubmit} className="space-y-5">
                     <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4">
-                        <p className="text-sm font-semibold text-primary-950">Supabase retail price source</p>
+                        <p className="text-sm font-semibold text-primary-950">Retail price list source</p>
                         <p className="mt-1 text-sm text-primary-600">
-                            Upload the yearly Mitsubishi Excel (.xlsx) or CSV price list, or paste rows manually. Imported rows become the active retail prices, older prices stay in history, and new part numbers are added with zero stock so current inventory quantities stay unchanged.
+                            Upload the new Mitsubishi price list and review exactly which part numbers changed before you leave this screen. Prices become active for the selected date, previous prices stay in history, and inventory stock quantities are never overwritten.
                         </p>
                     </div>
 
@@ -182,7 +212,7 @@ const PriceListManager = ({ onUpdated }) => {
 
                             <label className="btn btn-outline cursor-pointer">
                                 <Upload className="w-4 h-4" />
-                                <span>{isUploadingFile ? 'Uploading...' : 'Upload Excel/CSV'}</span>
+                                <span>{isUploadingFile ? 'Uploading price list...' : 'Upload Excel/CSV'}</span>
                                 <input
                                     type="file"
                                     accept=".xlsx,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain"
@@ -195,7 +225,7 @@ const PriceListManager = ({ onUpdated }) => {
                     </div>
 
                     <div>
-                        <label className="input-label">Part number and price list</label>
+                        <label className="input-label">Paste part numbers and prices</label>
                         <textarea
                             value={bulkText}
                             onChange={(event) => setBulkText(event.target.value)}
@@ -206,21 +236,122 @@ const PriceListManager = ({ onUpdated }) => {
                         <p className="mt-2 text-xs uppercase tracking-[0.18em] text-primary-400">
                             Parsed rows: {parsedItems.length}
                         </p>
+                        {parsedPreviewRows.length > 0 && (
+                            <div className="mt-3 overflow-hidden rounded-2xl border border-primary-200 bg-white">
+                                <div className="flex items-center justify-between border-b border-primary-100 px-4 py-3">
+                                    <p className="text-sm font-semibold text-primary-950">Parsed price rows</p>
+                                    <p className="text-xs uppercase tracking-[0.16em] text-primary-400">
+                                        Showing {parsedPreviewRows.length} of {formatUploadCount(parsedItems.length)}
+                                    </p>
+                                </div>
+                                <div className="max-h-56 overflow-auto">
+                                    <table className="min-w-full divide-y divide-primary-100 text-sm">
+                                        <thead className="bg-primary-50 text-left text-xs uppercase tracking-[0.14em] text-primary-500">
+                                            <tr>
+                                                <th className="px-4 py-3 font-semibold">Part Number</th>
+                                                <th className="px-4 py-3 font-semibold">Price</th>
+                                                <th className="px-4 py-3 font-semibold">Name</th>
+                                                <th className="px-4 py-3 font-semibold">Model</th>
+                                                <th className="px-4 py-3 font-semibold">Category</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-primary-100">
+                                            {parsedPreviewRows.map((item) => (
+                                                <tr key={`${item.sku}-${item.price}`} className="text-primary-700">
+                                                    <td className="px-4 py-3 font-semibold text-primary-950">{item.sku}</td>
+                                                    <td className="px-4 py-3">{formatPeso(item.price)}</td>
+                                                    <td className="px-4 py-3">{item.name || '-'}</td>
+                                                    <td className="px-4 py-3">{item.model || '-'}</td>
+                                                    <td className="px-4 py-3">{item.category || '-'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {lastResult && (
-                        <div className="rounded-2xl border border-primary-200 bg-white p-4 text-sm text-primary-700">
-                            <p className="font-semibold text-primary-950">Upload summary</p>
-                            <p className="mt-2">Updated active prices: {formatUploadCount(lastResult.updatedCount)}</p>
-                            <p>Rows received: {formatUploadCount(lastResult.receivedCount ?? lastResult.updatedCount)}</p>
-                            <p>Unique part numbers: {formatUploadCount(lastResult.uniqueCount ?? lastResult.updatedCount)}</p>
-                            <p>New parts added: {formatUploadCount(lastResult.newProductsCount ?? 0)}</p>
-                            <p>New zero-stock inventory rows: {formatUploadCount(lastResult.stockRowsCreated ?? 0)}</p>
-                            <p>Product records touched: {formatUploadCount(lastResult.createdOrUpdatedProducts ?? 0)}</p>
-                            <p>Skipped: {formatUploadCount(lastResult.skippedCount)}</p>
-                            <p>Effective from: {lastResult.effectiveFrom}</p>
+                        <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white text-sm text-primary-700 shadow-sm">
+                            <div className="flex flex-col gap-3 border-b border-emerald-100 bg-emerald-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex items-start gap-3">
+                                    <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
+                                    <div>
+                                        <p className="font-semibold text-emerald-950">Price list applied successfully</p>
+                                        <p className="mt-1 text-emerald-700">
+                                            {formatUploadCount(lastResult.changedCount ?? lastResult.updatedCount)} changed or new prices, {formatUploadCount(lastResult.unchangedCount ?? 0)} already matched.
+                                        </p>
+                                    </div>
+                                </div>
+                                <p className="rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                                    Effective {lastResult.effectiveFrom}
+                                </p>
+                            </div>
+
+                            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                                <div className="rounded-xl bg-primary-50 p-3">
+                                    <p className="text-xs uppercase tracking-[0.16em] text-primary-400">Rows received</p>
+                                    <p className="mt-1 text-lg font-semibold text-primary-950">{formatUploadCount(lastResult.receivedCount ?? lastResult.updatedCount)}</p>
+                                </div>
+                                <div className="rounded-xl bg-primary-50 p-3">
+                                    <p className="text-xs uppercase tracking-[0.16em] text-primary-400">Unique parts</p>
+                                    <p className="mt-1 text-lg font-semibold text-primary-950">{formatUploadCount(lastResult.uniqueCount ?? lastResult.updatedCount)}</p>
+                                </div>
+                                <div className="rounded-xl bg-primary-50 p-3">
+                                    <p className="text-xs uppercase tracking-[0.16em] text-primary-400">New parts</p>
+                                    <p className="mt-1 text-lg font-semibold text-primary-950">{formatUploadCount(lastResult.newProductsCount ?? 0)}</p>
+                                </div>
+                                <div className="rounded-xl bg-primary-50 p-3">
+                                    <p className="text-xs uppercase tracking-[0.16em] text-primary-400">Skipped</p>
+                                    <p className="mt-1 text-lg font-semibold text-primary-950">{formatUploadCount(lastResult.skippedCount)}</p>
+                                </div>
+                            </div>
+
+                            {priceChangeRows.length > 0 && (
+                                <div className="border-t border-primary-100">
+                                    <div className="flex items-center justify-between px-4 py-3">
+                                        <p className="font-semibold text-primary-950">Part number price changes</p>
+                                        <p className="text-xs uppercase tracking-[0.16em] text-primary-400">
+                                            {formatUploadCount(priceChangeRows.length)} rows
+                                        </p>
+                                    </div>
+                                    <div className="max-h-80 overflow-auto border-t border-primary-100">
+                                        <table className="min-w-full divide-y divide-primary-100 text-sm">
+                                            <thead className="sticky top-0 bg-white text-left text-xs uppercase tracking-[0.14em] text-primary-500 shadow-sm">
+                                                <tr>
+                                                    <th className="px-4 py-3 font-semibold">Part Number</th>
+                                                    <th className="px-4 py-3 font-semibold">Name</th>
+                                                    <th className="px-4 py-3 font-semibold">Old Price</th>
+                                                    <th className="px-4 py-3 font-semibold">New Price</th>
+                                                    <th className="px-4 py-3 font-semibold">Difference</th>
+                                                    <th className="px-4 py-3 font-semibold">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-primary-100">
+                                                {priceChangeRows.map((item) => (
+                                                    <tr key={`${item.sku}-${item.newPrice}`} className="text-primary-700">
+                                                        <td className="px-4 py-3 font-semibold text-primary-950">{item.sku}</td>
+                                                        <td className="px-4 py-3">{item.name || '-'}</td>
+                                                        <td className="px-4 py-3">{formatPeso(item.previousPrice)}</td>
+                                                        <td className="px-4 py-3 font-semibold text-primary-950">{formatPeso(item.newPrice)}</td>
+                                                        <td className={`px-4 py-3 ${Number(item.difference ?? 0) > 0 ? 'text-emerald-700' : Number(item.difference ?? 0) < 0 ? 'text-accent-danger' : ''}`}>
+                                                            {item.difference === null || item.difference === undefined ? '-' : formatPeso(item.difference)}
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <span className="rounded-full bg-primary-100 px-2.5 py-1 text-xs font-semibold text-primary-700">
+                                                                {getChangeLabel(item.status)}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
                             {lastResult.skippedItems?.length > 0 && (
-                                <p className="mt-2 text-accent-danger">
+                                <p className="border-t border-primary-100 px-4 py-3 text-accent-danger">
                                     Missing part numbers: {lastResult.skippedItems.map((item) => item.sku).join(', ')}
                                 </p>
                             )}
@@ -238,7 +369,7 @@ const PriceListManager = ({ onUpdated }) => {
                             isLoading={isSubmitting}
                             leftIcon={<RefreshCcw className="w-4 h-4" />}
                         >
-                            Apply New Price List
+                            Apply New Pricelist
                         </Button>
                     </div>
                 </form>

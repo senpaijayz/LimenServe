@@ -4050,6 +4050,25 @@ async function replaceRetailPrices(items, effectiveFrom) {
 
   const matchedProductIds = matchedItems.map((item) => productMap.get(item.sku).id);
   const previousDate = getPreviousDate(effectiveFrom);
+  const previousPriceMap = new Map();
+
+  for (const productIdChunk of chunkArray(matchedProductIds)) {
+    const { data: currentPrices, error: currentPricesError } = await supabaseAdmin
+      .schema('catalog')
+      .from('product_prices')
+      .select('product_id, amount')
+      .eq('price_type', 'retail')
+      .eq('is_current', true)
+      .in('product_id', productIdChunk);
+
+    if (currentPricesError) {
+      throw currentPricesError;
+    }
+
+    (currentPrices ?? []).forEach((price) => {
+      previousPriceMap.set(price.product_id, Number(price.amount ?? 0));
+    });
+  }
 
   for (const productIdChunk of chunkArray(matchedProductIds)) {
     const { error: archiveError } = await supabaseAdmin
@@ -4093,10 +4112,40 @@ async function replaceRetailPrices(items, effectiveFrom) {
 
   invalidateProductCatalogCache();
 
+  const uploadedSkuSet = new Set(productRows.map((product) => product.sku));
+  const priceChanges = matchedItems.map((item) => {
+    const product = productMap.get(item.sku);
+    const previousPrice = previousPriceMap.has(product.id) ? previousPriceMap.get(product.id) : null;
+    const newPrice = Number(item.price ?? 0);
+    const status = uploadedSkuSet.has(item.sku)
+      ? 'new_part'
+      : previousPrice === null
+        ? 'new_price'
+        : previousPrice === newPrice
+          ? 'unchanged'
+          : 'changed';
+
+    return {
+      sku: item.sku,
+      name: product.name || item.name || item.sku,
+      model: product.model_name || item.model || '',
+      category: product.category || item.category || '',
+      previousPrice,
+      newPrice,
+      difference: previousPrice === null ? null : Number((newPrice - previousPrice).toFixed(2)),
+      status,
+    };
+  });
+  const changedCount = priceChanges.filter((item) => item.status === 'changed' || item.status === 'new_part' || item.status === 'new_price').length;
+  const unchangedCount = priceChanges.filter((item) => item.status === 'unchanged').length;
+
   return {
     updatedCount: matchedItems.length,
+    changedCount,
+    unchangedCount,
     skippedCount: skippedItems.length,
     skippedItems,
+    priceChanges,
     createdOrUpdatedProducts: productRows.length,
     newProductsCount,
     stockRowsCreated,
