@@ -1,4 +1,4 @@
-import apiClient, { cachedApiGet, clearApiClientCache, extractApiError, INVENTORY_API_TIMEOUT_MS } from './apiClient';
+import apiClient, { cachedApiGet, clearApiClientCache, extractApiError, INVENTORY_API_TIMEOUT_MS, PRICE_LIST_UPLOAD_TIMEOUT_MS } from './apiClient';
 import { ALL_VEHICLE_MODELS, products as fallbackProducts } from '../data/productData';
 import inventoryClassifier from '../lib/inventoryClassifier';
 
@@ -685,7 +685,7 @@ export async function replaceRetailPriceListFile(file, effectiveFrom) {
     formData.append('effectiveFrom', effectiveFrom);
 
     const { data } = await apiClient.post('/catalog/prices/bulk-replace-file', formData, {
-      timeout: INVENTORY_API_TIMEOUT_MS,
+      timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS,
       headers: {
         'Content-Type': 'multipart/form-data',
       },

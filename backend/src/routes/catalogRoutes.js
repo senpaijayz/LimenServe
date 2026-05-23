@@ -34,7 +34,7 @@ const priceListUpload = multer({
 const PRODUCT_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const FULL_CATALOG_PAGE_SIZE = 250;
 const FULL_CATALOG_PAGE_BATCH_SIZE = 3;
-const PRICE_LIST_DB_BATCH_SIZE = 500;
+const PRICE_LIST_DB_BATCH_SIZE = 1000;
 const SERVICE_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const VEHICLE_FITMENT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const DEFAULT_PART_LIMIT = 6;
@@ -3946,7 +3946,7 @@ async function replaceRetailPrices(items, effectiveFrom) {
   let newProductsCount = 0;
   let stockRowsCreated = 0;
   const productRows = uniqueItems
-    .filter((item) => item.name || item.model || item.category || !productMap.has(item.sku))
+    .filter((item) => !productMap.has(item.sku))
     .map((item) => {
       const currentProduct = productMap.get(item.sku) ?? {};
       const sourceCategory = item.sourceCategory || item.category || currentProduct.source_category || '';
