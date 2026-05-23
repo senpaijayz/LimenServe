@@ -155,7 +155,7 @@ const PriceListManager = ({ onUpdated }) => {
                     <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4">
                         <p className="text-sm font-semibold text-primary-950">Supabase retail price source</p>
                         <p className="mt-1 text-sm text-primary-600">
-                            Upload the yearly Mitsubishi Excel (.xlsx) or CSV price list, or paste rows manually. Imported rows become the active retail prices, older prices stay in history, and new part numbers are created when the file includes descriptions.
+                            Upload the yearly Mitsubishi Excel (.xlsx) or CSV price list, or paste rows manually. Imported rows become the active retail prices, older prices stay in history, and new part numbers are added with zero stock so current inventory quantities stay unchanged.
                         </p>
                     </div>
 
@@ -214,6 +214,8 @@ const PriceListManager = ({ onUpdated }) => {
                             <p className="mt-2">Updated active prices: {formatUploadCount(lastResult.updatedCount)}</p>
                             <p>Rows received: {formatUploadCount(lastResult.receivedCount ?? lastResult.updatedCount)}</p>
                             <p>Unique part numbers: {formatUploadCount(lastResult.uniqueCount ?? lastResult.updatedCount)}</p>
+                            <p>New parts added: {formatUploadCount(lastResult.newProductsCount ?? 0)}</p>
+                            <p>New zero-stock inventory rows: {formatUploadCount(lastResult.stockRowsCreated ?? 0)}</p>
                             <p>Product records touched: {formatUploadCount(lastResult.createdOrUpdatedProducts ?? 0)}</p>
                             <p>Skipped: {formatUploadCount(lastResult.skippedCount)}</p>
                             <p>Effective from: {lastResult.effectiveFrom}</p>

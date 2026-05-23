@@ -210,12 +210,18 @@ function parsePrice(value) {
   const normalized = typeof value === 'number'
     ? value
     : String(value ?? '')
-      .replace(/₱|php|peso/gi, '')
+      .replace(/\u20b1|php|peso/gi, '')
       .replace(/[,\s]/g, '')
-      .replace(/[^\d.-]/g, '')
       .trim();
   const numeric = Number(normalized);
-  return Number.isFinite(numeric) && numeric >= 0 ? Number(numeric.toFixed(2)) : null;
+
+  if (Number.isFinite(numeric) && numeric >= 0) {
+    return Number(numeric.toFixed(2));
+  }
+
+  const currencyFallback = String(normalized).replace(/[^\d.-]/g, '');
+  const fallbackNumeric = Number(currencyFallback);
+  return Number.isFinite(fallbackNumeric) && fallbackNumeric >= 0 ? Number(fallbackNumeric.toFixed(2)) : null;
 }
 
 function normalizePriceListItems(items = []) {
@@ -406,6 +412,9 @@ const PRICE_LIST_COLUMN_ALIASES = {
     fallback: 1,
     names: new Map([
       ['srpwithvat', 120],
+      ['dealersrpwithvat', 135],
+      ['customersrpwithvat', 130],
+      ['dealersrpvatinclusive', 130],
       ['srpvatinclusive', 120],
       ['srpincludingvat', 120],
       ['srpvatin', 110],
@@ -453,18 +462,27 @@ const PRICE_LIST_COLUMN_ALIASES = {
   },
 };
 
-function findColumnIndex(header, columnKey) {
+function findColumnIndex(header, columnKey, options = {}) {
   const config = PRICE_LIST_COLUMN_ALIASES[columnKey];
+  const allowFallback = options.allowFallback ?? true;
   let best = { index: -1, score: -1 };
 
   header.forEach((value, index) => {
     const score = config.names.get(value) ?? -1;
+    if (score < 0) {
+      return;
+    }
+
     if (score > best.score || (score === best.score && index > best.index)) {
       best = { index, score };
     }
   });
 
-  return best.index >= 0 ? best.index : config.fallback;
+  if (best.index >= 0) {
+    return best.index;
+  }
+
+  return allowFallback ? config.fallback : -1;
 }
 
 function findPriceListHeader(rows = []) {
@@ -497,9 +515,10 @@ function rowsToPriceListItems(rows = []) {
   const dataRows = detectedHeader ? rows.slice(detectedHeader.rowIndex + 1) : rows;
   const skuIndex = findColumnIndex(header, 'sku');
   const priceIndex = findColumnIndex(header, 'price');
-  const nameIndex = findColumnIndex(header, 'name');
-  const modelIndex = findColumnIndex(header, 'model');
-  const categoryIndex = findColumnIndex(header, 'category');
+  const hasHeader = Boolean(detectedHeader);
+  const nameIndex = findColumnIndex(header, 'name', { allowFallback: !hasHeader });
+  const modelIndex = findColumnIndex(header, 'model', { allowFallback: !hasHeader });
+  const categoryIndex = findColumnIndex(header, 'category', { allowFallback: !hasHeader });
 
   return normalizePriceListItems(dataRows.map((row) => ({
     sku: row[skuIndex],
@@ -3933,6 +3952,8 @@ async function replaceRetailPrices(items, effectiveFrom) {
   const existingProductIds = new Set((currentProducts ?? []).map((product) => product.id));
   const nowIso = new Date().toISOString();
   const businessDate = effectiveFrom;
+  let newProductsCount = 0;
+  let stockRowsCreated = 0;
   const productRows = uniqueItems
     .filter((item) => item.name || item.model || item.category || !productMap.has(item.sku))
     .map((item) => {
@@ -4007,7 +4028,10 @@ async function replaceRetailPrices(items, effectiveFrom) {
         business_date: businessDate,
       }));
 
+    newProductsCount = newBalanceRows.length;
+
     if (newBalanceRows.length > 0) {
+      // Price-list replacement must never overwrite stock. Existing balances are left untouched.
       for (const balanceChunk of chunkArray(newBalanceRows)) {
         const { error: balanceError } = await supabaseAdmin
           .schema('catalog')
@@ -4018,6 +4042,8 @@ async function replaceRetailPrices(items, effectiveFrom) {
           throw balanceError;
         }
       }
+
+      stockRowsCreated = newBalanceRows.length;
     }
   }
 
@@ -4081,6 +4107,8 @@ async function replaceRetailPrices(items, effectiveFrom) {
     skippedCount: skippedItems.length,
     skippedItems,
     createdOrUpdatedProducts: productRows.length,
+    newProductsCount,
+    stockRowsCreated,
     receivedCount: items.length,
     uniqueCount: uniqueItems.length,
     effectiveFrom,
