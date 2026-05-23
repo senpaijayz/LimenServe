@@ -1,42 +1,24 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { CheckCircle2, Download, FileSpreadsheet, RefreshCcw, Upload } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import Input from '../../../components/ui/Input';
 import { useToast } from '../../../components/ui/Toast';
-import { getCurrentRetailPriceList, replaceRetailPriceList, replaceRetailPriceListFile } from '../../../services/catalogApi';
-
-function parsePriceListText(rawText) {
-    const rows = rawText
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => line.replace(/\t/g, ',').split(',').map((part) => part.trim()));
-    const normalizedHeader = (rows[0] || []).map((part) => part.toLowerCase().replace(/[^a-z0-9]+/g, ''));
-    const hasHeader = normalizedHeader.some((part) => ['partnumber', 'sku', 'partno', 'price', 'retailprice', 'srp'].includes(part));
-    const findIndex = (names, fallback) => {
-        const found = normalizedHeader.findIndex((part) => names.includes(part));
-        return found >= 0 ? found : fallback;
-    };
-    const skuIndex = findIndex(['partnumber', 'partno', 'part', 'sku', 'itemcode', 'code'], 0);
-    const priceIndex = findIndex(['price', 'retailprice', 'srp', 'listprice', 'amount'], 1);
-    const nameIndex = findIndex(['name', 'description', 'partname', 'itemdescription'], 2);
-    const modelIndex = findIndex(['model', 'application', 'vehicle', 'modelname'], 3);
-    const categoryIndex = findIndex(['category', 'sourcecategory', 'group'], 4);
-
-    return (hasHeader ? rows.slice(1) : rows)
-        .map((row) => ({
-            sku: String(row[skuIndex] || '').toUpperCase(),
-            price: Number(row[priceIndex]),
-            name: row[nameIndex] || '',
-            model: row[modelIndex] || '',
-            category: row[categoryIndex] || '',
-        }))
-        .filter((item) => item.sku && Number.isFinite(item.price) && item.price >= 0);
-}
+import { getCurrentRetailPriceList, replaceRetailPriceListFile } from '../../../services/catalogApi';
 
 function formatUploadCount(value) {
     return Number(value ?? 0).toLocaleString('en-PH');
+}
+
+function formatFileSize(bytes = 0) {
+    if (!bytes) {
+        return '0 KB';
+    }
+
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const value = bytes / (1024 ** unitIndex);
+    return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 function formatPeso(value) {
@@ -84,21 +66,19 @@ function downloadCsv(filename, rows) {
 const PriceListManager = ({ onUpdated }) => {
     const { success, error } = useToast();
     const [isOpen, setIsOpen] = useState(false);
-    const [bulkText, setBulkText] = useState('');
     const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isUploadingFile, setIsUploadingFile] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
     const [lastResult, setLastResult] = useState(null);
+    const [selectedFile, setSelectedFile] = useState(null);
 
-    const parsedItems = useMemo(() => parsePriceListText(bulkText), [bulkText]);
-    const parsedPreviewRows = useMemo(() => parsedItems.slice(0, 10), [parsedItems]);
     const priceChangeRows = lastResult?.priceChanges ?? [];
     const priceChangesTotalCount = lastResult?.priceChangesTotalCount ?? priceChangeRows.length;
 
     const handleClose = () => {
         setIsOpen(false);
         setLastResult(null);
+        setSelectedFile(null);
     };
 
     const handleDownloadTemplate = async () => {
@@ -123,32 +103,22 @@ const PriceListManager = ({ onUpdated }) => {
         onUpdated?.();
     };
 
-    const handleFileUpload = async (event) => {
+    const handleFileChange = (event) => {
         const file = event.target.files?.[0];
         if (!file) {
             return;
         }
 
-        setIsUploadingFile(true);
+        setSelectedFile(file);
         setLastResult(null);
-
-        try {
-            const result = await replaceRetailPriceListFile(file, effectiveFrom);
-            applyResult(result);
-            setBulkText('');
-        } catch (uploadError) {
-            error(uploadError.message || 'Failed to upload the price list file.');
-        } finally {
-            setIsUploadingFile(false);
-            event.target.value = '';
-        }
+        event.target.value = '';
     };
 
     const handleSubmit = async (submitEvent) => {
         submitEvent.preventDefault();
 
-        if (parsedItems.length === 0) {
-            error('Add at least one valid part number and price before uploading.');
+        if (!selectedFile) {
+            error('Choose an Excel or CSV price list first, then click Apply New Pricelist.');
             return;
         }
 
@@ -156,11 +126,11 @@ const PriceListManager = ({ onUpdated }) => {
         setLastResult(null);
 
         try {
-            const result = await replaceRetailPriceList(parsedItems, effectiveFrom);
+            const result = await replaceRetailPriceListFile(selectedFile, effectiveFrom);
             applyResult(result);
-            setBulkText('');
+            setSelectedFile(null);
         } catch (submitError) {
-            error(submitError.message || 'Failed to replace the price list.');
+            error(submitError.message || 'Failed to upload the price list file.');
         } finally {
             setIsSubmitting(false);
         }
@@ -213,63 +183,34 @@ const PriceListManager = ({ onUpdated }) => {
 
                             <label className="btn btn-outline cursor-pointer">
                                 <Upload className="w-4 h-4" />
-                                <span>{isUploadingFile ? 'Uploading price list...' : 'Upload Excel/CSV'}</span>
+                                <span>{selectedFile ? 'Change Excel/CSV' : 'Choose Excel/CSV'}</span>
                                 <input
                                     type="file"
                                     accept=".xlsx,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain"
                                     className="hidden"
-                                    disabled={isUploadingFile}
-                                    onChange={handleFileUpload}
+                                    disabled={isSubmitting}
+                                    onChange={handleFileChange}
                                 />
                             </label>
                         </div>
                     </div>
 
-                    <div>
-                        <label className="input-label">Paste part numbers and prices</label>
-                        <textarea
-                            value={bulkText}
-                            onChange={(event) => setBulkText(event.target.value)}
-                            rows={12}
-                            placeholder={`PART_NUMBER,PRICE,NAME,MODEL,CATEGORY\nLF-OF-001,450,Oil Filter,Montero,Filters\nLF-EO-004,1850,Engine Oil 4L,All Models,Fluids & Oils`}
-                            className="input min-h-[260px] font-mono text-sm"
-                        />
-                        <p className="mt-2 text-xs uppercase tracking-[0.18em] text-primary-400">
-                            Parsed rows: {parsedItems.length}
-                        </p>
-                        {parsedPreviewRows.length > 0 && (
-                            <div className="mt-3 overflow-hidden rounded-2xl border border-primary-200 bg-white">
-                                <div className="flex items-center justify-between border-b border-primary-100 px-4 py-3">
-                                    <p className="text-sm font-semibold text-primary-950">Parsed price rows</p>
-                                    <p className="text-xs uppercase tracking-[0.16em] text-primary-400">
-                                        Showing {parsedPreviewRows.length} of {formatUploadCount(parsedItems.length)}
-                                    </p>
+                    <div className="rounded-2xl border border-primary-200 bg-white p-4">
+                        <p className="text-sm font-semibold text-primary-950">Selected pricelist file</p>
+                        {selectedFile ? (
+                            <div className="mt-3 flex flex-col gap-3 rounded-xl bg-primary-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <p className="font-semibold text-primary-950">{selectedFile.name}</p>
+                                    <p className="mt-1 text-sm text-primary-500">{formatFileSize(selectedFile.size)}</p>
                                 </div>
-                                <div className="max-h-56 overflow-auto">
-                                    <table className="min-w-full divide-y divide-primary-100 text-sm">
-                                        <thead className="bg-primary-50 text-left text-xs uppercase tracking-[0.14em] text-primary-500">
-                                            <tr>
-                                                <th className="px-4 py-3 font-semibold">Part Number</th>
-                                                <th className="px-4 py-3 font-semibold">Price</th>
-                                                <th className="px-4 py-3 font-semibold">Name</th>
-                                                <th className="px-4 py-3 font-semibold">Model</th>
-                                                <th className="px-4 py-3 font-semibold">Category</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-primary-100">
-                                            {parsedPreviewRows.map((item) => (
-                                                <tr key={`${item.sku}-${item.price}`} className="text-primary-700">
-                                                    <td className="px-4 py-3 font-semibold text-primary-950">{item.sku}</td>
-                                                    <td className="px-4 py-3">{formatPeso(item.price)}</td>
-                                                    <td className="px-4 py-3">{item.name || '-'}</td>
-                                                    <td className="px-4 py-3">{item.model || '-'}</td>
-                                                    <td className="px-4 py-3">{item.category || '-'}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedFile(null)}>
+                                    Remove
+                                </Button>
                             </div>
+                        ) : (
+                            <p className="mt-2 text-sm text-primary-500">
+                                No file selected yet. Choose the Excel or CSV file, then click Apply New Pricelist.
+                            </p>
                         )}
                     </div>
 
