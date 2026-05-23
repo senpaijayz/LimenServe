@@ -15,6 +15,7 @@ import PublicQuoteLookupCard from '../components/PublicQuoteLookupCard';
 import PublicVehicleSelector from '../components/PublicVehicleSelector';
 import VehiclePackageShowcase from '../components/VehiclePackageShowcase';
 import { buildSmartQuoteModel } from '../utils/quoteRecommendationModel';
+import { buildBundleLineItems, getAppliedBundleSummaries, roundCurrency } from '../utils/bundleQuotePricing';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 
 const SORT_OPTIONS = [
@@ -117,6 +118,8 @@ const buildEstimatePayload = ({
     selectedParts,
     selectedServices,
     subtotal,
+    discountTotal = 0,
+    bundleSummaries = [],
     vat,
     total,
 }) => {
@@ -142,15 +145,19 @@ const buildEstimatePayload = ({
         },
     } : undefined;
 
+    const bundleNote = bundleSummaries.length
+        ? ` Bundle pricing applied: ${bundleSummaries.map((bundle) => `${bundle.bundleName} (${bundle.bundleTierLabel})`).join(', ')}.`
+        : '';
+
     return {
         customer,
         ...(vehiclePayload ? { vehicle: vehiclePayload } : {}),
         estimate: {
             status: 'sent',
             source: 'public',
-            note: 'Public estimate generated from LimenServe quote builder.',
+            note: `Public estimate generated from LimenServe quote builder.${bundleNote}`,
             subtotal: Number(subtotal.toFixed(2)),
-            discount_total: 0,
+            discount_total: Number(discountTotal.toFixed(2)),
             tax_total: Number(vat.toFixed(2)),
             grand_total: Number(total.toFixed(2)),
             issued_at: issuedAt.toISOString(),
@@ -226,8 +233,10 @@ const buildRetrievedPrintableQuote = (quote) => {
         customerPhone: quote.customer?.phone || '',
         vehicleInfo: formatVehicleSummary(quote.vehicle),
         subtotal: Number(quote.estimate?.subtotal ?? 0),
+        discountTotal: Number(quote.estimate?.discount_total ?? 0),
         vat: Number(quote.estimate?.tax_total ?? 0),
         total: Number(quote.estimate?.grand_total ?? 0),
+        note: quote.estimate?.note || '',
         items: (quote.items ?? []).map((item) => ({
             id: item.id || `${item.product_id || item.service_id || 'line'}-${item.line_type || 'item'}`,
             quantity: Number(item.quantity ?? 1),
@@ -266,6 +275,8 @@ const PublicEstimate = () => {
     const [sortBy, setSortBy] = useState('name-asc');
     const [currentPage, setCurrentPage] = useState(1);
     const [focusedProduct, setFocusedProduct] = useState(null);
+    const [showVehiclePackages, setShowVehiclePackages] = useState(true);
+    const [showSmartBundles, setShowSmartBundles] = useState(true);
     const [showPrintPreview, setShowPrintPreview] = useState(false);
     const [showSummaryDrawer, setShowSummaryDrawer] = useState(false);
     const [printSource, setPrintSource] = useState('draft');
@@ -501,6 +512,8 @@ const PublicEstimate = () => {
                     ...part,
                     isUpsell: true,
                     recommendationRuleId: recommendationRuleId || part.recommendationRuleId || null,
+                    catalogPrice: Number(recommendation.catalogPrice ?? recommendation.catalog_price ?? part.catalogPrice ?? part.price ?? recommendedPrice),
+                    ...(recommendation.bundleMeta ?? {}),
                     price: Math.min(Number(part.price ?? recommendedPrice), recommendedPrice),
                 } : part));
             }
@@ -515,6 +528,8 @@ const PublicEstimate = () => {
                 quantity: 1,
                 isUpsell: true,
                 recommendationRuleId,
+                catalogPrice: Number(recommendation.catalogPrice ?? recommendation.catalog_price ?? matchedProduct.price ?? recommendedPrice),
+                ...(recommendation.bundleMeta ?? {}),
             }];
         });
     };
@@ -535,6 +550,8 @@ const PublicEstimate = () => {
             quantity: 1,
             isUpsell: true,
             recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
+            catalogPrice: Number(recommendation.catalogPrice ?? recommendation.catalog_price ?? recommendation.recommendedPrice ?? recommendedService?.price ?? 0),
+            ...(recommendation.bundleMeta ?? {}),
         };
 
         setSelectedServices((services) => {
@@ -551,19 +568,25 @@ const PublicEstimate = () => {
         });
     };
 
-    const addBundleToEstimate = (_pkg, tier) => {
+    const addBundleToEstimate = (pkg, tier) => {
         if (!tier?.items?.length) {
             return;
         }
 
-        tier.items.forEach((item) => {
-            const isService = (item.consequentKind || item.consequent_kind) === 'service';
-            if (isService) {
-                addSuggestedService(item);
+        buildBundleLineItems(pkg, tier).forEach((lineItem) => {
+            const recommendation = {
+                ...lineItem.raw,
+                resolvedPrice: lineItem.price,
+                catalogPrice: lineItem.catalogPrice,
+                bundleMeta: lineItem.bundleMeta,
+            };
+
+            if (lineItem.kind === 'service') {
+                addSuggestedService(recommendation);
                 return;
             }
 
-            addSuggestedPart(item);
+            addSuggestedPart(recommendation);
         });
     };
 
@@ -580,6 +603,8 @@ const PublicEstimate = () => {
         selectedParts,
         selectedServices,
     }), [summaryFocusProduct, selectedParts, selectedServices]);
+    const appliedBundles = useMemo(() => getAppliedBundleSummaries([...selectedParts, ...selectedServices]), [selectedParts, selectedServices]);
+    const bundleDiscountTotal = useMemo(() => roundCurrency(appliedBundles.reduce((sum, bundle) => sum + Number(bundle.savings ?? 0), 0)), [appliedBundles]);
     const partsTotal = quoteFinancialModel.totals.partsSubtotal;
     const servicesTotal = quoteFinancialModel.totals.servicesSubtotal;
     const subtotal = quoteFinancialModel.totals.subtotal;
@@ -616,6 +641,8 @@ const PublicEstimate = () => {
             selectedParts,
             selectedServices,
             subtotal,
+            discountTotal: bundleDiscountTotal,
+            bundleSummaries: appliedBundles,
             vat,
             total,
         });
@@ -835,6 +862,11 @@ const PublicEstimate = () => {
                                                 <div className="min-w-0">
                                                     <p className="truncate text-sm font-semibold text-primary-950">{part.name}</p>
                                                     <p className="mt-1 text-xs text-primary-500">{getProductPartNumber(part) || 'Pricelist item'}</p>
+                                                    {part.bundleKey && (
+                                                        <p className="mt-2 inline-flex rounded-full bg-accent-success/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-accent-success">
+                                                            {part.bundleTierLabel} bundle
+                                                        </p>
+                                                    )}
                                                 </div>
                                                 <button
                                                     type="button"
@@ -877,7 +909,7 @@ const PublicEstimate = () => {
                                         <div key={service.id} className="flex min-h-[64px] items-center justify-between gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 p-3">
                                             <div className="min-w-0">
                                                 <p className="truncate text-sm font-semibold text-primary-950">{service.name}</p>
-                                                <p className="mt-1 text-xs text-primary-500">Service / labor line</p>
+                                                <p className="mt-1 text-xs text-primary-500">{service.bundleKey ? `${service.bundleName} bundle labor` : 'Service / labor line'}</p>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-sm font-bold text-accent-blue">{formatCurrency(service.price)}</span>
@@ -898,6 +930,23 @@ const PublicEstimate = () => {
                     </div>
                 )}
 
+                {appliedBundles.length > 0 && (
+                    <div className="rounded-[24px] border border-accent-success/25 bg-accent-success/10 p-4">
+                        <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-accent-success">Bundle pricing applied</p>
+                        <div className="mt-3 space-y-2">
+                            {appliedBundles.map((bundle) => (
+                                <div key={bundle.bundleKey} className="flex items-start justify-between gap-3 text-sm">
+                                    <div>
+                                        <p className="font-semibold text-primary-950">{bundle.bundleName}</p>
+                                        <p className="text-xs text-primary-500">{bundle.bundleTierLabel} package total {formatCurrency(bundle.smartTotal)}</p>
+                                    </div>
+                                    {bundle.savings > 0 && <p className="font-bold text-accent-success">Save {formatCurrency(bundle.savings)}</p>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <div className="rounded-[26px] border border-primary-200 bg-primary-50/80 p-4">
                     <div className="space-y-3">
                         <div className="flex justify-between text-sm text-primary-600">
@@ -908,6 +957,12 @@ const PublicEstimate = () => {
                             <span>Services subtotal</span>
                             <span className="font-semibold text-primary-950">{formatCurrency(servicesTotal)}</span>
                         </div>
+                        {bundleDiscountTotal > 0 && (
+                            <div className="flex justify-between text-sm text-accent-success">
+                                <span>Bundle savings applied</span>
+                                <span className="font-semibold">-{formatCurrency(bundleDiscountTotal)}</span>
+                            </div>
+                        )}
                         <div className="flex justify-between text-sm text-primary-600">
                             <span>VAT (12%)</span>
                             <span className="font-semibold text-primary-950">{formatCurrency(vat)}</span>
@@ -1058,6 +1113,11 @@ const PublicEstimate = () => {
                                 <div className="min-w-0">
                                     <p className="font-semibold text-primary-950">{part.name}</p>
                                     <p className="mt-1 text-xs text-primary-500">{getProductPartNumber(part) || 'Pricelist item'} - Qty {part.quantity}</p>
+                                    {part.bundleKey && (
+                                        <p className="mt-2 inline-flex rounded-full bg-accent-success/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-accent-success">
+                                            {part.bundleName} / {part.bundleTierLabel}
+                                        </p>
+                                    )}
                                 </div>
                                 <p className="font-bold text-accent-blue">{formatCurrency(part.price * part.quantity)}</p>
                             </div>
@@ -1066,7 +1126,7 @@ const PublicEstimate = () => {
                             <div key={service.id} className="grid gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                                 <div className="min-w-0">
                                     <p className="font-semibold text-primary-950">{service.name}</p>
-                                    <p className="mt-1 text-xs text-primary-500">Service / labor line</p>
+                                    <p className="mt-1 text-xs text-primary-500">{service.bundleKey ? `${service.bundleName} / ${service.bundleTierLabel}` : 'Service / labor line'}</p>
                                 </div>
                                 <p className="font-bold text-accent-blue">{formatCurrency(service.price)}</p>
                             </div>
@@ -1286,21 +1346,28 @@ const PublicEstimate = () => {
 
                             {estimatePhase === 'catalog' && hasVehicle && (
                                 <div ref={packageShelfRef}>
-                                    <VehiclePackageShowcase
-                                        vehicle={vehicle}
-                                        packages={vehiclePackages}
-                                        loading={vehiclePackagesLoading}
-                                        error={vehiclePackagesError}
-                                        mode="estimate"
-                                        onAddBundle={addBundleToEstimate}
-                                        selectedProductIds={selectedProductIds}
-                                        selectedServiceIds={selectedServiceIds}
-                                        title="Vehicle-first service bundles"
-                                        subtitle="Visual package cards for the vehicle you selected, complete with included parts, included labor, normal total, package total, and savings."
-                                        emptyLabel={`No featured packages are ready for ${vehicle.displayLabel} yet.`}
-                                        highlightPackageKey={highlightedVehiclePackageKey}
-                                        compactTabs
-                                    />
+                                    <div className="mb-3 flex justify-end">
+                                        <Button variant="secondary" onClick={() => setShowVehiclePackages((value) => !value)}>
+                                            {showVehiclePackages ? 'Hide Vehicle Packages' : 'Show Vehicle Packages'}
+                                        </Button>
+                                    </div>
+                                    {showVehiclePackages && (
+                                        <VehiclePackageShowcase
+                                            vehicle={vehicle}
+                                            packages={vehiclePackages}
+                                            loading={vehiclePackagesLoading}
+                                            error={vehiclePackagesError}
+                                            mode="estimate"
+                                            onAddBundle={addBundleToEstimate}
+                                            selectedProductIds={selectedProductIds}
+                                            selectedServiceIds={selectedServiceIds}
+                                            title="Vehicle-first service bundles"
+                                            subtitle="Visual package cards for the vehicle you selected, complete with included parts, included labor, normal total, package total, and savings."
+                                            emptyLabel={`No featured packages are ready for ${vehicle.displayLabel} yet.`}
+                                            highlightPackageKey={highlightedVehiclePackageKey}
+                                            compactTabs
+                                        />
+                                    )}
                                 </div>
                             )}
 
@@ -1442,26 +1509,55 @@ const PublicEstimate = () => {
                             )}
 
                             {estimatePhase === 'catalog' && focusedProduct && (
-                                <ProductPackageSuggestions
-                                    product={focusedProduct}
-                                    vehicleModelId={vehicle.model || focusedProduct.model || focusedProduct.vehicleModelName || ''}
-                                    vehicleContext={hasVehicle ? vehicle : null}
-                                    anchorQuantity={focusedPartSelection?.quantity ?? 1}
-                                    onAddProduct={addSuggestedPart}
-                                    onAddService={addSuggestedService}
-                                    onAddBundle={addBundleToEstimate}
-                                    onRemoveProduct={removePart}
-                                    onRemoveService={removeService}
-                                    selectedProductIds={selectedProductIds}
-                                    selectedServiceIds={selectedServiceIds}
-                                    title={hasVehicle ? 'Good / Better / Best smart bundles' : 'Part-based Good / Better / Best bundles'}
-                                    subtitle={hasVehicle
-                                        ? 'Vehicle-aware smart upsell bundles of matched Mitsubishi parts and labor for the selected anchor part.'
-                                        : 'Vehicle selection is optional. These recommendations use the selected part as the bundle anchor.'}
-                                    highlightedPackageKey={incomingPackageKey}
-                                    bundleMode="estimate"
-                                    smartQuote
-                                />
+                                <div className="space-y-3">
+                                    <div className="flex flex-col gap-3 rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary-400">Selected bundle anchor</p>
+                                            <p className="mt-1 font-semibold text-primary-950">{focusedProduct.name}</p>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {selectedParts.length > 1 && (
+                                                <select
+                                                    value={focusedProduct.id}
+                                                    onChange={(event) => {
+                                                        const nextProduct = selectedParts.find((part) => part.id === event.target.value);
+                                                        if (nextProduct) setFocusedProduct(nextProduct);
+                                                    }}
+                                                    className="min-h-11 rounded-xl border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-900 outline-none focus:border-accent-blue"
+                                                >
+                                                    {selectedParts.map((part) => (
+                                                        <option key={`${part.id}-bundle-anchor`} value={part.id}>{part.name}</option>
+                                                    ))}
+                                                </select>
+                                            )}
+                                            <Button variant="secondary" onClick={() => setShowSmartBundles((value) => !value)}>
+                                                {showSmartBundles ? 'Hide Smart Bundles' : 'Show Smart Bundles'}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    {showSmartBundles && (
+                                        <ProductPackageSuggestions
+                                            product={focusedProduct}
+                                            vehicleModelId={vehicle.model || focusedProduct.model || focusedProduct.vehicleModelName || ''}
+                                            vehicleContext={hasVehicle ? vehicle : null}
+                                            anchorQuantity={focusedPartSelection?.quantity ?? 1}
+                                            onAddProduct={addSuggestedPart}
+                                            onAddService={addSuggestedService}
+                                            onAddBundle={addBundleToEstimate}
+                                            onRemoveProduct={removePart}
+                                            onRemoveService={removeService}
+                                            selectedProductIds={selectedProductIds}
+                                            selectedServiceIds={selectedServiceIds}
+                                            title={hasVehicle ? 'Good / Better / Best smart bundles' : 'Part-based Good / Better / Best bundles'}
+                                            subtitle={hasVehicle
+                                                ? 'Vehicle-aware smart upsell bundles of matched Mitsubishi parts and labor for the selected anchor part.'
+                                                : 'Vehicle selection is optional. These recommendations use the selected part as the bundle anchor.'}
+                                            highlightedPackageKey={incomingPackageKey}
+                                            bundleMode="estimate"
+                                            smartQuote
+                                        />
+                                    )}
+                                </div>
                             )}
 
                             {estimatePhase === 'catalog' && (
@@ -1824,6 +1920,7 @@ const PublicEstimate = () => {
                                     <div><span style={{ fontWeight: '600' }}>Date: </span><span>{formatPrintDate(printableQuote.issuedAt)}</span></div>
                                     <div><span style={{ fontWeight: '600' }}>{printableQuote.referenceLabel}: </span><span style={{ fontFamily: 'monospace', fontSize: '11px' }}>{printableQuote.referenceValue}</span></div>
                                     {printableQuote.validUntil && <div><span style={{ fontWeight: '600' }}>Valid Until: </span><span>{formatPrintDate(printableQuote.validUntil)}</span></div>}
+                                    {printableQuote.note && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontWeight: '600' }}>Notes: </span><span>{printableQuote.note}</span></div>}
                                 </div>
                             </div>
 
@@ -1859,6 +1956,12 @@ const PublicEstimate = () => {
                                         <span style={{ fontWeight: '600' }}>Subtotal</span>
                                         <span>{formatCurrency(printableQuote.subtotal)}</span>
                                     </div>
+                                    {printableQuote.discountTotal > 0 && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #ddd', color: '#059669' }}>
+                                            <span style={{ fontWeight: '600' }}>Bundle savings</span>
+                                            <span>-{formatCurrency(printableQuote.discountTotal)}</span>
+                                        </div>
+                                    )}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #ddd' }}>
                                         <span style={{ fontWeight: '600' }}>VAT (12%)</span>
                                         <span>{formatCurrency(printableQuote.vat)}</span>

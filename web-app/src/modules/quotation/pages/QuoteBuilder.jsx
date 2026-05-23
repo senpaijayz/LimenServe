@@ -18,6 +18,7 @@ import { useToast } from '../../../components/ui/Toast';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
 import ProductPackageSuggestions from '../../public/components/ProductPackageSuggestions';
+import { buildBundleLineItems, getAppliedBundleSummaries, roundCurrency } from '../../public/utils/bundleQuotePricing';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 import {
     createEstimate,
@@ -56,6 +57,11 @@ function buildEstimatePayload({
     const servicesTotal = selectedServices.reduce((sum, service) => sum + Number(service.price ?? 0), 0);
     const subtotal = partsTotal + servicesTotal;
     const taxTotal = subtotal * 0.12;
+    const appliedBundles = getAppliedBundleSummaries([...selectedParts, ...selectedServices]);
+    const bundleDiscountTotal = appliedBundles.reduce((sum, bundle) => sum + Number(bundle.savings ?? 0), 0);
+    const bundleNote = appliedBundles.length
+        ? ` Bundle pricing applied: ${appliedBundles.map((bundle) => `${bundle.bundleName} (${bundle.bundleTierLabel})`).join(', ')}.`
+        : '';
 
     return {
         customer: {
@@ -66,9 +72,9 @@ function buildEstimatePayload({
         estimate: {
             ...defaultMeta,
             estimate_number: currentEstimateNumber || undefined,
-            note: notes || null,
+            note: `${notes || 'Quotation prepared in LimenServe.'}${bundleNote}`,
             subtotal,
-            discount_total: 0,
+            discount_total: bundleDiscountTotal,
             tax_total: taxTotal,
             grand_total: subtotal + taxTotal,
             issued_at: new Date().toISOString(),
@@ -148,6 +154,7 @@ const QuoteBuilder = () => {
     const [changeNote, setChangeNote] = useState('Customer requested item updates');
     const [revisions, setRevisions] = useState([]);
     const [focusedProduct, setFocusedProduct] = useState(null);
+    const [showSmartBundles, setShowSmartBundles] = useState(true);
 
     const {
         products: availableProducts,
@@ -167,9 +174,13 @@ const QuoteBuilder = () => {
         const servicesTotal = selectedServices.reduce((sum, service) => sum + Number(service.price ?? 0), 0);
         const subtotal = partsTotal + servicesTotal;
         const vat = subtotal * 0.12;
+        const appliedBundles = getAppliedBundleSummaries([...selectedParts, ...selectedServices]);
+        const bundleDiscountTotal = roundCurrency(appliedBundles.reduce((sum, bundle) => sum + Number(bundle.savings ?? 0), 0));
         return {
             partsTotal,
             servicesTotal,
+            appliedBundles,
+            bundleDiscountTotal,
             subtotal,
             vat,
             total: subtotal + vat,
@@ -257,6 +268,52 @@ const QuoteBuilder = () => {
                 quantity: 1,
             }]);
         }
+    };
+
+    const addBundleToQuote = (pkg, tier) => {
+        if (!tier?.items?.length) {
+            return;
+        }
+
+        buildBundleLineItems(pkg, tier).forEach((lineItem) => {
+            const recommendation = {
+                ...lineItem.raw,
+                resolvedPrice: lineItem.price,
+                catalogPrice: lineItem.catalogPrice,
+                bundleMeta: lineItem.bundleMeta,
+            };
+
+            if (lineItem.kind === 'service') {
+                const nextService = {
+                    id: recommendation.recommendedServiceId,
+                    name: recommendation.recommendedServiceName,
+                    price: Number(recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? 0),
+                    quantity: 1,
+                    isUpsell: true,
+                    recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
+                    catalogPrice: Number(recommendation.catalogPrice ?? recommendation.recommendedPrice ?? 0),
+                    ...(recommendation.bundleMeta ?? {}),
+                };
+
+                setSelectedServices((services) => {
+                    const existing = services.find((service) => service.id === nextService.id);
+                    return existing
+                        ? services.map((service) => (service.id === nextService.id ? { ...service, ...nextService, price: Math.min(Number(service.price ?? 0), Number(nextService.price ?? 0)) } : service))
+                        : [...services, nextService];
+                });
+                return;
+            }
+
+            if (recommendation.recommendedProduct) {
+                addPart(recommendation.recommendedProduct, {
+                    price: Number(recommendation.resolvedPrice ?? recommendation.recommendedProduct.price ?? recommendation.recommendedPrice ?? 0),
+                    isUpsell: true,
+                    recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
+                    catalogPrice: Number(recommendation.catalogPrice ?? recommendation.recommendedProduct.price ?? recommendation.recommendedPrice ?? 0),
+                    ...(recommendation.bundleMeta ?? {}),
+                });
+            }
+        });
     };
 
     const loadQuote = async (estimateId) => {
@@ -464,11 +521,39 @@ const QuoteBuilder = () => {
                     </Card>
 
                     {focusedProduct && (
-                        <ProductPackageSuggestions
-                            product={focusedProduct}
-                            vehicleModelId={focusedProduct.model || null}
-                            anchorQuantity={focusedPartSelection?.quantity ?? 1}
-                            onAddProduct={(recommendation) => {
+                        <div className="space-y-3">
+                            <div className="flex flex-col gap-3 rounded-xl border border-primary-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary-400">Selected bundle anchor</p>
+                                    <p className="mt-1 font-semibold text-primary-950">{focusedProduct.name}</p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {selectedParts.length > 1 && (
+                                        <select
+                                            value={focusedProduct.id}
+                                            onChange={(event) => {
+                                                const nextProduct = selectedParts.find((part) => part.id === event.target.value);
+                                                if (nextProduct) setFocusedProduct(nextProduct);
+                                            }}
+                                            className="min-h-11 rounded-xl border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-900 outline-none focus:border-accent-blue"
+                                        >
+                                            {selectedParts.map((part) => (
+                                                <option key={`${part.id}-quote-bundle-anchor`} value={part.id}>{part.name}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                    <Button variant="secondary" onClick={() => setShowSmartBundles((value) => !value)}>
+                                        {showSmartBundles ? 'Hide Smart Bundles' : 'Show Smart Bundles'}
+                                    </Button>
+                                </div>
+                            </div>
+                            {showSmartBundles && (
+                                <ProductPackageSuggestions
+                                    product={focusedProduct}
+                                    vehicleModelId={focusedProduct.model || null}
+                                    anchorQuantity={focusedPartSelection?.quantity ?? 1}
+                                    onAddBundle={addBundleToQuote}
+                                    onAddProduct={(recommendation) => {
                                 if (!recommendation.recommendedProduct) {
                                     return;
                                 }
@@ -477,9 +562,11 @@ const QuoteBuilder = () => {
                                     price: Number(recommendation.resolvedPrice ?? recommendation.recommendedProduct.price ?? recommendation.recommendedPrice ?? 0),
                                     isUpsell: true,
                                     recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
+                                    catalogPrice: Number(recommendation.catalogPrice ?? recommendation.catalog_price ?? recommendation.recommendedProduct.price ?? recommendation.recommendedPrice ?? 0),
+                                    ...(recommendation.bundleMeta ?? {}),
                                 });
-                            }}
-                            onAddService={(recommendation) => {
+                                    }}
+                                    onAddService={(recommendation) => {
                                 if (!recommendation.recommendedServiceId) {
                                     return;
                                 }
@@ -492,6 +579,8 @@ const QuoteBuilder = () => {
                                         quantity: 1,
                                         isUpsell: true,
                                         recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
+                                        catalogPrice: Number(recommendation.catalogPrice ?? recommendation.catalog_price ?? recommendation.recommendedPrice ?? 0),
+                                        ...(recommendation.bundleMeta ?? {}),
                                     };
                                     const existing = services.find((service) => service.id === recommendation.recommendedServiceId);
 
@@ -508,12 +597,14 @@ const QuoteBuilder = () => {
                                         nextService,
                                     ];
                                 });
-                            }}
-                            selectedProductIds={selectedParts.map((part) => part.id)}
-                            selectedServiceIds={selectedServices.map((service) => service.id)}
-                            title="Smart Mitsubishi Bundles"
-                            subtitle="Smart upsell bundles of matched parts and services, ranked by exact model first and family fallback second."
-                        />
+                                    }}
+                                    selectedProductIds={selectedParts.map((part) => part.id)}
+                                    selectedServiceIds={selectedServices.map((service) => service.id)}
+                                    title="Smart Mitsubishi Bundles"
+                                    subtitle="Smart upsell bundles of matched parts and services, ranked by exact model first and family fallback second."
+                                />
+                            )}
+                        </div>
                     )}
 
                     <Card title="Select Services" subtitle="Add labor or maintenance services to the quotation.">
@@ -570,6 +661,7 @@ const QuoteBuilder = () => {
                                             <div className="flex-1 min-w-0 mr-2">
                                                 <p className="text-sm font-semibold text-primary-950 truncate">{part.name}</p>
                                                 <p className="text-[10px] text-primary-500 font-mono">{getProductPartNumber(part) || 'No part number'}</p>
+                                                {part.bundleKey && <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-accent-success">{part.bundleTierLabel} bundle</p>}
                                                 <p className="text-xs font-bold text-accent-blue mt-1">{formatCurrency(part.price)} x {part.quantity}</p>
                                             </div>
                                             <div className="flex items-center gap-2">
@@ -601,6 +693,7 @@ const QuoteBuilder = () => {
                                     {selectedServices.map((service) => (
                                         <div key={service.id} className="flex items-center justify-between p-2 bg-primary-50 rounded-lg border border-primary-100">
                                             <p className="text-sm font-semibold text-primary-950">{service.name}</p>
+                                            {service.bundleKey && <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent-success">{service.bundleTierLabel} bundle labor</p>}
                                             <p className="text-sm font-bold text-accent-blue">{formatCurrency(service.price)}</p>
                                         </div>
                                     ))}
@@ -625,6 +718,12 @@ const QuoteBuilder = () => {
                                 <span>Services Subtotal</span>
                                 <span>{formatCurrency(totals.servicesTotal)}</span>
                             </div>
+                            {totals.bundleDiscountTotal > 0 && (
+                                <div className="flex justify-between text-sm text-accent-success font-medium">
+                                    <span>Bundle Savings Applied</span>
+                                    <span>-{formatCurrency(totals.bundleDiscountTotal)}</span>
+                                </div>
+                            )}
                             <div className="flex justify-between text-sm text-primary-600 font-medium">
                                 <span>VAT (12%)</span>
                                 <span>{formatCurrency(totals.vat)}</span>
@@ -680,7 +779,7 @@ const QuoteBuilder = () => {
                                 <div key={`${item.id}-${item.name}`} className="flex items-center justify-between rounded-lg border border-primary-200 px-4 py-3 text-sm">
                                     <div>
                                         <p className="font-medium text-primary-950">{item.name}</p>
-                                        <p className="text-primary-500">Qty {item.quantity || 1}</p>
+                                        <p className="text-primary-500">Qty {item.quantity || 1}{item.bundleKey ? ` / ${item.bundleTierLabel} bundle` : ''}</p>
                                     </div>
                                     <span className="font-semibold text-accent-blue">{formatCurrency((item.price || 0) * (item.quantity || 1))}</span>
                                 </div>
@@ -697,6 +796,12 @@ const QuoteBuilder = () => {
                             <span>VAT</span>
                             <span>{formatCurrency(totals.vat)}</span>
                         </div>
+                        {totals.bundleDiscountTotal > 0 && (
+                            <div className="mt-2 flex items-center justify-between text-sm text-accent-success">
+                                <span>Bundle savings applied</span>
+                                <span>-{formatCurrency(totals.bundleDiscountTotal)}</span>
+                            </div>
+                        )}
                         <div className="mt-3 flex items-center justify-between border-t border-primary-200 pt-3 text-lg font-bold text-primary-950">
                             <span>Total</span>
                             <span className="text-accent-blue">{formatCurrency(totals.total)}</span>
