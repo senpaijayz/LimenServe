@@ -94,6 +94,7 @@ const PriceListManager = ({ onUpdated }) => {
     const parsedItems = useMemo(() => parsePriceListText(bulkText), [bulkText]);
     const parsedPreviewRows = useMemo(() => parsedItems.slice(0, 10), [parsedItems]);
     const priceChangeRows = lastResult?.priceChanges ?? [];
+    const priceChangesTotalCount = lastResult?.priceChangesTotalCount ?? priceChangeRows.length;
 
     const handleClose = () => {
         setIsOpen(false);
@@ -313,7 +314,7 @@ const PriceListManager = ({ onUpdated }) => {
                                     <div className="flex items-center justify-between px-4 py-3">
                                         <p className="font-semibold text-primary-950">Part number price changes</p>
                                         <p className="text-xs uppercase tracking-[0.16em] text-primary-400">
-                                            {formatUploadCount(priceChangeRows.length)} rows
+                                            Showing {formatUploadCount(priceChangeRows.length)} of {formatUploadCount(priceChangesTotalCount)}
                                         </p>
                                     </div>
                                     <div className="max-h-80 overflow-auto border-t border-primary-100">

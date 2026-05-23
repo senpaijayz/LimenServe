@@ -35,6 +35,8 @@ const PRODUCT_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const FULL_CATALOG_PAGE_SIZE = 250;
 const FULL_CATALOG_PAGE_BATCH_SIZE = 3;
 const PRICE_LIST_DB_BATCH_SIZE = 1000;
+const PRICE_LIST_LOOKUP_BATCH_SIZE = 250;
+const PRICE_LIST_CHANGE_PREVIEW_LIMIT = 500;
 const SERVICE_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const VEHICLE_FITMENT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const DEFAULT_PART_LIMIT = 6;
@@ -3925,7 +3927,7 @@ async function replaceRetailPrices(items, effectiveFrom) {
   const skuList = uniqueItems.map((item) => item.sku);
   const currentProducts = [];
 
-  for (const skuChunk of chunkArray(skuList)) {
+  for (const skuChunk of chunkArray(skuList, PRICE_LIST_LOOKUP_BATCH_SIZE)) {
     const { data, error: productsError } = await supabaseAdmin
       .schema('catalog')
       .from('products')
@@ -4052,7 +4054,7 @@ async function replaceRetailPrices(items, effectiveFrom) {
   const previousDate = getPreviousDate(effectiveFrom);
   const previousPriceMap = new Map();
 
-  for (const productIdChunk of chunkArray(matchedProductIds)) {
+  for (const productIdChunk of chunkArray(matchedProductIds, PRICE_LIST_LOOKUP_BATCH_SIZE)) {
     const { data: currentPrices, error: currentPricesError } = await supabaseAdmin
       .schema('catalog')
       .from('product_prices')
@@ -4070,7 +4072,7 @@ async function replaceRetailPrices(items, effectiveFrom) {
     });
   }
 
-  for (const productIdChunk of chunkArray(matchedProductIds)) {
+  for (const productIdChunk of chunkArray(matchedProductIds, PRICE_LIST_LOOKUP_BATCH_SIZE)) {
     const { error: archiveError } = await supabaseAdmin
       .schema('catalog')
       .from('product_prices')
@@ -4113,7 +4115,7 @@ async function replaceRetailPrices(items, effectiveFrom) {
   invalidateProductCatalogCache();
 
   const uploadedSkuSet = new Set(productRows.map((product) => product.sku));
-  const priceChanges = matchedItems.map((item) => {
+  const allPriceChanges = matchedItems.map((item) => {
     const product = productMap.get(item.sku);
     const previousPrice = previousPriceMap.has(product.id) ? previousPriceMap.get(product.id) : null;
     const newPrice = Number(item.price ?? 0);
@@ -4136,8 +4138,9 @@ async function replaceRetailPrices(items, effectiveFrom) {
       status,
     };
   });
-  const changedCount = priceChanges.filter((item) => item.status === 'changed' || item.status === 'new_part' || item.status === 'new_price').length;
-  const unchangedCount = priceChanges.filter((item) => item.status === 'unchanged').length;
+  const changedCount = allPriceChanges.filter((item) => item.status === 'changed' || item.status === 'new_part' || item.status === 'new_price').length;
+  const unchangedCount = allPriceChanges.filter((item) => item.status === 'unchanged').length;
+  const priceChanges = allPriceChanges.slice(0, PRICE_LIST_CHANGE_PREVIEW_LIMIT);
 
   return {
     updatedCount: matchedItems.length,
@@ -4146,6 +4149,8 @@ async function replaceRetailPrices(items, effectiveFrom) {
     skippedCount: skippedItems.length,
     skippedItems,
     priceChanges,
+    priceChangesPreviewLimit: PRICE_LIST_CHANGE_PREVIEW_LIMIT,
+    priceChangesTotalCount: allPriceChanges.length,
     createdOrUpdatedProducts: productRows.length,
     newProductsCount,
     stockRowsCreated,
