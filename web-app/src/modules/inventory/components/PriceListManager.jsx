@@ -35,6 +35,10 @@ function parsePriceListText(rawText) {
         .filter((item) => item.sku && Number.isFinite(item.price) && item.price >= 0);
 }
 
+function formatUploadCount(value) {
+    return Number(value ?? 0).toLocaleString('en-PH');
+}
+
 function downloadCsv(filename, rows) {
     const csv = rows.map((row) => row.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -84,7 +88,7 @@ const PriceListManager = ({ onUpdated }) => {
 
     const applyResult = (result) => {
         setLastResult(result);
-        success(`Updated ${result.updatedCount} catalog prices.`);
+        success(`Updated ${formatUploadCount(result.updatedCount)} catalog prices.`);
         onUpdated?.();
     };
 
@@ -151,7 +155,7 @@ const PriceListManager = ({ onUpdated }) => {
                     <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4">
                         <p className="text-sm font-semibold text-primary-950">Supabase retail price source</p>
                         <p className="mt-1 text-sm text-primary-600">
-                            Upload the yearly Excel or CSV price list from Mitsubishi, or paste rows manually. The live upload replaces current retail prices in Supabase, keeps price history, and creates newly listed part numbers when the file includes description data.
+                            Upload the yearly Mitsubishi Excel (.xlsx) or CSV price list, or paste rows manually. Imported rows become the active retail prices, older prices stay in history, and new part numbers are created when the file includes descriptions.
                         </p>
                     </div>
 
@@ -207,9 +211,11 @@ const PriceListManager = ({ onUpdated }) => {
                     {lastResult && (
                         <div className="rounded-2xl border border-primary-200 bg-white p-4 text-sm text-primary-700">
                             <p className="font-semibold text-primary-950">Upload summary</p>
-                            <p className="mt-2">Updated: {lastResult.updatedCount}</p>
-                            <p>Product records touched: {lastResult.createdOrUpdatedProducts ?? 0}</p>
-                            <p>Skipped: {lastResult.skippedCount}</p>
+                            <p className="mt-2">Updated active prices: {formatUploadCount(lastResult.updatedCount)}</p>
+                            <p>Rows received: {formatUploadCount(lastResult.receivedCount ?? lastResult.updatedCount)}</p>
+                            <p>Unique part numbers: {formatUploadCount(lastResult.uniqueCount ?? lastResult.updatedCount)}</p>
+                            <p>Product records touched: {formatUploadCount(lastResult.createdOrUpdatedProducts ?? 0)}</p>
+                            <p>Skipped: {formatUploadCount(lastResult.skippedCount)}</p>
                             <p>Effective from: {lastResult.effectiveFrom}</p>
                             {lastResult.skippedItems?.length > 0 && (
                                 <p className="mt-2 text-accent-danger">

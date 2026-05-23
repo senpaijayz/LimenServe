@@ -34,6 +34,7 @@ const priceListUpload = multer({
 const PRODUCT_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const FULL_CATALOG_PAGE_SIZE = 250;
 const FULL_CATALOG_PAGE_BATCH_SIZE = 3;
+const PRICE_LIST_DB_BATCH_SIZE = 500;
 const SERVICE_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const VEHICLE_FITMENT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const DEFAULT_PART_LIMIT = 6;
@@ -206,7 +207,14 @@ let vehicleFitmentCachePromise = null;
 let archivedProductIdsPromise = null;
 
 function parsePrice(value) {
-  const numeric = Number(value);
+  const normalized = typeof value === 'number'
+    ? value
+    : String(value ?? '')
+      .replace(/₱|php|peso/gi, '')
+      .replace(/[,\s]/g, '')
+      .replace(/[^\d.-]/g, '')
+      .trim();
+  const numeric = Number(normalized);
   return Number.isFinite(numeric) && numeric >= 0 ? Number(numeric.toFixed(2)) : null;
 }
 
@@ -336,34 +344,147 @@ function getCellIndex(cellRef = '') {
   return letters.split('').reduce((total, letter) => (total * 26) + letter.charCodeAt(0) - 64, 0) - 1;
 }
 
-function parseXlsxRows(buffer) {
+function parseXlsxWorksheetRows(buffer) {
   const sharedStrings = parseSharedStrings(findZipEntry(buffer, 'xl/sharedStrings.xml'));
-  const sheetXml = findZipEntry(buffer, 'xl/worksheets/sheet1.xml');
+  const worksheets = [];
 
-  if (!sheetXml) {
-    throw new Error('The Excel workbook does not contain a first worksheet.');
+  for (let sheetNumber = 1; sheetNumber <= 50; sheetNumber += 1) {
+    const sheetXml = findZipEntry(buffer, `xl/worksheets/sheet${sheetNumber}.xml`);
+    if (!sheetXml) {
+      continue;
+    }
+
+    const rows = Array.from(sheetXml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g))
+      .map((rowMatch) => {
+        const row = [];
+        for (const cellMatch of rowMatch[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
+          const attrs = cellMatch[1];
+          const body = cellMatch[2];
+          const ref = attrs.match(/\br="([^"]+)"/)?.[1] || '';
+          const type = attrs.match(/\bt="([^"]+)"/)?.[1] || '';
+          const index = Math.max(getCellIndex(ref), row.length);
+          const rawValue = body.match(/<v>([\s\S]*?)<\/v>/)?.[1] ?? body.match(/<t[^>]*>([\s\S]*?)<\/t>/)?.[1] ?? '';
+          const value = type === 's' ? sharedStrings[Number(rawValue)] ?? '' : decodeXmlEntities(rawValue);
+          row[index] = String(value).trim();
+        }
+        return row;
+      })
+      .filter((row) => row.some(Boolean));
+
+    if (rows.length > 0) {
+      worksheets.push(rows);
+    }
   }
 
-  return Array.from(sheetXml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g))
-    .map((rowMatch) => {
-      const row = [];
-      for (const cellMatch of rowMatch[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
-        const attrs = cellMatch[1];
-        const body = cellMatch[2];
-        const ref = attrs.match(/\br="([^"]+)"/)?.[1] || '';
-        const type = attrs.match(/\bt="([^"]+)"/)?.[1] || '';
-        const index = Math.max(getCellIndex(ref), row.length);
-        const rawValue = body.match(/<v>([\s\S]*?)<\/v>/)?.[1] ?? body.match(/<t[^>]*>([\s\S]*?)<\/t>/)?.[1] ?? '';
-        const value = type === 's' ? sharedStrings[Number(rawValue)] ?? '' : decodeXmlEntities(rawValue);
-        row[index] = String(value).trim();
-      }
-      return row;
-    })
-    .filter((row) => row.some(Boolean));
+  if (worksheets.length === 0) {
+    throw new Error('The Excel workbook does not contain a readable worksheet.');
+  }
+
+  return worksheets;
 }
 
 function normalizeHeader(value = '') {
   return String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+const PRICE_LIST_COLUMN_ALIASES = {
+  sku: {
+    fallback: 0,
+    names: new Map([
+      ['partnumber', 100],
+      ['partno', 100],
+      ['part', 80],
+      ['sku', 100],
+      ['itemcode', 90],
+      ['code', 70],
+      ['material', 100],
+      ['materialnumber', 100],
+      ['productcode', 90],
+    ]),
+  },
+  price: {
+    fallback: 1,
+    names: new Map([
+      ['srpwithvat', 120],
+      ['srpvatinclusive', 120],
+      ['srpincludingvat', 120],
+      ['srpvatin', 110],
+      ['newsrpwithvat', 130],
+      ['newprice', 110],
+      ['newsrp', 110],
+      ['retailprice', 100],
+      ['sellingprice', 100],
+      ['unitprice', 90],
+      ['listprice', 90],
+      ['amount', 80],
+      ['price', 80],
+      ['srp', 80],
+    ]),
+  },
+  name: {
+    fallback: 2,
+    names: new Map([
+      ['name', 80],
+      ['description', 90],
+      ['partname', 90],
+      ['partdescription', 100],
+      ['materialdescription', 120],
+      ['itemdescription', 100],
+    ]),
+  },
+  model: {
+    fallback: 3,
+    names: new Map([
+      ['model', 90],
+      ['application', 90],
+      ['vehicle', 80],
+      ['modelname', 90],
+      ['modelcode', 100],
+    ]),
+  },
+  category: {
+    fallback: 4,
+    names: new Map([
+      ['category', 90],
+      ['sourcecategory', 90],
+      ['group', 80],
+      ['pcc', 75],
+    ]),
+  },
+};
+
+function findColumnIndex(header, columnKey) {
+  const config = PRICE_LIST_COLUMN_ALIASES[columnKey];
+  let best = { index: -1, score: -1 };
+
+  header.forEach((value, index) => {
+    const score = config.names.get(value) ?? -1;
+    if (score > best.score || (score === best.score && index > best.index)) {
+      best = { index, score };
+    }
+  });
+
+  return best.index >= 0 ? best.index : config.fallback;
+}
+
+function findPriceListHeader(rows = []) {
+  let best = { rowIndex: -1, score: -1, header: [] };
+  const scanLimit = Math.min(rows.length, 25);
+
+  for (let rowIndex = 0; rowIndex < scanLimit; rowIndex += 1) {
+    const header = (rows[rowIndex] || []).map(normalizeHeader);
+    const skuIndex = findColumnIndex(header, 'sku');
+    const priceIndex = findColumnIndex(header, 'price');
+    const skuScore = PRICE_LIST_COLUMN_ALIASES.sku.names.get(header[skuIndex]) ?? 0;
+    const priceScore = PRICE_LIST_COLUMN_ALIASES.price.names.get(header[priceIndex]) ?? 0;
+    const score = skuScore + priceScore;
+
+    if (skuScore > 0 && priceScore > 0 && score > best.score) {
+      best = { rowIndex, score, header };
+    }
+  }
+
+  return best.rowIndex >= 0 ? best : null;
 }
 
 function rowsToPriceListItems(rows = []) {
@@ -371,18 +492,14 @@ function rowsToPriceListItems(rows = []) {
     return [];
   }
 
-  const header = rows[0].map(normalizeHeader);
-  const hasHeader = header.some((value) => ['partnumber', 'sku', 'partno', 'price', 'retailprice', 'srp'].includes(value));
-  const dataRows = hasHeader ? rows.slice(1) : rows;
-  const findIndex = (names, fallback) => {
-    const found = header.findIndex((value) => names.includes(value));
-    return found >= 0 ? found : fallback;
-  };
-  const skuIndex = findIndex(['partnumber', 'partno', 'part', 'sku', 'itemcode', 'code'], 0);
-  const priceIndex = findIndex(['price', 'retailprice', 'srp', 'listprice', 'amount'], 1);
-  const nameIndex = findIndex(['name', 'description', 'partname', 'itemdescription'], 2);
-  const modelIndex = findIndex(['model', 'application', 'vehicle', 'modelname'], 3);
-  const categoryIndex = findIndex(['category', 'sourcecategory', 'group'], 4);
+  const detectedHeader = findPriceListHeader(rows);
+  const header = detectedHeader?.header ?? (rows[0] || []).map(normalizeHeader);
+  const dataRows = detectedHeader ? rows.slice(detectedHeader.rowIndex + 1) : rows;
+  const skuIndex = findColumnIndex(header, 'sku');
+  const priceIndex = findColumnIndex(header, 'price');
+  const nameIndex = findColumnIndex(header, 'name');
+  const modelIndex = findColumnIndex(header, 'model');
+  const categoryIndex = findColumnIndex(header, 'category');
 
   return normalizePriceListItems(dataRows.map((row) => ({
     sku: row[skuIndex],
@@ -398,7 +515,15 @@ function parsePriceListUpload(file) {
   const mimetype = String(file?.mimetype || '').toLowerCase();
 
   if (filename.endsWith('.xlsx') || mimetype.includes('spreadsheetml')) {
-    return rowsToPriceListItems(parseXlsxRows(file.buffer));
+    return parseXlsxWorksheetRows(file.buffer)
+      .map((rows) => rowsToPriceListItems(rows))
+      .sort((left, right) => right.length - left.length)[0] ?? [];
+  }
+
+  if (filename.endsWith('.xls') || mimetype.includes('ms-excel')) {
+    const error = new Error('Legacy .xls files are not supported yet. Save the workbook as .xlsx or CSV, then upload again.');
+    error.statusCode = 400;
+    throw error;
   }
 
   return rowsToPriceListItems(parseCsvRows(file.buffer.toString('utf8').replace(/\t/g, ',')));
@@ -408,6 +533,14 @@ function getPreviousDate(isoDate) {
   const date = new Date(`${isoDate}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() - 1);
   return date.toISOString().slice(0, 10);
+}
+
+function chunkArray(items = [], size = PRICE_LIST_DB_BATCH_SIZE) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function parsePositiveInteger(value, fallback, max = Number.MAX_SAFE_INTEGER) {
@@ -3780,17 +3913,24 @@ async function replaceRetailPrices(items, effectiveFrom) {
   );
 
   const skuList = uniqueItems.map((item) => item.sku);
-  const { data: currentProducts, error: productsError } = await supabaseAdmin
-    .schema('catalog')
-    .from('products')
-    .select('id, sku, name, model_name, category, brand, uom, status, source_category, metadata')
-    .in('sku', skuList);
+  const currentProducts = [];
 
-  if (productsError) {
-    throw productsError;
+  for (const skuChunk of chunkArray(skuList)) {
+    const { data, error: productsError } = await supabaseAdmin
+      .schema('catalog')
+      .from('products')
+      .select('id, sku, name, model_name, category, brand, uom, status, source_category, metadata')
+      .in('sku', skuChunk);
+
+    if (productsError) {
+      throw productsError;
+    }
+
+    currentProducts.push(...(data ?? []));
   }
 
   let productMap = new Map((currentProducts ?? []).map((product) => [product.sku, product]));
+  const existingProductIds = new Set((currentProducts ?? []).map((product) => product.id));
   const nowIso = new Date().toISOString();
   const businessDate = effectiveFrom;
   const productRows = uniqueItems
@@ -3833,14 +3973,20 @@ async function replaceRetailPrices(items, effectiveFrom) {
     });
 
   if (productRows.length > 0) {
-    const { data: upsertedProducts, error: upsertError } = await supabaseAdmin
-      .schema('catalog')
-      .from('products')
-      .upsert(productRows, { onConflict: 'sku' })
-      .select('id, sku, name, model_name, category, source_category, metadata');
+    const upsertedProducts = [];
 
-    if (upsertError) {
-      throw upsertError;
+    for (const productChunk of chunkArray(productRows)) {
+      const { data, error: upsertError } = await supabaseAdmin
+        .schema('catalog')
+        .from('products')
+        .upsert(productChunk, { onConflict: 'sku' })
+        .select('id, sku, name, model_name, category, source_category, metadata');
+
+      if (upsertError) {
+        throw upsertError;
+      }
+
+      upsertedProducts.push(...(data ?? []));
     }
 
     productMap = new Map([
@@ -3849,7 +3995,7 @@ async function replaceRetailPrices(items, effectiveFrom) {
     ]);
 
     const newBalanceRows = (upsertedProducts ?? [])
-      .filter((product) => !currentProducts?.some((currentProduct) => currentProduct.id === product.id))
+      .filter((product) => !existingProductIds.has(product.id))
       .map((product) => ({
         product_id: product.id,
         on_hand: 0,
@@ -3862,13 +4008,15 @@ async function replaceRetailPrices(items, effectiveFrom) {
       }));
 
     if (newBalanceRows.length > 0) {
-      const { error: balanceError } = await supabaseAdmin
-        .schema('catalog')
-        .from('inventory_balances')
-        .upsert(newBalanceRows, { onConflict: 'product_id', ignoreDuplicates: true });
+      for (const balanceChunk of chunkArray(newBalanceRows)) {
+        const { error: balanceError } = await supabaseAdmin
+          .schema('catalog')
+          .from('inventory_balances')
+          .upsert(balanceChunk, { onConflict: 'product_id', ignoreDuplicates: true });
 
-      if (balanceError) {
-        throw balanceError;
+        if (balanceError) {
+          throw balanceError;
+        }
       }
     }
   }
@@ -3886,20 +4034,22 @@ async function replaceRetailPrices(items, effectiveFrom) {
   const matchedProductIds = matchedItems.map((item) => productMap.get(item.sku).id);
   const previousDate = getPreviousDate(effectiveFrom);
 
-  const { error: archiveError } = await supabaseAdmin
-    .schema('catalog')
-    .from('product_prices')
-    .update({
-      is_current: false,
-      effective_to: previousDate,
-      updated_at: nowIso,
-    })
-    .eq('price_type', 'retail')
-    .eq('is_current', true)
-    .in('product_id', matchedProductIds);
+  for (const productIdChunk of chunkArray(matchedProductIds)) {
+    const { error: archiveError } = await supabaseAdmin
+      .schema('catalog')
+      .from('product_prices')
+      .update({
+        is_current: false,
+        effective_to: previousDate,
+        updated_at: nowIso,
+      })
+      .eq('price_type', 'retail')
+      .eq('is_current', true)
+      .in('product_id', productIdChunk);
 
-  if (archiveError) {
-    throw archiveError;
+    if (archiveError) {
+      throw archiveError;
+    }
   }
 
   const newPrices = matchedItems.map((item) => ({
@@ -3913,13 +4063,15 @@ async function replaceRetailPrices(items, effectiveFrom) {
     business_date: effectiveFrom,
   }));
 
-  const { error: insertError } = await supabaseAdmin
-    .schema('catalog')
-    .from('product_prices')
-    .insert(newPrices);
+  for (const priceChunk of chunkArray(newPrices)) {
+    const { error: insertError } = await supabaseAdmin
+      .schema('catalog')
+      .from('product_prices')
+      .insert(priceChunk);
 
-  if (insertError) {
-    throw insertError;
+    if (insertError) {
+      throw insertError;
+    }
   }
 
   invalidateProductCatalogCache();
@@ -3929,6 +4081,8 @@ async function replaceRetailPrices(items, effectiveFrom) {
     skippedCount: skippedItems.length,
     skippedItems,
     createdOrUpdatedProducts: productRows.length,
+    receivedCount: items.length,
+    uniqueCount: uniqueItems.length,
     effectiveFrom,
   };
 }
