@@ -11,6 +11,7 @@ import {
   archiveCatalogProduct,
   createCatalogProduct,
   getArchivedCatalogProducts,
+  getCatalogProductByPartNumber,
   getManagedCategories,
   getProductStockHistory,
   getSuppliers,
@@ -101,7 +102,7 @@ function isStockIncrease(entry = {}) {
 }
 
 export default function ProductManagement() {
-  const { success, error: showError, info } = useToast();
+  const { success, error: showError, info, warning } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -111,6 +112,7 @@ export default function ProductManagement() {
   const [editingProduct, setEditingProduct] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
+  const [partNumberConflict, setPartNumberConflict] = useState(null);
   const [saving, setSaving] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [largeBarcodeProduct, setLargeBarcodeProduct] = useState(null);
@@ -178,18 +180,21 @@ export default function ProductManagement() {
   const openCreate = () => {
     setEditingProduct(null);
     setForm({ ...emptyForm });
+    setPartNumberConflict(null);
     setIsModalOpen(true);
   };
 
   const openEdit = (product) => {
     setEditingProduct(product);
     setForm(toForm(product));
+    setPartNumberConflict(null);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setEditingProduct(null);
     setForm({ ...emptyForm });
+    setPartNumberConflict(null);
     setIsModalOpen(false);
   };
 
@@ -229,8 +234,23 @@ export default function ProductManagement() {
     }
 
     setSaving(true);
-    info(editingProduct ? `Saving ${partNumber}...` : `Registering ${partNumber}...`);
     try {
+      const duplicateProduct = await getCatalogProductByPartNumber(partNumber);
+      if (duplicateProduct && duplicateProduct.id !== editingProduct?.id) {
+        const message = duplicateProduct.archived
+          ? `Part number ${partNumber} is archived as "${duplicateProduct.name}". Restore it from Archived Products instead of creating a duplicate.`
+          : `Part number ${partNumber} already exists on "${duplicateProduct.name}". Edit the existing product instead.`;
+
+        setPartNumberConflict({
+          product: duplicateProduct,
+          message,
+        });
+        warning(message);
+        return;
+      }
+
+      setPartNumberConflict(null);
+      info(editingProduct ? `Saving ${partNumber}...` : `Registering ${partNumber}...`);
       const supplier = suppliers.find((item) => item.id === form.supplierId);
       const payload = {
         ...form,
@@ -252,6 +272,12 @@ export default function ProductManagement() {
       closeModal();
       setRefreshKey((value) => value + 1);
     } catch (saveError) {
+      if (saveError.message?.toLowerCase().includes('part number') && saveError.message?.toLowerCase().includes('exists')) {
+        setPartNumberConflict({
+          product: null,
+          message: saveError.message,
+        });
+      }
       showError(saveError.message || 'Unable to save product.');
     } finally {
       setSaving(false);
@@ -488,7 +514,21 @@ export default function ProductManagement() {
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
               <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Part Number</span>
-              <input className={`${inputClassName} mt-2 font-mono uppercase`} value={form.sku} onChange={(event) => setForm({ ...form, sku: event.target.value.toUpperCase() })} placeholder="Example: 5370A737" required />
+              <input
+                className={`${inputClassName} mt-2 font-mono uppercase ${partNumberConflict ? 'border-accent-danger focus:border-accent-danger focus:ring-accent-danger/15' : ''}`}
+                value={form.sku}
+                onChange={(event) => {
+                  setPartNumberConflict(null);
+                  setForm({ ...form, sku: event.target.value.toUpperCase() });
+                }}
+                placeholder="Example: 5370A737"
+                required
+              />
+              {partNumberConflict && (
+                <div className="mt-2 rounded-xl border border-accent-danger/20 bg-accent-danger/5 px-3 py-2 text-xs font-semibold text-accent-danger">
+                  {partNumberConflict.message}
+                </div>
+              )}
             </label>
             <label className="block">
               <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Retail Price</span>

@@ -610,6 +610,21 @@ export async function getInventoryMovements(limit = 12) {
   }
 }
 
+export async function getCatalogProductByPartNumber(partNumber) {
+  try {
+    const { data } = await apiClient.get(`/catalog/products/part-number/${encodeURIComponent(partNumber)}`, {
+      timeout: INVENTORY_API_TIMEOUT_MS,
+    });
+    return data.product ?? null;
+  } catch (error) {
+    if (error?.response?.status === 404) {
+      return null;
+    }
+
+    extractApiError(error, 'Failed to check part number.');
+  }
+}
+
 export async function archiveCatalogProduct(productId, { archive = true, reason = '' } = {}) {
   try {
     const { data } = await apiClient.patch(`/catalog/products/${productId}/archive`, {

@@ -860,6 +860,78 @@ function mapCatalogRow(row) {
   };
 }
 
+async function getProductByPartNumber(partNumber) {
+  const sku = normalizePartNumber(partNumber);
+
+  if (!sku) {
+    return null;
+  }
+
+  const { data: product, error: productError } = await supabaseAdmin
+    .schema('catalog')
+    .from('products')
+    .select('id, sku, name, model_name, category, brand, uom, status, source_category, metadata, is_active, updated_at')
+    .eq('sku', sku)
+    .maybeSingle();
+
+  if (productError) {
+    throw productError;
+  }
+
+  if (!product) {
+    return null;
+  }
+
+  const [{ data: price }, { data: balance }] = await Promise.all([
+    supabaseAdmin
+      .schema('catalog')
+      .from('product_prices')
+      .select('amount')
+      .eq('product_id', product.id)
+      .eq('price_type', 'retail')
+      .eq('is_current', true)
+      .maybeSingle(),
+    supabaseAdmin
+      .schema('catalog')
+      .from('inventory_balances')
+      .select('on_hand, location')
+      .eq('product_id', product.id)
+      .maybeSingle(),
+  ]);
+
+  const mappedProduct = mapCatalogRow({
+    id: product.id,
+    sku: product.sku,
+    name: product.name,
+    model: product.model_name,
+    category: product.category,
+    source_category: product.source_category,
+    price: Number(price?.amount ?? 0),
+    stock: Number(balance?.on_hand ?? 0),
+    status: product.status,
+    uom: product.uom,
+    brand: product.brand,
+    location: balance?.location ?? {},
+    metadata: product.metadata ?? {},
+  });
+
+  return {
+    ...mappedProduct,
+    isActive: product.is_active !== false,
+    archived: product.is_active === false,
+    archivedAt: product.is_active === false ? product.updated_at : null,
+  };
+}
+
+function sendDuplicateProductResponse(res, product, sku) {
+  const archivedText = product?.archived ? ' It is archived; restore it from Archived Products instead of creating a new copy.' : '';
+  res.status(409).json({
+    error: `Part number ${sku} already exists on ${product?.name || 'another product'}.${archivedText}`,
+    code: 'DUPLICATE_PART_NUMBER',
+    product,
+  });
+}
+
 function mapSupplierRow(row = {}) {
   return {
     id: row.id,
@@ -3018,6 +3090,28 @@ router.get('/products/all', async (_req, res, next) => {
   }
 });
 
+router.get('/products/part-number/:partNumber', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
+  try {
+    const sku = normalizePartNumber(req.params.partNumber);
+
+    if (!sku) {
+      res.status(400).json({ error: 'Part number is required.' });
+      return;
+    }
+
+    const product = await getProductByPartNumber(sku);
+
+    if (!product) {
+      res.status(404).json({ error: 'No product matched that part number.' });
+      return;
+    }
+
+    res.json({ product });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/products/:productId/stock-history', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
     const productId = String(req.params.productId || '').trim();
@@ -3348,6 +3442,12 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
       return;
     }
 
+    const existingProduct = await getProductByPartNumber(sku);
+    if (existingProduct) {
+      sendDuplicateProductResponse(res, existingProduct, sku);
+      return;
+    }
+
     const nowIso = new Date().toISOString();
     const businessDate = nowIso.slice(0, 10);
     const initialStock = requestedStock ?? 0;
@@ -3385,7 +3485,8 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
 
     if (productError) {
       if (productError.code === '23505') {
-        res.status(409).json({ error: 'A product with this part number already exists.' });
+        const duplicateProduct = await getProductByPartNumber(sku);
+        sendDuplicateProductResponse(res, duplicateProduct, sku);
         return;
       }
       throw productError;
@@ -3497,6 +3598,12 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
       return;
     }
 
+    const existingProduct = await getProductByPartNumber(sku);
+    if (existingProduct && existingProduct.id !== productId) {
+      sendDuplicateProductResponse(res, existingProduct, sku);
+      return;
+    }
+
     const nowIso = new Date().toISOString();
     const businessDate = nowIso.slice(0, 10);
     const classification = classifyInventoryItem({
@@ -3568,6 +3675,11 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
       .maybeSingle();
 
     if (productError) {
+      if (productError.code === '23505') {
+        const duplicateProduct = await getProductByPartNumber(sku);
+        sendDuplicateProductResponse(res, duplicateProduct, sku);
+        return;
+      }
       throw productError;
     }
 
