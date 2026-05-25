@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import MainLayout from './components/layout/MainLayout';
 import PublicLayout from './components/layout/PublicLayout';
@@ -7,6 +8,7 @@ import { ToastProvider } from './components/ui/Toast';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { queryClient } from './lib/queryClient';
 
 const LoginPage = lazy(() => import('./modules/auth/pages/LoginPage'));
 const AdminDashboard = lazy(() => import('./modules/dashboard/pages/AdminDashboard'));
@@ -62,18 +64,19 @@ function renderRoute(Component, fallback) {
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <ThemeProvider>
-          <CartProvider>
-            <ToastProvider>
-              <Routes>
-                <Route element={<PublicLayout />}>
-                  <Route path="/" element={renderRoute(PublicHome, <PageLoader />)} />
-                  <Route path="/catalog" element={renderRoute(PublicCatalog, <PageLoader />)} />
-                  <Route path="/estimate" element={renderRoute(PublicEstimate, <PageLoader />)} />
-                  <Route path="/service-orders" element={renderRoute(PublicServiceOrders, <PageLoader />)} />
-                  <Route path="/about" element={renderRoute(PublicAbout, <PageLoader />)} />
-                </Route>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <ThemeProvider>
+            <CartProvider>
+              <ToastProvider>
+                <Routes>
+                  <Route element={<PublicLayout />}>
+                    <Route path="/" element={renderRoute(PublicHome, <PageLoader />)} />
+                    <Route path="/catalog" element={renderRoute(PublicCatalog, <PageLoader />)} />
+                    <Route path="/estimate" element={renderRoute(PublicEstimate, <PageLoader />)} />
+                    <Route path="/service-orders" element={renderRoute(PublicServiceOrders, <PageLoader />)} />
+                    <Route path="/about" element={renderRoute(PublicAbout, <PageLoader />)} />
+                  </Route>
 
                 <Route path="/login" element={renderRoute(LoginPage, <PageLoader />)} />
 
@@ -95,11 +98,12 @@ function App() {
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </ToastProvider>
-          </CartProvider>
-        </ThemeProvider>
-      </AuthProvider>
+                </Routes>
+              </ToastProvider>
+            </CartProvider>
+          </ThemeProvider>
+        </AuthProvider>
+      </QueryClientProvider>
     </BrowserRouter>
   );
 }

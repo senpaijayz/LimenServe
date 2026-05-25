@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArchiveRestore, Edit2, LayoutGrid, List, Package, Plus, RefreshCw, Save, Search, ScanLine, Trash2 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
@@ -19,6 +20,7 @@ import {
 } from '../../../services/catalogApi';
 import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
 import { getPartNumberSearchSuggestions, getProductPartNumber, normalizeBarcodeToken, stripProductBarcodeSuffix } from '../../../utils/barcode';
+import { invalidateProductCatalog } from '../api/productCatalogQueries';
 
 const PAGE_SIZE = 12;
 const inputClassName = 'w-full rounded-xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-950 shadow-sm outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15';
@@ -102,6 +104,7 @@ function isStockIncrease(entry = {}) {
 }
 
 export default function ProductManagement() {
+  const queryClient = useQueryClient();
   const { success, error: showError, info, warning } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -270,6 +273,7 @@ export default function ProductManagement() {
       }
 
       closeModal();
+      void invalidateProductCatalog(queryClient);
       setRefreshKey((value) => value + 1);
     } catch (saveError) {
       if (saveError.message?.toLowerCase().includes('part number') && saveError.message?.toLowerCase().includes('exists')) {
@@ -289,6 +293,7 @@ export default function ProductManagement() {
     try {
       await archiveCatalogProduct(product.id, { archive: true, reason: 'Archived from Product Management' });
       success('Product archived.');
+      void invalidateProductCatalog(queryClient);
       setRefreshKey((value) => value + 1);
       await refreshArchivedProducts();
     } catch (archiveError) {
@@ -303,6 +308,7 @@ export default function ProductManagement() {
       await archiveCatalogProduct(product.id, { archive: false, reason: 'Restored from Product Management' });
       success('Product restored.');
       setArchivedProducts((current) => current.filter((item) => item.id !== product.id));
+      void invalidateProductCatalog(queryClient);
       setRefreshKey((value) => value + 1);
     } catch (restoreError) {
       showError(restoreError.message || 'Unable to restore product.');

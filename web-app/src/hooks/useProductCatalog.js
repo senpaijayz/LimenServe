@@ -1,5 +1,8 @@
-import { useDeferredValue, useEffect, useState } from 'react';
-import { getProductCatalog } from '../services/catalogApi';
+import { useDeferredValue } from 'react';
+import {
+  DEFAULT_PRODUCT_PAGINATION,
+  useProductCatalogQuery,
+} from '../modules/products/api/productCatalogQueries';
 
 const useProductCatalog = ({
   page = 1,
@@ -13,68 +16,36 @@ const useProductCatalog = ({
   refreshKey = 0,
 } = {}) => {
   const deferredSearchQuery = useDeferredValue(searchQuery);
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, pageSize, totalCount: 0, totalPages: 1 });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const catalogQuery = useProductCatalogQuery({
+    page,
+    pageSize,
+    searchQuery: deferredSearchQuery,
+    selectedCategory,
+    sortBy,
+    vehicleModel,
+    vehicleYear,
+    includeCategories,
+    refreshKey,
+  });
 
-  useEffect(() => {
-    let active = true;
-
-    const loadCatalog = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const catalog = await getProductCatalog({
-          page,
-          pageSize,
-          q: deferredSearchQuery,
-          category: selectedCategory,
-          sortBy,
-          vehicleModel,
-          vehicleYear,
-          includeCategories,
-          cacheBust: refreshKey,
-        });
-
-        if (!active) {
-          return;
-        }
-
-        setProducts(catalog.products);
-        setCategories(catalog.categories);
-        setPagination(catalog.pagination);
-      } catch (loadError) {
-        if (!active) {
-          return;
-        }
-
-        setProducts([]);
-        setCategories([]);
-        setPagination({ page: 1, pageSize, totalCount: 0, totalPages: 1 });
-        setError(loadError.message || 'Failed to load product catalog.');
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadCatalog();
-
-    return () => {
-      active = false;
-    };
-  }, [page, pageSize, deferredSearchQuery, selectedCategory, sortBy, vehicleModel, vehicleYear, includeCategories, refreshKey]);
+  const catalog = catalogQuery.data ?? {
+    products: [],
+    categories: [],
+    pagination: {
+      ...DEFAULT_PRODUCT_PAGINATION,
+      page,
+      pageSize,
+    },
+  };
 
   return {
-    products,
-    categories,
-    pagination,
-    loading,
-    error,
+    products: catalog.products,
+    categories: catalog.categories,
+    pagination: catalog.pagination,
+    loading: catalogQuery.isPending,
+    isFetching: catalogQuery.isFetching,
+    error: catalogQuery.error?.message ?? null,
+    refetch: catalogQuery.refetch,
   };
 };
 
