@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { callRpc } from '../services/supabaseRpc.js';
-import { getPublishedCmsPage, getPublishedCmsSite } from '../services/cmsService.js';
+import { getPublishedCmsPage, getPublishedCmsSite, getPublishedFeaturedCatalogItems } from '../services/cmsService.js';
 
 const router = Router();
 
@@ -103,6 +103,38 @@ router.get('/cms/pages/:slug', async (req, res, next) => {
     }
 
     res.json({ page });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/catalog/featured', async (req, res, next) => {
+  try {
+    const placementKey = String(req.query.placementKey || 'home_best_sellers').trim();
+    const items = await getPublishedFeaturedCatalogItems(placementKey);
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/catalog/recommendation-packages', async (req, res, next) => {
+  try {
+    const anchorProductId = String(req.query.anchorProductId || '').trim();
+
+    if (!anchorProductId) {
+      res.json({ packages: [] });
+      return;
+    }
+
+    const rows = await callRpc('get_cms_recommendation_packages', {
+      p_anchor_product_id: anchorProductId,
+      p_vehicle_model_name: String(req.query.vehicleModel || '').trim() || null,
+      p_part_limit: Number.parseInt(req.query.partLimit, 10) || 8,
+      p_service_limit: Number.parseInt(req.query.serviceLimit, 10) || 4,
+    });
+
+    res.json({ rows: rows ?? [] });
   } catch (error) {
     next(error);
   }

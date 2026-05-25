@@ -4,6 +4,8 @@ import { callRpc } from './supabaseRpc.js';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ALLOWED_NAV_STATUSES = new Set(['draft', 'published', 'archived']);
 const ALLOWED_NAV_GROUPS = new Set(['primary', 'footer_shop', 'footer_company']);
+const ALLOWED_RECOMMENDATION_ITEM_KINDS = new Set(['product', 'service']);
+const ALLOWED_RECOMMENDATION_PRICE_MODES = new Set(['catalog', 'complimentary', 'override']);
 
 function normalizeJsonPayload(value, fallback) {
   if (value === null || value === undefined) {
@@ -59,6 +61,177 @@ export async function saveCmsSiteSettings(payload, actorId) {
 
 function normalizeActorId(actorId) {
   return UUID_PATTERN.test(String(actorId || '')) ? actorId : null;
+}
+
+function assertUuid(value, message) {
+  const normalizedValue = String(value || '').trim();
+  if (!UUID_PATTERN.test(normalizedValue)) {
+    const error = new Error(message);
+    error.statusCode = 400;
+    throw error;
+  }
+  return normalizedValue;
+}
+
+function normalizeOptionalUuid(value) {
+  const normalizedValue = String(value || '').trim();
+  return UUID_PATTERN.test(normalizedValue) ? normalizedValue : null;
+}
+
+function normalizeText(value, fallback = '', maxLength = 240) {
+  return String(value ?? fallback).trim().slice(0, maxLength);
+}
+
+function normalizeInteger(value, fallback = 100) {
+  const normalizedValue = Number.parseInt(value, 10);
+  return Number.isFinite(normalizedValue) ? normalizedValue : fallback;
+}
+
+function normalizeBoolean(value, fallback = true) {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function mapFeaturedCatalogItem(row = {}) {
+  const product = row.products ?? row.product ?? {};
+  return {
+    id: row.id,
+    placementKey: row.placement_key,
+    productId: row.product_id,
+    sku: row.sku ?? product.sku ?? '',
+    name: row.name ?? product.name ?? '',
+    category: row.category ?? product.category ?? '',
+    label: row.label ?? '',
+    badge: row.badge ?? '',
+    sortOrder: Number(row.sort_order ?? 100),
+    isActive: row.is_active !== false,
+  };
+}
+
+function mapRecommendationPackageItem(row = {}) {
+  const product = row.products ?? row.product ?? {};
+  const service = row.services ?? row.service ?? {};
+  return {
+    id: row.id,
+    itemKind: row.item_kind,
+    productId: row.product_id ?? '',
+    serviceId: row.service_id ?? '',
+    productName: product.name ?? row.product_name ?? '',
+    serviceName: service.name ?? row.service_name ?? '',
+    reasonLabel: row.reason_label ?? '',
+    displayPriority: Number(row.display_priority ?? 100),
+    priceMode: row.price_mode ?? 'catalog',
+    priceOverride: row.price_override === null || row.price_override === undefined ? null : Number(row.price_override),
+    isActive: row.is_active !== false,
+  };
+}
+
+function mapRecommendationPackage(row = {}) {
+  const anchorProduct = row.products ?? row.anchor_product ?? {};
+  return {
+    id: row.id,
+    anchorProductId: row.anchor_product_id,
+    anchorProductName: anchorProduct.name ?? row.anchor_product_name ?? '',
+    anchorProductSku: anchorProduct.sku ?? row.anchor_product_sku ?? '',
+    vehicleModelName: row.vehicle_model_name ?? '',
+    vehicleFamily: row.vehicle_family ?? '',
+    serviceGroup: row.service_group ?? 'maintenance',
+    packageKey: row.package_key ?? '',
+    packageName: row.package_name ?? '',
+    packageDescription: row.package_description ?? '',
+    minAnchorQuantity: Number(row.min_anchor_quantity ?? 1),
+    priority: Number(row.priority ?? 100),
+    isActive: row.is_active !== false,
+    items: (row.recommendation_package_items ?? row.items ?? []).map(mapRecommendationPackageItem),
+  };
+}
+
+function normalizeFeaturedCatalogItemPayload(payload = {}, actorId = null) {
+  const normalizedActorId = normalizeActorId(actorId);
+  const id = normalizeOptionalUuid(payload.id);
+  return {
+    ...(id ? { id } : {}),
+    placement_key: normalizeText(payload.placementKey ?? payload.placement_key, 'home_best_sellers', 80) || 'home_best_sellers',
+    product_id: assertUuid(payload.productId ?? payload.product_id, 'Choose a valid product for the featured item.'),
+    label: normalizeText(payload.label, '', 120) || null,
+    badge: normalizeText(payload.badge, '', 80) || null,
+    sort_order: normalizeInteger(payload.sortOrder ?? payload.sort_order, 100),
+    is_active: normalizeBoolean(payload.isActive ?? payload.is_active, true),
+    metadata: payload.metadata && typeof payload.metadata === 'object' && !Array.isArray(payload.metadata) ? payload.metadata : {},
+    updated_by: normalizedActorId,
+    ...(id ? {} : { created_by: normalizedActorId }),
+  };
+}
+
+function normalizeRecommendationPackagePayload(payload = {}, actorId = null) {
+  const normalizedActorId = normalizeActorId(actorId);
+  const id = normalizeOptionalUuid(payload.id);
+  const packageName = normalizeText(payload.packageName ?? payload.package_name, '', 180);
+  const packageKey = normalizeText(payload.packageKey ?? payload.package_key, '', 120)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  if (!packageName || !packageKey) {
+    const error = new Error('Package key and package name are required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    ...(id ? { id } : {}),
+    anchor_product_id: assertUuid(payload.anchorProductId ?? payload.anchor_product_id, 'Choose a valid anchor product.'),
+    vehicle_model_name: normalizeText(payload.vehicleModelName ?? payload.vehicle_model_name, '', 120) || null,
+    vehicle_family: normalizeText(payload.vehicleFamily ?? payload.vehicle_family, '', 120) || null,
+    service_group: normalizeText(payload.serviceGroup ?? payload.service_group, 'maintenance', 80) || 'maintenance',
+    package_key: packageKey,
+    package_name: packageName,
+    package_description: normalizeText(payload.packageDescription ?? payload.package_description, '', 500) || null,
+    min_anchor_quantity: Math.max(1, normalizeInteger(payload.minAnchorQuantity ?? payload.min_anchor_quantity, 1)),
+    priority: normalizeInteger(payload.priority, 100),
+    is_active: normalizeBoolean(payload.isActive ?? payload.is_active, true),
+    metadata: payload.metadata && typeof payload.metadata === 'object' && !Array.isArray(payload.metadata) ? payload.metadata : {},
+    updated_by: normalizedActorId,
+    ...(id ? {} : { created_by: normalizedActorId }),
+  };
+}
+
+function normalizeRecommendationPackageItemPayload(payload = {}, packageId, actorId = null, index = 0) {
+  const normalizedActorId = normalizeActorId(actorId);
+  const itemKind = normalizeText(payload.itemKind ?? payload.item_kind, 'product', 20);
+  const priceMode = normalizeText(payload.priceMode ?? payload.price_mode, 'catalog', 20);
+
+  if (!ALLOWED_RECOMMENDATION_ITEM_KINDS.has(itemKind)) {
+    const error = new Error('Recommendation item must be a product or service.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!ALLOWED_RECOMMENDATION_PRICE_MODES.has(priceMode)) {
+    const error = new Error('Recommendation item has an invalid price mode.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const priceOverride = payload.priceOverride ?? payload.price_override;
+  const normalizedPriceOverride = priceOverride === null || priceOverride === undefined || priceOverride === ''
+    ? null
+    : Number(priceOverride);
+
+  return {
+    package_id: packageId,
+    item_kind: itemKind,
+    product_id: itemKind === 'product' ? assertUuid(payload.productId ?? payload.product_id, 'Choose a valid product recommendation item.') : null,
+    service_id: itemKind === 'service' ? assertUuid(payload.serviceId ?? payload.service_id, 'Choose a valid service recommendation item.') : null,
+    item_role: itemKind === 'service' ? 'service' : 'part',
+    reason_label: normalizeText(payload.reasonLabel ?? payload.reason_label, '', 220) || null,
+    display_priority: normalizeInteger(payload.displayPriority ?? payload.display_priority, (index + 1) * 10),
+    price_mode: priceMode,
+    price_override: Number.isFinite(normalizedPriceOverride) ? normalizedPriceOverride : null,
+    is_active: normalizeBoolean(payload.isActive ?? payload.is_active, true),
+    metadata: payload.metadata && typeof payload.metadata === 'object' && !Array.isArray(payload.metadata) ? payload.metadata : {},
+    created_by: normalizedActorId,
+    updated_by: normalizedActorId,
+  };
 }
 
 function normalizeNavigationRow(item = {}, index = 0) {
@@ -162,4 +335,151 @@ export async function saveCmsNavigation(payload, actorId) {
   }
 
   return getPublishedCmsSite();
+}
+
+export async function listCmsFeaturedCatalogItems() {
+  const { data, error } = await supabaseAdmin
+    .schema('cms')
+    .from('featured_catalog_items')
+    .select('id, placement_key, product_id, label, badge, sort_order, is_active, products:product_id(sku, name, category)')
+    .order('placement_key', { ascending: true })
+    .order('sort_order', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).map(mapFeaturedCatalogItem);
+}
+
+export async function saveCmsFeaturedCatalogItem(payload, actorId) {
+  const row = normalizeFeaturedCatalogItemPayload(payload, actorId);
+  const { data, error } = await supabaseAdmin
+    .schema('cms')
+    .from('featured_catalog_items')
+    .upsert(row, { onConflict: row.id ? 'id' : 'placement_key,product_id' })
+    .select('id, placement_key, product_id, label, badge, sort_order, is_active, products:product_id(sku, name, category)')
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapFeaturedCatalogItem(data);
+}
+
+export async function deleteCmsFeaturedCatalogItem(id) {
+  const itemId = assertUuid(id, 'Featured item is required.');
+  const { error } = await supabaseAdmin
+    .schema('cms')
+    .from('featured_catalog_items')
+    .delete()
+    .eq('id', itemId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function listCmsRecommendationPackages() {
+  const { data, error } = await supabaseAdmin
+    .schema('cms')
+    .from('recommendation_packages')
+    .select(`
+      id,
+      anchor_product_id,
+      vehicle_model_name,
+      vehicle_family,
+      service_group,
+      package_key,
+      package_name,
+      package_description,
+      min_anchor_quantity,
+      priority,
+      is_active,
+      products:anchor_product_id(sku, name),
+      recommendation_package_items(
+        id,
+        item_kind,
+        product_id,
+        service_id,
+        reason_label,
+        display_priority,
+        price_mode,
+        price_override,
+        is_active,
+        products:product_id(name),
+        services:service_id(name)
+      )
+    `)
+    .order('priority', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).map(mapRecommendationPackage);
+}
+
+export async function saveCmsRecommendationPackage(payload, actorId) {
+  const packageRow = normalizeRecommendationPackagePayload(payload, actorId);
+  const { data: savedPackage, error: packageError } = await supabaseAdmin
+    .schema('cms')
+    .from('recommendation_packages')
+    .upsert(packageRow, { onConflict: packageRow.id ? 'id' : 'package_key' })
+    .select('id')
+    .single();
+
+  if (packageError) {
+    throw packageError;
+  }
+
+  const packageId = savedPackage.id;
+  const { error: deleteItemsError } = await supabaseAdmin
+    .schema('cms')
+    .from('recommendation_package_items')
+    .delete()
+    .eq('package_id', packageId);
+
+  if (deleteItemsError) {
+    throw deleteItemsError;
+  }
+
+  const itemRows = (Array.isArray(payload.items) ? payload.items : [])
+    .filter((item) => item?.isActive !== false)
+    .map((item, index) => normalizeRecommendationPackageItemPayload(item, packageId, actorId, index));
+
+  if (itemRows.length > 0) {
+    const { error: insertItemsError } = await supabaseAdmin
+      .schema('cms')
+      .from('recommendation_package_items')
+      .insert(itemRows);
+
+    if (insertItemsError) {
+      throw insertItemsError;
+    }
+  }
+
+  const packages = await listCmsRecommendationPackages();
+  return packages.find((item) => item.id === packageId) ?? null;
+}
+
+export async function deleteCmsRecommendationPackage(id) {
+  const packageId = assertUuid(id, 'Recommendation package is required.');
+  const { error } = await supabaseAdmin
+    .schema('cms')
+    .from('recommendation_packages')
+    .delete()
+    .eq('id', packageId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function getPublishedFeaturedCatalogItems(placementKey) {
+  const rows = await callRpc('get_featured_catalog_items', {
+    p_placement_key: placementKey,
+  });
+  return (Array.isArray(rows) ? rows : []).map(mapFeaturedCatalogItem);
 }

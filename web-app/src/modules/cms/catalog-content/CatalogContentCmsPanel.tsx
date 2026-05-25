@@ -1,0 +1,387 @@
+import { useEffect, useMemo, useState } from 'react';
+import { LoaderCircle, Plus, Save, Trash2 } from 'lucide-react';
+import { getProductCatalog, getServiceCatalog } from '../../../services/catalogApi';
+import { useToast } from '../../../components/ui/Toast';
+import {
+  deleteCmsFeaturedCatalogItem,
+  deleteCmsRecommendationPackage,
+  getCmsCatalogContent,
+  saveCmsFeaturedCatalogItem,
+  saveCmsRecommendationPackage,
+} from '../api/cmsCatalogApi';
+import type {
+  CmsFeaturedCatalogItem,
+  CmsRecommendationPackage,
+  CmsRecommendationPackageItem,
+} from '../types/cmsCatalogTypes';
+import {
+  createEmptyFeaturedCatalogItem,
+  createEmptyRecommendationPackage,
+  normalizeFeaturedCatalogItem,
+  normalizeRecommendationPackage,
+} from './cmsCatalogContentModel';
+
+type CatalogProductOption = {
+  id: string;
+  sku?: string;
+  name?: string;
+  category?: string;
+};
+
+type ServiceOption = {
+  id: string;
+  code?: string;
+  name?: string;
+};
+
+const placementOptions = [
+  { value: 'home_best_sellers', label: 'Home best sellers' },
+  { value: 'catalog_featured', label: 'Catalog featured' },
+  { value: 'estimate_recommended', label: 'Estimate recommended' },
+];
+
+const fieldClassName = 'w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-950 outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15';
+
+function productLabel(product?: CatalogProductOption): string {
+  if (!product) return 'Choose product';
+  return `${product.sku || 'No part number'} - ${product.name || 'Unnamed product'}`;
+}
+
+function serviceLabel(service?: ServiceOption): string {
+  if (!service) return 'Choose service';
+  return `${service.code || 'Service'} - ${service.name || 'Unnamed service'}`;
+}
+
+function Field({ label, value, onChange, type = 'text' }: {
+  label: string;
+  value: string | number;
+  type?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">{label}</span>
+      <input className={`${fieldClassName} mt-2`} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function SelectField({ label, value, options, onChange }: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">{label}</span>
+      <select className={`${fieldClassName} mt-2`} value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function ProductSelect({ label, value, products, onChange }: {
+  label: string;
+  value: string;
+  products: CatalogProductOption[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">{label}</span>
+      <select className={`${fieldClassName} mt-2`} value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Choose product</option>
+        {products.map((product) => <option key={product.id} value={product.id}>{productLabel(product)}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function ServiceSelect({ value, services, onChange }: {
+  value: string;
+  services: ServiceOption[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Service</span>
+      <select className={`${fieldClassName} mt-2`} value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Choose service</option>
+        {services.map((service) => <option key={service.id} value={service.id}>{serviceLabel(service)}</option>)}
+      </select>
+    </label>
+  );
+}
+
+export default function CatalogContentCmsPanel() {
+  const { success, error: showError } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState('');
+  const [featuredItems, setFeaturedItems] = useState<CmsFeaturedCatalogItem[]>([]);
+  const [packages, setPackages] = useState<CmsRecommendationPackage[]>([]);
+  const [products, setProducts] = useState<CatalogProductOption[]>([]);
+  const [services, setServices] = useState<ServiceOption[]>([]);
+
+  const productMap = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
+
+  async function refreshContent() {
+    setLoading(true);
+    try {
+      const [content, productCatalog, serviceCatalog] = await Promise.all([
+        getCmsCatalogContent(),
+        getProductCatalog({ page: 1, pageSize: 100, includeCategories: false }),
+        getServiceCatalog(),
+      ]);
+      setFeaturedItems(content.featuredItems);
+      setPackages(content.recommendationPackages);
+      setProducts(productCatalog.products ?? []);
+      setServices(serviceCatalog ?? []);
+    } catch (loadError) {
+      showError(loadError instanceof Error ? loadError.message : 'Failed to load catalog CMS content.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void refreshContent();
+  }, []);
+
+  const updateFeaturedItem = (index: number, patch: Partial<CmsFeaturedCatalogItem>) => {
+    setFeaturedItems((items) => items.map((item, itemIndex) => (
+      itemIndex === index ? normalizeFeaturedCatalogItem({ ...item, ...patch }) : item
+    )));
+  };
+
+  const updatePackage = (index: number, patch: Partial<CmsRecommendationPackage>) => {
+    setPackages((items) => items.map((item, itemIndex) => (
+      itemIndex === index ? normalizeRecommendationPackage({ ...item, ...patch }) : item
+    )));
+  };
+
+  const updatePackageItem = (packageIndex: number, itemIndex: number, patch: Partial<CmsRecommendationPackageItem>) => {
+    setPackages((items) => items.map((pkg, pkgIndex) => {
+      if (pkgIndex !== packageIndex) return pkg;
+      return normalizeRecommendationPackage({
+        ...pkg,
+        items: pkg.items.map((item, nextItemIndex) => (
+          nextItemIndex === itemIndex ? { ...item, ...patch } : item
+        )),
+      });
+    }));
+  };
+
+  async function saveFeatured(index: number) {
+    setSavingKey(`featured-${index}`);
+    try {
+      const saved = await saveCmsFeaturedCatalogItem(featuredItems[index]);
+      setFeaturedItems((items) => items.map((item, itemIndex) => (itemIndex === index ? saved : item)));
+      success('Featured product saved.');
+    } catch (saveError) {
+      showError(saveError instanceof Error ? saveError.message : 'Failed to save featured product.');
+    } finally {
+      setSavingKey('');
+    }
+  }
+
+  async function removeFeatured(index: number) {
+    const item = featuredItems[index];
+    if (!item.id) {
+      setFeaturedItems((items) => items.filter((_, itemIndex) => itemIndex !== index));
+      return;
+    }
+    setSavingKey(`featured-delete-${index}`);
+    try {
+      await deleteCmsFeaturedCatalogItem(item.id);
+      setFeaturedItems((items) => items.filter((_, itemIndex) => itemIndex !== index));
+      success('Featured product removed.');
+    } catch (deleteError) {
+      showError(deleteError instanceof Error ? deleteError.message : 'Failed to remove featured product.');
+    } finally {
+      setSavingKey('');
+    }
+  }
+
+  async function savePackage(index: number) {
+    setSavingKey(`package-${index}`);
+    try {
+      const saved = await saveCmsRecommendationPackage(packages[index]);
+      setPackages((items) => items.map((item, itemIndex) => (itemIndex === index ? saved : item)));
+      success('Recommendation package saved.');
+    } catch (saveError) {
+      showError(saveError instanceof Error ? saveError.message : 'Failed to save recommendation package.');
+    } finally {
+      setSavingKey('');
+    }
+  }
+
+  async function removePackage(index: number) {
+    const pkg = packages[index];
+    if (!pkg.id) {
+      setPackages((items) => items.filter((_, itemIndex) => itemIndex !== index));
+      return;
+    }
+    setSavingKey(`package-delete-${index}`);
+    try {
+      await deleteCmsRecommendationPackage(pkg.id);
+      setPackages((items) => items.filter((_, itemIndex) => itemIndex !== index));
+      success('Recommendation package removed.');
+    } catch (deleteError) {
+      showError(deleteError instanceof Error ? deleteError.message : 'Failed to remove recommendation package.');
+    } finally {
+      setSavingKey('');
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[320px] items-center justify-center text-primary-500">
+        <LoaderCircle className="mr-2 h-5 w-5 animate-spin" />
+        Loading catalog CMS...
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 p-5 lg:p-6">
+      <section className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-xl font-display font-semibold text-primary-950">Featured Products</h2>
+            <p className="mt-1 text-sm text-primary-500">Choose catalog products for public placements like homepage best sellers.</p>
+          </div>
+          <button type="button" className="btn btn-secondary" onClick={() => setFeaturedItems((items) => [...items, createEmptyFeaturedCatalogItem((items.length + 1) * 10)])}>
+            <Plus className="h-4 w-4" />
+            Add Featured Product
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          {featuredItems.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-primary-300 bg-primary-50 p-8 text-center text-primary-500">No featured products yet.</div>
+          ) : featuredItems.map((item, index) => (
+            <div key={item.id || index} className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_120px_120px]">
+                <SelectField label="Placement" value={item.placementKey} options={placementOptions} onChange={(value) => updateFeaturedItem(index, { placementKey: value })} />
+                <ProductSelect label="Product" value={item.productId} products={products} onChange={(value) => {
+                  const product = productMap.get(value);
+                  updateFeaturedItem(index, { productId: value, sku: product?.sku || '', name: product?.name || '', category: product?.category || '' });
+                }} />
+                <Field label="Badge" value={item.badge} onChange={(value) => updateFeaturedItem(index, { badge: value })} />
+                <Field label="Order" type="number" value={item.sortOrder} onChange={(value) => updateFeaturedItem(index, { sortOrder: Number(value) })} />
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <label className="inline-flex items-center gap-2 text-sm font-semibold text-primary-700">
+                  <input type="checkbox" checked={item.isActive} onChange={(event) => updateFeaturedItem(index, { isActive: event.target.checked })} />
+                  Active
+                </label>
+                <button type="button" className="btn btn-primary" disabled={savingKey === `featured-${index}`} onClick={() => void saveFeatured(index)}>
+                  {savingKey === `featured-${index}` ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Save
+                </button>
+                <button type="button" className="btn btn-secondary text-accent-danger" onClick={() => void removeFeatured(index)}>
+                  <Trash2 className="h-4 w-4" />
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-xl font-display font-semibold text-primary-950">Recommendation Packages</h2>
+            <p className="mt-1 text-sm text-primary-500">Curate public smart bundles by anchor product, included parts, and included labor.</p>
+          </div>
+          <button type="button" className="btn btn-secondary" onClick={() => setPackages((items) => [...items, createEmptyRecommendationPackage()])}>
+            <Plus className="h-4 w-4" />
+            Add Package
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          {packages.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-primary-300 bg-primary-50 p-8 text-center text-primary-500">No curated packages yet.</div>
+          ) : packages.map((pkg, packageIndex) => (
+            <div key={pkg.id || packageIndex} className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <ProductSelect label="Anchor product" value={pkg.anchorProductId} products={products} onChange={(value) => updatePackage(packageIndex, { anchorProductId: value })} />
+                <Field label="Package key" value={pkg.packageKey} onChange={(value) => updatePackage(packageIndex, { packageKey: value })} />
+                <Field label="Package name" value={pkg.packageName} onChange={(value) => updatePackage(packageIndex, { packageName: value })} />
+                <Field label="Service group" value={pkg.serviceGroup} onChange={(value) => updatePackage(packageIndex, { serviceGroup: value })} />
+                <Field label="Vehicle model" value={pkg.vehicleModelName} onChange={(value) => updatePackage(packageIndex, { vehicleModelName: value })} />
+                <Field label="Vehicle family" value={pkg.vehicleFamily} onChange={(value) => updatePackage(packageIndex, { vehicleFamily: value })} />
+                <Field label="Min quantity" type="number" value={pkg.minAnchorQuantity} onChange={(value) => updatePackage(packageIndex, { minAnchorQuantity: Number(value) })} />
+                <Field label="Priority" type="number" value={pkg.priority} onChange={(value) => updatePackage(packageIndex, { priority: Number(value) })} />
+              </div>
+              <label className="mt-4 block">
+                <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Description</span>
+                <textarea className={`${fieldClassName} mt-2 min-h-20`} value={pkg.packageDescription} onChange={(event) => updatePackage(packageIndex, { packageDescription: event.target.value })} />
+              </label>
+
+              <div className="mt-5 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-primary-500">Package items</h3>
+                  <button type="button" className="btn btn-secondary" onClick={() => updatePackage(packageIndex, {
+                    items: [...pkg.items, {
+                      id: '',
+                      itemKind: 'product',
+                      productId: '',
+                      serviceId: '',
+                      productName: '',
+                      serviceName: '',
+                      reasonLabel: '',
+                      displayPriority: (pkg.items.length + 1) * 10,
+                      priceMode: 'catalog',
+                      priceOverride: null,
+                      isActive: true,
+                    }],
+                  })}>
+                    <Plus className="h-4 w-4" />
+                    Add Item
+                  </button>
+                </div>
+                {pkg.items.map((item, itemIndex) => (
+                  <div key={item.id || itemIndex} className="rounded-2xl border border-primary-200 bg-white p-4">
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[140px_1fr_1fr_120px]">
+                      <SelectField label="Type" value={item.itemKind} options={[{ value: 'product', label: 'Product' }, { value: 'service', label: 'Service' }]} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { itemKind: value === 'service' ? 'service' : 'product', productId: '', serviceId: '' })} />
+                      {item.itemKind === 'service' ? (
+                        <ServiceSelect value={item.serviceId} services={services} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { serviceId: value })} />
+                      ) : (
+                        <ProductSelect label="Product" value={item.productId} products={products} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { productId: value })} />
+                      )}
+                      <Field label="Reason" value={item.reasonLabel} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { reasonLabel: value })} />
+                      <Field label="Order" type="number" value={item.displayPriority} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { displayPriority: Number(value) })} />
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      <button type="button" className="text-sm font-semibold text-accent-danger" onClick={() => updatePackage(packageIndex, { items: pkg.items.filter((_, nextIndex) => nextIndex !== itemIndex) })}>Remove item</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <label className="inline-flex items-center gap-2 text-sm font-semibold text-primary-700">
+                  <input type="checkbox" checked={pkg.isActive} onChange={(event) => updatePackage(packageIndex, { isActive: event.target.checked })} />
+                  Active
+                </label>
+                <button type="button" className="btn btn-primary" disabled={savingKey === `package-${packageIndex}`} onClick={() => void savePackage(packageIndex)}>
+                  {savingKey === `package-${packageIndex}` ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Save Package
+                </button>
+                <button type="button" className="btn btn-secondary text-accent-danger" onClick={() => void removePackage(packageIndex)}>
+                  <Trash2 className="h-4 w-4" />
+                  Remove Package
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}

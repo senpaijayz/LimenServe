@@ -22,6 +22,7 @@ import tritonImage from '../../../assets/homepage/triton-trimmed.png';
 import xforceImage from '../../../assets/homepage/xforce-trimmed.png';
 import xpanderImage from '../../../assets/homepage/xpander-trimmed.png';
 import { getPublicCmsPage } from '../../../services/cmsApi';
+import { getPublicFeaturedCatalogItems } from '../../cms/api/cmsCatalogApi';
 
 const categoryCards = [
     { title: 'Engine Parts', description: 'Filters, timing components, gaskets, and cooling parts.', icon: Cog, query: 'engine' },
@@ -149,9 +150,31 @@ function mergeCmsStats(fallbackStats, cmsItems = []) {
     }));
 }
 
+function mergeFeaturedCatalogItems(fallbackCards, featuredItems = []) {
+    if (!Array.isArray(featuredItems) || featuredItems.length === 0) {
+        return fallbackCards;
+    }
+
+    return fallbackCards.map((card, index) => {
+        const item = featuredItems[index];
+        if (!item) return card;
+        return {
+            ...card,
+            name: item.name || card.name,
+            partNo: item.sku || card.partNo,
+            vehicle: item.label || card.vehicle,
+            badge: item.badge || card.badge,
+            note: item.category || card.note,
+            catalogQuery: item.sku || item.name || card.catalogQuery,
+            href: `/catalog?q=${encodeURIComponent(item.sku || item.name || card.catalogQuery)}`,
+        };
+    });
+}
+
 const PublicHome = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [cmsPage, setCmsPage] = useState(null);
+    const [featuredCatalogItems, setFeaturedCatalogItems] = useState([]);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -177,6 +200,29 @@ const PublicHome = () => {
         };
     }, []);
 
+    useEffect(() => {
+        let active = true;
+
+        async function loadFeaturedCatalogItems() {
+            try {
+                const items = await getPublicFeaturedCatalogItems('home_best_sellers');
+                if (active) {
+                    setFeaturedCatalogItems(items);
+                }
+            } catch {
+                if (active) {
+                    setFeaturedCatalogItems([]);
+                }
+            }
+        }
+
+        void loadFeaturedCatalogItems();
+
+        return () => {
+            active = false;
+        };
+    }, []);
+
     const handleSearch = () => {
         const query = searchQuery.trim();
         navigate(query ? `/catalog?q=${encodeURIComponent(query)}` : '/catalog');
@@ -189,7 +235,7 @@ const PublicHome = () => {
     const statsCms = getCmsSection(cmsPage, 'stats', 'home-stats');
     const ctaCms = getCmsSection(cmsPage, 'cta', 'home-cta');
     const editableCategoryCards = mergeCmsCards(categoryCards, featureCms.items);
-    const editableFeaturedParts = mergeCmsCards(featuredParts, bestSellersCms.items);
+    const editableFeaturedParts = mergeFeaturedCatalogItems(mergeCmsCards(featuredParts, bestSellersCms.items), featuredCatalogItems);
     const editableTrustSignals = mergeCmsCards(trustSignals, trustCms.items);
     const editableQuickStats = mergeCmsStats(quickStats, statsCms.items);
     const storefrontHeroImage = resolveStorefrontHeroImage(heroCms.imageUrl);

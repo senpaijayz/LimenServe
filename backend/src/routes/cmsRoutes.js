@@ -3,10 +3,16 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { requireRole } from '../middleware/auth.js';
 import { clearPublicResponseCache } from '../middleware/cache.js';
 import {
+  deleteCmsFeaturedCatalogItem,
+  deleteCmsRecommendationPackage,
   getCmsPage,
+  listCmsFeaturedCatalogItems,
   listCmsPages,
+  listCmsRecommendationPackages,
   saveCmsNavigation,
   saveCmsPage,
+  saveCmsFeaturedCatalogItem,
+  saveCmsRecommendationPackage,
   saveCmsSiteSettings,
 } from '../services/cmsService.js';
 
@@ -171,6 +177,67 @@ router.get('/pages', requireRole('admin'), async (_req, res, next) => {
   try {
     const pages = await listCmsPages();
     res.json({ pages });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/catalog-content', requireRole('admin'), async (_req, res, next) => {
+  try {
+    const [featuredItems, recommendationPackages] = await Promise.all([
+      listCmsFeaturedCatalogItems(),
+      listCmsRecommendationPackages(),
+    ]);
+
+    res.json({ featuredItems, recommendationPackages });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/featured-catalog-items', requireRole('admin'), async (req, res, next) => {
+  try {
+    if (!requireObjectPayload(req, res)) {
+      return;
+    }
+
+    const item = await saveCmsFeaturedCatalogItem(req.body, req.user?.id);
+    clearPublicResponseCache();
+    res.status(201).json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/featured-catalog-items/:id', requireRole('admin'), async (req, res, next) => {
+  try {
+    await deleteCmsFeaturedCatalogItem(req.params.id);
+    clearPublicResponseCache();
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/recommendation-packages', requireRole('admin'), async (req, res, next) => {
+  try {
+    if (!requireObjectPayload(req, res)) {
+      return;
+    }
+
+    const recommendationPackage = await saveCmsRecommendationPackage(req.body, req.user?.id);
+    clearPublicResponseCache();
+    res.status(201).json({ package: recommendationPackage });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/recommendation-packages/:id', requireRole('admin'), async (req, res, next) => {
+  try {
+    await deleteCmsRecommendationPackage(req.params.id);
+    clearPublicResponseCache();
+    res.status(204).send();
   } catch (error) {
     next(error);
   }

@@ -6,12 +6,14 @@ import {
   Globe2,
   LoaderCircle,
   Navigation,
+  PackageSearch,
   Plus,
   Save,
   Settings,
   Trash2,
   Upload,
 } from 'lucide-react';
+import CatalogContentCmsPanel from '../catalog-content/CatalogContentCmsPanel';
 import { useToast } from '../../../components/ui/Toast';
 import {
   getCmsPage,
@@ -1123,6 +1125,7 @@ function SectionEditor({ section, index, total, onChange, onMove, onRemove, onIm
 
 const tabs = [
   { id: 'pages', label: 'Pages', icon: FileText },
+  { id: 'catalog', label: 'Catalog Content', icon: PackageSearch },
   { id: 'settings', label: 'Site Settings', icon: Settings },
   { id: 'navigation', label: 'Navigation', icon: Navigation },
 ];
@@ -1396,7 +1399,9 @@ export default function CmsAdmin() {
     ? handleSavePage
     : activeTab === 'settings'
       ? handleSaveSettings
-      : handleSaveNavigation;
+      : activeTab === 'navigation'
+        ? handleSaveNavigation
+        : undefined;
 
   return (
     <div className="space-y-6">
@@ -1409,15 +1414,21 @@ export default function CmsAdmin() {
             </div>
             <h1 className="mt-4 text-3xl font-display font-bold text-primary-950">Content Management</h1>
           </div>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={handleSaveActive}
-            className="btn btn-primary min-w-[160px]"
-          >
-            {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save {activeTab === 'pages' ? 'Page' : activeTab === 'settings' ? 'Settings' : 'Navigation'}
-          </button>
+          {handleSaveActive ? (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={handleSaveActive}
+              className="btn btn-primary min-w-[160px]"
+            >
+              {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save {activeTab === 'pages' ? 'Page' : activeTab === 'settings' ? 'Settings' : 'Navigation'}
+            </button>
+          ) : (
+            <div className="rounded-2xl border border-primary-200 bg-white px-4 py-3 text-sm font-semibold text-primary-600">
+              Save each catalog card after editing.
+            </div>
+          )}
         </div>
 
         <div className="flex max-w-full gap-2 overflow-x-auto border-b border-primary-200 bg-primary-50 px-4 py-3">
@@ -1573,6 +1584,8 @@ export default function CmsAdmin() {
               </section>
             </main>
           </div>
+        ) : activeTab === 'catalog' ? (
+          <CatalogContentCmsPanel />
         ) : activeTab === 'settings' ? (
           <div className="space-y-6 p-5 lg:p-6">
             <section className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">

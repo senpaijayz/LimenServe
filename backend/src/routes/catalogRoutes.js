@@ -4298,7 +4298,16 @@ router.get('/products/:productId/recommendations', async (req, res, next) => {
 
     const productMap = new Map(catalog.map((product) => [product.id, product]));
     const serviceMap = new Map(serviceCatalog.map((service) => [service.id, service]));
-    const packageRows = await getOptionalPackageRecommendationRows(req.params.productId, vehicleModelId, partLimit, serviceLimit);
+    const [cmsPackageRows, generatedPackageRows] = await Promise.all([
+      callRpc('get_cms_recommendation_packages', {
+        p_anchor_product_id: req.params.productId,
+        p_vehicle_model_name: vehicleModelId,
+        p_part_limit: partLimit,
+        p_service_limit: serviceLimit,
+      }).catch(() => []),
+      getOptionalPackageRecommendationRows(req.params.productId, vehicleModelId, partLimit, serviceLimit),
+    ]);
+    const packageRows = [...(cmsPackageRows ?? []), ...(generatedPackageRows ?? [])];
 
     if (packageRows.length > 0) {
       const packageResponse = buildPackageResponse({
