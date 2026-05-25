@@ -10,6 +10,11 @@ function isMissingLegacyMechanicsError(error) {
     && message.includes('does not exist');
 }
 
+function isMissingCmsRecommendationRpcError(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return message.includes('get_cms_recommendation_packages') || message.includes('schema cache');
+}
+
 function normalizeMechanic(row = {}) {
   let storedProfile = {};
   try {
@@ -132,6 +137,11 @@ router.get('/catalog/recommendation-packages', async (req, res, next) => {
       p_vehicle_model_name: String(req.query.vehicleModel || '').trim() || null,
       p_part_limit: Number.parseInt(req.query.partLimit, 10) || 8,
       p_service_limit: Number.parseInt(req.query.serviceLimit, 10) || 4,
+    }).catch((error) => {
+      if (isMissingCmsRecommendationRpcError(error)) {
+        return [];
+      }
+      throw error;
     });
 
     res.json({ rows: rows ?? [] });

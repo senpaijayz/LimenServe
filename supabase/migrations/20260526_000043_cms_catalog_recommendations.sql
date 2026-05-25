@@ -1,3 +1,16 @@
+create schema if not exists cms;
+
+create or replace function cms.touch_updated_at()
+returns trigger
+language plpgsql
+set search_path = cms, pg_temp
+as $$
+begin
+  new.updated_at := timezone('utc', now());
+  return new;
+end;
+$$;
+
 create table if not exists cms.featured_catalog_items (
   id uuid primary key default gen_random_uuid(),
   placement_key text not null,

@@ -91,6 +91,61 @@ function normalizeBoolean(value, fallback = true) {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function isMissingCmsCatalogContentError(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return [
+    'featured_catalog_items',
+    'recommendation_packages',
+    'recommendation_package_items',
+    'get_featured_catalog_items',
+    'get_cms_recommendation_packages',
+    'could not find a relationship',
+    'schema cache',
+  ].some((token) => message.includes(token));
+}
+
+async function getCatalogProductsById(productIds = []) {
+  const ids = [...new Set(productIds.filter(Boolean))];
+  if (ids.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await supabaseAdmin
+    .schema('catalog')
+    .from('products')
+    .select('id, sku, name, category')
+    .in('id', ids);
+
+  if (error) {
+    throw error;
+  }
+
+  return new Map((data ?? []).map((product) => [product.id, product]));
+}
+
+async function getServicesById(serviceIds = []) {
+  const ids = [...new Set(serviceIds.filter(Boolean))];
+  if (ids.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await supabaseAdmin
+    .schema('app')
+    .from('services')
+    .select('id, code, name')
+    .in('id', ids);
+
+  if (error) {
+    if (isMissingCmsCatalogContentError(error) || String(error?.message || '').toLowerCase().includes('services')) {
+      console.warn('CMS recommendation services lookup is not ready yet:', error.message || error);
+      return new Map();
+    }
+    throw error;
+  }
+
+  return new Map((data ?? []).map((service) => [service.id, service]));
+}
+
 function mapFeaturedCatalogItem(row = {}) {
   const product = row.products ?? row.product ?? {};
   return {
@@ -341,15 +396,23 @@ export async function listCmsFeaturedCatalogItems() {
   const { data, error } = await supabaseAdmin
     .schema('cms')
     .from('featured_catalog_items')
-    .select('id, placement_key, product_id, label, badge, sort_order, is_active, products:product_id(sku, name, category)')
+    .select('id, placement_key, product_id, label, badge, sort_order, is_active')
     .order('placement_key', { ascending: true })
     .order('sort_order', { ascending: true });
 
   if (error) {
+    if (isMissingCmsCatalogContentError(error)) {
+      console.warn('CMS catalog content tables are not ready yet:', error.message || error);
+      return [];
+    }
     throw error;
   }
 
-  return (data ?? []).map(mapFeaturedCatalogItem);
+  const productMap = await getCatalogProductsById((data ?? []).map((item) => item.product_id));
+  return (data ?? []).map((item) => mapFeaturedCatalogItem({
+    ...item,
+    product: productMap.get(item.product_id) ?? null,
+  }));
 }
 
 export async function saveCmsFeaturedCatalogItem(payload, actorId) {
@@ -358,14 +421,18 @@ export async function saveCmsFeaturedCatalogItem(payload, actorId) {
     .schema('cms')
     .from('featured_catalog_items')
     .upsert(row, { onConflict: row.id ? 'id' : 'placement_key,product_id' })
-    .select('id, placement_key, product_id, label, badge, sort_order, is_active, products:product_id(sku, name, category)')
+    .select('id, placement_key, product_id, label, badge, sort_order, is_active')
     .single();
 
   if (error) {
     throw error;
   }
 
-  return mapFeaturedCatalogItem(data);
+  const productMap = await getCatalogProductsById([data.product_id]);
+  return mapFeaturedCatalogItem({
+    ...data,
+    product: productMap.get(data.product_id) ?? null,
+  });
 }
 
 export async function deleteCmsFeaturedCatalogItem(id) {
@@ -382,43 +449,59 @@ export async function deleteCmsFeaturedCatalogItem(id) {
 }
 
 export async function listCmsRecommendationPackages() {
-  const { data, error } = await supabaseAdmin
+  const { data: packageRows, error } = await supabaseAdmin
     .schema('cms')
     .from('recommendation_packages')
-    .select(`
-      id,
-      anchor_product_id,
-      vehicle_model_name,
-      vehicle_family,
-      service_group,
-      package_key,
-      package_name,
-      package_description,
-      min_anchor_quantity,
-      priority,
-      is_active,
-      products:anchor_product_id(sku, name),
-      recommendation_package_items(
-        id,
-        item_kind,
-        product_id,
-        service_id,
-        reason_label,
-        display_priority,
-        price_mode,
-        price_override,
-        is_active,
-        products:product_id(name),
-        services:service_id(name)
-      )
-    `)
+    .select('id, anchor_product_id, vehicle_model_name, vehicle_family, service_group, package_key, package_name, package_description, min_anchor_quantity, priority, is_active')
     .order('priority', { ascending: true });
 
   if (error) {
+    if (isMissingCmsCatalogContentError(error)) {
+      console.warn('CMS recommendation package tables are not ready yet:', error.message || error);
+      return [];
+    }
     throw error;
   }
 
-  return (data ?? []).map(mapRecommendationPackage);
+  const packageIds = (packageRows ?? []).map((item) => item.id);
+  const { data: itemRows, error: itemError } = packageIds.length
+    ? await supabaseAdmin
+      .schema('cms')
+      .from('recommendation_package_items')
+      .select('id, package_id, item_kind, product_id, service_id, reason_label, display_priority, price_mode, price_override, is_active')
+      .in('package_id', packageIds)
+      .order('display_priority', { ascending: true })
+    : { data: [], error: null };
+
+  if (itemError) {
+    if (isMissingCmsCatalogContentError(itemError)) {
+      console.warn('CMS recommendation package item table is not ready yet:', itemError.message || itemError);
+      return (packageRows ?? []).map(mapRecommendationPackage);
+    }
+    throw itemError;
+  }
+
+  const productMap = await getCatalogProductsById([
+    ...(packageRows ?? []).map((item) => item.anchor_product_id),
+    ...(itemRows ?? []).map((item) => item.product_id),
+  ]);
+  const serviceMap = await getServicesById((itemRows ?? []).map((item) => item.service_id));
+  const itemsByPackageId = (itemRows ?? []).reduce((map, item) => {
+    const nextItems = map.get(item.package_id) ?? [];
+    nextItems.push({
+      ...item,
+      product: productMap.get(item.product_id) ?? null,
+      service: serviceMap.get(item.service_id) ?? null,
+    });
+    map.set(item.package_id, nextItems);
+    return map;
+  }, new Map());
+
+  return (packageRows ?? []).map((item) => mapRecommendationPackage({
+    ...item,
+    anchor_product: productMap.get(item.anchor_product_id) ?? null,
+    items: itemsByPackageId.get(item.id) ?? [],
+  }));
 }
 
 export async function saveCmsRecommendationPackage(payload, actorId) {
@@ -478,8 +561,16 @@ export async function deleteCmsRecommendationPackage(id) {
 }
 
 export async function getPublishedFeaturedCatalogItems(placementKey) {
-  const rows = await callRpc('get_featured_catalog_items', {
-    p_placement_key: placementKey,
-  });
-  return (Array.isArray(rows) ? rows : []).map(mapFeaturedCatalogItem);
+  try {
+    const rows = await callRpc('get_featured_catalog_items', {
+      p_placement_key: placementKey,
+    });
+    return (Array.isArray(rows) ? rows : []).map(mapFeaturedCatalogItem);
+  } catch (error) {
+    if (isMissingCmsCatalogContentError(error)) {
+      console.warn('Published featured catalog RPC is not ready yet:', error.message || error);
+      return [];
+    }
+    throw error;
+  }
 }
