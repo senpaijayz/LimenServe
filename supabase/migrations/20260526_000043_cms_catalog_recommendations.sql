@@ -53,7 +53,7 @@ create table if not exists cms.recommendation_package_items (
   package_id uuid not null references cms.recommendation_packages(id) on delete cascade,
   item_kind text not null check (item_kind in ('product', 'service')),
   product_id uuid references catalog.products(id) on delete cascade,
-  service_id uuid references app.services(id) on delete cascade,
+  service_id uuid references operations.services(id) on delete cascade,
   item_role text not null check (item_role in ('part', 'service')),
   reason_label text,
   display_priority integer not null default 100,
@@ -202,7 +202,7 @@ returns table (
 language sql
 stable
 security definer
-set search_path = public, cms, catalog, app
+set search_path = public, cms, catalog, operations
 as $$
   with package_rows as (
     select pkg.*
@@ -219,7 +219,14 @@ as $$
   item_rows as (
     select
       pkg.id as package_id,
-      item.*,
+      item.id,
+      item.item_kind,
+      item.product_id,
+      item.service_id,
+      item.reason_label,
+      item.display_priority,
+      item.price_mode,
+      item.price_override,
       row_number() over (
         partition by pkg.id, item.item_kind
         order by item.display_priority, item.created_at
@@ -269,7 +276,7 @@ as $$
     order by pp.effective_from desc, pp.created_at desc
     limit 1
   ) price on true
-  left join app.services service on service.id = item.service_id
+  left join operations.services service on service.id = item.service_id
   where
     (item.item_kind = 'product' and product.id is not null and item.item_rank <= greatest(coalesce(p_part_limit, 8), 1))
     or

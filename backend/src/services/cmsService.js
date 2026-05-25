@@ -130,7 +130,7 @@ async function getServicesById(serviceIds = []) {
   }
 
   const { data, error } = await supabaseAdmin
-    .schema('app')
+    .schema('operations')
     .from('services')
     .select('id, code, name')
     .in('id', ids);
