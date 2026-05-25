@@ -851,6 +851,8 @@ function mapCatalogRow(row) {
     status: row.status,
     uom: row.uom,
     brand: row.brand,
+    createdAt: row.created_at ?? row.createdAt ?? row.date_added ?? row.dateAdded ?? row.metadata?.createdAt ?? null,
+    dateAdded: row.date_added ?? row.dateAdded ?? row.created_at ?? row.createdAt ?? row.metadata?.dateAdded ?? null,
     location: row.location ?? {},
     supplierId: row.supplier_id ?? row.supplierId ?? row.metadata?.supplierId ?? null,
     supplierName: row.supplier_name ?? row.supplierName ?? row.metadata?.supplierName ?? null,
@@ -870,7 +872,7 @@ async function getProductByPartNumber(partNumber) {
   const { data: product, error: productError } = await supabaseAdmin
     .schema('catalog')
     .from('products')
-    .select('id, sku, name, model_name, category, brand, uom, status, source_category, metadata, is_active, updated_at')
+    .select('id, sku, name, model_name, category, brand, uom, status, source_category, metadata, is_active, created_at, updated_at')
     .eq('sku', sku)
     .maybeSingle();
 
@@ -911,6 +913,7 @@ async function getProductByPartNumber(partNumber) {
     status: product.status,
     uom: product.uom,
     brand: product.brand,
+    created_at: product.created_at,
     location: balance?.location ?? {},
     metadata: product.metadata ?? {},
   });
@@ -1131,6 +1134,7 @@ function mapPricelistStagingRow(row, productBySku = new Map(), balanceByProductI
     status: row.status || product?.status || 'out_of_stock',
     uom: row.uom || product?.uom || 'PC',
     brand: product?.brand || 'Mitsubishi',
+    created_at: product?.created_at ?? null,
     location: balance?.location ?? {},
     metadata: {
       ...(product?.metadata ?? {}),
@@ -2537,7 +2541,7 @@ async function fetchPricelistCatalogPage({ page, pageSize, searchQuery = '', sel
     ? await supabaseAdmin
       .schema('catalog')
       .from('products')
-      .select('id, sku, brand, uom, status, metadata')
+      .select('id, sku, brand, uom, status, metadata, created_at')
       .in('sku', skus)
     : { data: [], error: null };
 
@@ -3480,7 +3484,7 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
           classification: classification.trace,
         },
       })
-      .select('id, sku, name, model_name, category, brand, uom, status, source_category, metadata')
+      .select('id, sku, name, model_name, category, brand, uom, status, source_category, metadata, created_at')
       .single();
 
     if (productError) {
@@ -3546,6 +3550,7 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
         status: product.status,
         uom: product.uom,
         brand: product.brand,
+        created_at: product.created_at,
         metadata: product.metadata ?? {},
       })]))[0],
     });
@@ -3671,7 +3676,7 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
         updated_at: nowIso,
       })
       .eq('id', productId)
-      .select('id, sku, name, model_name, category, brand, uom, status, source_category, metadata')
+      .select('id, sku, name, model_name, category, brand, uom, status, source_category, metadata, created_at')
       .maybeSingle();
 
     if (productError) {
@@ -3740,6 +3745,7 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
         status: product.status,
         uom: product.uom,
         brand: product.brand,
+        created_at: product.created_at,
         metadata: product.metadata ?? {},
       })]))[0],
     });

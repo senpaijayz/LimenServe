@@ -18,7 +18,7 @@ import {
   getSuppliers,
   updateCatalogProduct,
 } from '../../../services/catalogApi';
-import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
+import { formatCurrency, formatDate, formatDateTime, formatNumber } from '../../../utils/formatters';
 import { getPartNumberSearchSuggestions, getProductPartNumber, normalizeBarcodeToken, stripProductBarcodeSuffix } from '../../../utils/barcode';
 import { invalidateProductCatalog } from '../api/productCatalogQueries';
 
@@ -47,6 +47,11 @@ const emptyForm = {
   uom: 'PC',
 };
 
+function getProductDateAdded(product = {}) {
+  const addedAt = product.dateAdded ?? product.createdAt ?? product.created_at ?? null;
+  return addedAt ? formatDate(addedAt) : '-';
+}
+
 function ProductLabelStage({ product, quantity, size = 'compact', showQuantity = true }) {
   return (
     <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-xl border border-primary-200 bg-slate-950 p-4">
@@ -71,6 +76,7 @@ function ProductInfoStage({ product }) {
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-blue">Product</p>
         <h3 className="mt-3 line-clamp-3 text-xl font-display font-bold leading-tight text-primary-950">{product.name}</h3>
         <p className="mt-3 font-mono text-sm text-primary-500">{getProductPartNumber(product) || product.sku}</p>
+        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary-400">Added {getProductDateAdded(product)}</p>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
         <p><span className="text-primary-500">Category</span><br /><span className="font-semibold text-primary-950">{product.category || '-'}</span></p>
@@ -414,6 +420,7 @@ export default function ProductManagement() {
                     <p className="text-right"><span className="text-primary-500">Price</span><br /><span className="font-semibold text-accent-blue">{formatCurrency(product.price)}</span></p>
                     <p><span className="text-primary-500">Supplier</span><br /><span className="font-semibold text-primary-950">{product.supplierName || 'Unlinked'}</span></p>
                     <p className="text-right"><span className="text-primary-500">Stock</span><br /><span className="font-semibold text-primary-950">{formatNumber(product.stock ?? product.quantity ?? 0)}</span></p>
+                    <p className="col-span-2"><span className="text-primary-500">Date Added</span><br /><span className="font-semibold text-primary-950">{getProductDateAdded(product)}</span></p>
                   </div>
                   <div className="flex gap-2 pt-2">
                     <Button variant="outline" size="sm" leftIcon={<Edit2 className="h-4 w-4" />} onClick={(event) => { event.stopPropagation(); openEdit(product); }}>Edit</Button>
@@ -425,23 +432,25 @@ export default function ProductManagement() {
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-primary-200 bg-white">
-            <div className="hidden grid-cols-[minmax(220px,1.4fr)_150px_minmax(150px,0.8fr)_110px_90px_160px] gap-4 border-b border-primary-200 bg-primary-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-primary-500 xl:grid">
+            <div className="hidden grid-cols-[minmax(220px,1.4fr)_150px_minmax(150px,0.8fr)_120px_110px_90px_160px] gap-4 border-b border-primary-200 bg-primary-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-primary-500 xl:grid">
               <span>Product</span>
               <span>Part Number</span>
               <span>Category</span>
+              <span>Date Added</span>
               <span className="text-right">Price</span>
               <span className="text-right">Stock</span>
               <span className="text-right">Actions</span>
             </div>
             <div className="divide-y divide-primary-100">
               {products.map((product) => (
-                <div key={product.id} role="button" tabIndex={0} onClick={() => openProductDetail(product)} onKeyDown={(event) => { if (event.key === 'Enter') openProductDetail(product); }} className="grid gap-3 px-4 py-4 transition hover:bg-primary-50 xl:grid-cols-[minmax(220px,1.4fr)_150px_minmax(150px,0.8fr)_110px_90px_160px] xl:items-center xl:gap-4">
+                <div key={product.id} role="button" tabIndex={0} onClick={() => openProductDetail(product)} onKeyDown={(event) => { if (event.key === 'Enter') openProductDetail(product); }} className="grid gap-3 px-4 py-4 transition hover:bg-primary-50 xl:grid-cols-[minmax(220px,1.4fr)_150px_minmax(150px,0.8fr)_120px_110px_90px_160px] xl:items-center xl:gap-4">
                   <div className="min-w-0">
                     <p className="line-clamp-2 font-bold text-primary-950">{product.name}</p>
-                    <p className="mt-1 text-xs text-primary-500 xl:hidden">{product.category}</p>
+                    <p className="mt-1 text-xs text-primary-500 xl:hidden">{product.category} - Added {getProductDateAdded(product)}</p>
                   </div>
                   <p className="font-mono text-sm text-primary-600">{getProductPartNumber(product) || '-'}</p>
                   <p className="hidden text-sm font-semibold text-primary-800 xl:block">{product.category || '-'}</p>
+                  <p className="hidden text-sm font-semibold text-primary-700 xl:block">{getProductDateAdded(product)}</p>
                   <p className="text-sm font-bold text-accent-blue xl:text-right">{formatCurrency(product.price)}</p>
                   <p className="text-sm font-semibold text-primary-950 xl:text-right">{formatNumber(product.stock ?? product.quantity ?? 0)}</p>
                   <div className="flex gap-2 xl:justify-end">
@@ -498,6 +507,7 @@ export default function ProductManagement() {
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-primary-500">
                   <p><span className="font-semibold text-primary-700">Qty:</span> {formatNumber(product.stock ?? product.quantity ?? 0)}</p>
                   <p><span className="font-semibold text-primary-700">Price:</span> {formatCurrency(product.price ?? 0)}</p>
+                  <p className="col-span-2"><span className="font-semibold text-primary-700">Date Added:</span> {getProductDateAdded(product)}</p>
                   <p className="col-span-2"><span className="font-semibold text-primary-700">Archived:</span> {product.archivedAt ? formatDateTime(product.archivedAt) : '-'}</p>
                 </div>
                 <Button
@@ -602,6 +612,7 @@ export default function ProductManagement() {
                 <p><span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Price</span><br /><span className="font-semibold text-accent-blue">{formatCurrency(selectedProduct.price)}</span></p>
                 <p><span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Stock</span><br /><span className="font-semibold text-primary-950">{formatNumber(selectedProduct.stock ?? selectedProduct.quantity ?? 0)}</span></p>
                 <p><span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Model</span><br /><span className="font-semibold text-primary-950">{selectedProduct.model || '-'}</span></p>
+                <p><span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Date Added</span><br /><span className="font-semibold text-primary-950">{getProductDateAdded(selectedProduct)}</span></p>
               </div>
             </div>
             <div className="flex justify-end">
