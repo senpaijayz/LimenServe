@@ -10,6 +10,7 @@ const SESSION_EXPIRY_SKEW_SECONDS = 60;
 
 let cachedSession;
 let sessionPromise = null;
+let refreshPromise = null;
 
 function setCachedSession(session) {
   cachedSession = session ?? null;
@@ -23,6 +24,18 @@ function isSessionExpiring(session) {
 
   const nowSeconds = Math.floor(Date.now() / 1000);
   return expiresAt - nowSeconds <= SESSION_EXPIRY_SKEW_SECONDS;
+}
+
+function isInvalidRefreshTokenError(error) {
+  const message = String(error?.message || error?.error_description || error?.error || '').toLowerCase();
+  return /refresh token|invalid_grant|already used|not found|revoked|expired/.test(message);
+}
+
+function createSessionExpiredError() {
+  const error = new Error('Your sign-in session expired. Please sign in again before saving.');
+  error.code = 'AUTH_SESSION_EXPIRED';
+  error.isAuthSessionError = true;
+  return error;
 }
 
 async function loadSessionFromSupabase() {
@@ -62,6 +75,46 @@ export async function ensureSessionLoaded() {
   return sessionPromise;
 }
 
+async function clearLocalSession() {
+  setCachedSession(null);
+
+  try {
+    await supabase.auth.signOut({ scope: 'local' });
+  } catch {
+    // If Supabase cannot clear storage, the in-memory session is already reset.
+  }
+}
+
+async function refreshCachedSession(session) {
+  if (!session?.refresh_token) {
+    return loadSessionFromSupabase();
+  }
+
+  if (!refreshPromise) {
+    refreshPromise = supabase.auth.refreshSession({
+      refresh_token: session.refresh_token,
+    }).then(({ data, error }) => {
+      if (error) {
+        throw error;
+      }
+
+      setCachedSession(data.session);
+      return cachedSession;
+    }).catch(async (error) => {
+      if (isInvalidRefreshTokenError(error)) {
+        await clearLocalSession();
+        throw createSessionExpiredError();
+      }
+
+      throw error;
+    }).finally(() => {
+      refreshPromise = null;
+    });
+  }
+
+  return refreshPromise;
+}
+
 export async function getFreshAccessToken({ forceRefresh = false } = {}) {
   let session = await ensureSessionLoaded();
 
@@ -74,18 +127,15 @@ export async function getFreshAccessToken({ forceRefresh = false } = {}) {
   }
 
   if (forceRefresh || isSessionExpiring(session)) {
-    if (session.refresh_token) {
-      const { data, error } = await supabase.auth.refreshSession({
-        refresh_token: session.refresh_token,
-      });
-
-      if (!error) {
-        setCachedSession(data.session);
-        return cachedSession?.access_token ?? null;
+    try {
+      session = await refreshCachedSession(session);
+    } catch (error) {
+      if (error?.isAuthSessionError) {
+        throw error;
       }
-    }
 
-    session = await loadSessionFromSupabase();
+      session = await loadSessionFromSupabase();
+    }
   }
 
   return session?.access_token ?? null;

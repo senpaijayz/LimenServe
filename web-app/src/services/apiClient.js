@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/constants';
-import { getCachedAccessToken, getFreshAccessToken } from './supabase';
+import { getFreshAccessToken } from './supabase';
 
 export const DEFAULT_API_TIMEOUT_MS = 30000;
 export const STOCKROOM_API_TIMEOUT_MS = 15000;
@@ -173,18 +173,16 @@ apiClient.interceptors.request.use(async (config) => {
     return config;
   }
 
-  let token = getCachedAccessToken();
+  let token;
 
-  if (!token) {
-    try {
+  try {
+    token = await getFreshAccessToken();
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      await wait(50);
       token = await getFreshAccessToken();
-    } catch (error) {
-      if (error?.name === 'AbortError') {
-        await wait(50);
-        token = getCachedAccessToken();
-      } else {
-        throw error;
-      }
+    } else {
+      throw error;
     }
   }
 
@@ -221,6 +219,10 @@ apiClient.interceptors.response.use(
 );
 
 export function extractApiError(error, fallbackMessage) {
+  if (error?.code === 'AUTH_SESSION_EXPIRED' || error?.isAuthSessionError) {
+    throw new Error(error.message || 'Your sign-in session expired. Please sign in again.');
+  }
+
   if (error?.code === 'ECONNABORTED' || String(error?.message || '').toLowerCase().includes('timeout')) {
     throw new Error(REQUEST_TIMEOUT_MESSAGE);
   }
