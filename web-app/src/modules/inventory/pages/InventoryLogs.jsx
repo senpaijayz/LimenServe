@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState, useCallback } from 'react';
 import { ClipboardList, Download, Printer, RefreshCw, Search, X } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -131,6 +131,7 @@ export default function InventoryLogs() {
     const [search, setSearch] = useState('');
     const [typeFilter, setTypeFilter] = useState('all');
     const [dateRange, setDateRange] = useState('30d');
+    const deferredSearch = useDeferredValue(search);
 
     const loadData = useCallback(async () => {
         setLoading(true); setError('');
@@ -146,25 +147,50 @@ export default function InventoryLogs() {
 
     useEffect(() => { void loadData(); }, [loadData]);
 
-    const filteredMovements = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        return allMovements.filter((m) => {
-            if (!isWithinRange(m.createdAt, dateRange)) return false;
-            if (typeFilter !== 'all' && m.movementType !== typeFilter) return false;
+    const movementModel = useMemo(() => {
+        const q = deferredSearch.trim().toLowerCase();
+        const filtered = [];
+        let stockInCount = 0;
+        let salesCount = 0;
+        let totalQtyIn = 0;
+        let totalQtySold = 0;
+
+        for (const m of allMovements) {
+            if (!isWithinRange(m.createdAt, dateRange)) continue;
+            if (typeFilter !== 'all' && m.movementType !== typeFilter) continue;
             if (q) {
                 const hay = [m.productName, m.sku, m.performedBy, m.referenceNumber, m.referenceType, m.notes, m.supplierName, m.supplier]
                     .filter(Boolean).join(' ').toLowerCase();
-                if (!hay.includes(q)) return false;
+                if (!hay.includes(q)) continue;
             }
-            return true;
-        });
-    }, [allMovements, search, typeFilter, dateRange]);
 
-    // KPI stats
-    const stockInCount = filteredMovements.filter((m) => m.movementType === 'stock_in').length;
-    const salesCount = filteredMovements.filter((m) => m.movementType === 'sale').length;
-    const totalQtyIn = filteredMovements.filter((m) => m.movementType === 'stock_in').reduce((s, m) => s + Number(m.quantity ?? 0), 0);
-    const totalQtySold = filteredMovements.filter((m) => m.movementType === 'sale').reduce((s, m) => s + Number(m.quantity ?? 0), 0);
+            filtered.push(m);
+
+            if (m.movementType === 'stock_in') {
+                stockInCount += 1;
+                totalQtyIn += Number(m.quantity ?? 0);
+            } else if (m.movementType === 'sale') {
+                salesCount += 1;
+                totalQtySold += Number(m.quantity ?? 0);
+            }
+        }
+
+        return {
+            filteredMovements: filtered,
+            salesCount,
+            stockInCount,
+            totalQtyIn,
+            totalQtySold,
+        };
+    }, [allMovements, deferredSearch, typeFilter, dateRange]);
+
+    const {
+        filteredMovements,
+        salesCount,
+        stockInCount,
+        totalQtyIn,
+        totalQtySold,
+    } = movementModel;
 
     return (
         <div className="space-y-6">

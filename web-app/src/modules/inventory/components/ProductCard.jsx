@@ -1,5 +1,5 @@
 import { motion as Motion } from 'framer-motion';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Box, MapPin, Edit2, Trash2, ScanLine } from 'lucide-react';
 import { StockBadge } from '../../../components/ui/Badge';
 import { formatCurrency } from '../../../utils/formatters';
@@ -30,7 +30,7 @@ function formatLocation(location = {}) {
     return parts.length > 0 ? parts.join(' • ') : 'Unassigned';
 }
 
-const ProductCard = ({ product, onEdit, onDelete, onLocate, onSelect }) => {
+const ProductCard = memo(({ product, onEdit, onDelete, onLocate, onSelect }) => {
     const [showLargeBarcode, setShowLargeBarcode] = useState(false);
 
     const handleLocateClick = (event) => {
@@ -147,6 +147,8 @@ const ProductCard = ({ product, onEdit, onDelete, onLocate, onSelect }) => {
             />
         </>
     );
-};
+});
+
+ProductCard.displayName = 'ProductCard';
 
 export default ProductCard;

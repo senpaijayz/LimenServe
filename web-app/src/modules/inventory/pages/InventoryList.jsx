@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion as Motion } from 'framer-motion';
 import { Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ClipboardList, Edit2, Crosshair, Box } from 'lucide-react';
@@ -463,17 +463,19 @@ const InventoryList = () => {
     }, [filteredProducts, sortConfig]);
     const partNumberSuggestions = useMemo(() => getPartNumberSearchSuggestions(visibleProducts, searchQuery, 5), [searchQuery, visibleProducts]);
 
-    const handleSort = (key) => {
+    const handleSort = useCallback((key) => {
         setSortConfig((current) => {
             if (current.key !== key) return { key, dir: 'asc' };
             if (current.dir === 'asc') return { key, dir: 'desc' };
             return { key: null, dir: null };
         });
-    };
+    }, []);
 
     const totalProducts = catalogSummary?.totalProducts ?? pagination.totalCount ?? visibleProducts.length;
     const inStockProducts = catalogSummary?.inStockProducts ?? visibleProducts.filter((product) => product.quantity > 0).length;
-    const pageInventoryValue = filteredProducts.reduce((sum, product) => sum + (product.price * product.quantity), 0);
+    const pageInventoryValue = useMemo(() => (
+        filteredProducts.reduce((sum, product) => sum + (product.price * product.quantity), 0)
+    ), [filteredProducts]);
     const summaryInventoryValue = Number(catalogSummary?.inventoryValue);
     const totalValue = Number.isFinite(summaryInventoryValue) ? summaryInventoryValue : pageInventoryValue;
     const canGoPrev = (pagination.page ?? currentPage) > 1;
@@ -481,7 +483,7 @@ const InventoryList = () => {
     const rangeStart = pagination.totalCount === 0 ? 0 : (((pagination.page ?? currentPage) - 1) * (pagination.pageSize ?? PAGE_SIZE)) + 1;
     const rangeEnd = pagination.totalCount === 0 ? 0 : Math.min((pagination.page ?? currentPage) * (pagination.pageSize ?? PAGE_SIZE), pagination.totalCount ?? 0);
 
-    const openPreview = (product) => {
+    const openPreview = useCallback((product) => {
         if (!product) {
             return;
         }
@@ -500,28 +502,28 @@ const InventoryList = () => {
                 setPreviewHistoryLoading(false);
             }
         })();
-    };
+    }, [productOverrides, showError]);
 
-    const handleSearchQueryChange = (value) => {
+    const handleSearchQueryChange = useCallback((value) => {
         setSearchQuery(value);
         setCurrentPage(1);
-    };
+    }, []);
 
-    const handleCategoryChange = (value) => {
+    const handleCategoryChange = useCallback((value) => {
         setSelectedCategory(value);
         setCurrentPage(1);
-    };
+    }, []);
 
-    const handleStockFilterChange = (value) => {
+    const handleStockFilterChange = useCallback((value) => {
         setSelectedStockFilter(value);
         setCurrentPage(1);
-    };
+    }, []);
 
-    const openEditProduct = (product) => {
+    const openEditProduct = useCallback((product) => {
         setEditingProduct(productOverrides[product.id] ?? formatCatalogProduct(product));
-    };
+    }, [productOverrides]);
 
-    const handleLocateIn3D = (product) => {
+    const handleLocateIn3D = useCallback((product) => {
         if (!product) {
             return;
         }
@@ -535,7 +537,7 @@ const InventoryList = () => {
                 productId: normalizedProduct.id,
             },
         });
-    };
+    }, [navigate, productOverrides]);
 
     const handleSaveProductDetails = async (form) => {
         if (!editingProduct?.id) {
