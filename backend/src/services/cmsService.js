@@ -205,7 +205,7 @@ function normalizeFeaturedCatalogItemPayload(payload = {}, actorId = null) {
   const id = normalizeOptionalUuid(payload.id);
   return {
     ...(id ? { id } : {}),
-    placement_key: normalizeText(payload.placementKey ?? payload.placement_key, 'home_best_sellers', 80) || 'home_best_sellers',
+    placement_key: normalizeText(payload.placementKey ?? payload.placement_key, 'catalog_featured', 80) || 'catalog_featured',
     product_id: assertUuid(payload.productId ?? payload.product_id, 'Choose a valid product for the featured item.'),
     label: normalizeText(payload.label, '', 120) || null,
     badge: normalizeText(payload.badge, '', 80) || null,
@@ -506,6 +506,16 @@ export async function listCmsRecommendationPackages() {
 
 export async function saveCmsRecommendationPackage(payload, actorId) {
   const packageRow = normalizeRecommendationPackagePayload(payload, actorId);
+  const itemRows = (Array.isArray(payload.items) ? payload.items : [])
+    .filter((item) => item?.isActive !== false)
+    .map((item, index) => normalizeRecommendationPackageItemPayload(item, null, actorId, index));
+
+  if (itemRows.length === 0) {
+    const error = new Error('Add at least one product or service item before saving this recommendation package.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   const { data: savedPackage, error: packageError } = await supabaseAdmin
     .schema('cms')
     .from('recommendation_packages')
@@ -528,15 +538,16 @@ export async function saveCmsRecommendationPackage(payload, actorId) {
     throw deleteItemsError;
   }
 
-  const itemRows = (Array.isArray(payload.items) ? payload.items : [])
-    .filter((item) => item?.isActive !== false)
-    .map((item, index) => normalizeRecommendationPackageItemPayload(item, packageId, actorId, index));
+  const packageItemRows = itemRows.map((item) => ({
+    ...item,
+    package_id: packageId,
+  }));
 
-  if (itemRows.length > 0) {
+  if (packageItemRows.length > 0) {
     const { error: insertItemsError } = await supabaseAdmin
       .schema('cms')
       .from('recommendation_package_items')
-      .insert(itemRows);
+      .insert(packageItemRows);
 
     if (insertItemsError) {
       throw insertItemsError;

@@ -22,7 +22,7 @@ function booleanValue(value: unknown, fallback = true): boolean {
 export function normalizeFeaturedCatalogItem(row: Record<string, unknown> = {}): CmsFeaturedCatalogItem {
   return {
     id: stringValue(row.id),
-    placementKey: stringValue(row.placementKey ?? row.placement_key) || 'home_best_sellers',
+    placementKey: stringValue(row.placementKey ?? row.placement_key) || 'catalog_featured',
     productId: stringValue(row.productId ?? row.product_id),
     sku: stringValue(row.sku),
     name: stringValue(row.name),
@@ -32,6 +32,18 @@ export function normalizeFeaturedCatalogItem(row: Record<string, unknown> = {}):
     sortOrder: numberValue(row.sortOrder ?? row.sort_order, 100),
     isActive: booleanValue(row.isActive ?? row.is_active, true),
   };
+}
+
+export function hasValidRecommendationPackageItems(pkg: CmsRecommendationPackage): boolean {
+  return pkg.items.some((item) => {
+    if (item.isActive === false) {
+      return false;
+    }
+
+    return item.itemKind === 'service'
+      ? Boolean(item.serviceId)
+      : Boolean(item.productId);
+  });
 }
 
 export function normalizeRecommendationPackageItem(row: Record<string, unknown> = {}): CmsRecommendationPackageItem {

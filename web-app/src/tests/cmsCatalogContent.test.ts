@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  hasValidRecommendationPackageItems,
   normalizeFeaturedCatalogItem,
   normalizeRecommendationPackage,
 } from '../modules/cms/catalog-content/cmsCatalogContentModel';
@@ -27,6 +28,10 @@ describe('CMS catalog content model', () => {
     });
   });
 
+  it('defaults new featured products to the public Genuine Parts placement', () => {
+    expect(normalizeFeaturedCatalogItem({}).placementKey).toBe('catalog_featured');
+  });
+
   it('normalizes recommendation packages with editable item rows', () => {
     expect(normalizeRecommendationPackage({
       package_key: 'brake-care',
@@ -48,5 +53,21 @@ describe('CMS catalog content model', () => {
         { itemKind: 'service', serviceId: 'service-1', displayPriority: 2, priceMode: 'override', priceOverride: 300 },
       ],
     });
+  });
+
+  it('detects recommendation packages that have no selectable content', () => {
+    expect(hasValidRecommendationPackageItems(normalizeRecommendationPackage({
+      package_key: 'empty',
+      package_name: 'Empty package',
+      items: [],
+    }))).toBe(false);
+
+    expect(hasValidRecommendationPackageItems(normalizeRecommendationPackage({
+      package_key: 'ready',
+      package_name: 'Ready package',
+      items: [
+        { item_kind: 'product', product_id: 'part-1', is_active: true },
+      ],
+    }))).toBe(true);
   });
 });

@@ -14,6 +14,34 @@ const primaryNav = [
     { label: 'Service Orders', to: '/service-orders' },
 ];
 
+function isExternalHref(href = '') {
+    return /^https?:\/\//i.test(String(href || ''));
+}
+
+function PublicNavLink({ item, className = '', children, onClick }) {
+    const href = item.to || item.href || '/';
+
+    if (isExternalHref(href)) {
+        return (
+            <a
+                href={href}
+                target={item.opensNewTab === false ? undefined : '_blank'}
+                rel="noreferrer"
+                onClick={onClick}
+                className={className}
+            >
+                {children || item.label}
+            </a>
+        );
+    }
+
+    return (
+        <Link to={href} onClick={onClick} className={className}>
+            {children || item.label}
+        </Link>
+    );
+}
+
 const PublicLayout = () => {
     const { isAuthenticated, user } = useAuth();
     const location = useLocation();
@@ -59,7 +87,7 @@ const PublicLayout = () => {
     const cmsPrimaryNav = visibleNavigation
         .filter((item) => item.groupKey === 'primary')
         .sort((a, b) => Number(a.sortOrder ?? 100) - Number(b.sortOrder ?? 100))
-        .map((item) => ({ label: item.label, to: item.href }));
+        .map((item) => ({ label: item.label, to: item.href, opensNewTab: item.opensNewTab }));
     const navItems = cmsPrimaryNav.length ? cmsPrimaryNav : primaryNav;
     const footerShopLinks = visibleNavigation.filter((item) => item.groupKey === 'footer_shop');
     const footerCompanyLinks = visibleNavigation.filter((item) => item.groupKey === 'footer_company');
@@ -105,15 +133,15 @@ const PublicLayout = () => {
                         <div className="hidden flex-1 items-center justify-end gap-6 xl:flex">
                             <nav className="flex items-center gap-5">
                                 {navItems.map((item) => (
-                                    <Link
+                                    <PublicNavLink
                                         key={item.label}
-                                        to={item.to}
+                                        item={item}
                                         className={`text-sm font-medium transition-colors ${
                                             isNavItemActive(item.to) ? 'text-accent-primary' : 'text-primary-600 hover:text-primary-950'
                                         }`}
                                     >
                                         {item.label}
-                                    </Link>
+                                    </PublicNavLink>
                                 ))}
                             </nav>
 
@@ -145,14 +173,14 @@ const PublicLayout = () => {
                         <div className="mx-auto max-w-xl space-y-4">
                             <div className="rounded-2xl border border-primary-200 bg-white">
                                 {navItems.map((item) => (
-                                    <Link
+                                    <PublicNavLink
                                         key={item.label}
-                                        to={item.to}
+                                        item={item}
                                         onClick={() => setMobileMenuOpen(false)}
                                         className="block border-b border-primary-200 px-5 py-4 text-base font-semibold text-primary-900 last:border-b-0"
                                     >
                                         {item.label}
-                                    </Link>
+                                    </PublicNavLink>
                                 ))}
                                 <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block border-t border-primary-200 px-5 py-4 text-base font-semibold text-accent-primary">
                                     Staff Portal
@@ -207,7 +235,7 @@ const PublicLayout = () => {
                                     { label: 'Vehicle Search', href: '/estimate' },
                                     { label: 'Service Orders', href: '/service-orders' },
                                 ]).map((item) => (
-                                    <Link key={`${item.label}-${item.href}`} to={item.href} className="block hover:text-accent-primary">{item.label}</Link>
+                                    <PublicNavLink key={`${item.label}-${item.href}`} item={item} className="block hover:text-accent-primary">{item.label}</PublicNavLink>
                                 ))}
                             </div>
                         </div>
@@ -220,7 +248,7 @@ const PublicLayout = () => {
                                     { label: 'Get a Quote', href: '/estimate' },
                                     { label: 'Staff Portal', href: '/login' },
                                 ]).map((item) => (
-                                    <Link key={`${item.label}-${item.href}`} to={item.href} className="block hover:text-accent-primary">{item.label}</Link>
+                                    <PublicNavLink key={`${item.label}-${item.href}`} item={item} className="block hover:text-accent-primary">{item.label}</PublicNavLink>
                                 ))}
                             </div>
                         </div>

@@ -20,6 +20,7 @@ const CLIENT_GET_CACHE_MAX_ENTRIES = 120;
 const publicGetCacheRules = [
   { pattern: /^\/public\/cms\/site$/, ttlMs: 60_000 },
   { pattern: /^\/public\/cms\/pages\/[^/]+$/, ttlMs: 60_000 },
+  { pattern: /^\/public\/catalog\/featured$/, ttlMs: 60_000 },
   { pattern: /^\/public\/mechanics$/, ttlMs: 120_000 },
   { pattern: /^\/catalog\/vehicle-fitment\/options$/, ttlMs: 10 * 60_000 },
   { pattern: /^\/catalog\/vehicle-packages$/, ttlMs: 5 * 60_000 },

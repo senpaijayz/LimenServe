@@ -30,6 +30,7 @@ const PublicCatalog = lazy(() => import('./modules/public/pages/PublicCatalog'))
 const PublicEstimate = lazy(() => import('./modules/public/pages/PublicEstimate'));
 const PublicAbout = lazy(() => import('./modules/public/pages/PublicAbout'));
 const PublicServiceOrders = lazy(() => import('./modules/public/pages/PublicServiceOrders'));
+const PublicCmsPage = lazy(() => import('./modules/public/pages/PublicCmsPage'));
 
 function WorkspaceRouteFallback({ title = 'Loading workspace' }) {
   return (
@@ -76,6 +77,7 @@ function App() {
                     <Route path="/estimate" element={renderRoute(PublicEstimate, <PageLoader />)} />
                     <Route path="/service-orders" element={renderRoute(PublicServiceOrders, <PageLoader />)} />
                     <Route path="/about" element={renderRoute(PublicAbout, <PageLoader />)} />
+                    <Route path="/:slug" element={renderRoute(PublicCmsPage, <PageLoader />)} />
                   </Route>
 
                 <Route path="/login" element={renderRoute(LoginPage, <PageLoader />)} />

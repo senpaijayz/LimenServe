@@ -16,7 +16,7 @@ import {
   CarFront,
   ScanLine,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { formatCurrency } from '../../../utils/formatters';
 import { cleanVehicleModelLabel } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
@@ -26,6 +26,7 @@ import ProductPackageSuggestions from './ProductPackageSuggestions';
 import PublicVehicleSelector from './PublicVehicleSelector';
 import VehiclePackageShowcase from './VehiclePackageShowcase';
 import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
+import { getPublicFeaturedCatalogItems } from '../../cms/api/cmsCatalogApi';
 
 const PAGE_SIZE = 12;
 
@@ -55,13 +56,42 @@ const PublicProductSummary = ({ product }) => {
   );
 };
 
+const FeaturedCatalogProductCard = ({ item, onSelect }) => (
+  <button
+    type="button"
+    onClick={onSelect}
+    className="group flex h-full min-h-[190px] flex-col rounded-2xl border border-accent-blue/20 bg-white p-4 text-left shadow-sm transition hover:-translate-y-1 hover:border-accent-blue/40 hover:shadow-lg"
+  >
+    <div className="flex items-start justify-between gap-3">
+      <span className="rounded-full bg-primary-950 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white">
+        {item.label || 'Featured part'}
+      </span>
+      {item.badge && (
+        <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-[10px] font-semibold text-red-700">
+          {item.badge}
+        </span>
+      )}
+    </div>
+    <div className="mt-5 flex-1">
+      <p className="font-mono text-xs font-semibold uppercase tracking-[0.22em] text-primary-400">{item.sku}</p>
+      <h3 className="mt-2 line-clamp-2 text-lg font-display font-bold text-primary-950">{item.name}</h3>
+      {item.category && <p className="mt-2 text-sm text-primary-500">{item.category}</p>}
+    </div>
+    <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-accent-blue">
+      View part <ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" />
+    </span>
+  </button>
+);
+
 const PublicCatalogView = () => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [sortBy, setSortBy] = useState('name-asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [largeBarcodeProduct, setLargeBarcodeProduct] = useState(null);
+  const [featuredItems, setFeaturedItems] = useState([]);
   const [viewMode, setViewMode] = useState('grid');
   const { vehicle, updateVehicle, clearVehicle, hasVehicle } = usePublicVehicleSelection({
     persist: false,
@@ -70,6 +100,7 @@ const PublicCatalogView = () => {
   });
   const deferredVehicleModel = useDeferredValue(vehicle.model);
   const deferredVehicleYear = useDeferredValue(vehicle.year);
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const {
     products,
@@ -80,7 +111,7 @@ const PublicCatalogView = () => {
   } = useProductCatalog({
     page: currentPage,
     pageSize: PAGE_SIZE,
-    searchQuery,
+    searchQuery: deferredSearchQuery,
     selectedCategory,
     sortBy,
     vehicleModel: deferredVehicleModel,
@@ -108,6 +139,29 @@ const PublicCatalogView = () => {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadFeaturedItems() {
+      try {
+        const items = await getPublicFeaturedCatalogItems('catalog_featured');
+        if (active) {
+          setFeaturedItems(items);
+        }
+      } catch {
+        if (active) {
+          setFeaturedItems([]);
+        }
+      }
+    }
+
+    void loadFeaturedItems();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const visibleProducts = useMemo(() => products.map((product) => ({
     id: product.id,
     catalogEntryId: product.catalogEntryId || product.id,
@@ -120,6 +174,19 @@ const PublicCatalogView = () => {
     compatibility: [product.model || 'Universal'],
     description: `Genuine Mitsubishi ${product.name} for ${product.model || vehicle.displayLabel || 'Universal'}. Engineered for exact fitment.`,
   })), [products, vehicle.displayLabel]);
+  const featuredProducts = useMemo(() => featuredItems.map((item) => ({
+    id: item.productId,
+    catalogEntryId: item.productId,
+    name: item.name,
+    sku: item.sku,
+    category: item.category || 'Featured',
+    price: 0,
+    inStock: true,
+    model: item.label || 'Universal',
+    compatibility: [item.label || 'Universal'],
+    description: `${item.name} is curated by Limen Auto Parts Center for quick customer lookup.`,
+    cmsFeatured: item,
+  })).filter((product) => product.id && product.name), [featuredItems]);
   const selectedCategoryOption = useMemo(
     () => categories.find((category) => category.value === selectedCategory),
     [categories, selectedCategory],
@@ -142,6 +209,13 @@ const PublicCatalogView = () => {
 
   const handleSearchChange = (value) => {
     setSearchQuery(value);
+    const nextParams = new URLSearchParams(searchParams);
+    if (value.trim()) {
+      nextParams.set('q', value.trim());
+    } else {
+      nextParams.delete('q');
+    }
+    setSearchParams(nextParams, { replace: true });
     setCurrentPage(1);
     setSelectedProduct(null);
   };
@@ -300,6 +374,29 @@ const PublicCatalogView = () => {
               </div>
             </div>
           </Motion.div>
+
+          {featuredProducts.length > 0 && (
+            <section className="mt-5 rounded-[28px] border border-accent-blue/15 bg-gradient-to-br from-white via-blue-50/40 to-white p-4 shadow-sm sm:p-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-accent-blue">Featured Products</p>
+                  <h2 className="mt-2 text-2xl font-display font-bold text-primary-950">Curated parts from Content CMS</h2>
+                </div>
+                <p className="text-sm text-primary-500">Managed from CMS and shown only here in Genuine Parts.</p>
+              </div>
+              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {featuredProducts.map((product) => (
+                  <FeaturedCatalogProductCard
+                    key={product.id}
+                    item={product.cmsFeatured}
+                    onSelect={() => {
+                      handleSearchChange(product.sku || product.name);
+                    }}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       </section>
 

@@ -17,6 +17,7 @@ import type {
 import {
   createEmptyFeaturedCatalogItem,
   createEmptyRecommendationPackage,
+  hasValidRecommendationPackageItems,
   normalizeFeaturedCatalogItem,
   normalizeRecommendationPackage,
 } from './cmsCatalogContentModel';
@@ -35,8 +36,7 @@ type ServiceOption = {
 };
 
 const placementOptions = [
-  { value: 'home_best_sellers', label: 'Home best sellers' },
-  { value: 'catalog_featured', label: 'Catalog featured' },
+  { value: 'catalog_featured', label: 'Genuine Parts featured' },
   { value: 'estimate_recommended', label: 'Estimate recommended' },
 ];
 
@@ -82,36 +82,116 @@ function SelectField({ label, value, options, onChange }: {
   );
 }
 
-function ProductSelect({ label, value, products, onChange }: {
+function ProductSearchSelect({ label, value, products, onChange }: {
   label: string;
   value: string;
   products: CatalogProductOption[];
   onChange: (value: string) => void;
 }) {
+  const selectedProduct = products.find((product) => product.id === value);
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const suggestions = useMemo(() => {
+    if (!normalizedQuery && selectedProduct) {
+      return [selectedProduct];
+    }
+
+    if (!normalizedQuery) {
+      return products.slice(0, 5);
+    }
+
+    return products
+      .filter((product) => [
+        product.sku,
+        product.name,
+        product.category,
+      ].filter(Boolean).join(' ').toLowerCase().includes(normalizedQuery))
+      .slice(0, 5);
+  }, [normalizedQuery, products, selectedProduct]);
+
   return (
-    <label className="block">
+    <div className="block">
       <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">{label}</span>
-      <select className={`${fieldClassName} mt-2`} value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Choose product</option>
-        {products.map((product) => <option key={product.id} value={product.id}>{productLabel(product)}</option>)}
-      </select>
-    </label>
+      <input
+        className={`${fieldClassName} mt-2`}
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={selectedProduct ? productLabel(selectedProduct) : 'Search part number or product name'}
+      />
+      <div className="mt-2 overflow-hidden rounded-xl border border-primary-200 bg-white">
+        {suggestions.length === 0 ? (
+          <div className="px-3 py-3 text-sm text-primary-500">No matching parts found.</div>
+        ) : suggestions.map((product) => (
+          <button
+            key={product.id}
+            type="button"
+            onClick={() => {
+              onChange(product.id);
+              setQuery('');
+            }}
+            className={`block w-full px-3 py-2 text-left text-sm transition hover:bg-primary-50 ${
+              product.id === value ? 'bg-accent-blue/10 font-semibold text-accent-blue' : 'text-primary-700'
+            }`}
+          >
+            {productLabel(product)}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
-function ServiceSelect({ value, services, onChange }: {
+function ServiceSearchSelect({ value, services, onChange }: {
   value: string;
   services: ServiceOption[];
   onChange: (value: string) => void;
 }) {
+  const selectedService = services.find((service) => service.id === value);
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const suggestions = useMemo(() => {
+    if (!normalizedQuery && selectedService) {
+      return [selectedService];
+    }
+
+    if (!normalizedQuery) {
+      return services.slice(0, 5);
+    }
+
+    return services
+      .filter((service) => [service.code, service.name].filter(Boolean).join(' ').toLowerCase().includes(normalizedQuery))
+      .slice(0, 5);
+  }, [normalizedQuery, selectedService, services]);
+
   return (
-    <label className="block">
+    <div className="block">
       <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Service</span>
-      <select className={`${fieldClassName} mt-2`} value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Choose service</option>
-        {services.map((service) => <option key={service.id} value={service.id}>{serviceLabel(service)}</option>)}
-      </select>
-    </label>
+      <input
+        className={`${fieldClassName} mt-2`}
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={selectedService ? serviceLabel(selectedService) : 'Search service name or code'}
+      />
+      <div className="mt-2 overflow-hidden rounded-xl border border-primary-200 bg-white">
+        {suggestions.length === 0 ? (
+          <div className="px-3 py-3 text-sm text-primary-500">No matching services found.</div>
+        ) : suggestions.map((service) => (
+          <button
+            key={service.id}
+            type="button"
+            onClick={() => {
+              onChange(service.id);
+              setQuery('');
+            }}
+            className={`block w-full px-3 py-2 text-left text-sm transition hover:bg-primary-50 ${
+              service.id === value ? 'bg-accent-blue/10 font-semibold text-accent-blue' : 'text-primary-700'
+            }`}
+          >
+            {serviceLabel(service)}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -131,7 +211,7 @@ export default function CatalogContentCmsPanel() {
     try {
       const [content, productCatalog, serviceCatalog] = await Promise.all([
         getCmsCatalogContent(),
-        getProductCatalog({ page: 1, pageSize: 100, includeCategories: false }),
+        getProductCatalog({ page: 1, pageSize: 250, includeCategories: false }),
         getServiceCatalog(),
       ]);
       setFeaturedItems(content.featuredItems);
@@ -207,6 +287,11 @@ export default function CatalogContentCmsPanel() {
   async function savePackage(index: number) {
     setSavingKey(`package-${index}`);
     try {
+      if (!hasValidRecommendationPackageItems(packages[index])) {
+        showError('Add at least one product or service item before saving this recommendation package.');
+        return;
+      }
+
       const saved = await saveCmsRecommendationPackage(packages[index]);
       setPackages((items) => items.map((item, itemIndex) => (itemIndex === index ? saved : item)));
       success('Recommendation package saved.');
@@ -250,7 +335,7 @@ export default function CatalogContentCmsPanel() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-xl font-display font-semibold text-primary-950">Featured Products</h2>
-            <p className="mt-1 text-sm text-primary-500">Choose catalog products for public placements like homepage best sellers.</p>
+            <p className="mt-1 text-sm text-primary-500">Choose catalog products that appear in the public Genuine Parts page.</p>
           </div>
           <button type="button" className="btn btn-secondary" onClick={() => setFeaturedItems((items) => [...items, createEmptyFeaturedCatalogItem((items.length + 1) * 10)])}>
             <Plus className="h-4 w-4" />
@@ -265,7 +350,7 @@ export default function CatalogContentCmsPanel() {
             <div key={item.id || index} className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_120px_120px]">
                 <SelectField label="Placement" value={item.placementKey} options={placementOptions} onChange={(value) => updateFeaturedItem(index, { placementKey: value })} />
-                <ProductSelect label="Product" value={item.productId} products={products} onChange={(value) => {
+                <ProductSearchSelect label="Product" value={item.productId} products={products} onChange={(value) => {
                   const product = productMap.get(value);
                   updateFeaturedItem(index, { productId: value, sku: product?.sku || '', name: product?.name || '', category: product?.category || '' });
                 }} />
@@ -309,7 +394,7 @@ export default function CatalogContentCmsPanel() {
           ) : packages.map((pkg, packageIndex) => (
             <div key={pkg.id || packageIndex} className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <ProductSelect label="Anchor product" value={pkg.anchorProductId} products={products} onChange={(value) => updatePackage(packageIndex, { anchorProductId: value })} />
+                <ProductSearchSelect label="Anchor product" value={pkg.anchorProductId} products={products} onChange={(value) => updatePackage(packageIndex, { anchorProductId: value })} />
                 <Field label="Package key" value={pkg.packageKey} onChange={(value) => updatePackage(packageIndex, { packageKey: value })} />
                 <Field label="Package name" value={pkg.packageName} onChange={(value) => updatePackage(packageIndex, { packageName: value })} />
                 <Field label="Service group" value={pkg.serviceGroup} onChange={(value) => updatePackage(packageIndex, { serviceGroup: value })} />
@@ -350,9 +435,9 @@ export default function CatalogContentCmsPanel() {
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[140px_1fr_1fr_120px]">
                       <SelectField label="Type" value={item.itemKind} options={[{ value: 'product', label: 'Product' }, { value: 'service', label: 'Service' }]} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { itemKind: value === 'service' ? 'service' : 'product', productId: '', serviceId: '' })} />
                       {item.itemKind === 'service' ? (
-                        <ServiceSelect value={item.serviceId} services={services} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { serviceId: value })} />
+                        <ServiceSearchSelect value={item.serviceId} services={services} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { serviceId: value })} />
                       ) : (
-                        <ProductSelect label="Product" value={item.productId} products={products} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { productId: value })} />
+                        <ProductSearchSelect label="Product" value={item.productId} products={products} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { productId: value })} />
                       )}
                       <Field label="Reason" value={item.reasonLabel} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { reasonLabel: value })} />
                       <Field label="Order" type="number" value={item.displayPriority} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { displayPriority: Number(value) })} />
@@ -365,6 +450,11 @@ export default function CatalogContentCmsPanel() {
               </div>
 
               <div className="mt-5 flex flex-wrap items-center gap-3">
+                {!hasValidRecommendationPackageItems(pkg) && (
+                  <span className="rounded-full border border-accent-warning/30 bg-accent-warning/10 px-3 py-1 text-xs font-semibold text-accent-warning">
+                    Add at least one part or service so this bundle can appear publicly.
+                  </span>
+                )}
                 <label className="inline-flex items-center gap-2 text-sm font-semibold text-primary-700">
                   <input type="checkbox" checked={pkg.isActive} onChange={(event) => updatePackage(packageIndex, { isActive: event.target.checked })} />
                   Active
