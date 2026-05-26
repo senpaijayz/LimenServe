@@ -211,7 +211,13 @@ router.post('/', async (req, res, next) => {
       p_payload: payload,
     });
     clearPublicResponseCache();
-    res.status(201).json({ mechanicId });
+    res.status(201).json({
+      mechanicId,
+      mechanic: normalizeMechanic({
+        ...payload,
+        id: mechanicId,
+      }),
+    });
   } catch (error) {
     if (isMissingLegacyMechanicsError(error)) {
       res.status(503).json(mechanicsMigrationError());
@@ -232,7 +238,13 @@ router.patch('/:mechanicId', async (req, res, next) => {
       p_payload: payload,
     });
     clearPublicResponseCache();
-    res.json({ mechanicId });
+    res.json({
+      mechanicId,
+      mechanic: normalizeMechanic({
+        ...payload,
+        id: mechanicId,
+      }),
+    });
   } catch (error) {
     if (isMissingLegacyMechanicsError(error)) {
       res.status(503).json(mechanicsMigrationError());

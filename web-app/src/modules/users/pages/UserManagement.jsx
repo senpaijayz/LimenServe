@@ -10,6 +10,7 @@ import Table from '../../../components/ui/Table';
 import { useToast } from '../../../components/ui/Toast';
 import { listMechanics } from '../../../services/mechanicsApi';
 import MechanicManagementPanel from '../components/MechanicManagementPanel';
+import { removeMechanicRow, upsertMechanicRow } from '../utils/mechanicVisibilityModel';
 import { createUser, listUsers, updateUser } from '../../../services/usersApi';
 
 const roleOptions = [
@@ -223,6 +224,14 @@ const UserManagement = () => {
         }
     };
 
+    const handleMechanicSaved = (mechanic) => {
+        setMechanics((current) => upsertMechanicRow(current, mechanic));
+    };
+
+    const handleMechanicRemoved = (mechanicId) => {
+        setMechanics((current) => removeMechanicRow(current, mechanicId));
+    };
+
     const handleEdit = (user) => {
         setUserFormError('');
         setEditingUser(user);
@@ -386,7 +395,13 @@ const UserManagement = () => {
                 <Table columns={columns} data={filteredUsers} loading={usersLoading} emptyMessage="No users found" />
             </div>
 
-            <MechanicManagementPanel mechanics={mechanics} onReload={loadMechanics} onNotify={success} />
+            <MechanicManagementPanel
+                mechanics={mechanics}
+                onReload={loadMechanics}
+                onNotify={success}
+                onSaved={handleMechanicSaved}
+                onRemoved={handleMechanicRemoved}
+            />
 
             {showAddModal && (
             <UserFormModal

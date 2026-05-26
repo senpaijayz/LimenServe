@@ -20,10 +20,10 @@ const publicCacheRules = [
   },
   {
     pattern: /^\/api\/public\/mechanics$/,
-    browserMaxAge: 60,
-    sharedMaxAge: 300,
-    staleWhileRevalidate: 900,
-    memoryTtlMs: 120_000,
+    browserMaxAge: 5,
+    sharedMaxAge: 15,
+    staleWhileRevalidate: 30,
+    memoryTtlMs: 15_000,
     tags: ['public-mechanics'],
   },
   {

@@ -1,4 +1,5 @@
 import apiClient, { cachedApiGet, clearApiClientCache, extractApiError } from './apiClient';
+import { normalizeMechanicSaveResult } from '../modules/users/utils/mechanicVisibilityModel';
 
 export async function getPublicMechanics() {
   try {
@@ -23,12 +24,12 @@ export async function upsertMechanic(payload) {
     if (payload?.id) {
       const { data } = await apiClient.patch(`/mechanics/${payload.id}`, payload);
       clearApiClientCache('/public/mechanics');
-      return data.mechanicId;
+      return normalizeMechanicSaveResult(data, payload);
     }
 
     const { data } = await apiClient.post('/mechanics', payload);
     clearApiClientCache('/public/mechanics');
-    return data.mechanicId;
+    return normalizeMechanicSaveResult(data, payload);
   } catch (error) {
     extractApiError(error, 'Failed to save mechanic.');
   }

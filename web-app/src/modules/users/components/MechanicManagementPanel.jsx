@@ -76,13 +76,14 @@ function MechanicAvatar({ mechanic, size = 'md' }) {
     );
 }
 
-const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify }) => {
+const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, onRemoved }) => {
     const { success, error: showError } = useToast();
     const [isOpen, setIsOpen] = useState(false);
     const [editingMechanic, setEditingMechanic] = useState(null);
     const [form, setForm] = useState(initialForm);
     const [formError, setFormError] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+    const [deletingIds, setDeletingIds] = useState(() => new Set());
 
     const notifySuccess = onNotify || success;
 
@@ -177,13 +178,16 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify }) => {
         setIsSaving(true);
         const isEditing = Boolean(editingMechanic);
         try {
-            await upsertMechanic({
+            const savedMechanic = await upsertMechanic({
                 ...form,
                 shift_label: getShiftLabel(form.shift_type),
                 location_name: 'Limen',
                 id: editingMechanic?.id,
             });
-            await onReload();
+            if (savedMechanic) {
+                onSaved?.(savedMechanic);
+            }
+            void onReload?.();
             notifySuccess(isEditing ? 'Mechanic updated successfully' : 'Mechanic added successfully');
             setIsOpen(false);
             resetForm();
@@ -197,12 +201,29 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify }) => {
     };
 
     const handleDelete = async (mechanicId) => {
+        if (deletingIds.has(mechanicId)) {
+            return;
+        }
+
+        const removedMechanic = mechanics.find((mechanic) => mechanic.id === mechanicId);
+        setDeletingIds((current) => new Set(current).add(mechanicId));
+        onRemoved?.(mechanicId);
+
         try {
             await deleteMechanic(mechanicId);
-            await onReload();
+            void onReload?.();
             notifySuccess('Mechanic removed successfully');
         } catch (error) {
+            if (removedMechanic) {
+                onSaved?.(removedMechanic);
+            }
             showError(error?.message || 'Unable to remove mechanic.');
+        } finally {
+            setDeletingIds((current) => {
+                const next = new Set(current);
+                next.delete(mechanicId);
+                return next;
+            });
         }
     };
 
@@ -216,8 +237,11 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify }) => {
                 <div className="space-y-3">
                     {mechanics.length === 0 ? (
                         <div className="rounded-xl border border-primary-200 bg-white p-4 text-sm text-primary-500">No mechanics have been configured yet.</div>
-                    ) : mechanics.map((mechanic) => (
-                        <div key={mechanic.id} className="flex flex-col gap-4 rounded-xl border border-primary-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
+                    ) : mechanics.map((mechanic) => {
+                        const isDeleting = deletingIds.has(mechanic.id);
+
+                        return (
+                        <div key={mechanic.id} className={`flex flex-col gap-4 rounded-xl border border-primary-200 bg-white p-4 transition md:flex-row md:items-center md:justify-between ${isDeleting ? 'opacity-60' : ''}`}>
                             <div className="flex min-w-0 gap-4">
                                 <MechanicAvatar mechanic={mechanic} />
                                 <div className="min-w-0">
@@ -232,11 +256,12 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify }) => {
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                <Button variant="outline" onClick={() => openEdit(mechanic)}>Edit</Button>
-                                <Button variant="secondary" onClick={() => handleDelete(mechanic.id)}>Remove</Button>
+                                <Button variant="outline" isDisabled={isDeleting} onClick={() => openEdit(mechanic)}>Edit</Button>
+                                <Button variant="secondary" isLoading={isDeleting} onClick={() => handleDelete(mechanic.id)}>Remove</Button>
                             </div>
                         </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </Card>
 
