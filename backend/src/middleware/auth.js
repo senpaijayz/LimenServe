@@ -1,27 +1,7 @@
 import { supabaseAdmin, supabaseAuth } from '../config/supabase.js';
+import { createAuthUserResolver } from './authUserResolver.js';
 
-const ALLOWED_ROLES = new Set(['admin', 'cashier', 'stock_clerk']);
-
-function normalizeRole(role) {
-  if (role === 'staff' || role === 'viewer' || role === 'customer') {
-    return 'stock_clerk';
-  }
-
-  return ALLOWED_ROLES.has(role) ? role : 'stock_clerk';
-}
-
-async function fetchProfile(userId) {
-  const { data, error } = await supabaseAdmin.rpc('get_user_profile_by_user_id', {
-    p_user_id: userId,
-  });
-
-  if (error) {
-    console.warn('Failed to load user profile via RPC:', error.message);
-    return null;
-  }
-
-  return Array.isArray(data) ? (data[0] ?? null) : data;
-}
+export const authUserResolver = createAuthUserResolver({ supabaseAuth, supabaseAdmin });
 
 export async function attachUser(req, _res, next) {
   try {
@@ -39,23 +19,7 @@ export async function attachUser(req, _res, next) {
       return next();
     }
 
-    const { data, error } = await supabaseAuth.auth.getUser(token);
-
-    if (error || !data?.user) {
-      return next();
-    }
-
-    const profile = await fetchProfile(data.user.id);
-    const fallbackFullName = data.user.user_metadata?.full_name || '';
-    const fallbackRole = data.user.app_metadata?.role || profile?.role;
-
-    req.user = {
-      id: data.user.id,
-      email: data.user.email,
-      fullName: profile?.full_name || fallbackFullName,
-      role: normalizeRole(fallbackRole),
-      profile,
-    };
+    req.user = await authUserResolver.resolveUser(token);
 
     return next();
   } catch (error) {

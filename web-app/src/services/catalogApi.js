@@ -26,6 +26,7 @@ const VEHICLE_MODEL_ALIASES = {
 
 const requestCache = new Map();
 const inflightRequests = new Map();
+let requestCacheVersion = 0;
 
 function isNetworkFailure(error) {
   return !error?.response;
@@ -56,12 +57,15 @@ async function withCachedRequest(key, ttlMs, loader) {
     return inflight;
   }
 
+  const cacheVersion = requestCacheVersion;
   const request = loader()
     .then((value) => {
-      requestCache.set(key, {
-        timestamp: Date.now(),
-        value,
-      });
+      if (cacheVersion === requestCacheVersion) {
+        requestCache.set(key, {
+          timestamp: Date.now(),
+          value,
+        });
+      }
       return value;
     })
     .finally(() => {
@@ -70,6 +74,27 @@ async function withCachedRequest(key, ttlMs, loader) {
 
   inflightRequests.set(key, request);
   return request;
+}
+
+function clearRequestCache(matcher = null) {
+  requestCacheVersion += 1;
+
+  for (const key of requestCache.keys()) {
+    if (!matcher || matcher(key)) {
+      requestCache.delete(key);
+    }
+  }
+
+  for (const key of inflightRequests.keys()) {
+    if (!matcher || matcher(key)) {
+      inflightRequests.delete(key);
+    }
+  }
+}
+
+function clearProductCatalogCaches() {
+  clearApiClientCache('/catalog/products');
+  clearRequestCache((key) => key.startsWith('catalog-products:') || key.startsWith('full-product-catalog:'));
 }
 
 function normalizeText(value) {
@@ -437,8 +462,13 @@ export async function getVehiclePackages(params = {}) {
 
 export async function getFullProductCatalog() {
   try {
-    const { data } = await apiClient.get('/catalog/products/all');
-    return data.products ?? [];
+    const cacheKey = buildRequestKey('full-product-catalog');
+    return await withCachedRequest(cacheKey, CATALOG_CACHE_TTL_MS, async () => {
+      const { data } = await apiClient.get('/catalog/products/all', {
+        timeout: INVENTORY_API_TIMEOUT_MS,
+      });
+      return data.products ?? [];
+    });
   } catch (error) {
     if (isNetworkFailure(error)) {
       return loadFallbackCatalogSource();
@@ -469,7 +499,7 @@ export async function createCatalogProduct(payload) {
     const { data } = await apiClient.post('/catalog/products', payload, {
       timeout: INVENTORY_API_TIMEOUT_MS,
     });
-    clearApiClientCache('/catalog/products');
+    clearProductCatalogCaches();
     return data.product ?? data;
   } catch (error) {
     extractApiError(error, 'Failed to create new product.');
@@ -492,7 +522,7 @@ export async function createSupplier(payload) {
     const { data } = await apiClient.post('/catalog/suppliers', payload, {
       timeout: INVENTORY_API_TIMEOUT_MS,
     });
-    clearApiClientCache('/catalog/products');
+    clearProductCatalogCaches();
     return data.supplier;
   } catch (error) {
     extractApiError(error, 'Failed to create supplier.');
@@ -504,7 +534,7 @@ export async function updateSupplier(supplierId, payload) {
     const { data } = await apiClient.patch(`/catalog/suppliers/${supplierId}`, payload, {
       timeout: INVENTORY_API_TIMEOUT_MS,
     });
-    clearApiClientCache('/catalog/products');
+    clearProductCatalogCaches();
     return data.supplier;
   } catch (error) {
     extractApiError(error, 'Failed to update supplier.');
@@ -516,7 +546,7 @@ export async function deleteSupplier(supplierId) {
     await apiClient.delete(`/catalog/suppliers/${supplierId}`, {
       timeout: INVENTORY_API_TIMEOUT_MS,
     });
-    clearApiClientCache('/catalog/products');
+    clearProductCatalogCaches();
   } catch (error) {
     extractApiError(error, 'Failed to delete supplier.');
   }
@@ -538,7 +568,7 @@ export async function createManagedCategory(payload) {
     const { data } = await apiClient.post('/catalog/categories', payload, {
       timeout: INVENTORY_API_TIMEOUT_MS,
     });
-    clearApiClientCache('/catalog/products');
+    clearProductCatalogCaches();
     return data.category;
   } catch (error) {
     extractApiError(error, 'Failed to create category.');
@@ -550,7 +580,7 @@ export async function updateManagedCategory(categoryId, payload) {
     const { data } = await apiClient.patch(`/catalog/categories/${categoryId}`, payload, {
       timeout: INVENTORY_API_TIMEOUT_MS,
     });
-    clearApiClientCache('/catalog/products');
+    clearProductCatalogCaches();
     return data.category;
   } catch (error) {
     extractApiError(error, 'Failed to update category.');
@@ -562,7 +592,7 @@ export async function deleteManagedCategory(categoryId) {
     await apiClient.delete(`/catalog/categories/${categoryId}`, {
       timeout: INVENTORY_API_TIMEOUT_MS,
     });
-    clearApiClientCache('/catalog/products');
+    clearProductCatalogCaches();
   } catch (error) {
     extractApiError(error, 'Failed to delete category.');
   }
@@ -573,13 +603,7 @@ export async function receiveInventoryStock(payload) {
     const { data } = await apiClient.post('/catalog/stock/receive', payload, {
       timeout: INVENTORY_API_TIMEOUT_MS,
     });
-    clearApiClientCache('/catalog/products');
-    // Also bust the local withCachedRequest cache so next catalog fetch is fresh
-    for (const key of requestCache.keys()) {
-      if (key.startsWith('catalog-products:')) {
-        requestCache.delete(key);
-      }
-    }
+    clearProductCatalogCaches();
     return data;
   } catch (error) {
     extractApiError(error, 'Failed to receive stock.');
@@ -631,7 +655,7 @@ export async function archiveCatalogProduct(productId, { archive = true, reason 
       archive,
       reason,
     });
-    clearApiClientCache('/catalog/products');
+    clearProductCatalogCaches();
     return data;
   } catch (error) {
     extractApiError(error, archive ? 'Failed to archive product.' : 'Failed to restore product.');
@@ -641,7 +665,7 @@ export async function archiveCatalogProduct(productId, { archive = true, reason 
 export async function updateCatalogProduct(productId, payload) {
   try {
     const { data } = await apiClient.patch(`/catalog/products/${productId}`, payload);
-    clearApiClientCache('/catalog/products');
+    clearProductCatalogCaches();
     return data.product;
   } catch (error) {
     extractApiError(error, 'Failed to update product details.');
@@ -689,7 +713,7 @@ export async function replaceRetailPriceList(items, effectiveFrom) {
       timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS,
     });
 
-    clearApiClientCache('/catalog/products');
+    clearProductCatalogCaches();
     return data;
   } catch (error) {
     extractApiError(error, 'Failed to replace the price list.');
@@ -709,7 +733,7 @@ export async function replaceRetailPriceListFile(file, effectiveFrom) {
       },
     });
 
-    clearApiClientCache('/catalog/products');
+    clearProductCatalogCaches();
     return data;
   } catch (error) {
     extractApiError(error, 'Failed to upload the price list file.');

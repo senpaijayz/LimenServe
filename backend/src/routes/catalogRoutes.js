@@ -6,6 +6,7 @@ import { requireRole } from '../middleware/auth.js';
 import { clearPublicResponseCache } from '../middleware/cache.js';
 import { analyzeSupplierInvoiceImage } from '../services/invoiceOcrService.js';
 import { callRpc } from '../services/supabaseRpc.js';
+import { selectByInChunks } from '../utils/supabaseBatchSelect.js';
 import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
@@ -1077,12 +1078,15 @@ async function enrichCatalogProducts(products = []) {
   const productById = new Map(products.map((product) => [product.id, { ...product }]));
 
   try {
-    const { data: images, error: imagesError } = await supabaseAdmin
-      .schema('catalog')
-      .from('product_images')
-      .select('product_id, image_url')
-      .in('product_id', productIds)
-      .eq('is_primary', true);
+    const { data: images, error: imagesError } = await selectByInChunks({
+      client: supabaseAdmin,
+      schema: 'catalog',
+      table: 'product_images',
+      select: 'product_id, image_url',
+      column: 'product_id',
+      values: productIds,
+      apply: (query) => query.eq('is_primary', true),
+    });
 
     if (imagesError && !isPrivateSchemaAccessError(imagesError)) {
       throw imagesError;
@@ -1101,11 +1105,14 @@ async function enrichCatalogProducts(products = []) {
   }
 
   try {
-    const { data: links, error: linksError } = await supabaseAdmin
-      .schema('catalog')
-      .from('product_supplier_links')
-      .select('product_id, supplier_id, suppliers(id, supplier_code, name)')
-      .in('product_id', productIds);
+    const { data: links, error: linksError } = await selectByInChunks({
+      client: supabaseAdmin,
+      schema: 'catalog',
+      table: 'product_supplier_links',
+      select: 'product_id, supplier_id, suppliers(id, supplier_code, name)',
+      column: 'product_id',
+      values: productIds,
+    });
 
     if (linksError && !isPrivateSchemaAccessError(linksError)) {
       throw linksError;
@@ -1332,20 +1339,30 @@ function buildCategoryRows(products = []) {
     .map(([value, count]) => ({ value, label: value, count }));
 }
 
-async function buildFullCatalogCategoryOptions({ searchQuery = '', vehicleContext = null } = {}) {
-  const catalog = await getCachedProductCatalog();
-  const categoryScopedProducts = catalog.filter((product) => matchesCatalogFilters(product, {
-    searchQuery,
-    selectedCategory: 'all',
-    vehicleContext,
-  }));
-  const categoryRows = buildCategoryRows(categoryScopedProducts);
-  const categoryCountTotal = categoryRows.reduce((sum, row) => sum + Number(row.count ?? 0), 0);
+function splitVehicleScopedCatalogProducts(catalog = [], { searchQuery = '', selectedCategory = 'all', vehicleContext } = {}) {
+  const scopedProducts = [];
+  const categoryScopedProducts = [];
 
-  return [
-    { value: 'all', label: 'All Categories', count: categoryCountTotal },
-    ...categoryRows,
-  ];
+  for (const product of catalog) {
+    if (!matchesCatalogFilters(product, {
+      searchQuery,
+      selectedCategory: 'all',
+      vehicleContext,
+    })) {
+      continue;
+    }
+
+    categoryScopedProducts.push(product);
+
+    if (selectedCategory === 'all' || product.category === selectedCategory) {
+      scopedProducts.push(product);
+    }
+  }
+
+  return {
+    scopedProducts,
+    categoryScopedProducts,
+  };
 }
 
 function mapVehicleFitmentRow(row) {
@@ -3109,16 +3126,11 @@ router.get('/products', async (req, res, next) => {
       }
     } else {
       const catalog = await getCachedProductCatalog();
-      const scopedProducts = catalog.filter((product) => matchesCatalogFilters(product, {
+      const { scopedProducts, categoryScopedProducts } = splitVehicleScopedCatalogProducts(catalog, {
         searchQuery,
         selectedCategory,
         vehicleContext,
-      }));
-      const categoryScopedProducts = catalog.filter((product) => matchesCatalogFilters(product, {
-        searchQuery,
-        selectedCategory: 'all',
-        vehicleContext,
-      }));
+      });
       const sortedProducts = sortCatalogProducts(scopedProducts, sortBy);
 
       totalCount = sortedProducts.length;
@@ -3133,13 +3145,6 @@ router.get('/products', async (req, res, next) => {
           ...categoryRows,
         ];
       }
-    }
-
-    if (includeCategories && !useStagingCatalog && vehicleContext) {
-      categories = await buildFullCatalogCategoryOptions({
-        searchQuery,
-        vehicleContext,
-      });
     }
 
     res.json({
@@ -3159,7 +3164,7 @@ router.get('/products', async (req, res, next) => {
 
 router.get('/products/all', async (_req, res, next) => {
   try {
-    const products = await enrichCatalogProducts(await getCachedProductCatalog());
+    const products = await getCachedProductCatalog();
     res.json({ products: products ?? [] });
   } catch (error) {
     next(error);
