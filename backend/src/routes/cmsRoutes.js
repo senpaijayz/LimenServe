@@ -4,6 +4,7 @@ import { requireRole } from '../middleware/auth.js';
 import { clearPublicResponseCache } from '../middleware/cache.js';
 import {
   deleteCmsFeaturedCatalogItem,
+  deleteCmsPage,
   deleteCmsRecommendationPackage,
   getCmsPage,
   listCmsFeaturedCatalogItems,
@@ -283,6 +284,16 @@ router.put('/pages/:slug', requireRole('admin'), async (req, res, next) => {
       slug: req.params.slug,
     }, req.user?.id);
 
+    clearPublicResponseCache();
+    res.json({ page });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/pages/:slug', requireRole('admin'), async (req, res, next) => {
+  try {
+    const page = await deleteCmsPage(req.params.slug, req.user?.id);
     clearPublicResponseCache();
     res.json({ page });
   } catch (error) {

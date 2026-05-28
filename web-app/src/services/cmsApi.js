@@ -52,6 +52,16 @@ export async function saveCmsPage(payload) {
   }
 }
 
+export async function deleteCmsPage(slug) {
+  try {
+    const { data } = await apiClient.delete(`/cms/pages/${encodeURIComponent(slug)}`);
+    clearApiClientCache((key) => key.startsWith('/public/cms/'));
+    return data.page;
+  } catch (error) {
+    extractApiError(error, 'Failed to delete CMS page.');
+  }
+}
+
 export async function saveCmsSiteSettings(payload) {
   try {
     const { data } = await apiClient.put('/cms/site-settings', payload);

@@ -14,8 +14,15 @@ import {
   Upload,
 } from 'lucide-react';
 import CatalogContentCmsPanel from '../catalog-content/CatalogContentCmsPanel';
+import {
+  buildPageLinkOptions,
+  canDeleteCmsPage,
+  normalizeCmsPageSlugFromHref,
+  withCurrentPageLinkOption,
+} from './cmsPageLinks';
 import { useToast } from '../../../components/ui/Toast';
 import {
+  deleteCmsPage,
   getCmsPage,
   getPublicCmsSite,
   listCmsPages,
@@ -807,7 +814,9 @@ function TextAreaField({ label, value, onChange, placeholder = '', rows = 4, hel
   );
 }
 
-function SelectField({ label, value, onChange, options }) {
+function SelectField({ label, value, onChange, options, helper = '' }) {
+  const hasCurrentOption = options.some((option) => option.value === (value ?? ''));
+
   return (
     <label className="block">
       <span className="text-xs font-bold uppercase tracking-[0.18em] text-primary-500">{label}</span>
@@ -816,10 +825,12 @@ function SelectField({ label, value, onChange, options }) {
         onChange={(event) => onChange(event.target.value)}
         className="mt-2 w-full rounded-2xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-900 outline-none transition focus:border-accent-primary focus:ring-4 focus:ring-accent-primary/10"
       >
+        {!hasCurrentOption && <option value="">{value ? `Current value: ${value}` : 'Choose an option'}</option>}
         {options.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>
         ))}
       </select>
+      {helper && <span className="mt-2 block text-xs text-primary-500">{helper}</span>}
     </label>
   );
 }
@@ -1135,6 +1146,7 @@ export default function CmsAdmin() {
   const [activeTab, setActiveTab] = useState('pages');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingSlug, setDeletingSlug] = useState('');
   const [uploadingKey, setUploadingKey] = useState('');
   const [pages, setPages] = useState([]);
   const [selectedSlug, setSelectedSlug] = useState('');
@@ -1146,6 +1158,10 @@ export default function CmsAdmin() {
   const selectedPage = useMemo(
     () => pages.find((page) => page.slug === selectedSlug),
     [pages, selectedSlug],
+  );
+  const pageLinkOptions = useMemo(
+    () => withCurrentPageLinkOption(buildPageLinkOptions(navigationDraft), pageDraft.slug),
+    [navigationDraft, pageDraft.slug],
   );
   const activeSectionIndex = useMemo(() => {
     const sections = pageDraft.sections ?? [];
@@ -1252,6 +1268,10 @@ export default function CmsAdmin() {
     setPageDraft((draft) => ({ ...draft, [field]: value }));
   };
 
+  const handlePageLinkChange = (slug) => {
+    updatePageField('slug', makeSlug(slug));
+  };
+
   const updateSeoField = (field, value) => {
     setPageDraft((draft) => ({
       ...draft,
@@ -1340,9 +1360,13 @@ export default function CmsAdmin() {
   };
 
   const handleCreatePage = () => {
+    const existingSlugs = new Set(pages.map((page) => page.slug));
+    const firstUnusedNavigationSlug = buildPageLinkOptions(navigationDraft)
+      .find((option) => !existingSlugs.has(option.value))?.value;
+
     setSelectedSlug('');
     setPageDraft(createPageDraft({
-      slug: 'new-page',
+      slug: firstUnusedNavigationSlug || 'new-page',
       title: 'New Page',
       status: 'draft',
       sections: [createDefaultSection('hero', 0)],
@@ -1361,6 +1385,39 @@ export default function CmsAdmin() {
       showError(saveError.message || 'Failed to save CMS page. Please check the page fields and try again.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeletePage = async (page) => {
+    if (!canDeleteCmsPage(page)) {
+      showError('Default CMS pages are protected and cannot be deleted.');
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete "${page.title || page.slug}" from CMS pages? This also removes its saved sections and archives matching Navigation links.`);
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingSlug(page.slug);
+    try {
+      await deleteCmsPage(page.slug);
+      const remainingPages = ensureEditablePublicPages((await listCmsPages()).filter((item) => item.slug !== page.slug));
+      const currentSelectionStillExists = selectedSlug
+        && selectedSlug !== page.slug
+        && remainingPages.some((item) => item.slug === selectedSlug);
+      const nextSelectedSlug = currentSelectionStillExists ? selectedSlug : remainingPages[0]?.slug || '';
+      setPages(remainingPages);
+      setSelectedSlug(nextSelectedSlug);
+      if (!nextSelectedSlug) {
+        setPageDraft(createPageDraft());
+      }
+      setNavigationDraft((items) => items.filter((item) => normalizeCmsPageSlugFromHref(item.href) !== page.slug));
+      success(`CMS page deleted: ${page.title || page.slug}`);
+    } catch (deleteError) {
+      showError(deleteError.message || 'Failed to delete CMS page. Please try again.');
+    } finally {
+      setDeletingSlug('');
     }
   };
 
@@ -1470,24 +1527,42 @@ export default function CmsAdmin() {
               <div className="space-y-2">
                 {pages.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-primary-300 bg-white p-4 text-sm text-primary-500">No CMS pages yet.</div>
-                ) : pages.map((page) => (
-                  <button
-                    key={page.id}
-                    type="button"
-                    onClick={() => setSelectedSlug(page.slug)}
-                    className={`w-full rounded-2xl border p-4 text-left transition ${
-                      selectedSlug === page.slug
-                        ? 'border-accent-primary bg-white shadow-sm'
-                        : 'border-primary-200 bg-white/70 hover:bg-white'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-semibold text-primary-950">{page.title}</span>
-                      <StatusBadge status={page.status} />
+                ) : pages.map((page) => {
+                  const deleteAllowed = canDeleteCmsPage(page);
+                  const isDeletingPage = deletingSlug === page.slug;
+
+                  return (
+                    <div
+                      key={page.id || page.slug}
+                      className={`grid grid-cols-[1fr_auto] items-stretch rounded-2xl border bg-white transition ${
+                        selectedSlug === page.slug
+                          ? 'border-accent-primary shadow-sm'
+                          : 'border-primary-200 bg-white/70 hover:bg-white'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSlug(page.slug)}
+                        className="min-w-0 p-4 text-left"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="truncate font-semibold text-primary-950">{page.title}</span>
+                          <StatusBadge status={page.status} />
+                        </div>
+                        <p className="mt-2 text-xs text-primary-500">/{page.slug} - {page.sectionCount ?? 0} sections</p>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!deleteAllowed || isDeletingPage}
+                        onClick={() => handleDeletePage(page)}
+                        title={deleteAllowed ? `Delete ${page.title || page.slug}` : 'Default CMS pages are protected'}
+                        className="m-2 inline-flex w-10 items-center justify-center rounded-xl border border-transparent text-primary-400 transition hover:border-red-200 hover:bg-red-50 hover:text-accent-danger disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-transparent disabled:hover:bg-transparent disabled:hover:text-primary-400"
+                      >
+                        {isDeletingPage ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      </button>
                     </div>
-                    <p className="mt-2 text-xs text-primary-500">/{page.slug} - {page.sectionCount ?? 0} sections</p>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             </aside>
 
@@ -1499,7 +1574,13 @@ export default function CmsAdmin() {
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <Field label="Page title" value={pageDraft.title} onChange={(value) => updatePageField('title', value)} />
-                  <Field label="Page link" value={pageDraft.slug} onChange={(value) => updatePageField('slug', makeSlug(value))} helper="Example: about creates /about" />
+                  <SelectField
+                    label="Page link"
+                    value={pageDraft.slug}
+                    options={pageLinkOptions}
+                    onChange={handlePageLinkChange}
+                    helper="Choose from links saved in Navigation."
+                  />
                   <SelectField label="Page status" value={pageDraft.status} options={STATUS_OPTIONS} onChange={(value) => updatePageField('status', value)} />
                   <Field label="Browser title" value={pageDraft.seo?.title} onChange={(value) => updateSeoField('title', value)} />
                   <div className="md:col-span-2">

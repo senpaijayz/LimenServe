@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { callRpc } from './supabaseRpc.js';
+import { assertDeletableCmsPageSlug } from './cmsPageDeleteModel.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ALLOWED_NAV_STATUSES = new Set(['draft', 'published', 'archived']);
@@ -50,6 +51,23 @@ export async function saveCmsPage(payload, actorId) {
     p_payload: payload,
     p_actor_id: actorId || null,
   });
+}
+
+export async function deleteCmsPage(slug, actorId) {
+  const normalizedSlug = assertDeletableCmsPageSlug(slug);
+
+  const deletedPage = await callRpc('cms_admin_delete_page', {
+    p_slug: normalizedSlug,
+    p_actor_id: normalizeActorId(actorId),
+  });
+
+  if (!deletedPage) {
+    const error = new Error('CMS page was not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return deletedPage;
 }
 
 export async function saveCmsSiteSettings(payload, actorId) {
