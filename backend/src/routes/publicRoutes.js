@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { callRpc } from '../services/supabaseRpc.js';
 import { getPublishedCmsPage, getPublishedCmsSite, getPublishedFeaturedCatalogItems } from '../services/cmsService.js';
+import { buildPublicCmsPageResponse } from '../services/publicCmsPageResponseModel.js';
 
 const router = Router();
 
@@ -101,13 +102,8 @@ router.get('/cms/site', async (_req, res, next) => {
 router.get('/cms/pages/:slug', async (req, res, next) => {
   try {
     const page = await getPublishedCmsPage(req.params.slug);
-
-    if (!page) {
-      res.status(404).json({ error: 'Published CMS page was not found.' });
-      return;
-    }
-
-    res.json({ page });
+    const response = buildPublicCmsPageResponse(page);
+    res.status(response.statusCode).json(response.body);
   } catch (error) {
     next(error);
   }
