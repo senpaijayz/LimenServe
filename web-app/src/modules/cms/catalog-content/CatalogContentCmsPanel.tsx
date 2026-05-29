@@ -337,7 +337,7 @@ export default function CatalogContentCmsPanel() {
             <h2 className="text-xl font-display font-semibold text-primary-950">Featured Products</h2>
             <p className="mt-1 text-sm text-primary-500">Choose catalog products that appear in the public Genuine Parts page.</p>
           </div>
-          <button type="button" className="btn btn-secondary" onClick={() => setFeaturedItems((items) => [...items, createEmptyFeaturedCatalogItem((items.length + 1) * 10)])}>
+          <button type="button" className="btn btn-secondary" onClick={() => setFeaturedItems((items) => [...items, createEmptyFeaturedCatalogItem()])}>
             <Plus className="h-4 w-4" />
             Add Featured Product
           </button>
@@ -348,15 +348,16 @@ export default function CatalogContentCmsPanel() {
             <div className="rounded-3xl border border-dashed border-primary-300 bg-primary-50 p-8 text-center text-primary-500">No featured products yet.</div>
           ) : featuredItems.map((item, index) => (
             <div key={item.id || index} className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_120px_120px]">
+              <div className="grid gap-4 md:grid-cols-2">
                 <SelectField label="Placement" value={item.placementKey} options={placementOptions} onChange={(value) => updateFeaturedItem(index, { placementKey: value })} />
                 <ProductSearchSelect label="Product" value={item.productId} products={products} onChange={(value) => {
                   const product = productMap.get(value);
                   updateFeaturedItem(index, { productId: value, sku: product?.sku || '', name: product?.name || '', category: product?.category || '' });
                 }} />
-                <Field label="Badge" value={item.badge} onChange={(value) => updateFeaturedItem(index, { badge: value })} />
-                <Field label="Order" type="number" value={item.sortOrder} onChange={(value) => updateFeaturedItem(index, { sortOrder: Number(value) })} />
               </div>
+              <p className="mt-3 text-xs font-semibold text-primary-500">
+                Display order is automatic. Newly added featured products appear after the existing featured products.
+              </p>
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <label className="inline-flex items-center gap-2 text-sm font-semibold text-primary-700">
                   <input type="checkbox" checked={item.isActive} onChange={(event) => updateFeaturedItem(index, { isActive: event.target.checked })} />

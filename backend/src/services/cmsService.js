@@ -227,7 +227,6 @@ function normalizeFeaturedCatalogItemPayload(payload = {}, actorId = null) {
     product_id: assertUuid(payload.productId ?? payload.product_id, 'Choose a valid product for the featured item.'),
     label: normalizeText(payload.label, '', 120) || null,
     badge: normalizeText(payload.badge, '', 80) || null,
-    sort_order: normalizeInteger(payload.sortOrder ?? payload.sort_order, 100),
     is_active: normalizeBoolean(payload.isActive ?? payload.is_active, true),
     metadata: payload.metadata && typeof payload.metadata === 'object' && !Array.isArray(payload.metadata) ? payload.metadata : {},
     updated_by: normalizedActorId,
@@ -435,10 +434,58 @@ export async function listCmsFeaturedCatalogItems() {
 
 export async function saveCmsFeaturedCatalogItem(payload, actorId) {
   const row = normalizeFeaturedCatalogItemPayload(payload, actorId);
+  let sortOrder = normalizeInteger(payload.sortOrder ?? payload.sort_order, 0);
+
+  if (row.id) {
+    const { data: existingItem, error: existingItemError } = await supabaseAdmin
+      .schema('cms')
+      .from('featured_catalog_items')
+      .select('sort_order')
+      .eq('id', row.id)
+      .maybeSingle();
+
+    if (existingItemError) {
+      throw existingItemError;
+    }
+
+    sortOrder = Number(existingItem?.sort_order ?? sortOrder ?? 100);
+  } else {
+    const { data: existingPlacementProduct, error: existingPlacementProductError } = await supabaseAdmin
+      .schema('cms')
+      .from('featured_catalog_items')
+      .select('sort_order')
+      .eq('placement_key', row.placement_key)
+      .eq('product_id', row.product_id)
+      .maybeSingle();
+
+    if (existingPlacementProductError) {
+      throw existingPlacementProductError;
+    }
+
+    if (existingPlacementProduct) {
+      sortOrder = Number(existingPlacementProduct.sort_order ?? 100);
+    } else {
+      const { data: latestItems, error: latestItemsError } = await supabaseAdmin
+        .schema('cms')
+        .from('featured_catalog_items')
+        .select('sort_order')
+        .eq('placement_key', row.placement_key)
+        .order('sort_order', { ascending: false })
+        .limit(1);
+
+      if (latestItemsError) {
+        throw latestItemsError;
+      }
+
+      const latestSortOrder = Number(latestItems?.[0]?.sort_order ?? 0);
+      sortOrder = latestSortOrder + 10;
+    }
+  }
+
   const { data, error } = await supabaseAdmin
     .schema('cms')
     .from('featured_catalog_items')
-    .upsert(row, { onConflict: row.id ? 'id' : 'placement_key,product_id' })
+    .upsert({ ...row, sort_order: sortOrder }, { onConflict: row.id ? 'id' : 'placement_key,product_id' })
     .select('id, placement_key, product_id, label, badge, sort_order, is_active')
     .single();
 
