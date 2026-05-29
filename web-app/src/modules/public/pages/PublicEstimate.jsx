@@ -1037,11 +1037,8 @@ const PublicEstimate = () => {
                     <div>
                         <p className="text-[0.7rem] font-bold uppercase tracking-[0.28em] text-accent-blue">Final review</p>
                         <h3 className="mt-3 text-3xl font-display font-bold tracking-tight text-primary-950 md:text-4xl">
-                            Confirm the quote before sending it to the customer.
+                            Finalize the quote before sharing it with the provider.
                         </h3>
-                        <p className="mt-3 max-w-2xl text-sm leading-6 text-primary-600">
-                            Review the customer context, selected parts, service labor, and estimated total. When you finish, LimenServe saves the quotation and generates a quote number for retrieval.
-                        </p>
                     </div>
                     <div className="rounded-[28px] border border-primary-200 bg-white/90 p-5 shadow-sm">
                         <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-primary-400">Estimated total</p>

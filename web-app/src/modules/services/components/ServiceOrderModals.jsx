@@ -48,7 +48,7 @@ const buildPrintRows = (items, emptyLabel) => {
 };
 
 const printServiceOrderDocument = ({ order, serviceItems, partItems, orderTotal, completedAt, mechanicName }) => {
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=960,height=720');
+    const printWindow = window.open('', '_blank', 'width=960,height=720');
     if (!printWindow) return;
 
     const vehicleLabel = [order.vehicle?.year, order.vehicle?.make, order.vehicle?.model].filter(Boolean).join(' ') || 'Vehicle not recorded';
@@ -137,7 +137,6 @@ const printServiceOrderDocument = ({ order, serviceItems, partItems, orderTotal,
                     <section class="signatures"><div class="signature">Prepared By</div><div class="signature">Customer Approval</div><div class="signature">Authorized Signature</div></section>
                     <p class="footer">This document is generated from LimenServe service order records. Final prices may be subject to confirmation by authorized staff.</p>
                 </main>
-                <script>window.onload = () => { window.focus(); window.print(); };</script>
             </body>
         </html>
     `;
@@ -145,6 +144,12 @@ const printServiceOrderDocument = ({ order, serviceItems, partItems, orderTotal,
     printWindow.document.open();
     printWindow.document.write(html);
     printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => {
+        if (!printWindow.closed) {
+            printWindow.print();
+        }
+    }, 350);
 };
 
 // ── Parts search sub-component ────────────────────────────────────────────────

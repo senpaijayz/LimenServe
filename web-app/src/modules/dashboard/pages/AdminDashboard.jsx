@@ -14,7 +14,7 @@ import { formatCurrency, formatNumber } from '../../../utils/formatters';
 import { getAnalyticsDashboardSnapshot, runFullAnalyticsRefresh } from '../../../services/analyticsApi';
 
 const SalesChart = lazy(() => import('../components/SalesChart'));
-const LowStockAlert = lazy(() => import('../components/LowStockAlert'));
+const InventoryMovementLedger = lazy(() => import('../components/InventoryMovementLedger'));
 const RecentTransactions = lazy(() => import('../components/RecentTransactions'));
 
 function DashboardPanelFallback({ title }) {
@@ -231,8 +231,8 @@ const AdminDashboard = () => {
                     </Suspense>
                 </div>
                 <div>
-                    <Suspense fallback={<DashboardPanelFallback title="Loading stock alerts" />}>
-                        <LowStockAlert />
+                    <Suspense fallback={<DashboardPanelFallback title="Loading inventory movement ledger" />}>
+                        <InventoryMovementLedger />
                     </Suspense>
                 </div>
             </div>
