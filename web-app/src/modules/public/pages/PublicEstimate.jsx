@@ -259,19 +259,24 @@ const PhaseBackButton = ({ onClick, label }) => (
     </button>
 );
 
+function getIncomingPartSearch(searchParams) {
+    return String(searchParams.get('part') || searchParams.get('q') || '').trim();
+}
+
 const PublicEstimate = () => {
     const [searchParams] = useSearchParams();
+    const incomingPartSearch = getIncomingPartSearch(searchParams);
     const packageShelfRef = useRef(null);
-    const [workflowStage, setWorkflowStage] = useState('choice');
+    const [workflowStage, setWorkflowStage] = useState(() => (incomingPartSearch ? 'active' : 'choice'));
     const [mode, setMode] = useState('estimate');
-    const [estimatePhase, setEstimatePhase] = useState('details');
+    const [estimatePhase, setEstimatePhase] = useState(() => (incomingPartSearch ? 'catalog' : 'details'));
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
     const { vehicle, updateVehicle, clearVehicle, hasVehicle } = usePublicVehicleSelection({ includePlate: true, syncToSearch: true });
     const { packages: vehiclePackages, loading: vehiclePackagesLoading, error: vehiclePackagesError } = useVehiclePackages(vehicle);
     const [selectedParts, setSelectedParts] = useState([]);
     const [selectedServices, setSelectedServices] = useState([]);
-    const [partSearch, setPartSearch] = useState('');
+    const [partSearch, setPartSearch] = useState(() => incomingPartSearch);
     const [sortBy, setSortBy] = useState('name-asc');
     const [currentPage, setCurrentPage] = useState(1);
     const [focusedProduct, setFocusedProduct] = useState(null);
@@ -314,6 +319,18 @@ const PublicEstimate = () => {
     useEffect(() => {
         setCurrentPage(1);
     }, [partSearch, sortBy, vehicle.model, vehicle.year]);
+
+    useEffect(() => {
+        if (!incomingPartSearch) {
+            return;
+        }
+
+        setPartSearch(incomingPartSearch);
+        setWorkflowStage('active');
+        setMode('estimate');
+        setEstimatePhase('catalog');
+        setCurrentPage(1);
+    }, [incomingPartSearch]);
 
     useEffect(() => {
         if (typeof window === 'undefined') {

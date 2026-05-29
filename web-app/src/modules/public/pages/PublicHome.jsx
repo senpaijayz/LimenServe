@@ -149,6 +149,20 @@ function mergeCmsStats(fallbackStats, cmsItems = []) {
     }));
 }
 
+function getFeaturedPartNumber(part = {}) {
+    return String(part.partNo || part.catalogQuery || part.name || '').trim();
+}
+
+function buildFeaturedPartCatalogHref(part = {}) {
+    const query = getFeaturedPartNumber(part);
+    return query ? `/catalog?q=${encodeURIComponent(query)}` : '/catalog';
+}
+
+function buildFeaturedPartEstimateHref(part = {}) {
+    const query = getFeaturedPartNumber(part);
+    return query ? `/estimate?part=${encodeURIComponent(query)}` : '/estimate';
+}
+
 const PublicHome = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [cmsPage, setCmsPage] = useState(null);
@@ -424,11 +438,11 @@ const PublicHome = () => {
                                     <p className="mt-3 text-sm leading-relaxed text-primary-600">{part.note}</p>
                                     <p className="mt-4 text-2xl font-bold text-accent-primary">{part.price}</p>
                                     <div className="mt-6 flex gap-3">
-                                        <Link to={part.href || `/catalog?q=${encodeURIComponent(part.catalogQuery)}`} className="btn btn-primary flex-1 px-4 py-3">
-                                            {bestSellersCms.primaryActionLabel || 'Add to Quote'}
+                                        <Link to={buildFeaturedPartEstimateHref(part)} className="btn btn-primary flex-1 px-4 py-3">
+                                            Get Quote
                                         </Link>
-                                        <Link to={part.href || `/catalog?q=${encodeURIComponent(part.catalogQuery)}`} className="btn btn-secondary px-4 py-3">
-                                            {bestSellersCms.secondaryActionLabel || 'Quick View'}
+                                        <Link to={buildFeaturedPartCatalogHref(part)} className="btn btn-secondary px-4 py-3">
+                                            Quick View
                                         </Link>
                                     </div>
                                 </div>
