@@ -622,10 +622,10 @@ export async function getProductStockHistory(productId, limit = 20) {
   }
 }
 
-export async function getInventoryMovements(limit = 12) {
+export async function getInventoryMovements(limit = 12, params = {}) {
   try {
     const { data } = await apiClient.get('/catalog/stock/movements', {
-      params: { limit },
+      params: { limit, ...params },
       timeout: INVENTORY_API_TIMEOUT_MS,
     });
     return data.movements ?? [];

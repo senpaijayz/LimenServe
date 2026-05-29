@@ -1071,6 +1071,78 @@ async function linkProductSupplier(productId, supplierId) {
   }
 }
 
+async function saveCurrentRetailPrice(productId, amount, businessDate, nowIso) {
+  const { data: currentPrice, error: currentPriceError } = await supabaseAdmin
+    .schema('catalog')
+    .from('product_prices')
+    .select('id, effective_from')
+    .eq('product_id', productId)
+    .eq('price_type', 'retail')
+    .eq('is_current', true)
+    .order('effective_from', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (currentPriceError) {
+    throw currentPriceError;
+  }
+
+  if (currentPrice?.effective_from === businessDate) {
+    const { error: updatePriceError } = await supabaseAdmin
+      .schema('catalog')
+      .from('product_prices')
+      .update({
+        amount,
+        currency: 'PHP',
+        effective_to: null,
+        business_date: businessDate,
+        updated_at: nowIso,
+      })
+      .eq('id', currentPrice.id);
+
+    if (updatePriceError) {
+      throw updatePriceError;
+    }
+
+    return;
+  }
+
+  const { error: closePriceError } = await supabaseAdmin
+    .schema('catalog')
+    .from('product_prices')
+    .update({
+      is_current: false,
+      effective_to: businessDate,
+      updated_at: nowIso,
+    })
+    .eq('product_id', productId)
+    .eq('price_type', 'retail')
+    .eq('is_current', true);
+
+  if (closePriceError) {
+    throw closePriceError;
+  }
+
+  const { error: priceError } = await supabaseAdmin
+    .schema('catalog')
+    .from('product_prices')
+    .insert({
+      product_id: productId,
+      price_type: 'retail',
+      amount,
+      currency: 'PHP',
+      effective_from: businessDate,
+      effective_to: null,
+      is_current: true,
+      business_date: businessDate,
+    });
+
+  if (priceError) {
+    throw priceError;
+  }
+}
+
 async function enrichCatalogProducts(products = []) {
   const productIds = [...new Set(products.map((product) => product.id).filter(Boolean))];
   if (productIds.length === 0) {
@@ -3885,10 +3957,10 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
         sku,
         name,
         model_name: modelName,
-        category: classification.category,
+        category,
         brand,
         uom,
-        status: getStatusForStockLevel(stockAdjustment?.updatedStock ?? targetStock),
+        status: requestedStock !== null ? getStatusForStockLevel(stockAdjustment?.updatedStock ?? targetStock) : status,
         source_category: sourceCategory,
         metadata: mergeProductMetadata(currentProduct?.metadata, {
           sourceCategory,
@@ -3917,39 +3989,7 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
       return;
     }
 
-    const { error: closePriceError } = await supabaseAdmin
-      .schema('catalog')
-      .from('product_prices')
-      .update({
-        is_current: false,
-        effective_to: businessDate,
-        updated_at: nowIso,
-      })
-      .eq('product_id', productId)
-      .eq('price_type', 'retail')
-      .eq('is_current', true);
-
-    if (closePriceError) {
-      throw closePriceError;
-    }
-
-    const { error: priceError } = await supabaseAdmin
-      .schema('catalog')
-      .from('product_prices')
-      .insert({
-        product_id: productId,
-        price_type: 'retail',
-        amount: price,
-        currency: 'PHP',
-        effective_from: businessDate,
-        effective_to: null,
-        is_current: true,
-        business_date: businessDate,
-      });
-
-    if (priceError) {
-      throw priceError;
-    }
+    await saveCurrentRetailPrice(productId, price, businessDate, nowIso);
 
     await linkProductSupplier(productId, supplierId);
     await upsertProductImage(productId, imageUrl);
@@ -4128,7 +4168,7 @@ router.get('/products/archived', requireRole('admin'), async (req, res, next) =>
 
 router.get('/stock/movements', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
-    const limit = parsePositiveInteger(req.query.limit, 12, 100);
+    const limit = parsePositiveInteger(req.query.limit, 12, 500);
     const { data: movements, error: movementsError } = await supabaseAdmin
       .schema('catalog')
       .from('inventory_movements')
@@ -4149,7 +4189,7 @@ router.get('/stock/movements', requireRole('admin', 'stock_clerk'), async (req, 
 
     const [{ data: products, error: productsError }, { data: profiles, error: profilesError }] = await Promise.all([
       productIds.length > 0
-        ? supabaseAdmin.schema('catalog').from('products').select('id, sku, name').in('id', productIds)
+        ? supabaseAdmin.schema('catalog').from('products').select('id, sku, name, category').in('id', productIds)
         : Promise.resolve({ data: [], error: null }),
       userIds.length > 0
         ? supabaseAdmin.schema('core').from('user_profiles').select('user_id, full_name, email').in('user_id', userIds)
@@ -4181,6 +4221,7 @@ router.get('/stock/movements', requireRole('admin', 'stock_clerk'), async (req, 
           productId: movement.product_id,
           sku: product.sku ?? '',
           productName: product.name ?? 'Unknown product',
+          category: product.category ?? '',
           movementType: movement.movement_type,
           quantity: Number(movement.quantity ?? 0),
           referenceType: movement.reference_type,

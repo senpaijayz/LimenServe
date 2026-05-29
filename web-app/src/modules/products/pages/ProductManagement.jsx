@@ -166,7 +166,6 @@ export default function ProductManagement() {
     void refreshArchivedProducts();
   }, [refreshArchivedProducts, showError]);
 
-  const totalStock = useMemo(() => products.reduce((sum, product) => sum + Number(product.stock ?? product.quantity ?? 0), 0), [products]);
   const partNumberSuggestions = useMemo(() => getPartNumberSearchSuggestions(products, searchQuery, 5), [products, searchQuery]);
   const productCategoryOptions = useMemo(() => {
     const categoryRows = (managedCategories.length > 0 ? managedCategories : categories)
@@ -339,9 +338,8 @@ export default function ProductManagement() {
 
       {error && <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/5 px-4 py-3 text-sm text-accent-danger">{error}</div>}
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <KPICard title="Visible Products" value={formatNumber(pagination.totalCount ?? products.length)} icon={<Package className="h-6 w-6" />} />
-        <KPICard title="Page Stock" value={formatNumber(totalStock)} icon={<Package className="h-6 w-6" />} accentColor="border-emerald-500" iconBg="bg-emerald-50 text-emerald-600" />
         <KPICard title="Archived" value={formatNumber(archivedProducts.length)} icon={<ArchiveRestore className="h-6 w-6" />} accentColor="border-amber-500" iconBg="bg-amber-50 text-amber-600" />
       </div>
 

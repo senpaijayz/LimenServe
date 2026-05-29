@@ -67,6 +67,7 @@ export default function SupplierManagement() {
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
   const [deletingSupplierId, setDeletingSupplierId] = useState(null);
+  const [supplierToRemove, setSupplierToRemove] = useState(null);
 
   const loadSuppliers = async () => {
     setLoading(true);
@@ -139,13 +140,22 @@ export default function SupplierManagement() {
     }
   };
 
-  const handleDelete = async (supplier) => {
-    if (!window.confirm(`Delete supplier "${supplier.name}"?`)) return;
+  const closeRemoveDialog = () => {
+    if (!deletingSupplierId) {
+      setSupplierToRemove(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!supplierToRemove?.id || deletingSupplierId) return;
+
+    const supplier = supplierToRemove;
     setDeletingSupplierId(supplier.id);
     try {
       await deleteSupplier(supplier.id);
       setSuppliers((current) => current.filter((item) => item.id !== supplier.id));
-      success('Supplier deleted.');
+      success('Supplier removed successfully.');
+      setSupplierToRemove(null);
     } catch (deleteError) {
       showError(deleteError.message || 'Unable to delete supplier.');
     } finally {
@@ -224,7 +234,7 @@ export default function SupplierManagement() {
                         leftIcon={<Trash2 className="h-4 w-4" />}
                         isLoading={deletingSupplierId === supplier.id}
                         disabled={Boolean(deletingSupplierId)}
-                        onClick={() => handleDelete(supplier)}
+                        onClick={() => setSupplierToRemove(supplier)}
                       >
                         Delete
                       </Button>
@@ -251,6 +261,33 @@ export default function SupplierManagement() {
             <Button variant="primary" type="submit" isLoading={saving} leftIcon={<Save className="h-4 w-4" />}>Save Supplier</Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(supplierToRemove)}
+        onClose={closeRemoveDialog}
+        title="Remove Supplier"
+        size="sm"
+        closeOnBackdrop={!deletingSupplierId}
+        closeOnEscape={!deletingSupplierId}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-primary-600">
+            Confirm removing <span className="font-semibold text-primary-950">{supplierToRemove?.name}</span> from the supplier directory.
+          </p>
+          <div className="flex justify-end gap-3 border-t border-primary-200 pt-4">
+            <Button variant="secondary" type="button" disabled={Boolean(deletingSupplierId)} onClick={closeRemoveDialog}>Cancel</Button>
+            <Button
+              variant="primary"
+              type="button"
+              leftIcon={<Trash2 className="h-4 w-4" />}
+              isLoading={Boolean(deletingSupplierId)}
+              onClick={handleDelete}
+            >
+              Confirm Remove
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

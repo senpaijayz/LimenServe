@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react';
-import { CalendarDays, Camera, Phone, UserRound } from 'lucide-react';
+import { CalendarDays, Camera, Phone, Trash2, UserRound } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
@@ -84,6 +84,7 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
     const [formError, setFormError] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [deletingIds, setDeletingIds] = useState(() => new Set());
+    const [mechanicToRemove, setMechanicToRemove] = useState(null);
 
     const notifySuccess = onNotify || success;
 
@@ -200,12 +201,26 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
         }
     };
 
-    const handleDelete = async (mechanicId) => {
+    const closeRemoveDialog = () => {
+        if (!mechanicToRemove || deletingIds.has(mechanicToRemove.id)) {
+            return;
+        }
+
+        setMechanicToRemove(null);
+    };
+
+    const handleDelete = async () => {
+        const mechanicId = mechanicToRemove?.id;
+
+        if (!mechanicId) {
+            return;
+        }
+
         if (deletingIds.has(mechanicId)) {
             return;
         }
 
-        const removedMechanic = mechanics.find((mechanic) => mechanic.id === mechanicId);
+        const removedMechanic = mechanicToRemove;
         setDeletingIds((current) => new Set(current).add(mechanicId));
         onRemoved?.(mechanicId);
 
@@ -213,6 +228,7 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
             await deleteMechanic(mechanicId);
             void onReload?.();
             notifySuccess('Mechanic removed successfully');
+            setMechanicToRemove(null);
         } catch (error) {
             if (removedMechanic) {
                 onSaved?.(removedMechanic);
@@ -257,7 +273,7 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
                             </div>
                             <div className="flex items-center gap-2">
                                 <Button variant="outline" isDisabled={isDeleting} onClick={() => openEdit(mechanic)}>Edit</Button>
-                                <Button variant="secondary" isLoading={isDeleting} onClick={() => handleDelete(mechanic.id)}>Remove</Button>
+                                <Button variant="secondary" isLoading={isDeleting} onClick={() => setMechanicToRemove(mechanic)}>Remove</Button>
                             </div>
                         </div>
                         );
@@ -337,6 +353,40 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
                         <Button variant="primary" fullWidth type="submit" isLoading={isSaving} isDisabled={isSaving}>{editingMechanic ? 'Update Mechanic' : 'Create Mechanic'}</Button>
                     </div>
                 </form>
+            </Modal>
+
+            <Modal
+                isOpen={Boolean(mechanicToRemove)}
+                onClose={closeRemoveDialog}
+                title="Remove Mechanic"
+                size="sm"
+                closeOnBackdrop={!mechanicToRemove || !deletingIds.has(mechanicToRemove.id)}
+                closeOnEscape={!mechanicToRemove || !deletingIds.has(mechanicToRemove.id)}
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-primary-600">
+                        Confirm removing <span className="font-semibold text-primary-950">{mechanicToRemove?.full_name}</span> from public mechanic visibility.
+                    </p>
+                    <div className="flex justify-end gap-3 border-t border-primary-200 pt-4">
+                        <Button
+                            variant="secondary"
+                            type="button"
+                            isDisabled={mechanicToRemove ? deletingIds.has(mechanicToRemove.id) : false}
+                            onClick={closeRemoveDialog}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="primary"
+                            type="button"
+                            leftIcon={<Trash2 className="h-4 w-4" />}
+                            isLoading={mechanicToRemove ? deletingIds.has(mechanicToRemove.id) : false}
+                            onClick={handleDelete}
+                        >
+                            Confirm Remove
+                        </Button>
+                    </div>
+                </div>
             </Modal>
         </>
     );

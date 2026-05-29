@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Archive, Boxes, ClipboardList, Download, PackageCheck, Printer, RefreshCw } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
-import { getArchivedCatalogProducts, getCatalogSummary, getInventoryMovements } from '../../../services/catalogApi';
+import { getArchivedCatalogProducts, getCatalogSummary, getInventoryMovements, getManagedCategories } from '../../../services/catalogApi';
 import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
 import { useAuth } from '../../../context/useAuth';
 
@@ -25,17 +25,27 @@ const MOVEMENT_COLORS = {
     service_usage: 'bg-purple-50 text-purple-700 border-purple-200',
 };
 
-const DATE_RANGE_OPTIONS = [
-    { value: '7d', label: 'Last 7 Days' }, { value: '30d', label: 'Last 30 Days' },
-    { value: '90d', label: 'Last 90 Days' }, { value: 'all', label: 'All Time' },
-];
+function toDateInputValue(date) {
+    return date.toISOString().slice(0, 10);
+}
 
-function isWithinRange(dateStr, range) {
-    if (range === 'all') return true;
+function addDays(date, days) {
+    const nextDate = new Date(date);
+    nextDate.setDate(nextDate.getDate() + days);
+    return nextDate;
+}
+
+function isWithinDateFilters(dateStr, startDate, endDate) {
     const date = new Date(dateStr);
     if (isNaN(date)) return true;
-    const ms = { '7d': 604800000, '30d': 2592000000, '90d': 7776000000 };
-    return Date.now() - date.getTime() <= ms[range];
+    const start = startDate ? new Date(`${startDate}T00:00:00`) : null;
+    const end = endDate ? new Date(`${endDate}T23:59:59`) : null;
+    return (!start || date >= start) && (!end || date <= end);
+}
+
+function matchesCategoryFilter(movement, category) {
+    if (!category) return true;
+    return String(movement?.category || '').toLowerCase() === String(category).toLowerCase();
 }
 
 function getReferenceLabel(referenceType) {
@@ -388,14 +398,25 @@ export default function InventoryReport() {
     const [summary, setSummary] = useState(null);
     const [movements, setMovements] = useState([]);
     const [archivedProducts, setArchivedProducts] = useState([]);
+    const [categoryOptions, setCategoryOptions] = useState([{ value: '', label: 'All categories' }]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [dateRange, setDateRange] = useState('30d');
+    const [filters, setFilters] = useState(() => {
+        const today = new Date();
+        return {
+            startDate: toDateInputValue(addDays(today, -30)),
+            endDate: toDateInputValue(today),
+            category: '',
+        };
+    });
     const [isExporting, setIsExporting] = useState(false);
 
-    const filteredMovements = useMemo(() => movements.filter((m) => isWithinRange(m.createdAt, dateRange)), [movements, dateRange]);
+    const filteredMovements = useMemo(
+        () => movements.filter((m) => isWithinDateFilters(m.createdAt, filters.startDate, filters.endDate) && matchesCategoryFilter(m, filters.category)),
+        [filters.category, filters.endDate, filters.startDate, movements],
+    );
     const partsInvoiceMovements = useMemo(() => filteredMovements.filter((m) => m.referenceType === 'supplier_invoice'), [filteredMovements]);
-    const dateRangeLabel = DATE_RANGE_OPTIONS.find((o) => o.value === dateRange)?.label || dateRange;
+    const dateRangeLabel = `${filters.startDate || 'All time'} to ${filters.endDate || 'Today'}${filters.category ? ` | ${filters.category}` : ''}`;
 
     const movementStats = useMemo(() => {
         const movedQuantity = filteredMovements.reduce((sum, m) => sum + Number(m.quantity ?? 0), 0);
@@ -406,8 +427,17 @@ export default function InventoryReport() {
     const loadReportData = async () => {
         setLoading(true); setError('');
         try {
-            const [s, m, a] = await Promise.all([getCatalogSummary(), getInventoryMovements(100), getArchivedCatalogProducts(20)]);
+            const [s, m, a, categories] = await Promise.all([getCatalogSummary(), getInventoryMovements(500), getArchivedCatalogProducts(20), getManagedCategories()]);
             setSummary(s); setMovements(m); setArchivedProducts(a);
+            setCategoryOptions([
+                { value: '', label: 'All categories' },
+                ...(categories ?? [])
+                    .filter((category) => category.name || category.label)
+                    .map((category) => ({
+                        value: category.name || category.label,
+                        label: category.name || category.label,
+                    })),
+            ]);
         } catch (e) { setError(e.message || 'Unable to load inventory report data.'); }
         finally { setLoading(false); }
     };
@@ -462,10 +492,6 @@ export default function InventoryReport() {
                     </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                    <select value={dateRange} onChange={(e) => setDateRange(e.target.value)}
-                        className="rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-700 focus:outline-none focus:border-accent-blue shadow-sm">
-                        {DATE_RANGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
                     <Button variant="secondary" leftIcon={<RefreshCw className="h-4 w-4" />} isLoading={loading} onClick={loadReportData}>Refresh</Button>
                     <Button variant="secondary" leftIcon={<Download className="h-4 w-4" />} onClick={() => exportMovementsCsv(filteredMovements)} disabled={filteredMovements.length === 0}>Export CSV</Button>
                     <Button variant="primary" leftIcon={<Printer className="h-4 w-4" />} isLoading={isExporting} onClick={handlePrint}>Print Report</Button>
@@ -488,11 +514,37 @@ export default function InventoryReport() {
                 </div>
             </div>
 
+            <Card title="Report Filters" subtitle="Narrow inventory movement and stock-in summaries by period and category.">
+                <div className="grid gap-4 md:grid-cols-3">
+                    <input
+                        type="date"
+                        value={filters.startDate}
+                        onChange={(event) => setFilters((current) => ({ ...current, startDate: event.target.value }))}
+                        className="input py-2.5 text-sm"
+                    />
+                    <input
+                        type="date"
+                        value={filters.endDate}
+                        onChange={(event) => setFilters((current) => ({ ...current, endDate: event.target.value }))}
+                        className="input py-2.5 text-sm"
+                    />
+                    <select
+                        value={filters.category}
+                        onChange={(event) => setFilters((current) => ({ ...current, category: event.target.value }))}
+                        className="input py-2.5 text-sm"
+                    >
+                        {categoryOptions.map((category) => (
+                            <option key={category.value || 'all'} value={category.value}>{category.label}</option>
+                        ))}
+                    </select>
+                </div>
+            </Card>
+
             {/* KPI Cards */}
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <KPICard title="Catalog Rows" value={formatNumber(summary?.totalProducts ?? 0)} icon={<Boxes className="h-6 w-6" />} />
                 <KPICard title="Unique Part Numbers" value={formatNumber(summary?.uniqueProducts ?? 0)} icon={<PackageCheck className="h-6 w-6" />} />
-                <KPICard title="Movement Rows" value={formatNumber(movements.length)} icon={<ClipboardList className="h-6 w-6" />} />
+                <KPICard title="Filtered Movements" value={formatNumber(filteredMovements.length)} icon={<ClipboardList className="h-6 w-6" />} />
                 <KPICard title="Archived Products" value={formatNumber(archivedProducts.length)} icon={<Archive className="h-6 w-6" />} />
             </div>
 
