@@ -12,6 +12,7 @@ const useProductCatalog = ({
   sortBy = 'name-asc',
   vehicleModel = '',
   vehicleYear = '',
+  source = '',
   includeCategories = true,
   refreshKey = 0,
 } = {}) => {
@@ -24,6 +25,7 @@ const useProductCatalog = ({
     sortBy,
     vehicleModel,
     vehicleYear,
+    source,
     includeCategories,
     refreshKey,
   });

@@ -16,6 +16,7 @@ export function normalizeProductCatalogParams({
   sortBy = 'name-asc',
   vehicleModel = '',
   vehicleYear = '',
+  source = '',
   includeCategories = true,
   refreshKey = 0,
 } = {}) {
@@ -27,6 +28,7 @@ export function normalizeProductCatalogParams({
     sortBy,
     vehicleModel: String(vehicleModel || '').trim(),
     vehicleYear: String(vehicleYear || '').trim(),
+    source: String(source || '').trim(),
     includeCategories,
     refreshKey,
   };
@@ -64,6 +66,7 @@ export function useProductCatalogQuery(params = {}) {
       sortBy: normalizedParams.sortBy,
       vehicleModel: normalizedParams.vehicleModel,
       vehicleYear: normalizedParams.vehicleYear,
+      source: normalizedParams.source,
       includeCategories: normalizedParams.includeCategories,
       cacheBust: normalizedParams.refreshKey,
     }),

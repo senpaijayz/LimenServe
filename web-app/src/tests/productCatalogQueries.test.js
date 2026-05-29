@@ -15,6 +15,7 @@ describe('product catalog query helpers', () => {
       selectedCategory: 'body',
       vehicleModel: ' Montero ',
       vehicleYear: 2014,
+      source: ' staging ',
       refreshKey: 3,
     });
 
@@ -26,6 +27,7 @@ describe('product catalog query helpers', () => {
       sortBy: 'name-asc',
       vehicleModel: 'Montero',
       vehicleYear: '2014',
+      source: 'staging',
       includeCategories: true,
       refreshKey: 3,
     });

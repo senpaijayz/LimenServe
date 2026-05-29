@@ -312,6 +312,7 @@ const PublicEstimate = () => {
         sortBy,
         vehicleModel: vehicle.model,
         vehicleYear: vehicle.year,
+        source: 'staging',
         includeCategories: false,
     });
     const { services: availableServices, loading: servicesLoading, error: servicesError } = useServiceCatalog();

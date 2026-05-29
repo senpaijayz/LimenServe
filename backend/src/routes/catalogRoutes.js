@@ -36,6 +36,7 @@ const PRODUCT_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const CATALOG_SUMMARY_CACHE_TTL_MS = 30 * 1000;
 const FULL_CATALOG_PAGE_SIZE = 250;
 const FULL_CATALOG_PAGE_BATCH_SIZE = 3;
+const VEHICLE_PRICELIST_CANDIDATE_LIMIT = 8000;
 const PRICE_LIST_DB_BATCH_SIZE = 1000;
 const PRICE_LIST_LOOKUP_BATCH_SIZE = 250;
 const PRICE_LIST_CHANGE_PREVIEW_LIMIT = 500;
@@ -48,6 +49,7 @@ const SMART_PART_DISCOUNT_RATE = 0.05;
 const SMART_SERVICE_DISCOUNT_RATE = 0.03;
 const SMART_RECOMMENDATION_LABEL = 'Smart Recommendation';
 const MODEL_YEAR_LOOKAHEAD = 1;
+const GENERAL_FITMENT_TERMS = ['various', 'universal', 'general', 'accessories'];
 
 function isPrivateSchemaAccessError(error) {
   const message = [
@@ -1173,6 +1175,76 @@ function mapPricelistStagingRow(row, productBySku = new Map(), balanceByProductI
   });
 }
 
+async function enrichPricelistCatalogProducts(products = []) {
+  const skus = [...new Set(products.map((product) => product.sku).filter(Boolean))];
+  const { data: productRows, error: productsError } = skus.length
+    ? await selectByInChunks({
+      client: supabaseAdmin,
+      schema: 'catalog',
+      table: 'products',
+      select: 'id, sku, brand, uom, status, metadata, created_at',
+      column: 'sku',
+      values: skus,
+      chunkSize: PRICE_LIST_LOOKUP_BATCH_SIZE,
+    })
+    : { data: [], error: null };
+
+  if (productsError) {
+    if (isPrivateSchemaAccessError(productsError)) {
+      return null;
+    }
+    throw productsError;
+  }
+
+  const productBySku = new Map((productRows ?? []).map((product) => [product.sku, product]));
+  const productIds = [...new Set((productRows ?? []).map((product) => product.id).filter(Boolean))];
+  const { data: balanceRows, error: balancesError } = productIds.length
+    ? await selectByInChunks({
+      client: supabaseAdmin,
+      schema: 'catalog',
+      table: 'inventory_balances',
+      select: 'product_id, on_hand, location',
+      column: 'product_id',
+      values: productIds,
+      chunkSize: PRICE_LIST_LOOKUP_BATCH_SIZE,
+    })
+    : { data: [], error: null };
+
+  if (balancesError) {
+    if (isPrivateSchemaAccessError(balancesError)) {
+      return null;
+    }
+    throw balancesError;
+  }
+
+  const balanceByProductId = new Map((balanceRows ?? []).map((balance) => [balance.product_id, balance]));
+
+  return products.map((product) => {
+    const catalogProduct = productBySku.get(product.sku) ?? null;
+    const balance = catalogProduct?.id ? balanceByProductId.get(catalogProduct.id) : null;
+
+    return {
+      ...product,
+      id: catalogProduct?.id || product.id,
+      brand: catalogProduct?.brand || product.brand,
+      uom: product.uom || catalogProduct?.uom || 'PC',
+      status: product.status || catalogProduct?.status || 'out_of_stock',
+      stock: Number(balance?.on_hand ?? product.stock ?? 0),
+      createdAt: catalogProduct?.created_at ?? product.createdAt ?? null,
+      dateAdded: product.dateAdded ?? catalogProduct?.created_at ?? null,
+      location: balance?.location ?? product.location ?? {},
+      metadata: {
+        ...(catalogProduct?.metadata ?? {}),
+        ...(product.metadata ?? {}),
+      },
+    };
+  });
+}
+
+async function mapPricelistStagingRowsWithInventory(stagingRows = []) {
+  return enrichPricelistCatalogProducts(stagingRows.map((row) => mapPricelistStagingRow(row)));
+}
+
 function mapServiceRow(service) {
   return {
     id: service.id,
@@ -1266,8 +1338,29 @@ function matchesVehicleModel(productModel, context) {
     || Boolean(context.family && normalizedModel.includes(context.family));
 }
 
+function isGeneralFitmentProduct(product) {
+  const text = normalizeText([
+    product.model,
+    product.category,
+    product.sourceCategory,
+    product.source_category,
+    product.metadata?.sourceCategory,
+  ].filter(Boolean).join(' '));
+
+  return !normalizeText(product.model) || GENERAL_FITMENT_TERMS.some((term) => text.includes(term));
+}
+
+function searchLooksLikePartNumber(searchQuery) {
+  const normalizedSearch = String(searchQuery || '').trim();
+  return /^[a-z0-9-]{4,}$/i.test(normalizedSearch) && /\d/.test(normalizedSearch);
+}
+
 function matchesVehicleFilters(product, context) {
   if (!context.model) {
+    return true;
+  }
+
+  if (isGeneralFitmentProduct(product)) {
     return true;
   }
 
@@ -1285,9 +1378,13 @@ function matchesVehicleFilters(product, context) {
 
 function matchesCatalogFilters(product, { searchQuery = '', selectedCategory = 'all', vehicleContext = null } = {}) {
   const normalizedSearch = normalizeText(searchQuery);
+  let matchesSearch = true;
+
   if (normalizedSearch) {
     const productSearchText = buildProductSearchText(product);
-    if (!productSearchText.includes(normalizedSearch)) {
+    matchesSearch = productSearchText.includes(normalizedSearch);
+
+    if (!matchesSearch) {
       return false;
     }
   }
@@ -1296,7 +1393,9 @@ function matchesCatalogFilters(product, { searchQuery = '', selectedCategory = '
     return false;
   }
 
-  return !vehicleContext || matchesVehicleFilters(product, vehicleContext);
+  return !vehicleContext
+    || matchesVehicleFilters(product, vehicleContext)
+    || (matchesSearch && searchLooksLikePartNumber(searchQuery));
 }
 
 function sortCatalogProducts(products = [], sortBy = 'name-asc') {
@@ -1614,8 +1713,14 @@ function buildVehiclePackageCopy(serviceGroup, fallbackName) {
 }
 
 function getVehicleProductMatchLevel(product, context) {
-  const normalizedModel = normalizeVehicleSelectorValue(product.model);
-  if (context.model && normalizedModel.includes(context.model)) {
+  const normalizedModel = normalizeVehicleSelectorValue(cleanVehicleModelLabel(product.model));
+  const requestedAliases = context.modelAliases?.length ? context.modelAliases : getVehicleModelAliases(context.rawModel || context.model);
+
+  if (isGeneralFitmentProduct(product)) {
+    return 'general_fitment';
+  }
+
+  if (context.model && requestedAliases.some((alias) => normalizedModel.includes(alias) || alias.includes(normalizedModel))) {
     return 'exact_model';
   }
 
@@ -1627,7 +1732,7 @@ function getVehicleProductMatchLevel(product, context) {
 }
 
 function scoreVehiclePackageCandidate(candidate) {
-  const matchScore = candidate.matchLevel === 'exact_model' ? 0 : 1;
+  const matchScore = candidate.matchLevel === 'exact_model' ? 0 : candidate.matchLevel === 'family_match' ? 1 : 2;
   const stockScore = Number(candidate.product.stock ?? 0) * -1;
   const priceScore = Number(candidate.product.price ?? 0);
   return matchScore * 10000 + stockScore * 10 + priceScore;
@@ -1699,7 +1804,9 @@ function buildVehiclePackageProductItem(candidate, vehicleContext, serviceGroup,
     recommendedProduct: candidate.product,
     reasonLabel: candidate.matchLevel === 'exact_model'
       ? 'Matched core part for the exact Mitsubishi model you selected'
-      : 'Matched core part for the same Mitsubishi vehicle family',
+      : candidate.matchLevel === 'family_match'
+        ? 'Matched core part for the same Mitsubishi vehicle family'
+        : 'General Mitsubishi maintenance part that can support this estimate',
     vehicleModelName: vehicleContext.rawModel,
     vehicleFamily: vehicleContext.family,
     serviceGroup,
@@ -2516,6 +2623,83 @@ function applyPricelistCatalogSort(query, sortBy = 'name-asc') {
   }
 }
 
+function buildVehiclePricelistModelPatterns(vehicleContext) {
+  const modelTerms = new Set([
+    ...(vehicleContext?.modelAliases ?? []),
+    vehicleContext?.family,
+    ...GENERAL_FITMENT_TERMS,
+  ].filter(Boolean));
+
+  return Array.from(modelTerms)
+    .map(normalizePostgrestSearchTerm)
+    .filter((term) => term.length >= 3)
+    .map((term) => `model_name.ilike.*${term}*`);
+}
+
+function applyVehiclePricelistCandidateFilters(query, { vehicleContext } = {}) {
+  const modelPatterns = buildVehiclePricelistModelPatterns(vehicleContext);
+  if (!modelPatterns.length) {
+    return query;
+  }
+
+  return query.or(modelPatterns.join(','));
+}
+
+async function fetchVehiclePricelistCatalog({ searchQuery = '', selectedCategory = 'all', sortBy = 'name-asc', vehicleContext, enrichInventory = false }) {
+  let query = supabaseAdmin
+    .schema('catalog')
+    .from('pricelist_import_staging')
+    .select(`
+      id,
+      source_sheet,
+      source_line_number,
+      sku,
+      name,
+      model_name,
+      uom,
+      pcc,
+      price,
+      status,
+      category,
+      source_category,
+      classification_version,
+      classification_confidence,
+      classification_strategy,
+      classification_rule_key,
+      classification_tokens
+    `);
+
+  query = searchLooksLikePartNumber(searchQuery)
+    ? applyPricelistCatalogFilters(query, { searchQuery, selectedCategory: 'all' })
+    : applyVehiclePricelistCandidateFilters(query, { vehicleContext });
+  query = applyPricelistCatalogSort(query, sortBy).limit(VEHICLE_PRICELIST_CANDIDATE_LIMIT);
+
+  const { data, error } = await query;
+  if (error) {
+    const message = String(error.message || '');
+    if (message.includes('pricelist_import_staging') || message.includes('does not exist') || isPrivateSchemaAccessError(error)) {
+      return null;
+    }
+    throw error;
+  }
+
+  const products = enrichInventory
+    ? await mapPricelistStagingRowsWithInventory(data ?? [])
+    : (data ?? []).map((row) => mapPricelistStagingRow(row));
+  if (!products) {
+    return null;
+  }
+
+  return {
+    sourceAvailable: true,
+    ...splitVehicleScopedCatalogProducts(products, {
+      searchQuery,
+      selectedCategory,
+      vehicleContext,
+    }),
+  };
+}
+
 async function fetchPricelistCatalogPage({ page, pageSize, searchQuery = '', selectedCategory = 'all', sortBy = 'name-asc' }) {
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
@@ -2564,43 +2748,13 @@ async function fetchPricelistCatalogPage({ page, pageSize, searchQuery = '', sel
     };
   }
 
-  const skus = [...new Set(stagingRows.map((row) => row.sku).filter(Boolean))];
-  const { data: productRows, error: productsError } = skus.length
-    ? await supabaseAdmin
-      .schema('catalog')
-      .from('products')
-      .select('id, sku, brand, uom, status, metadata, created_at')
-      .in('sku', skus)
-    : { data: [], error: null };
-
-  if (productsError) {
-    if (isPrivateSchemaAccessError(productsError)) {
-      return null;
-    }
-    throw productsError;
+  const products = await mapPricelistStagingRowsWithInventory(stagingRows);
+  if (!products) {
+    return null;
   }
-
-  const productBySku = new Map((productRows ?? []).map((product) => [product.sku, product]));
-  const productIds = [...new Set((productRows ?? []).map((product) => product.id).filter(Boolean))];
-  const { data: balanceRows, error: balancesError } = productIds.length
-    ? await supabaseAdmin
-      .schema('catalog')
-      .from('inventory_balances')
-      .select('product_id, on_hand, location')
-      .in('product_id', productIds)
-    : { data: [], error: null };
-
-  if (balancesError) {
-    if (isPrivateSchemaAccessError(balancesError)) {
-      return null;
-    }
-    throw balancesError;
-  }
-
-  const balanceByProductId = new Map((balanceRows ?? []).map((balance) => [balance.product_id, balance]));
 
   return {
-    products: stagingRows.map((row) => mapPricelistStagingRow(row, productBySku, balanceByProductId)),
+    products,
     totalCount: Number(count ?? stagingRows.length),
     sourceAvailable: true,
   };
@@ -2818,16 +2972,23 @@ router.get('/vehicle-packages', async (req, res, next) => {
       return;
     }
 
-    const [catalog, serviceCatalog] = await Promise.all([
-      getCachedProductCatalog(),
-      getCachedServiceCatalog(),
-    ]);
-
     const vehicleContext = buildVehicleFilterContext({
       vehicleModel,
       vehicleYear,
       vehicleFamily: extractVehicleFamily(vehicleModel),
     });
+    const [vehiclePricelist, serviceCatalog] = await Promise.all([
+      fetchVehiclePricelistCatalog({
+        searchQuery: '',
+        selectedCategory: 'all',
+        sortBy: 'name-asc',
+        vehicleContext,
+      }),
+      getCachedServiceCatalog(),
+    ]);
+    const catalog = vehiclePricelist?.sourceAvailable && vehiclePricelist.categoryScopedProducts.length > 0
+      ? vehiclePricelist.categoryScopedProducts
+      : await getCachedProductCatalog();
     const packages = buildVehiclePackages({ catalog, serviceCatalog, vehicleContext });
 
     res.json({
@@ -3125,17 +3286,45 @@ router.get('/products', async (req, res, next) => {
         ];
       }
     } else {
-      const catalog = await getCachedProductCatalog();
-      const { scopedProducts, categoryScopedProducts } = splitVehicleScopedCatalogProducts(catalog, {
-        searchQuery,
-        selectedCategory,
-        vehicleContext,
-      });
+      let scopedProducts = [];
+      let categoryScopedProducts = [];
+      let usingVehiclePricelist = false;
+
+      if (useStagingCatalog) {
+        const vehiclePricelist = await fetchVehiclePricelistCatalog({
+          searchQuery,
+          selectedCategory,
+          sortBy,
+          vehicleContext,
+        });
+
+        if (vehiclePricelist?.sourceAvailable) {
+          scopedProducts = vehiclePricelist.scopedProducts;
+          categoryScopedProducts = vehiclePricelist.categoryScopedProducts;
+          usingVehiclePricelist = true;
+        }
+      }
+
+      if (!useStagingCatalog || (scopedProducts.length === 0 && !searchQuery)) {
+        const catalog = await getCachedProductCatalog();
+        const scopedCatalog = splitVehicleScopedCatalogProducts(catalog, {
+          searchQuery,
+          selectedCategory,
+          vehicleContext,
+        });
+        scopedProducts = scopedCatalog.scopedProducts;
+        categoryScopedProducts = scopedCatalog.categoryScopedProducts;
+        usingVehiclePricelist = false;
+      }
+
       const sortedProducts = sortCatalogProducts(scopedProducts, sortBy);
+      const pageProducts = sortedProducts.slice((page - 1) * pageSize, page * pageSize);
 
       totalCount = sortedProducts.length;
       totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-      products = await enrichCatalogProducts(sortedProducts.slice((page - 1) * pageSize, page * pageSize));
+      products = usingVehiclePricelist
+        ? await enrichCatalogProducts(await enrichPricelistCatalogProducts(pageProducts))
+        : await enrichCatalogProducts(pageProducts);
 
       if (includeCategories) {
         const categoryRows = buildCategoryRows(categoryScopedProducts);
