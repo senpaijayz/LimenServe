@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     FileClock,
     FileText,
@@ -6,15 +7,16 @@ import {
     Printer,
     Save,
     Search,
+    ShoppingCart,
     Trash2,
     User,
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
 import Card from '../../../components/ui/Card';
-import Modal from '../../../components/ui/Modal';
 import { formatCurrency } from '../../../utils/formatters';
 import { useToast } from '../../../components/ui/Toast';
+import { useCart } from '../../../context/CartContext';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
 import ProductPackageSuggestions from '../../public/components/ProductPackageSuggestions';
@@ -33,6 +35,13 @@ const defaultMeta = {
     source: 'internal',
 };
 
+const escapeHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 function mapCatalogProduct(product) {
     return {
         id: product.id,
@@ -43,6 +52,130 @@ function mapCatalogProduct(product) {
         model: product.model,
         quantity: 1,
     };
+}
+
+function buildPrintableQuote({
+    quoteNumber,
+    customerName,
+    customerPhone,
+    notes,
+    selectedParts,
+    selectedServices,
+    totals,
+}) {
+    const lineItems = [
+        ...selectedParts.map((part) => ({
+            kind: 'Part',
+            name: part.name,
+            code: getProductPartNumber(part) || 'No part number',
+            quantity: Number(part.quantity ?? 1),
+            unitPrice: Number(part.price ?? 0),
+            lineTotal: Number(part.price ?? 0) * Number(part.quantity ?? 1),
+            bundleLabel: part.bundleKey ? `${part.bundleTierLabel || 'Smart'} bundle` : '',
+        })),
+        ...selectedServices.map((service) => ({
+            kind: 'Service',
+            name: service.name,
+            code: service.bundleKey ? `${service.bundleTierLabel || 'Smart'} bundle labor` : 'Service / labor',
+            quantity: Number(service.quantity ?? 1),
+            unitPrice: Number(service.price ?? 0),
+            lineTotal: Number(service.price ?? 0) * Number(service.quantity ?? 1),
+            bundleLabel: service.bundleKey ? `${service.bundleTierLabel || 'Smart'} bundle` : '',
+        })),
+    ];
+
+    const rows = lineItems.map((item, index) => `
+        <tr>
+            <td>${index + 1}</td>
+            <td>
+                <strong>${escapeHtml(item.name)}</strong>
+                <span>${escapeHtml(item.kind)} - ${escapeHtml(item.code)}</span>
+                ${item.bundleLabel ? `<em>${escapeHtml(item.bundleLabel)}</em>` : ''}
+            </td>
+            <td>${item.quantity}</td>
+            <td>${escapeHtml(formatCurrency(item.unitPrice))}</td>
+            <td>${escapeHtml(formatCurrency(item.lineTotal))}</td>
+        </tr>
+    `).join('');
+    const bundleRows = totals.appliedBundles.length
+        ? totals.appliedBundles.map((bundle) => `<p>${escapeHtml(bundle.bundleName)} (${escapeHtml(bundle.bundleTierLabel)}) saved ${escapeHtml(formatCurrency(bundle.savings))}</p>`).join('')
+        : '<p>No bundle pricing applied.</p>';
+
+    return `<!doctype html>
+        <html>
+            <head>
+                <meta charset="utf-8" />
+                <title>Quotation ${escapeHtml(quoteNumber || 'Draft')}</title>
+                <style>
+                    @page { size: A4; margin: 14mm; }
+                    * { box-sizing: border-box; }
+                    body { margin: 0; color: #0f172a; font-family: Arial, Helvetica, sans-serif; background: #fff; font-size: 12px; }
+                    .sheet { width: 100%; }
+                    .header { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #0f172a; padding-bottom: 14px; }
+                    .brand h1 { margin: 0; font-size: 22px; letter-spacing: -0.02em; }
+                    .brand p, .doc-title p { margin: 4px 0 0; color: #475569; line-height: 1.45; }
+                    .doc-title { text-align: right; }
+                    .doc-title h2 { margin: 0; font-size: 20px; text-transform: uppercase; letter-spacing: 0.08em; }
+                    .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 18px; }
+                    .box { border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px; min-height: 64px; }
+                    .label { display: block; color: #64748b; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 5px; }
+                    .value { font-weight: 700; color: #0f172a; line-height: 1.35; }
+                    .muted { color: #64748b; font-weight: 400; }
+                    .section { margin-top: 18px; }
+                    .section h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: #0f172a; }
+                    table { width: 100%; border-collapse: collapse; overflow: hidden; border: 1px solid #cbd5e1; border-radius: 10px; }
+                    th { background: #f1f5f9; color: #475569; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; text-align: left; padding: 9px; border-bottom: 1px solid #cbd5e1; }
+                    td { padding: 9px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+                    td span, td em { display: block; margin-top: 3px; color: #64748b; font-size: 10px; font-style: normal; }
+                    tr:last-child td { border-bottom: 0; }
+                    .summary { display: flex; justify-content: flex-end; margin-top: 18px; }
+                    .summary-card { width: 300px; border: 1px solid #0f172a; border-radius: 12px; overflow: hidden; }
+                    .summary-row { display: flex; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #cbd5e1; }
+                    .summary-row.total { background: #0f172a; color: white; font-size: 16px; font-weight: 800; border-bottom: 0; }
+                    .notes { border: 1px solid #cbd5e1; border-radius: 10px; padding: 11px; min-height: 48px; line-height: 1.55; color: #334155; }
+                    .footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #cbd5e1; color: #64748b; font-size: 10px; text-align: center; }
+                    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+                </style>
+            </head>
+            <body>
+                <main class="sheet">
+                    <section class="header">
+                        <div class="brand">
+                            <h1>Limen Auto Supply and Services</h1>
+                            <p>Genuine Mitsubishi parts quotation and service estimate.</p>
+                            <p>Contact: (0915) 522 5629 | Landline: 0285513518</p>
+                        </div>
+                        <div class="doc-title">
+                            <h2>Quotation</h2>
+                            <p><strong>${escapeHtml(quoteNumber || 'Draft Quotation')}</strong></p>
+                            <p>Generated ${escapeHtml(new Date().toLocaleString())}</p>
+                        </div>
+                    </section>
+                    <section class="meta-grid">
+                        <div class="box"><span class="label">Customer</span><div class="value">${escapeHtml(customerName || 'Walk-in Customer')}</div><div class="muted">${escapeHtml(customerPhone || 'No phone recorded')}</div></div>
+                        <div class="box"><span class="label">Prepared By</span><div class="value">LimenServe</div><div class="muted">Admin quotation</div></div>
+                        <div class="box"><span class="label">Validity</span><div class="value">30 days</div><div class="muted">Subject to stock availability</div></div>
+                        <div class="box"><span class="label">Total</span><div class="value">${escapeHtml(formatCurrency(totals.total))}</div><div class="muted">VAT included</div></div>
+                    </section>
+                    <section class="section">
+                        <h3>Quoted Items</h3>
+                        <table><thead><tr><th style="width:42px;">#</th><th>Item</th><th style="width:70px;">Qty</th><th style="width:120px;">Unit</th><th style="width:120px;">Total</th></tr></thead><tbody>${rows}</tbody></table>
+                    </section>
+                    <section class="section"><h3>Bundle Pricing</h3><div class="notes">${bundleRows}</div></section>
+                    <section class="summary">
+                        <div class="summary-card">
+                            <div class="summary-row"><span>Parts subtotal</span><strong>${escapeHtml(formatCurrency(totals.partsTotal))}</strong></div>
+                            <div class="summary-row"><span>Services subtotal</span><strong>${escapeHtml(formatCurrency(totals.servicesTotal))}</strong></div>
+                            ${totals.bundleDiscountTotal > 0 ? `<div class="summary-row"><span>Bundle savings</span><strong>-${escapeHtml(formatCurrency(totals.bundleDiscountTotal))}</strong></div>` : ''}
+                            <div class="summary-row"><span>VAT (12%)</span><strong>${escapeHtml(formatCurrency(totals.vat))}</strong></div>
+                            <div class="summary-row total"><span>Total estimate</span><span>${escapeHtml(formatCurrency(totals.total))}</span></div>
+                        </div>
+                    </section>
+                    <section class="section"><h3>Notes</h3><div class="notes">${escapeHtml(notes || 'Quotation prepared in LimenServe.')}</div></section>
+                    <p class="footer">This quotation is generated from LimenServe quote records. Final sale is subject to stock, fitment, and cashier confirmation.</p>
+                </main>
+            </body>
+        </html>`;
 }
 
 function buildEstimatePayload({
@@ -136,14 +269,15 @@ function mapEstimateDetailToState(estimate) {
 }
 
 const QuoteBuilder = () => {
+    const navigate = useNavigate();
     const { success, error: showError, info } = useToast();
+    const { addItem: addPosItem, clearCart, setCustomerName: setPosCustomerName } = useCart();
     const { services: availableServices, loading: servicesLoading, error: servicesError } = useServiceCatalog();
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
     const [selectedParts, setSelectedParts] = useState([]);
     const [selectedServices, setSelectedServices] = useState([]);
     const [notes, setNotes] = useState('');
-    const [showPreview, setShowPreview] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [quoteSearch, setQuoteSearch] = useState('');
     const [savedQuotes, setSavedQuotes] = useState([]);
@@ -377,8 +511,78 @@ const QuoteBuilder = () => {
         }
     };
 
+    const hasQuoteItems = selectedParts.length > 0 || selectedServices.length > 0;
+
     const handlePrint = () => {
-        setShowPreview(true);
+        if (!hasQuoteItems) {
+            showError('Add at least one part or service before printing.');
+            return;
+        }
+
+        const printWindow = window.open('', '_blank', 'width=960,height=720');
+        if (!printWindow) {
+            showError('Please allow pop-ups to print or save the quotation PDF.');
+            return;
+        }
+
+        const html = buildPrintableQuote({
+            quoteNumber: currentEstimateNumber,
+            customerName,
+            customerPhone,
+            notes,
+            selectedParts,
+            selectedServices,
+            totals,
+        });
+
+        printWindow.document.open();
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.focus();
+        window.setTimeout(() => {
+            if (!printWindow.closed) {
+                printWindow.print();
+            }
+        }, 350);
+    };
+
+    const handleAddToPos = () => {
+        if (!hasQuoteItems) {
+            showError('Add at least one part or service before sending to POS.');
+            return;
+        }
+
+        clearCart();
+        setPosCustomerName(customerName || 'Walk-in Customer');
+
+        selectedParts.forEach((part) => {
+            addPosItem({
+                id: part.id,
+                productId: part.id,
+                lineType: 'product',
+                name: part.name,
+                sku: getProductPartNumber(part) || part.sku,
+                price: Number(part.price ?? 0),
+                quantity: Number(part.stock ?? part.maxQuantity ?? 999),
+                maxQuantity: Number(part.stock ?? part.maxQuantity ?? 999),
+            }, Number(part.quantity ?? 1));
+        });
+
+        selectedServices.forEach((service) => {
+            addPosItem({
+                id: `service-${service.id}`,
+                serviceId: service.id,
+                lineType: 'service',
+                name: service.name,
+                sku: 'SERVICE',
+                price: Number(service.price ?? 0),
+                quantity: 999,
+                maxQuantity: 999,
+            }, Number(service.quantity ?? 1));
+        });
+
+        success('Quotation summary added to POS cart.');
+        navigate('/pos');
     };
 
     return (
@@ -736,11 +940,20 @@ const QuoteBuilder = () => {
 
                         <div className="mt-6 space-y-3">
                             <Button
+                                variant="secondary"
+                                fullWidth
+                                leftIcon={<ShoppingCart className="w-4 h-4" />}
+                                onClick={handleAddToPos}
+                                disabled={!hasQuoteItems}
+                            >
+                                Add to POS
+                            </Button>
+                            <Button
                                 variant="primary"
                                 fullWidth
                                 leftIcon={<Printer className="w-4 h-4" />}
                                 onClick={handlePrint}
-                                disabled={selectedParts.length === 0 && selectedServices.length === 0}
+                                disabled={!hasQuoteItems}
                             >
                                 Print Quotation
                             </Button>
@@ -750,7 +963,7 @@ const QuoteBuilder = () => {
                                 leftIcon={<Save className="w-4 h-4" />}
                                 onClick={handleSave}
                                 isLoading={saving}
-                                disabled={selectedParts.length === 0 && selectedServices.length === 0}
+                                disabled={!hasQuoteItems}
                             >
                                 {currentEstimateId ? 'Save Revision' : 'Save Quotation'}
                             </Button>
@@ -759,63 +972,6 @@ const QuoteBuilder = () => {
                 </div>
             </div>
 
-            <Modal isOpen={showPreview} onClose={() => setShowPreview(false)} title="Print Preview" size="lg">
-                <div className="space-y-6 text-primary-900">
-                    <div className="border-b border-primary-200 pb-4">
-                        <p className="text-xs uppercase tracking-[0.22em] text-primary-400">Quotation</p>
-                        <h2 className="mt-2 text-2xl font-display font-bold text-primary-950">{currentEstimateNumber || 'Draft Quotation'}</h2>
-                        <div className="mt-3 grid gap-2 text-sm text-primary-600 sm:grid-cols-2">
-                            <p><span className="font-semibold text-primary-950">Customer:</span> {customerName || 'Walk-in Customer'}</p>
-                            <p><span className="font-semibold text-primary-950">Phone:</span> {customerPhone || 'N/A'}</p>
-                            <p><span className="font-semibold text-primary-950">Valid For:</span> 30 days</p>
-                            <p><span className="font-semibold text-primary-950">Prepared:</span> {new Date().toLocaleString()}</p>
-                        </div>
-                    </div>
-
-                    <div>
-                        <p className="text-sm font-semibold text-primary-950 mb-3">Quoted Items</p>
-                        <div className="space-y-2">
-                            {[...selectedParts, ...selectedServices].map((item) => (
-                                <div key={`${item.id}-${item.name}`} className="flex items-center justify-between rounded-lg border border-primary-200 px-4 py-3 text-sm">
-                                    <div>
-                                        <p className="font-medium text-primary-950">{item.name}</p>
-                                        <p className="text-primary-500">Qty {item.quantity || 1}{item.bundleKey ? ` / ${item.bundleTierLabel} bundle` : ''}</p>
-                                    </div>
-                                    <span className="font-semibold text-accent-blue">{formatCurrency((item.price || 0) * (item.quantity || 1))}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="rounded-xl border border-primary-200 bg-primary-50 p-4">
-                        <div className="flex items-center justify-between text-sm text-primary-600">
-                            <span>Subtotal</span>
-                            <span>{formatCurrency(totals.subtotal)}</span>
-                        </div>
-                        <div className="mt-2 flex items-center justify-between text-sm text-primary-600">
-                            <span>VAT</span>
-                            <span>{formatCurrency(totals.vat)}</span>
-                        </div>
-                        {totals.bundleDiscountTotal > 0 && (
-                            <div className="mt-2 flex items-center justify-between text-sm text-accent-success">
-                                <span>Bundle savings applied</span>
-                                <span>-{formatCurrency(totals.bundleDiscountTotal)}</span>
-                            </div>
-                        )}
-                        <div className="mt-3 flex items-center justify-between border-t border-primary-200 pt-3 text-lg font-bold text-primary-950">
-                            <span>Total</span>
-                            <span className="text-accent-blue">{formatCurrency(totals.total)}</span>
-                        </div>
-                    </div>
-
-                    {notes && (
-                        <div>
-                            <p className="text-sm font-semibold text-primary-950 mb-2">Notes</p>
-                            <p className="rounded-lg border border-primary-200 bg-white px-4 py-3 text-sm text-primary-600">{notes}</p>
-                        </div>
-                    )}
-                </div>
-            </Modal>
         </div>
     );
 };
