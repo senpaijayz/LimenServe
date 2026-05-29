@@ -82,32 +82,84 @@ function SelectField({ label, value, options, onChange }: {
   );
 }
 
-function ProductSearchSelect({ label, value, products, onChange }: {
+function ProductSearchSelect({ label, value, products, selectedLabel, onChange }: {
   label: string;
   value: string;
   products: CatalogProductOption[];
-  onChange: (value: string) => void;
+  selectedLabel?: string;
+  onChange: (value: string, product?: CatalogProductOption) => void;
 }) {
-  const selectedProduct = products.find((product) => product.id === value);
+  const [remoteProducts, setRemoteProducts] = useState<CatalogProductOption[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLowerCase();
+  const mergedProducts = useMemo(() => {
+    const map = new Map<string, CatalogProductOption>();
+    [...products, ...remoteProducts].forEach((product) => {
+      if (product.id) {
+        map.set(product.id, product);
+      }
+    });
+    return [...map.values()];
+  }, [products, remoteProducts]);
+  const selectedProduct = mergedProducts.find((product) => product.id === value);
+  const resolvedSelectedLabel = selectedProduct ? productLabel(selectedProduct) : '';
+
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setRemoteProducts([]);
+      setIsSearching(false);
+      return;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const result = await getProductCatalog({
+          page: 1,
+          pageSize: 12,
+          q: query.trim(),
+          includeCategories: false,
+          sortBy: 'name-asc',
+        });
+        if (active) {
+          setRemoteProducts(result?.products ?? []);
+        }
+      } catch {
+        if (active) {
+          setRemoteProducts([]);
+        }
+      } finally {
+        if (active) {
+          setIsSearching(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [query]);
+
   const suggestions = useMemo(() => {
     if (!normalizedQuery && selectedProduct) {
       return [selectedProduct];
     }
 
     if (!normalizedQuery) {
-      return products.slice(0, 5);
+      return mergedProducts.slice(0, 5);
     }
 
-    return products
+    return mergedProducts
       .filter((product) => [
         product.sku,
         product.name,
         product.category,
       ].filter(Boolean).join(' ').toLowerCase().includes(normalizedQuery))
       .slice(0, 5);
-  }, [normalizedQuery, products, selectedProduct]);
+  }, [mergedProducts, normalizedQuery, selectedProduct]);
 
   return (
     <div className="block">
@@ -116,17 +168,22 @@ function ProductSearchSelect({ label, value, products, onChange }: {
         className={`${fieldClassName} mt-2`}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder={selectedProduct ? productLabel(selectedProduct) : 'Search part number or product name'}
+        placeholder={resolvedSelectedLabel || selectedLabel || 'Search part number or product name'}
       />
       <div className="mt-2 overflow-hidden rounded-xl border border-primary-200 bg-white">
-        {suggestions.length === 0 ? (
+        {isSearching ? (
+          <div className="flex items-center gap-2 px-3 py-3 text-sm text-primary-500">
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+            Searching live catalog...
+          </div>
+        ) : suggestions.length === 0 ? (
           <div className="px-3 py-3 text-sm text-primary-500">No matching parts found.</div>
         ) : suggestions.map((product) => (
           <button
             key={product.id}
             type="button"
             onClick={() => {
-              onChange(product.id);
+              onChange(product.id, product);
               setQuery('');
             }}
             className={`block w-full px-3 py-2 text-left text-sm transition hover:bg-primary-50 ${
@@ -137,6 +194,7 @@ function ProductSearchSelect({ label, value, products, onChange }: {
           </button>
         ))}
       </div>
+      <p className="mt-2 text-xs text-primary-400">Type at least 2 characters to search the full live catalog.</p>
     </div>
   );
 }
@@ -350,8 +408,8 @@ export default function CatalogContentCmsPanel() {
             <div key={item.id || index} className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <SelectField label="Placement" value={item.placementKey} options={placementOptions} onChange={(value) => updateFeaturedItem(index, { placementKey: value })} />
-                <ProductSearchSelect label="Product" value={item.productId} products={products} onChange={(value) => {
-                  const product = productMap.get(value);
+                <ProductSearchSelect label="Product" value={item.productId} products={products} selectedLabel={item.sku || item.name ? `${item.sku || 'No part number'} - ${item.name || 'Unnamed product'}` : ''} onChange={(value, selectedProduct) => {
+                  const product = selectedProduct ?? productMap.get(value);
                   updateFeaturedItem(index, { productId: value, sku: product?.sku || '', name: product?.name || '', category: product?.category || '' });
                 }} />
               </div>
@@ -389,13 +447,33 @@ export default function CatalogContentCmsPanel() {
           </button>
         </div>
 
+        <div className="mt-5 grid gap-3 lg:grid-cols-3">
+          <div className="rounded-2xl border border-accent-blue/20 bg-accent-blue/10 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent-blue">Where it appears</p>
+            <p className="mt-2 text-sm font-semibold text-primary-950">Genuine Parts and Get Estimate</p>
+            <p className="mt-1 text-sm text-primary-600">Packages show when a customer selects the anchor product or opens a matching smart bundle.</p>
+          </div>
+          <div className="rounded-2xl border border-primary-200 bg-white p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-500">Anchor product</p>
+            <p className="mt-2 text-sm text-primary-600">This is the main part that triggers the package recommendations.</p>
+          </div>
+          <div className="rounded-2xl border border-primary-200 bg-white p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-500">Package items</p>
+            <p className="mt-2 text-sm text-primary-600">Add the parts and labor that should be offered together in the quote builder.</p>
+          </div>
+        </div>
+
         <div className="mt-5 space-y-4">
           {packages.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-primary-300 bg-primary-50 p-8 text-center text-primary-500">No curated packages yet.</div>
           ) : packages.map((pkg, packageIndex) => (
             <div key={pkg.id || packageIndex} className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <ProductSearchSelect label="Anchor product" value={pkg.anchorProductId} products={products} onChange={(value) => updatePackage(packageIndex, { anchorProductId: value })} />
+                <ProductSearchSelect label="Anchor product" value={pkg.anchorProductId} products={products} selectedLabel={pkg.anchorProductSku || pkg.anchorProductName ? `${pkg.anchorProductSku || 'No part number'} - ${pkg.anchorProductName || 'Unnamed product'}` : ''} onChange={(value, selectedProduct) => updatePackage(packageIndex, {
+                  anchorProductId: value,
+                  anchorProductSku: selectedProduct?.sku || pkg.anchorProductSku,
+                  anchorProductName: selectedProduct?.name || pkg.anchorProductName,
+                })} />
                 <Field label="Package key" value={pkg.packageKey} onChange={(value) => updatePackage(packageIndex, { packageKey: value })} />
                 <Field label="Package name" value={pkg.packageName} onChange={(value) => updatePackage(packageIndex, { packageName: value })} />
                 <Field label="Service group" value={pkg.serviceGroup} onChange={(value) => updatePackage(packageIndex, { serviceGroup: value })} />
@@ -438,7 +516,10 @@ export default function CatalogContentCmsPanel() {
                       {item.itemKind === 'service' ? (
                         <ServiceSearchSelect value={item.serviceId} services={services} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { serviceId: value })} />
                       ) : (
-                        <ProductSearchSelect label="Product" value={item.productId} products={products} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { productId: value })} />
+                        <ProductSearchSelect label="Product" value={item.productId} products={products} selectedLabel={item.productName} onChange={(value, selectedProduct) => updatePackageItem(packageIndex, itemIndex, {
+                          productId: value,
+                          productName: selectedProduct?.name || item.productName,
+                        })} />
                       )}
                       <Field label="Reason" value={item.reasonLabel} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { reasonLabel: value })} />
                       <Field label="Order" type="number" value={item.displayPriority} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { displayPriority: Number(value) })} />
