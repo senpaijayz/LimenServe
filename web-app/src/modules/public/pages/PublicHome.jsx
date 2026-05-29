@@ -417,9 +417,9 @@ const PublicHome = () => {
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true, margin: '-80px' }}
                                 transition={{ duration: 0.35, delay: index * 0.05 }}
-                                className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.06)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_26px_60px_rgba(15,23,42,0.10)]"
+                                className="flex h-full min-h-[590px] flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.06)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_26px_60px_rgba(15,23,42,0.10)]"
                             >
-                                <div className="border-b border-slate-200 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(226,232,240,0.9)_55%,_rgba(203,213,225,0.85))] px-5 pb-6 pt-5">
+                                <div className="shrink-0 border-b border-slate-200 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(226,232,240,0.9)_55%,_rgba(203,213,225,0.85))] px-5 pb-6 pt-5">
                                     <div className="mb-4 flex items-center justify-between">
                                         <span className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white">
                                             {part.vehicle}
@@ -432,12 +432,12 @@ const PublicHome = () => {
                                         <img src={part.image} alt={part.imageAlt || part.name} className="h-full w-full object-contain drop-shadow-[0_24px_30px_rgba(15,23,42,0.18)]" />
                                     </div>
                                 </div>
-                                <div className="p-6">
+                                <div className="flex flex-1 flex-col p-6">
                                     <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-500">Part No. {part.partNo}</p>
-                                    <h3 className="mt-3 text-xl font-bold text-primary-950">{part.name}</h3>
-                                    <p className="mt-3 text-sm leading-relaxed text-primary-600">{part.note}</p>
-                                    <p className="mt-4 text-2xl font-bold text-accent-primary">{part.price}</p>
-                                    <div className="mt-6 flex gap-3">
+                                    <h3 className="mt-3 min-h-[56px] text-xl font-bold leading-7 text-primary-950">{part.name}</h3>
+                                    <p className="mt-3 min-h-[48px] text-sm leading-6 text-primary-600">{part.note}</p>
+                                    <p className="mt-auto pt-4 text-2xl font-bold text-accent-primary">{part.price}</p>
+                                    <div className="mt-6 grid grid-cols-[minmax(0,1fr)_auto] gap-3">
                                         <Link to={buildFeaturedPartEstimateHref(part)} className="btn btn-primary flex-1 px-4 py-3">
                                             Get Quote
                                         </Link>
