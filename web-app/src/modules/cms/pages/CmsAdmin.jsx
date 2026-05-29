@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -667,6 +667,17 @@ function normalizeBeforeSave(pageDraft) {
   };
 }
 
+function buildCmsPageSummary(page = {}) {
+  return {
+    id: page.id || `draft-${page.slug}`,
+    slug: page.slug,
+    title: page.title || page.slug,
+    status: page.status || 'draft',
+    sectionCount: Array.isArray(page.sections) ? page.sections.length : Number(page.sectionCount ?? page.section_count ?? 0),
+    updatedAt: page.updatedAt || page.updated_at || new Date().toISOString(),
+  };
+}
+
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1143,9 +1154,12 @@ const tabs = [
 
 export default function CmsAdmin() {
   const { success, error: showError } = useToast();
+  const skipNextPageLoadSlugRef = useRef('');
   const [activeTab, setActiveTab] = useState('pages');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingMessage, setSavingMessage] = useState('');
+  const [pageLoading, setPageLoading] = useState(false);
   const [deletingSlug, setDeletingSlug] = useState('');
   const [uploadingKey, setUploadingKey] = useState('');
   const [pages, setPages] = useState([]);
@@ -1218,6 +1232,12 @@ export default function CmsAdmin() {
         return;
       }
 
+      if (skipNextPageLoadSlugRef.current === selectedSlug) {
+        skipNextPageLoadSlugRef.current = '';
+        return;
+      }
+
+      setPageLoading(true);
       try {
         const page = await getCmsPage(selectedSlug);
         if (!active || !page) {
@@ -1233,6 +1253,10 @@ export default function CmsAdmin() {
         }
         if (active) {
           showError(loadError.message || 'Failed to load selected page.');
+        }
+      } finally {
+        if (active) {
+          setPageLoading(false);
         }
       }
     }
@@ -1257,11 +1281,27 @@ export default function CmsAdmin() {
     }
   }, [activeSectionKey, pageDraft.sections]);
 
-  const refreshPages = async (slugToSelect) => {
-    const pageRows = await listCmsPages();
-    const editablePages = ensureEditablePublicPages(pageRows);
-    setPages(editablePages);
-    setSelectedSlug(slugToSelect || editablePages[0]?.slug || '');
+  const applySavedPage = (savedPage) => {
+    const normalizedPage = normalizePage(mergeRequiredSections(savedPage));
+    const savedSummary = buildCmsPageSummary(normalizedPage);
+
+    setPages((currentPages) => {
+      const editablePages = ensureEditablePublicPages(currentPages);
+      const existingIndex = editablePages.findIndex((page) => page.slug === savedSummary.slug);
+      if (existingIndex < 0) {
+        return [...editablePages, savedSummary];
+      }
+
+      return editablePages.map((page, index) => (index === existingIndex ? {
+        ...page,
+        ...savedSummary,
+        isLocalDraft: false,
+      } : page));
+    });
+
+    setPageDraft(normalizedPage);
+    skipNextPageLoadSlugRef.current = selectedSlug === savedSummary.slug ? '' : savedSummary.slug;
+    setSelectedSlug(savedSummary.slug);
   };
 
   const updatePageField = (field, value) => {
@@ -1375,16 +1415,18 @@ export default function CmsAdmin() {
 
   const handleSavePage = async () => {
     setSaving(true);
+    setSavingMessage('Saving page changes...');
     try {
       const payload = normalizeBeforeSave(pageDraft);
       const savedPage = await saveCmsPage(payload);
-      await refreshPages(savedPage.slug);
-      setPageDraft(normalizePage(savedPage));
+      setSavingMessage('Updating CMS preview...');
+      applySavedPage(savedPage);
       success(`CMS page saved successfully: ${savedPage.title || savedPage.slug}`);
     } catch (saveError) {
       showError(saveError.message || 'Failed to save CMS page. Please check the page fields and try again.');
     } finally {
       setSaving(false);
+      setSavingMessage('');
     }
   };
 
@@ -1423,6 +1465,7 @@ export default function CmsAdmin() {
 
   const handleSaveSettings = async () => {
     setSaving(true);
+    setSavingMessage('Saving site settings...');
     try {
       await saveCmsSiteSettings(settingsDraft);
       success('Site settings saved successfully.');
@@ -1430,11 +1473,13 @@ export default function CmsAdmin() {
       showError(saveError.message || 'Failed to save site settings. Please try again.');
     } finally {
       setSaving(false);
+      setSavingMessage('');
     }
   };
 
   const handleSaveNavigation = async () => {
     setSaving(true);
+    setSavingMessage('Saving navigation...');
     try {
       const navigation = navigationDraft.map((item, index) => ({
         ...item,
@@ -1449,6 +1494,7 @@ export default function CmsAdmin() {
       showError(saveError.message || 'Failed to save navigation. Please try again.');
     } finally {
       setSaving(false);
+      setSavingMessage('');
     }
   };
 
@@ -1479,7 +1525,7 @@ export default function CmsAdmin() {
               className="btn btn-primary min-w-[160px]"
             >
               {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save {activeTab === 'pages' ? 'Page' : activeTab === 'settings' ? 'Settings' : 'Navigation'}
+              {saving ? 'Saving...' : `Save ${activeTab === 'pages' ? 'Page' : activeTab === 'settings' ? 'Settings' : 'Navigation'}`}
             </button>
           ) : (
             <div className="rounded-2xl border border-primary-200 bg-white px-4 py-3 text-sm font-semibold text-primary-600">
@@ -1508,6 +1554,13 @@ export default function CmsAdmin() {
             );
           })}
         </div>
+
+        {saving && (
+          <div className="flex items-center gap-2 border-b border-accent-blue/20 bg-accent-blue/10 px-5 py-3 text-sm font-semibold text-accent-blue">
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+            {savingMessage || 'Saving CMS changes...'}
+          </div>
+        )}
 
         {loading ? (
           <div className="flex min-h-[360px] items-center justify-center text-primary-500">
@@ -1567,6 +1620,12 @@ export default function CmsAdmin() {
             </aside>
 
             <main className="space-y-6 p-5 lg:p-6">
+              {pageLoading && (
+                <div className="flex items-center gap-2 rounded-2xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm font-semibold text-primary-500">
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                  Loading selected page...
+                </div>
+              )}
               <section className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
                 <div className="mb-5">
                   <h2 className="text-xl font-display font-semibold text-primary-950">Page details</h2>
