@@ -118,6 +118,7 @@ const buildEstimatePayload = ({
     selectedParts,
     selectedServices,
     subtotal,
+    subtotalBeforeDiscount,
     discountTotal = 0,
     bundleSummaries = [],
     vat,
@@ -156,7 +157,7 @@ const buildEstimatePayload = ({
             status: 'sent',
             source: 'public',
             note: `Public estimate generated from LimenServe quote builder.${bundleNote}`,
-            subtotal: Number(subtotal.toFixed(2)),
+            subtotal: Number((subtotalBeforeDiscount ?? subtotal).toFixed(2)),
             discount_total: Number(discountTotal.toFixed(2)),
             tax_total: Number(vat.toFixed(2)),
             grand_total: Number(total.toFixed(2)),
@@ -179,6 +180,10 @@ const buildEstimatePayload = ({
                     line_total: Number((unitPrice * quantity).toFixed(2)),
                     recommendation_rule_id: isUuid(part.recommendationRuleId) ? part.recommendationRuleId : null,
                     is_upsell: Boolean(part.isUpsell),
+                    bundle_key: part.bundleKey || null,
+                    bundle_name: part.bundleName || null,
+                    bundle_tier_label: part.bundleTierLabel || null,
+                    catalog_unit_price: Number(part.catalogPrice ?? unitPrice),
                 };
             }),
             ...selectedServices.map((service) => {
@@ -193,6 +198,10 @@ const buildEstimatePayload = ({
                     line_total: Number(unitPrice.toFixed(2)),
                     recommendation_rule_id: isUuid(service.recommendationRuleId) ? service.recommendationRuleId : null,
                     is_upsell: Boolean(service.isUpsell),
+                    bundle_key: service.bundleKey || null,
+                    bundle_name: service.bundleName || null,
+                    bundle_tier_label: service.bundleTierLabel || null,
+                    catalog_unit_price: Number(service.catalogPrice ?? unitPrice),
                 };
             }),
         ],
@@ -214,6 +223,10 @@ const enrichCreatedQuoteWithRequestedLabels = (quote, requestedItems = []) => {
                 product_name: item.product_name || requestedItem.product_name || null,
                 product_sku: item.product_sku || requestedItem.product_sku || null,
                 service_name: item.service_name || requestedItem.service_name || null,
+                bundle_key: item.bundle_key || requestedItem.bundle_key || null,
+                bundle_name: item.bundle_name || requestedItem.bundle_name || null,
+                bundle_tier_label: item.bundle_tier_label || requestedItem.bundle_tier_label || null,
+                catalog_unit_price: item.catalog_unit_price || requestedItem.catalog_unit_price || null,
             };
         }),
     };
@@ -241,9 +254,12 @@ const buildRetrievedPrintableQuote = (quote) => {
             id: item.id || `${item.product_id || item.service_id || 'line'}-${item.line_type || 'item'}`,
             quantity: Number(item.quantity ?? 1),
             name: item.product_name || item.service_name || 'Quotation line',
-            subtitle: item.line_type === 'service' ? 'Service / Labor' : 'Product',
+            subtitle: item.bundle_name
+                ? `${item.bundle_name}${item.bundle_tier_label ? ` (${item.bundle_tier_label})` : ''}`
+                : (item.line_type === 'service' ? 'Service / Labor' : 'Product'),
             unitPrice: Number(item.unit_price ?? 0),
             lineTotal: Number(item.line_total ?? 0),
+            catalogUnitPrice: Number(item.catalog_unit_price ?? item.unit_price ?? 0),
         })),
     };
 };
@@ -578,7 +594,7 @@ const PublicEstimate = () => {
                 return services.map((selected) => (selected.id === service.id ? {
                     ...selected,
                     ...service,
-                    price: Math.min(Number(selected.price ?? 0), Number(service.price ?? 0)),
+                    price: Math.min(Number(selected.price ?? service.price ?? 0), Number(service.price ?? selected.price ?? 0)),
                 } : selected));
             }
 
@@ -626,6 +642,7 @@ const PublicEstimate = () => {
     const partsTotal = quoteFinancialModel.totals.partsSubtotal;
     const servicesTotal = quoteFinancialModel.totals.servicesSubtotal;
     const subtotal = quoteFinancialModel.totals.subtotal;
+    const subtotalBeforeDiscount = roundCurrency(subtotal + bundleDiscountTotal);
     const vat = quoteFinancialModel.totals.vat;
     const total = quoteFinancialModel.totals.estimatedTotal;
     const savedDraftPrintableQuote = buildRetrievedPrintableQuote(savedDraftQuote);
@@ -659,6 +676,7 @@ const PublicEstimate = () => {
             selectedParts,
             selectedServices,
             subtotal,
+            subtotalBeforeDiscount,
             discountTotal: bundleDiscountTotal,
             bundleSummaries: appliedBundles,
             vat,
@@ -976,10 +994,16 @@ const PublicEstimate = () => {
                             <span className="font-semibold text-primary-950">{formatCurrency(servicesTotal)}</span>
                         </div>
                         {bundleDiscountTotal > 0 && (
-                            <div className="flex justify-between text-sm text-accent-success">
-                                <span>Bundle savings applied</span>
-                                <span className="font-semibold">-{formatCurrency(bundleDiscountTotal)}</span>
-                            </div>
+                            <>
+                                <div className="flex justify-between text-sm text-primary-600">
+                                    <span>Before package savings</span>
+                                    <span className="font-semibold text-primary-950">{formatCurrency(subtotalBeforeDiscount)}</span>
+                                </div>
+                                <div className="flex justify-between text-sm text-accent-success">
+                                    <span>Package savings applied</span>
+                                    <span className="font-semibold">-{formatCurrency(bundleDiscountTotal)}</span>
+                                </div>
+                            </>
                         )}
                         <div className="flex justify-between text-sm text-primary-600">
                             <span>VAT (12%)</span>
@@ -1957,6 +1981,11 @@ const PublicEstimate = () => {
                                             <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>
                                                 {item.name}
                                                 {item.subtitle && <span style={{ display: 'block', fontSize: '10px', color: '#888' }}>{item.subtitle}</span>}
+                                                {item.catalogUnitPrice > item.unitPrice && (
+                                                    <span style={{ display: 'block', fontSize: '10px', color: '#059669' }}>
+                                                        Package price from {formatCurrency(item.catalogUnitPrice)}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right' }}>{formatCurrency(item.unitPrice)}</td>
                                             <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(item.lineTotal)}</td>

@@ -72,18 +72,26 @@ export function getAppliedBundleSummaries(lines = []) {
       return;
     }
 
+    const quantity = Math.max(Number(line.quantity ?? 1), 1);
+    const lineSmartTotal = roundCurrency(toNumber(line.price, 0) * quantity);
+    const lineCatalogTotal = roundCurrency(toNumber(line.catalogPrice ?? line.bundleCatalogTotal ?? line.price, 0) * quantity);
+
     if (!bundleMap.has(line.bundleKey)) {
       bundleMap.set(line.bundleKey, {
         bundleKey: line.bundleKey,
         bundleName: line.bundleName || 'Smart bundle',
         bundleTierLabel: line.bundleTierLabel || 'Bundle',
-        catalogTotal: roundCurrency(line.bundleCatalogTotal ?? 0),
-        smartTotal: roundCurrency(line.bundleSmartTotal ?? 0),
-        savings: roundCurrency(line.bundleSavings ?? 0),
+        catalogTotal: 0,
+        smartTotal: 0,
+        savings: 0,
       });
     }
+
+    const bundle = bundleMap.get(line.bundleKey);
+    bundle.catalogTotal = roundCurrency(bundle.catalogTotal + lineCatalogTotal);
+    bundle.smartTotal = roundCurrency(bundle.smartTotal + lineSmartTotal);
+    bundle.savings = roundCurrency(Math.max(bundle.catalogTotal - bundle.smartTotal, 0));
   });
 
   return Array.from(bundleMap.values());
 }
-

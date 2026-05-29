@@ -17,6 +17,7 @@ import type {
 import {
   createEmptyFeaturedCatalogItem,
   createEmptyRecommendationPackage,
+  createEmptyServiceRecommendationPackage,
   hasValidRecommendationPackageItems,
   normalizeFeaturedCatalogItem,
   normalizeRecommendationPackage,
@@ -38,6 +39,17 @@ type ServiceOption = {
 const placementOptions = [
   { value: 'catalog_featured', label: 'Genuine Parts featured' },
   { value: 'estimate_recommended', label: 'Estimate recommended' },
+];
+
+const serviceGroupOptions = [
+  { value: 'oil_change', label: 'Oil Change Package' },
+  { value: 'brake_service', label: 'Brake Service Package' },
+  { value: 'cooling_service', label: 'Cooling Service Package' },
+  { value: 'battery_service', label: 'Battery Service Package' },
+  { value: 'tune_up', label: 'Tune-Up Package' },
+  { value: 'filter_service', label: 'Filter Service Package' },
+  { value: 'service_package', label: 'Service Package' },
+  { value: 'general_service', label: 'General Service Package' },
 ];
 
 const fieldClassName = 'w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-950 outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15';
@@ -441,10 +453,16 @@ export default function CatalogContentCmsPanel() {
             <h2 className="text-xl font-display font-semibold text-primary-950">Recommendation Packages</h2>
             <p className="mt-1 text-sm text-primary-500">Curate public smart bundles by anchor product, included parts, and included labor.</p>
           </div>
-          <button type="button" className="btn btn-secondary" onClick={() => setPackages((items) => [...items, createEmptyRecommendationPackage()])}>
-            <Plus className="h-4 w-4" />
-            Add Package
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn btn-secondary" onClick={() => setPackages((items) => [...items, createEmptyRecommendationPackage()])}>
+              <Plus className="h-4 w-4" />
+              Add Package
+            </button>
+            <button type="button" className="btn btn-primary" onClick={() => setPackages((items) => [...items, createEmptyServiceRecommendationPackage()])}>
+              <Plus className="h-4 w-4" />
+              Add Service Package
+            </button>
+          </div>
         </div>
 
         <div className="mt-5 grid gap-3 lg:grid-cols-3">
@@ -476,7 +494,7 @@ export default function CatalogContentCmsPanel() {
                 })} />
                 <Field label="Package key" value={pkg.packageKey} onChange={(value) => updatePackage(packageIndex, { packageKey: value })} />
                 <Field label="Package name" value={pkg.packageName} onChange={(value) => updatePackage(packageIndex, { packageName: value })} />
-                <Field label="Service group" value={pkg.serviceGroup} onChange={(value) => updatePackage(packageIndex, { serviceGroup: value })} />
+                <SelectField label="Service group" value={pkg.serviceGroup || 'general_service'} options={serviceGroupOptions} onChange={(value) => updatePackage(packageIndex, { serviceGroup: value })} />
                 <Field label="Vehicle model" value={pkg.vehicleModelName} onChange={(value) => updatePackage(packageIndex, { vehicleModelName: value })} />
                 <Field label="Vehicle family" value={pkg.vehicleFamily} onChange={(value) => updatePackage(packageIndex, { vehicleFamily: value })} />
                 <Field label="Min quantity" type="number" value={pkg.minAnchorQuantity} onChange={(value) => updatePackage(packageIndex, { minAnchorQuantity: Number(value) })} />

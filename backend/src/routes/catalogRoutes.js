@@ -104,6 +104,12 @@ const SERVICE_GROUP_CONFIG = {
     packageDescription: 'Upsell bundle of replacement filters and labor with light package savings for this Mitsubishi model.',
     serviceKeywords: ['filter', 'maintenance', 'inspection'],
   },
+  service_package: {
+    packageKey: 'service-package',
+    packageName: 'Smart Service Package',
+    packageDescription: 'Labor-focused service work grouped with the matching parts for a cleaner quotation.',
+    serviceKeywords: ['service', 'labor', 'installation', 'repair', 'maintenance', 'inspection'],
+  },
   general_service: {
     packageKey: 'general-service-package',
     packageName: 'Smart Inspection Bundle',

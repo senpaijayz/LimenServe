@@ -43,6 +43,14 @@ export const SERVICE_GROUP_MARKETING_COPY = {
     heroTitle: 'Filter Service Package',
     subtitle: 'Air, cabin, and fuel-flow maintenance grouped into one cleaner service stop.',
   },
+  service_package: {
+    heroTitle: 'Service Package',
+    subtitle: 'Labor-focused service work grouped with the matching parts for a cleaner quotation.',
+  },
+  general_service: {
+    heroTitle: 'General Service Package',
+    subtitle: 'Inspection, installation, and general maintenance grouped into one practical service visit.',
+  },
 };
 
 export function toNumber(value, fallback = 0) {

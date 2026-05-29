@@ -93,12 +93,34 @@ export function createEmptyFeaturedCatalogItem(sortOrder = 100): CmsFeaturedCata
 
 export function createEmptyRecommendationPackage(): CmsRecommendationPackage {
   return normalizeRecommendationPackage({
-    serviceGroup: 'maintenance',
+    serviceGroup: 'general_service',
     packageKey: '',
     packageName: '',
     minAnchorQuantity: 1,
     priority: 100,
     isActive: true,
     items: [],
+  });
+}
+
+export function createEmptyServiceRecommendationPackage(): CmsRecommendationPackage {
+  const uniqueSuffix = Date.now().toString(36);
+
+  return normalizeRecommendationPackage({
+    serviceGroup: 'service_package',
+    packageKey: `service-package-${uniqueSuffix}`,
+    packageName: 'Service Package',
+    packageDescription: 'Labor-focused service work grouped with the matching parts for a cleaner quotation.',
+    minAnchorQuantity: 1,
+    priority: 100,
+    isActive: true,
+    items: [
+      {
+        itemKind: 'service',
+        displayPriority: 10,
+        priceMode: 'catalog',
+        isActive: true,
+      },
+    ],
   });
 }
