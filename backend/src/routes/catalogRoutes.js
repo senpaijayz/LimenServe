@@ -460,13 +460,19 @@ const PRICE_LIST_COLUMN_ALIASES = {
     fallback: 1,
     names: new Map([
       ['srpwithvat', 120],
+      ['srpwvat', 120],
       ['dealersrpwithvat', 135],
+      ['dealersrpwvat', 135],
       ['customersrpwithvat', 130],
+      ['customersrpwvat', 130],
       ['dealersrpvatinclusive', 130],
       ['srpvatinclusive', 120],
       ['srpincludingvat', 120],
       ['srpvatin', 110],
+      ['srpwithoutvat', 70],
+      ['srpwithouttax', 70],
       ['newsrpwithvat', 130],
+      ['newsrpwvat', 130],
       ['newprice', 110],
       ['newsrp', 110],
       ['retailprice', 100],
@@ -539,8 +545,8 @@ function findPriceListHeader(rows = []) {
 
   for (let rowIndex = 0; rowIndex < scanLimit; rowIndex += 1) {
     const header = (rows[rowIndex] || []).map(normalizeHeader);
-    const skuIndex = findColumnIndex(header, 'sku');
-    const priceIndex = findColumnIndex(header, 'price');
+    const skuIndex = findColumnIndex(header, 'sku', { allowFallback: false });
+    const priceIndex = findColumnIndex(header, 'price', { allowFallback: false });
     const skuScore = PRICE_LIST_COLUMN_ALIASES.sku.names.get(header[skuIndex]) ?? 0;
     const priceScore = PRICE_LIST_COLUMN_ALIASES.price.names.get(header[priceIndex]) ?? 0;
     const score = skuScore + priceScore;
@@ -559,14 +565,21 @@ function rowsToPriceListItems(rows = []) {
   }
 
   const detectedHeader = findPriceListHeader(rows);
-  const header = detectedHeader?.header ?? (rows[0] || []).map(normalizeHeader);
+  if (!detectedHeader) {
+    return [];
+  }
+
+  const header = detectedHeader.header;
   const dataRows = detectedHeader ? rows.slice(detectedHeader.rowIndex + 1) : rows;
-  const skuIndex = findColumnIndex(header, 'sku');
-  const priceIndex = findColumnIndex(header, 'price');
-  const hasHeader = Boolean(detectedHeader);
-  const nameIndex = findColumnIndex(header, 'name', { allowFallback: !hasHeader });
-  const modelIndex = findColumnIndex(header, 'model', { allowFallback: !hasHeader });
-  const categoryIndex = findColumnIndex(header, 'category', { allowFallback: !hasHeader });
+  const skuIndex = findColumnIndex(header, 'sku', { allowFallback: false });
+  const priceIndex = findColumnIndex(header, 'price', { allowFallback: false });
+  const nameIndex = findColumnIndex(header, 'name', { allowFallback: false });
+  const modelIndex = findColumnIndex(header, 'model', { allowFallback: false });
+  const categoryIndex = findColumnIndex(header, 'category', { allowFallback: false });
+
+  if (skuIndex < 0 || priceIndex < 0) {
+    return [];
+  }
 
   return normalizePriceListItems(dataRows.map((row) => ({
     sku: row[skuIndex],
