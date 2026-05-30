@@ -728,9 +728,6 @@ export async function replaceRetailPriceListFile(file, effectiveFrom) {
 
     const { data } = await apiClient.post('/catalog/prices/bulk-replace-file', formData, {
       timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
     });
 
     clearProductCatalogCaches();

@@ -32,6 +32,21 @@ const priceListUpload = multer({
     fileSize: 20 * 1024 * 1024,
   },
 });
+
+function handlePriceListUpload(req, res, next) {
+  priceListUpload.single('priceList')(req, res, (uploadError) => {
+    if (uploadError) {
+      uploadError.statusCode = uploadError.statusCode || 400;
+      uploadError.message = uploadError.code === 'LIMIT_FILE_SIZE'
+        ? 'The price list file is too large. Upload a file up to 20 MB.'
+        : uploadError.message || 'The price list upload could not be read.';
+      next(uploadError);
+      return;
+    }
+
+    next();
+  });
+}
 const PRODUCT_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const CATALOG_SUMMARY_CACHE_TTL_MS = 30 * 1000;
 const FULL_CATALOG_PAGE_SIZE = 250;
@@ -42,6 +57,8 @@ const PRICE_LIST_LOOKUP_BATCH_SIZE = 250;
 const PRICE_LIST_CHANGE_PREVIEW_LIMIT = 500;
 const SERVICE_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const VEHICLE_FITMENT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const PRODUCT_BARCODE_SUFFIX = '0001';
+const PRODUCT_BARCODE_VENDOR_PREFIXES = ['PA'];
 const DEFAULT_PART_LIMIT = 6;
 const DEFAULT_SERVICE_LIMIT = 4;
 const DEFAULT_PACKAGE_DESCRIPTION = 'Smart upsell bundle of Mitsubishi-matched parts and services for this vehicle.';
@@ -241,16 +258,30 @@ function parsePrice(value) {
   return Number.isFinite(fallbackNumeric) && fallbackNumeric >= 0 ? Number(fallbackNumeric.toFixed(2)) : null;
 }
 
+function normalizePriceListPartNumber(value) {
+  const normalized = normalizePartNumber(value);
+  const prefixStripped = PRODUCT_BARCODE_VENDOR_PREFIXES
+    .filter((prefix) => normalized.startsWith(prefix) && normalized.length > prefix.length)
+    .map((prefix) => normalizePartNumber(normalized.slice(prefix.length)))
+    .find(Boolean);
+
+  return prefixStripped || normalized;
+}
+
 function normalizePriceListItems(items = []) {
   return items
-    .map((item) => ({
-      sku: String(item?.sku || '').trim().toUpperCase(),
-      price: parsePrice(item?.price),
-      name: normalizeOptionalText(item?.name || item?.description, 220),
-      model: normalizeOptionalText(item?.model || item?.application, 140),
-      category: normalizeOptionalText(item?.category, 140),
-      sourceCategory: normalizeOptionalText(item?.sourceCategory || item?.category, 140),
-    }))
+    .map((item) => {
+      const originalSku = String(item?.sku || '').trim();
+      return {
+        sku: normalizePriceListPartNumber(originalSku),
+        originalSku,
+        price: parsePrice(item?.price),
+        name: normalizeOptionalText(item?.name || item?.description, 220),
+        model: normalizeOptionalText(item?.model || item?.application, 140),
+        category: normalizeOptionalText(item?.category, 140),
+        sourceCategory: normalizeOptionalText(item?.sourceCategory || item?.category, 140),
+      };
+    })
     .filter((item) => item.sku && item.price !== null);
 }
 
@@ -822,8 +853,8 @@ function normalizePartNumber(value) {
     .toUpperCase()
     .replace(/^\*+|\*+$/g, '')
     .replace(/\s+/g, '');
-  const withoutBarcodeSuffix = normalizedScanValue.endsWith('0001') && normalizedScanValue.length > 4
-    ? normalizedScanValue.slice(0, -4)
+  const withoutBarcodeSuffix = normalizedScanValue.endsWith(PRODUCT_BARCODE_SUFFIX) && normalizedScanValue.length > PRODUCT_BARCODE_SUFFIX.length
+    ? normalizedScanValue.slice(0, -PRODUCT_BARCODE_SUFFIX.length)
     : normalizedScanValue;
 
   return withoutBarcodeSuffix
@@ -4292,7 +4323,7 @@ router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next)
   }
 });
 
-router.post('/prices/bulk-replace-file', requireRole('admin'), priceListUpload.single('priceList'), async (req, res, next) => {
+router.post('/prices/bulk-replace-file', requireRole('admin'), handlePriceListUpload, async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Upload a CSV or Excel price list file.' });
