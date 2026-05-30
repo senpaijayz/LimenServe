@@ -192,6 +192,7 @@ function buildEstimatePayload({
     const taxTotal = subtotal * 0.12;
     const appliedBundles = getAppliedBundleSummaries([...selectedParts, ...selectedServices]);
     const bundleDiscountTotal = appliedBundles.reduce((sum, bundle) => sum + Number(bundle.savings ?? 0), 0);
+    const subtotalBeforeDiscount = subtotal + bundleDiscountTotal;
     const bundleNote = appliedBundles.length
         ? ` Bundle pricing applied: ${appliedBundles.map((bundle) => `${bundle.bundleName} (${bundle.bundleTierLabel})`).join(', ')}.`
         : '';
@@ -206,7 +207,7 @@ function buildEstimatePayload({
             ...defaultMeta,
             estimate_number: currentEstimateNumber || undefined,
             note: `${notes || 'Quotation prepared in LimenServe.'}${bundleNote}`,
-            subtotal,
+            subtotal: subtotalBeforeDiscount,
             discount_total: bundleDiscountTotal,
             tax_total: taxTotal,
             grand_total: subtotal + taxTotal,
@@ -222,6 +223,11 @@ function buildEstimatePayload({
                 line_total: Number(part.price ?? 0) * Number(part.quantity ?? 1),
                 is_upsell: Boolean(part.isUpsell),
                 recommendation_rule_id: part.recommendationRuleId || null,
+                product_sku: getProductPartNumber(part) || null,
+                bundle_key: part.bundleKey || null,
+                bundle_name: part.bundleName || null,
+                bundle_tier_label: part.bundleTierLabel || null,
+                catalog_unit_price: Number(part.catalogPrice ?? part.price ?? 0),
             })),
             ...selectedServices.map((service) => ({
                 line_type: 'service',
@@ -231,6 +237,10 @@ function buildEstimatePayload({
                 line_total: Number(service.price ?? 0) * Number(service.quantity ?? 1),
                 is_upsell: Boolean(service.isUpsell),
                 recommendation_rule_id: service.recommendationRuleId || null,
+                bundle_key: service.bundleKey || null,
+                bundle_name: service.bundleName || null,
+                bundle_tier_label: service.bundleTierLabel || null,
+                catalog_unit_price: Number(service.catalogPrice ?? service.price ?? 0),
             })),
         ],
     };
@@ -254,6 +264,10 @@ function mapEstimateDetailToState(estimate) {
                 quantity: Number(item.quantity ?? 1),
                 recommendationRuleId: item.recommendation_rule_id || null,
                 isUpsell: Boolean(item.is_upsell),
+                bundleKey: item.bundle_key || '',
+                bundleName: item.bundle_name || '',
+                bundleTierLabel: item.bundle_tier_label || '',
+                catalogPrice: Number(item.catalog_unit_price ?? item.unit_price ?? 0),
             })),
         selectedServices: items
             .filter((item) => item.line_type === 'service')
@@ -264,6 +278,10 @@ function mapEstimateDetailToState(estimate) {
                 quantity: Number(item.quantity ?? 1),
                 recommendationRuleId: item.recommendation_rule_id || null,
                 isUpsell: Boolean(item.is_upsell),
+                bundleKey: item.bundle_key || '',
+                bundleName: item.bundle_name || '',
+                bundleTierLabel: item.bundle_tier_label || '',
+                catalogPrice: Number(item.catalog_unit_price ?? item.unit_price ?? 0),
             })),
     };
 }

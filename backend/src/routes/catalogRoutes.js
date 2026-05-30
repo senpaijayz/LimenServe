@@ -550,19 +550,25 @@ function parsePriceListUpload(file) {
   const filename = String(file?.originalname || '').toLowerCase();
   const mimetype = String(file?.mimetype || '').toLowerCase();
 
-  if (filename.endsWith('.xlsx') || mimetype.includes('spreadsheetml')) {
-    return parseXlsxWorksheetRows(file.buffer)
-      .map((rows) => rowsToPriceListItems(rows))
-      .sort((left, right) => right.length - left.length)[0] ?? [];
-  }
-
   if (filename.endsWith('.xls') || mimetype.includes('ms-excel')) {
     const error = new Error('Legacy .xls files are not supported yet. Save the workbook as .xlsx or CSV, then upload again.');
     error.statusCode = 400;
     throw error;
   }
 
-  return rowsToPriceListItems(parseCsvRows(file.buffer.toString('utf8').replace(/\t/g, ',')));
+  try {
+    if (filename.endsWith('.xlsx') || mimetype.includes('spreadsheetml')) {
+      return parseXlsxWorksheetRows(file.buffer)
+        .map((rows) => rowsToPriceListItems(rows))
+        .sort((left, right) => right.length - left.length)[0] ?? [];
+    }
+
+    return rowsToPriceListItems(parseCsvRows(file.buffer.toString('utf8').replace(/\t/g, ',')));
+  } catch (parseError) {
+    parseError.statusCode = parseError.statusCode || 400;
+    parseError.message = parseError.message || 'The price list file could not be read. Save it as a clean .xlsx or CSV file, then upload again.';
+    throw parseError;
+  }
 }
 
 function getPreviousDate(isoDate) {
@@ -4309,6 +4315,12 @@ async function replaceRetailPrices(items, effectiveFrom) {
     throw error;
   }
 
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(effectiveFrom || ''))) {
+    const error = new Error('Choose a valid effective date before applying the price list.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   const uniqueItems = Array.from(
     items.reduce((map, item) => map.set(item.sku, item), new Map()).values()
   );
@@ -4461,7 +4473,16 @@ async function replaceRetailPrices(items, effectiveFrom) {
     });
   }
 
-  for (const productIdChunk of chunkArray(matchedProductIds, PRICE_LIST_LOOKUP_BATCH_SIZE)) {
+  const itemsToUpdate = matchedItems.filter((item) => {
+    const product = productMap.get(item.sku);
+    const previousPrice = previousPriceMap.has(product.id) ? Number(previousPriceMap.get(product.id) ?? 0) : null;
+    const newPrice = Number(item.price ?? 0);
+
+    return previousPrice === null || Number(previousPrice.toFixed(2)) !== Number(newPrice.toFixed(2));
+  });
+  const productIdsToUpdate = itemsToUpdate.map((item) => productMap.get(item.sku).id);
+
+  for (const productIdChunk of chunkArray(productIdsToUpdate, PRICE_LIST_LOOKUP_BATCH_SIZE)) {
     const { error: archiveError } = await supabaseAdmin
       .schema('catalog')
       .from('product_prices')
@@ -4479,7 +4500,7 @@ async function replaceRetailPrices(items, effectiveFrom) {
     }
   }
 
-  const newPrices = matchedItems.map((item) => ({
+  const newPrices = itemsToUpdate.map((item) => ({
     product_id: productMap.get(item.sku).id,
     price_type: 'retail',
     amount: item.price,

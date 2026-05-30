@@ -30,9 +30,53 @@ function isDemoEstimate(estimate) {
 }
 
 async function loadEstimateSnapshot(estimateId) {
-  return callRpc('get_estimate_detail', {
+  const estimate = await callRpc('get_estimate_detail', {
     p_estimate_id: estimateId,
   });
+
+  return enrichEstimateSnapshotItemLabels(estimate);
+}
+
+async function enrichEstimateSnapshotItemLabels(estimate) {
+  const items = Array.isArray(estimate?.items) ? estimate.items : [];
+  const productIds = [...new Set(items.map((item) => item.product_id).filter(Boolean))];
+  const serviceIds = [...new Set(items.map((item) => item.service_id).filter(Boolean))];
+
+  const [{ data: products, error: productsError }, { data: services, error: servicesError }] = await Promise.all([
+    productIds.length > 0
+      ? supabaseAdmin.schema('catalog').from('products').select('id, sku, name').in('id', productIds)
+      : Promise.resolve({ data: [], error: null }),
+    serviceIds.length > 0
+      ? supabaseAdmin.schema('operations').from('services').select('id, code, name').in('id', serviceIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (productsError) {
+    throw productsError;
+  }
+
+  if (servicesError) {
+    throw servicesError;
+  }
+
+  const productMap = new Map((products ?? []).map((product) => [product.id, product]));
+  const serviceMap = new Map((services ?? []).map((service) => [service.id, service]));
+
+  return {
+    ...estimate,
+    items: items.map((item) => {
+      const product = productMap.get(item.product_id);
+      const service = serviceMap.get(item.service_id);
+
+      return {
+        ...item,
+        product_name: item.product_name || product?.name || null,
+        product_sku: item.product_sku || product?.sku || null,
+        service_name: item.service_name || service?.name || null,
+        service_code: item.service_code || service?.code || null,
+      };
+    }),
+  };
 }
 
 function formatCurrency(value) {
