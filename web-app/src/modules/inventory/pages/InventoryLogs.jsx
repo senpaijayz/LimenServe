@@ -86,8 +86,12 @@ function exportToExcel(movements) {
 }
 
 function printLogs(movements) {
-    const win = window.open('', '_blank', 'noopener,noreferrer,width=1200,height=800');
-    if (!win) return;
+    const win = window.open('', '_blank', 'width=1200,height=800');
+    if (!win) {
+        window.alert('Please allow pop-ups to print or save the inventory logs PDF.');
+        return;
+    }
+    const generatedAt = new Date();
     const rows = movements.map((m, i) => `
         <tr>
             <td>${i + 1}</td>
@@ -101,7 +105,7 @@ function printLogs(movements) {
             <td>${escapeHtml(m.performedBy)}</td>
             <td>${escapeHtml(formatDateTime(m.createdAt))}</td>
         </tr>`).join('');
-    win.document.write(`<!doctype html><html><head><meta charset="utf-8"/>
+    const html = `<!doctype html><html><head><meta charset="utf-8"/>
     <title>Inventory Logs — LimenServe</title>
     <style>
         @page{size:A4 landscape;margin:12mm}
@@ -117,11 +121,20 @@ function printLogs(movements) {
         .mono{font-family:monospace;font-size:8px;color:#64748b}
         @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
     </style></head><body>
-    <header><div><h1>Inventory Movement Logs</h1><p>Limen Auto Supply and Services</p><p>Generated: ${formatDateTime(new Date())}</p></div><div style="text-align:right"><p><strong>${movements.length}</strong> records</p></div></header>
+    <header><div><h1>Inventory Movement Logs</h1><p>Limen Auto Parts Center</p><p>Generated: ${formatDateTime(generatedAt)}</p></div><div style="text-align:right"><p><strong>${movements.length}</strong> records</p></div></header>
     <table><thead><tr><th>#</th><th>Product / Part Number</th><th>Action</th><th>Prev</th><th>Change</th><th>New</th><th>Supplier</th><th>Reference</th><th>Staff</th><th>Date</th></tr></thead>
     <tbody>${rows}</tbody></table>
-    <script>window.onload=()=>{window.focus();window.print();}</script></body></html>`);
+    </body></html>`;
+    win.document.open();
+    win.document.write(html);
     win.document.close();
+    win.document.title = `limenserve-inventory-logs-${generatedAt.toISOString().slice(0, 10)}`;
+    win.focus();
+    window.setTimeout(() => {
+        if (!win.closed) {
+            win.print();
+        }
+    }, 400);
 }
 
 export default function InventoryLogs() {
