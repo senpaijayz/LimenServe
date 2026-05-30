@@ -243,7 +243,7 @@ export default function ProductManagement() {
 
     setSaving(true);
     try {
-      const duplicateProduct = await getCatalogProductByPartNumber(partNumber);
+      const duplicateProduct = await getCatalogProductByPartNumber(partNumber, { optional: true });
       if (duplicateProduct && duplicateProduct.id !== editingProduct?.id) {
         const message = duplicateProduct.archived
           ? `Part number ${partNumber} is archived as "${duplicateProduct.name}". Restore it from Archived Products instead of creating a duplicate.`

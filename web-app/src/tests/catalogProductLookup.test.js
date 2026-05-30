@@ -50,6 +50,7 @@ describe('catalog product part-number lookup', () => {
     const product = await getCatalogProductByPartNumber('5370A737 0001');
 
     expect(apiClientMock.get).toHaveBeenCalledWith('/catalog/products/part-number/5370A737%200001', {
+      params: undefined,
       timeout: 25000,
     });
     expect(product.name).toBe('Shield, FR F');
@@ -64,5 +65,20 @@ describe('catalog product part-number lookup', () => {
     });
 
     await expect(getCatalogProductByPartNumber('NEW-PART')).resolves.toBeNull();
+  });
+
+  it('can check availability without creating a red 404 request', async () => {
+    apiClientMock.get.mockResolvedValue({
+      data: {
+        product: null,
+        available: true,
+      },
+    });
+
+    await expect(getCatalogProductByPartNumber('NEW-PART', { optional: true })).resolves.toBeNull();
+    expect(apiClientMock.get).toHaveBeenCalledWith('/catalog/products/part-number/NEW-PART', {
+      params: { optional: true },
+      timeout: 25000,
+    });
   });
 });

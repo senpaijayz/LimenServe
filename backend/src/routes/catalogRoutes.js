@@ -3491,6 +3491,7 @@ router.get('/products/all', async (_req, res, next) => {
 router.get('/products/part-number/:partNumber', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
     const sku = normalizePartNumber(req.params.partNumber);
+    const optional = String(req.query.optional || '').toLowerCase() === 'true';
 
     if (!sku) {
       res.status(400).json({ error: 'Part number is required.' });
@@ -3500,11 +3501,16 @@ router.get('/products/part-number/:partNumber', requireRole('admin', 'stock_cler
     const product = await getProductByPartNumber(sku);
 
     if (!product) {
+      if (optional) {
+        res.json({ product: null, available: true });
+        return;
+      }
+
       res.status(404).json({ error: 'No product matched that part number.' });
       return;
     }
 
-    res.json({ product });
+    res.json({ product, available: false });
   } catch (error) {
     next(error);
   }

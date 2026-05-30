@@ -634,9 +634,10 @@ export async function getInventoryMovements(limit = 12, params = {}) {
   }
 }
 
-export async function getCatalogProductByPartNumber(partNumber) {
+export async function getCatalogProductByPartNumber(partNumber, options = {}) {
   try {
     const { data } = await apiClient.get(`/catalog/products/part-number/${encodeURIComponent(partNumber)}`, {
+      params: options.optional ? { optional: true } : undefined,
       timeout: INVENTORY_API_TIMEOUT_MS,
     });
     return data.product ?? null;
