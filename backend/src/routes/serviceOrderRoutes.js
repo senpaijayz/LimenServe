@@ -12,6 +12,118 @@ function normalizeStatus(value, fallback = 'pending') {
   return ALLOWED_STATUSES.has(value) ? value : fallback;
 }
 
+function normalizeAssignmentError(error) {
+  const message = String(error?.message || '');
+
+  if (error?.code === '42501') {
+    error.statusCode = 403;
+  } else if (error?.code === '23P01' || message.includes('conflicting assignment')) {
+    error.statusCode = 409;
+  } else if (
+    message.includes('required')
+    || message.includes('cannot be assigned')
+    || message.includes('Only active')
+    || message.includes('not found')
+  ) {
+    error.statusCode = message.includes('not found') ? 404 : 400;
+  }
+
+  return error;
+}
+
+async function loadLatestAssignments(orderIds = []) {
+  const uniqueOrderIds = [...new Set(orderIds.filter(Boolean))];
+  if (uniqueOrderIds.length === 0) return new Map();
+
+  const { data: assignments, error } = await supabaseAdmin
+    .schema('operations')
+    .from('mechanic_assignments')
+    .select('id, service_order_id, mechanic_id, status, scheduled_start, scheduled_end, assigned_by, assigned_at, note')
+    .in('service_order_id', uniqueOrderIds)
+    .in('status', ['assigned', 'completed', 'cancelled'])
+    .order('assigned_at', { ascending: false });
+
+  if (error) throw error;
+
+  const mechanicIds = [...new Set((assignments ?? []).map((row) => row.mechanic_id).filter(Boolean))];
+  const actorIds = [...new Set((assignments ?? []).map((row) => row.assigned_by).filter(Boolean))];
+  const [mechanicResult, actorResult] = await Promise.all([
+    mechanicIds.length
+      ? supabaseAdmin
+        .schema('operations')
+        .from('mechanics')
+        .select('id, full_name, specialization, availability_status, shift_label, location_name, photo_url, is_active')
+        .in('id', mechanicIds)
+      : Promise.resolve({ data: [], error: null }),
+    actorIds.length
+      ? supabaseAdmin
+        .schema('core')
+        .from('user_profiles')
+        .select('user_id, full_name')
+        .in('user_id', actorIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (mechanicResult.error) throw mechanicResult.error;
+  if (actorResult.error) throw actorResult.error;
+
+  const mechanics = new Map((mechanicResult.data ?? []).map((row) => [row.id, row]));
+  const actors = new Map((actorResult.data ?? []).map((row) => [row.user_id, row]));
+
+  const assignmentMap = new Map();
+  (assignments ?? []).forEach((row) => {
+    if (assignmentMap.has(row.service_order_id)) return;
+    const mechanic = mechanics.get(row.mechanic_id) ?? null;
+    const actor = actors.get(row.assigned_by) ?? null;
+    assignmentMap.set(row.service_order_id, {
+      id: row.id,
+      serviceOrderId: row.service_order_id,
+      mechanicId: row.mechanic_id,
+      status: row.status,
+      scheduledStart: row.scheduled_start,
+      scheduledEnd: row.scheduled_end,
+      assignedAt: row.assigned_at,
+      note: row.note,
+      mechanic: mechanic ? {
+        id: mechanic.id,
+        name: mechanic.full_name,
+        specialization: mechanic.specialization,
+        availabilityStatus: mechanic.availability_status,
+        shiftLabel: mechanic.shift_label,
+        locationName: mechanic.location_name,
+        photoUrl: mechanic.photo_url,
+        isActive: mechanic.is_active !== false,
+      } : null,
+      assignedBy: {
+        id: row.assigned_by,
+        name: actor?.full_name || 'Administrator',
+      },
+    });
+  });
+
+  return assignmentMap;
+}
+
+async function enrichOrdersWithAssignments(orders = []) {
+  const assignments = await loadLatestAssignments(orders.map((order) => order?.id));
+  return orders.map((order) => {
+    const assignment = assignments.get(order?.id) ?? null;
+    return {
+      ...order,
+      assignment,
+      assignedMechanic: assignment?.mechanic ?? null,
+      scheduledStart: assignment?.scheduledStart
+        ?? order?.scheduledStart
+        ?? order?.scheduled_start
+        ?? null,
+      scheduledEnd: assignment?.scheduledEnd
+        ?? order?.scheduledEnd
+        ?? order?.scheduled_end
+        ?? null,
+    };
+  });
+}
+
 async function loadOrders({ search = '', status = 'all', limit = 50 } = {}) {
   const orders = await callRpc('limen_list_service_orders', {
     p_search: String(search || ''),
@@ -19,13 +131,67 @@ async function loadOrders({ search = '', status = 'all', limit = 50 } = {}) {
     p_limit: Math.min(Math.max(Number(limit) || 50, 1), 100),
   });
 
-  return Array.isArray(orders) ? orders : [];
+  return enrichOrdersWithAssignments(Array.isArray(orders) ? orders : []);
 }
 
 async function loadOrder(orderId) {
-  return callRpc('limen_get_service_order', {
+  const order = await callRpc('limen_get_service_order', {
     p_order_id: orderId,
   });
+
+  if (!order) return null;
+  const [enriched] = await enrichOrdersWithAssignments([order]);
+  return enriched;
+}
+
+async function loadCustomerOrders(userId) {
+  const { data: customer, error: customerError } = await supabaseAdmin
+    .schema('operations')
+    .from('customers')
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (customerError) throw customerError;
+  if (!customer) return [];
+
+  const { data, error } = await supabaseAdmin
+    .schema('operations')
+    .from('service_orders')
+    .select('id, order_number, status, note, total_amount, started_at, completed_at, business_date, created_at, updated_at, scheduled_start, scheduled_end')
+    .eq('customer_id', customer.id)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) throw error;
+
+  const orders = (data ?? []).map((row) => ({
+    id: row.id,
+    orderNumber: row.order_number,
+    status: row.status,
+    description: row.note,
+    totalAmount: Number(row.total_amount ?? 0),
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    businessDate: row.business_date,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    scheduledStart: row.scheduled_start,
+    scheduledEnd: row.scheduled_end,
+  }));
+
+  const enriched = await enrichOrdersWithAssignments(orders);
+  return enriched.map((order) => ({
+    ...order,
+    assignment: order.assignment ? {
+      id: order.assignment.id,
+      status: order.assignment.status,
+      scheduledStart: order.assignment.scheduledStart,
+      scheduledEnd: order.assignment.scheduledEnd,
+      assignedAt: order.assignment.assignedAt,
+      mechanic: order.assignment.mechanic,
+    } : null,
+  }));
 }
 
 function normalizeServiceOrderError(error) {
@@ -248,6 +414,11 @@ async function completeServiceOrder(orderId, operatorId) {
   });
 
   await persistServiceCompletion(orderId);
+  await callRpc('finish_mechanic_assignment', {
+    p_service_order_id: orderId,
+    p_actor_user_id: operatorId ?? null,
+    p_outcome: 'completed',
+  });
 
   return {
     order: await loadOrder(orderId),
@@ -256,6 +427,14 @@ async function completeServiceOrder(orderId, operatorId) {
     archiveReference: reference,
   };
 }
+
+router.get('/customer/mine', requireRole('customer'), async (req, res, next) => {
+  try {
+    res.json({ orders: await loadCustomerOrders(req.user.id) });
+  } catch (error) {
+    next(normalizeServiceOrderError(error));
+  }
+});
 
 router.use(requireRole('admin', 'cashier'));
 
@@ -290,6 +469,54 @@ router.get('/:orderId', async (req, res, next) => {
   }
 });
 
+router.post('/:orderId/assignment', requireRole('admin'), async (req, res, next) => {
+  try {
+    const mechanicId = String(req.body?.mechanicId || '').trim();
+    const scheduledStart = new Date(req.body?.scheduledStart);
+    const scheduledEnd = new Date(req.body?.scheduledEnd);
+
+    if (!mechanicId || Number.isNaN(scheduledStart.getTime()) || Number.isNaN(scheduledEnd.getTime())) {
+      res.status(400).json({ error: 'Choose a mechanic and valid service schedule.' });
+      return;
+    }
+
+    if (scheduledEnd <= scheduledStart) {
+      res.status(400).json({ error: 'Service end time must be after the start time.' });
+      return;
+    }
+
+    await callRpc('assign_mechanic_to_service_order', {
+      p_service_order_id: req.params.orderId,
+      p_mechanic_id: mechanicId,
+      p_scheduled_start: scheduledStart.toISOString(),
+      p_scheduled_end: scheduledEnd.toISOString(),
+      p_actor_user_id: req.user.id,
+      p_note: String(req.body?.note || '').trim().slice(0, 1000) || null,
+    });
+
+    res.json({ order: await loadOrder(req.params.orderId) });
+  } catch (error) {
+    next(normalizeAssignmentError(error));
+  }
+});
+
+router.delete('/:orderId/assignment', requireRole('admin'), async (req, res, next) => {
+  try {
+    const result = await callRpc('remove_mechanic_from_service_order', {
+      p_service_order_id: req.params.orderId,
+      p_actor_user_id: req.user.id,
+      p_note: String(req.body?.note || '').trim().slice(0, 1000) || null,
+    });
+
+    res.json({
+      result,
+      order: await loadOrder(req.params.orderId),
+    });
+  } catch (error) {
+    next(normalizeAssignmentError(error));
+  }
+});
+
 router.post('/', async (req, res, next) => {
   try {
     const order = await callRpc('limen_create_service_order', {
@@ -312,7 +539,15 @@ router.patch('/:orderId', async (req, res, next) => {
       return;
     }
 
-    res.json({ order });
+    if (req.body?.status === 'cancelled') {
+      await callRpc('finish_mechanic_assignment', {
+        p_service_order_id: req.params.orderId,
+        p_actor_user_id: req.user.id,
+        p_outcome: 'cancelled',
+      });
+    }
+
+    res.json({ order: await loadOrder(req.params.orderId) });
   } catch (error) {
     next(normalizeServiceOrderError(error));
   }

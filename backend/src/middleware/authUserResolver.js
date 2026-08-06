@@ -1,14 +1,17 @@
-const ALLOWED_ROLES = new Set(['admin', 'cashier', 'stock_clerk']);
+const ALLOWED_ROLES = new Set([
+  'admin',
+  'cashier',
+  'staff',
+  'stock_clerk',
+  'viewer',
+  'customer',
+]);
 const DEFAULT_AUTH_CACHE_TTL_MS = 30_000;
 const DEFAULT_MAX_AUTH_CACHE_ENTRIES = 200;
 const TOKEN_EXPIRY_SAFETY_MS = 5_000;
 
 function normalizeRole(role) {
-  if (role === 'staff' || role === 'viewer' || role === 'customer') {
-    return 'stock_clerk';
-  }
-
-  return ALLOWED_ROLES.has(role) ? role : 'stock_clerk';
+  return ALLOWED_ROLES.has(role) ? role : 'customer';
 }
 
 function decodeTokenExpiresAt(token) {
@@ -77,7 +80,9 @@ export function createAuthUserResolver({
 
     const profile = await fetchProfile(data.user.id);
     const fallbackFullName = data.user.user_metadata?.full_name || '';
-    const fallbackRole = data.user.app_metadata?.role || profile?.role;
+    // The managed database profile is authoritative. Auth metadata is only a
+    // fallback during the short window before the profile trigger completes.
+    const fallbackRole = profile?.role || data.user.app_metadata?.role;
 
     return {
       id: data.user.id,

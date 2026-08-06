@@ -7,6 +7,7 @@ import { formatCurrency, formatDateTime, formatRelativeTime } from '../../../uti
 import { StatusBadge } from '../../../components/ui/Badge';
 import useDataStore from '../../../store/useDataStore';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
+import { listMechanics } from '../../../services/mechanicsApi';
 
 const escapeHtml = (value) => String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -528,9 +529,71 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
  * ServiceOrderDetailModal
  * Modal for viewing a service order's details and updating its status
  */
-export const ServiceOrderDetailModal = ({ isOpen, onClose, order, onStatusUpdate, onComplete }) => {
+const toDateTimeLocalValue = (value, fallbackOffsetHours = 0) => {
+    const date = value ? new Date(value) : new Date(Date.now() + fallbackOffsetHours * 60 * 60 * 1000);
+    if (Number.isNaN(date.getTime())) return '';
+    date.setMinutes(0, 0, 0);
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000);
+    return local.toISOString().slice(0, 16);
+};
+
+export const ServiceOrderDetailModal = ({
+    isOpen,
+    onClose,
+    order,
+    onStatusUpdate,
+    onComplete,
+    canAssignMechanic = false,
+    onAssignMechanic,
+    onRemoveMechanic,
+}) => {
     const [updating, setUpdating] = useState(false);
     const [completing, setCompleting] = useState(false);
+    const [mechanics, setMechanics] = useState([]);
+    const [mechanicsLoading, setMechanicsLoading] = useState(false);
+    const [assignmentError, setAssignmentError] = useState('');
+    const [assignmentSaving, setAssignmentSaving] = useState(false);
+    const [assignmentRemoving, setAssignmentRemoving] = useState(false);
+    const [mechanicId, setMechanicId] = useState('');
+    const [scheduledStart, setScheduledStart] = useState('');
+    const [scheduledEnd, setScheduledEnd] = useState('');
+
+    useEffect(() => {
+        if (!isOpen || !order) return;
+        const nextStart = toDateTimeLocalValue(order.scheduledStart ?? order.scheduled_start, 1);
+        const nextEnd = toDateTimeLocalValue(order.scheduledEnd ?? order.scheduled_end, 2);
+        setMechanicId(order.assignment?.mechanicId ?? order.assignedMechanic?.id ?? '');
+        setScheduledStart(nextStart);
+        setScheduledEnd(nextEnd > nextStart ? nextEnd : toDateTimeLocalValue(null, 2));
+        setAssignmentError('');
+    }, [isOpen, order]);
+
+    useEffect(() => {
+        if (!isOpen || !canAssignMechanic || !scheduledStart || !scheduledEnd) return undefined;
+
+        let active = true;
+        const timer = window.setTimeout(async () => {
+            setMechanicsLoading(true);
+            try {
+                const rows = await listMechanics({
+                    activeOnly: true,
+                    orderId: order.id,
+                    start: new Date(scheduledStart).toISOString(),
+                    end: new Date(scheduledEnd).toISOString(),
+                });
+                if (active) setMechanics(rows);
+            } catch (error) {
+                if (active) setAssignmentError(error.message || 'Unable to load mechanics.');
+            } finally {
+                if (active) setMechanicsLoading(false);
+            }
+        }, 250);
+
+        return () => {
+            active = false;
+            window.clearTimeout(timer);
+        };
+    }, [canAssignMechanic, isOpen, order?.id, scheduledEnd, scheduledStart]);
 
     if (!isOpen || !order) return null;
 
@@ -542,7 +605,7 @@ export const ServiceOrderDetailModal = ({ isOpen, onClose, order, onStatusUpdate
     const partItems = items.filter((item) => !serviceItems.includes(item));
     const orderTotal = Number(order.totalAmount ?? order.total_amount ?? order.estimatedCost ?? order.estimated_cost ?? 0);
     const completedAt = order.completedAt ?? order.completed_at ?? null;
-    const mechanicName = order.mechanicName ?? order.assignedMechanicName ?? order.assigned_to_name ?? order.assignedToName ?? '';
+    const mechanicName = order.assignedMechanic?.name ?? order.assignment?.mechanic?.name ?? order.mechanicName ?? order.assignedMechanicName ?? order.assigned_to_name ?? order.assignedToName ?? '';
 
     const statusLabels = {
         pending: 'Pending',
@@ -577,6 +640,47 @@ export const ServiceOrderDetailModal = ({ isOpen, onClose, order, onStatusUpdate
             completedAt,
             mechanicName,
         });
+    };
+
+    const handleAssignmentSubmit = async (event) => {
+        event.preventDefault();
+        setAssignmentError('');
+
+        if (!mechanicId || !scheduledStart || !scheduledEnd) {
+            setAssignmentError('Choose a mechanic and service schedule.');
+            return;
+        }
+
+        if (new Date(scheduledEnd) <= new Date(scheduledStart)) {
+            setAssignmentError('Service end time must be after the start time.');
+            return;
+        }
+
+        setAssignmentSaving(true);
+        try {
+            await onAssignMechanic?.(order.id, {
+                mechanicId,
+                scheduledStart: new Date(scheduledStart).toISOString(),
+                scheduledEnd: new Date(scheduledEnd).toISOString(),
+            });
+        } catch (error) {
+            setAssignmentError(error.message || 'Unable to assign the mechanic.');
+        } finally {
+            setAssignmentSaving(false);
+        }
+    };
+
+    const handleAssignmentRemove = async () => {
+        setAssignmentRemoving(true);
+        setAssignmentError('');
+        try {
+            await onRemoveMechanic?.(order.id);
+            setMechanicId('');
+        } catch (error) {
+            setAssignmentError(error.message || 'Unable to remove the assignment.');
+        } finally {
+            setAssignmentRemoving(false);
+        }
     };
 
     const renderItemRow = (item, index) => {
@@ -710,7 +814,33 @@ export const ServiceOrderDetailModal = ({ isOpen, onClose, order, onStatusUpdate
                                             <UserCheck className="h-4 w-4" /> Mechanic
                                         </div>
                                         <p className="mt-2 text-sm font-semibold text-primary-950">{mechanicName || 'Not assigned'}</p>
+                                        {order.assignedMechanic?.specialization && <p className="mt-1 text-xs text-primary-600">{order.assignedMechanic.specialization}</p>}
+                                        {order.scheduledStart && <p className="mt-2 text-xs text-primary-600">{formatDateTime(order.scheduledStart)} – {formatDateTime(order.scheduledEnd)}</p>}
                                     </div>
+                                    {canAssignMechanic && order.status !== 'completed' && order.status !== 'cancelled' && (
+                                        <form onSubmit={handleAssignmentSubmit} className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-800">Admin mechanic assignment</p>
+                                            {assignmentError && <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800" role="alert">{assignmentError}</p>}
+                                            <label className="mt-3 block text-xs font-semibold text-primary-700">Mechanic
+                                                <select className="input mt-1" value={mechanicId} onChange={(event) => setMechanicId(event.target.value)} disabled={mechanicsLoading} required>
+                                                    <option value="">{mechanicsLoading ? 'Loading mechanics…' : 'Choose active mechanic'}</option>
+                                                    {mechanics.map((mechanic) => (
+                                                        <option key={mechanic.id} value={mechanic.id} disabled={!mechanic.availableForRequestedWindow}>
+                                                            {mechanic.full_name || mechanic.fullName} · {mechanic.specialization} · {mechanic.currentWorkload} active{mechanic.hasScheduleConflict ? ' · conflict' : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </label>
+                                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                                <label className="text-xs font-semibold text-primary-700">Start<input type="datetime-local" className="input mt-1" value={scheduledStart} onChange={(event) => setScheduledStart(event.target.value)} required /></label>
+                                                <label className="text-xs font-semibold text-primary-700">End<input type="datetime-local" className="input mt-1" value={scheduledEnd} onChange={(event) => setScheduledEnd(event.target.value)} required /></label>
+                                            </div>
+                                            <div className="mt-3 flex flex-wrap gap-2">
+                                                <Button type="submit" size="sm" variant="confirm" isLoading={assignmentSaving} leftIcon={<UserCheck className="h-4 w-4" />}>{order.assignment ? 'Change assignment' : 'Assign mechanic'}</Button>
+                                                {order.assignment && <Button size="sm" variant="delete" isLoading={assignmentRemoving} onClick={handleAssignmentRemove}>Remove</Button>}
+                                            </div>
+                                        </form>
+                                    )}
                                     <div className="rounded-2xl border border-primary-100 bg-primary-50 p-4">
                                         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary-500">
                                             <CalendarDays className="h-4 w-4" /> Dates

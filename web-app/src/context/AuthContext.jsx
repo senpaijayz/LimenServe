@@ -6,26 +6,9 @@ import { getCurrentUserProfile } from '../services/authApi';
 
 const PROFILE_TIMEOUT_MS = 8000;
 
-function normalizeRole(role, email) {
-    if (role === 'staff') {
-        return ROLES.STOCK_CLERK;
-    }
-
-    if (role) {
-        return role;
-    }
-
-    const normalizedEmail = email?.trim().toLowerCase();
-
-    if (normalizedEmail === 'admin@limen.com') {
-        return ROLES.ADMIN;
-    }
-
-    if (normalizedEmail?.endsWith('@limen.com')) {
-        return ROLES.STOCK_CLERK;
-    }
-
-    return ROLES.STOCK_CLERK;
+function normalizeRole(role) {
+    const allowedRoles = new Set(Object.values(ROLES));
+    return allowedRoles.has(role) ? role : ROLES.CUSTOMER;
 }
 
 function mapSupabaseUser(sessionUser, profile) {
@@ -39,7 +22,7 @@ function mapSupabaseUser(sessionUser, profile) {
         firstName,
         lastName: lastNameParts.join(' '),
         fullName,
-        role: normalizeRole(profile?.role || sessionUser.app_metadata?.role, email),
+        role: normalizeRole(profile?.role || sessionUser.app_metadata?.role),
     };
 }
 
@@ -223,6 +206,42 @@ export function AuthProvider({ children }) {
         resetAuthState();
     }, [resetAuthState]);
 
+    const registerCustomer = useCallback(async ({ fullName, email, password }) => {
+        setIsLoadingAuth(true);
+        setError(null);
+        setProfileWarning(null);
+
+        try {
+            const { data, error: signUpError } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    data: {
+                        full_name: fullName,
+                    },
+                },
+            });
+
+            if (signUpError) throw signUpError;
+
+            if (data?.session) {
+                applySession(data.session, { force: true });
+            }
+
+            return {
+                success: true,
+                requiresEmailConfirmation: !data?.session,
+                user: data?.user ?? null,
+            };
+        } catch (registrationError) {
+            const message = registrationError.message || 'Unable to create your customer account.';
+            setError(message);
+            return { success: false, error: message };
+        } finally {
+            setIsLoadingAuth(false);
+        }
+    }, [applySession]);
+
     const hasRole = useCallback((roles) => {
         if (!user) return false;
         if (typeof roles === 'string') {
@@ -242,9 +261,10 @@ export function AuthProvider({ children }) {
         isAuthenticated: !!user,
         isAdmin: user?.role === ROLES.ADMIN,
         login,
+        registerCustomer,
         logout,
         hasRole,
-    }), [user, isLoadingAuth, isProfileReady, error, profileWarning, login, logout, hasRole]);
+    }), [user, isLoadingAuth, isProfileReady, error, profileWarning, login, registerCustomer, logout, hasRole]);
 
     return (
         <AuthContext.Provider value={value}>

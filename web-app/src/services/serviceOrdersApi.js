@@ -9,6 +9,15 @@ export async function listServiceOrders(params = {}) {
   }
 }
 
+export async function listMyServiceOrders() {
+  try {
+    const { data } = await apiClient.get('/service-orders/customer/mine');
+    return data.orders ?? [];
+  } catch (error) {
+    extractApiError(error, 'Failed to load your service orders.');
+  }
+}
+
 export async function getServiceOrder(orderId) {
   try {
     const { data } = await apiClient.get(`/service-orders/${orderId}`);
@@ -42,5 +51,25 @@ export async function completeServiceOrder(orderId) {
     return data;
   } catch (error) {
     extractApiError(error, 'Failed to complete and archive the service order.');
+  }
+}
+
+export async function assignMechanicToServiceOrder(orderId, payload) {
+  try {
+    const { data } = await apiClient.post(`/service-orders/${orderId}/assignment`, payload);
+    return data.order;
+  } catch (error) {
+    extractApiError(error, 'Failed to assign the mechanic.');
+  }
+}
+
+export async function removeMechanicFromServiceOrder(orderId, note = '') {
+  try {
+    const { data } = await apiClient.delete(`/service-orders/${orderId}/assignment`, {
+      data: { note },
+    });
+    return data.order;
+  } catch (error) {
+    extractApiError(error, 'Failed to remove the mechanic assignment.');
   }
 }

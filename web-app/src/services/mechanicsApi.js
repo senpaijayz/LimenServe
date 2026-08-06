@@ -10,9 +10,9 @@ export async function getPublicMechanics() {
   }
 }
 
-export async function listMechanics() {
+export async function listMechanics(params = {}) {
   try {
-    const { data } = await apiClient.get('/mechanics');
+    const { data } = await apiClient.get('/mechanics', { params });
     return data.mechanics ?? [];
   } catch (error) {
     extractApiError(error, 'Failed to load mechanics.');

@@ -41,7 +41,7 @@ function createFakeClients({ user, profile, getUserDelayMs = 0, getUserError = n
       async rpc() {
         profileCalls += 1;
         return {
-          data: profile ?? { full_name: 'Database Admin', role: 'admin' },
+          data: profile === undefined ? { full_name: 'Database Admin', role: 'admin' } : profile,
           error: null,
         };
       },
@@ -107,4 +107,44 @@ test('does not cache invalid tokens', async () => {
   assert.equal(second, null);
   assert.equal(clients.counts.getUserCalls, 2);
   assert.equal(clients.counts.profileCalls, 0);
+});
+
+test('keeps customer users as customers instead of promoting them to stock clerk', async () => {
+  const clients = createFakeClients({
+    user: {
+      id: 'customer-1',
+      email: 'customer@example.com',
+      app_metadata: { role: 'stock_clerk' },
+      user_metadata: { full_name: 'Customer One' },
+    },
+    profile: { full_name: 'Customer One', role: 'customer' },
+  });
+  const { resolveUser } = createAuthUserResolver({
+    supabaseAuth: clients.supabaseAuth,
+    supabaseAdmin: clients.supabaseAdmin,
+  });
+
+  const user = await resolveUser(jwtWithExpiry(Date.now() + 60_000));
+
+  assert.equal(user?.role, 'customer');
+});
+
+test('uses the safe customer role for unknown metadata roles', async () => {
+  const clients = createFakeClients({
+    user: {
+      id: 'unknown-1',
+      email: 'unknown@example.com',
+      app_metadata: { role: 'super_admin' },
+      user_metadata: {},
+    },
+    profile: null,
+  });
+  const { resolveUser } = createAuthUserResolver({
+    supabaseAuth: clients.supabaseAuth,
+    supabaseAdmin: clients.supabaseAdmin,
+  });
+
+  const user = await resolveUser(jwtWithExpiry(Date.now() + 60_000));
+
+  assert.equal(user?.role, 'customer');
 });
