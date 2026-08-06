@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router';
 import { motion as Motion } from 'framer-motion';
 import { Search, Plus, Grid, List, Package, AlertTriangle, Camera, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ClipboardList, Edit2, Crosshair, Box } from 'lucide-react';
 import Button from '../../../components/ui/Button';

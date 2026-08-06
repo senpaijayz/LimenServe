@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { AlertTriangle, ChevronRight } from 'lucide-react';
 import Card from '../../../components/ui/Card';
 import { StockBadge } from '../../../components/ui/Badge';

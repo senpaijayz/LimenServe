@@ -17,7 +17,7 @@ import {
   ScanLine,
   PackagePlus,
 } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import { formatCurrency } from '../../../utils/formatters';
 import { cleanVehicleModelLabel } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';

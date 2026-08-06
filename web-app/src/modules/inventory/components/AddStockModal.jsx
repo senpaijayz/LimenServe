@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { AlertTriangle, ArrowRight, Camera, CheckCircle, ClipboardCheck, FileText, ListPlus, LoaderCircle, Package, Plus, Search, Trash2, UploadCloud } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
 import Button from '../../../components/ui/Button';
