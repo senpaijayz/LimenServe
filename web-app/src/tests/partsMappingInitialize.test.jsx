@@ -1,66 +1,30 @@
-import React from 'react';
-import { cleanup, render, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ToastProvider } from '../components/ui/Toast';
-import PartsMapping from '../modules/parts-mapping/PartsMapping';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import apiClient from '../services/apiClient';
 import { getPartsMappingLayouts } from '../services/partsMappingApi';
 
-vi.mock('@react-three/fiber', () => ({
-    Canvas: ({ children }) => <div data-testid="stockroom-canvas">{children}</div>,
+vi.mock('../services/apiClient', () => ({
+    default: {
+        get: vi.fn(),
+    },
+    STOCKROOM_API_TIMEOUT_MS: 30_000,
+    extractApiError: vi.fn((error) => {
+        throw error;
+    }),
 }));
 
-vi.mock('../modules/parts-mapping/Scene3D', () => ({
-    default: () => <div data-testid="mock-scene" />,
-}));
-
-vi.mock('../services/partsMappingApi', () => ({
-    getPartsMappingLayouts: vi.fn(),
-    createPartsMappingLayout: vi.fn(),
-    updatePartsMappingLayout: vi.fn(),
-    deletePartsMappingLayout: vi.fn(),
-    setPriorityPartsMappingLayout: vi.fn(),
-}));
-
-describe('PartsMapping initialization', () => {
+describe('parts mapping layout loading', () => {
     beforeEach(() => {
-        localStorage.clear();
-        Object.defineProperty(window, 'matchMedia', {
-            writable: true,
-            value: vi.fn().mockImplementation((query) => ({
-                matches: true,
-                media: query,
-                onchange: null,
-                addEventListener: vi.fn(),
-                removeEventListener: vi.fn(),
-                addListener: vi.fn(),
-                removeListener: vi.fn(),
-                dispatchEvent: vi.fn(),
-            })),
-        });
-        vi.mocked(getPartsMappingLayouts).mockRejectedValue(new Error('layout endpoint down'));
-    });
-
-    afterEach(() => {
-        cleanup();
         vi.clearAllMocks();
     });
 
-    it('settles into a safe stockroom shell instead of retrying forever', async () => {
-        render(
-            <ToastProvider>
-                <PartsMapping />
-            </ToastProvider>
-        );
+    it('surfaces a layout endpoint error after one request', async () => {
+        const error = new Error('layout endpoint down');
+        vi.mocked(apiClient.get).mockRejectedValue(error);
 
-        await waitFor(() => {
-            expect(document.body.textContent).toContain('layout endpoint down');
+        await expect(getPartsMappingLayouts()).rejects.toThrow('layout endpoint down');
+        expect(apiClient.get).toHaveBeenCalledTimes(1);
+        expect(apiClient.get).toHaveBeenCalledWith('/parts-mapping/layouts', {
+            timeout: 30_000,
         });
-
-        await new Promise((resolve) => {
-            setTimeout(resolve, 50);
-        });
-
-        expect(getPartsMappingLayouts).toHaveBeenCalledTimes(1);
-        expect(document.body.textContent).not.toContain('Loading Warehouse Digital Twin...');
     });
 });

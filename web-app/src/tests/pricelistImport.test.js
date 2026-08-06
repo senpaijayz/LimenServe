@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import process from 'node:process';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = path.resolve(process.cwd(), '..');
@@ -18,18 +19,13 @@ describe('full pricelist import pipeline', () => {
     expect(summary.duplicateSourceRows).toBe(35);
   });
 
-  it('keeps a raw-row staging table instead of collapsing imports by sku', () => {
-    const catalogSql = readText('Current SQL Editor/02_catalog_inventory.sql');
-    const importSql = readText('Current SQL Editor/08_pricelist_import.sql');
+  it('reads raw staging rows without collapsing duplicate skus', () => {
+    const catalogRoutes = readText('backend/src/routes/catalogRoutes.js');
 
-    expect(catalogSql).toContain('source_sheet text not null');
-    expect(catalogSql).toContain('source_line_number integer not null');
-    expect(catalogSql).not.toContain('sku text primary key');
-
-    expect(importSql).toContain('source_sheet text not null');
-    expect(importSql).toContain('source_line_number integer not null');
-    expect(importSql).not.toContain('sku text primary key');
-    expect(importSql).toContain('with price_source as (');
-    expect(importSql).toContain('price_source.product_id');
+    expect(catalogRoutes).toContain(".from('pricelist_import_staging')");
+    expect(catalogRoutes).toContain('source_sheet,');
+    expect(catalogRoutes).toContain('source_line_number,');
+    expect(catalogRoutes).toContain(".order('source_line_number', { ascending: true })");
+    expect(catalogRoutes).toContain('catalogEntryId: `pricelist-${row.id || row.source_line_number}`');
   });
 });
