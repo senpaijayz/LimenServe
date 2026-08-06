@@ -2,6 +2,8 @@
 
 Audit snapshot: 2026-08-06 (Asia/Taipei)
 
+Final synchronization update: GitHub `main`, Vercel, and Render were re-verified after the Render settings alignment. The current shared application commit is `8b5236ba826af3dcccca6b3fab9396aa5f7abf95`; Vercel production deployment is `dpl_7aQvEm1ry46TRPSZ18p6skCyJNQy`; Render production deployment is `dep-d9q7732d0e5s7393rggg`. The existing Supabase project remains `bxrdmfdokslnnluztmgl` with no database or production-record changes in this settings follow-up.
+
 This report is based on the local checkout, GitHub, the connected Vercel and Render projects, and the live Supabase project `bxrdmfdokslnnluztmgl`. Secret values were not read or recorded. Production records were queried only for aggregate counts, status distributions, schema metadata, and invariant checks.
 
 ## 1. Current architecture
@@ -37,10 +39,10 @@ The production Supabase project is on the confirmed Free plan. A previously crea
 
 There are two production authorities:
 
-- Application code: GitHub `main`, commit `1b92e829cfcd2cf1066f07f9437608b4016ffa35` at the audit snapshot.
+- Application code: GitHub `main`, commit `8b5236ba826af3dcccca6b3fab9396aa5f7abf95` after the completed follow-up.
 - Live schema and business data: Supabase project `bxrdmfdokslnnluztmgl`.
 
-Vercel and Render both deploy GitHub `main` and both currently run the same commit. The local follow-up branch `feature/production-hardening-audit` starts from that production commit and contains only post-audit hardening until it is reviewed and merged.
+Vercel and Render both deploy GitHub `main` and both currently run the same commit. The local checkout is synchronized to `main`; only the user-owned untracked files described below remain outside the repository.
 
 The untracked local `outputs/` directory and root `package.json` are user files and are not part of the GitHub or production source of truth. They were not modified or included.
 
@@ -48,10 +50,10 @@ The untracked local `outputs/` directory and root `package.json` are user files 
 
 - Repository: `https://github.com/senpaijayz/LimenServe`
 - Production branch: `main`
-- Merged feature PR: `#1`, `feature/secure-assignments-reservations` -> `main`
-- Production commit: `1b92e829cfcd2cf1066f07f9437608b4016ffa35`
+- Merged feature PRs include `#1` (assignments/reservations), `#2` (production hardening), `#3` (Supabase security), `#4` (backend dependency hardening), and `#5` (Render settings alignment).
+- Production commit: `8b5236ba826af3dcccca6b3fab9396aa5f7abf95`
 - Vercel production URL: `https://limen-serve.vercel.app`
-- Vercel deployment: `dpl_6gxjitbgRVrUcr8ht8UQ4haK1AMp`, state `READY`, region `iad1`
+- Vercel deployment: `dpl_7aQvEm1ry46TRPSZ18p6skCyJNQy`, state `READY`, region `iad1`
 - Framework: Vite; Vercel Node setting: `24.x`
 - Build behavior: the connected `web-app` package runs `npm run build` and emits `dist`.
 - Routing: `web-app/vercel.json` rewrites `/api/(.*)` to Render and all other paths to `/index.html` for SPA routing.
@@ -64,11 +66,11 @@ The Vercel connector does not expose a read-only environment-variable listing. R
 
 - Render URL: `https://limen-backend.onrender.com`
 - Service: `srv-d6rqmefdiees73bvimg0`, branch `main`, automatic deploy on commit enabled
-- Production deploy: `dep-d9q4ll3l550s7382m4g0`, status `live`
-- Deployed commit: `1b92e829cfcd2cf1066f07f9437608b4016ffa35`
+- Production deploy: `dep-d9q7732d0e5s7393rggg`, status `live`
+- Deployed commit: `8b5236ba826af3dcccca6b3fab9396aa5f7abf95`
 - Runtime: Node.js 22.22.0, one Starter instance, Singapore
-- Executed build command in the deployment log: `cd backend && npm install`
-- Executed start command: `cd backend && npm start`
+- Current executed build command: `npm ci` from the `backend` root directory.
+- Current executed start command: `npm start` from the `backend` root directory.
 - API base URL: `https://limen-backend.onrender.com/api`
 - CORS: exact production Vercel origin, Vercel preview pattern, and local development origins are allowed; an unrelated origin is rejected.
 - Background workers and cron jobs: none detected.
@@ -81,13 +83,13 @@ Required backend environment names found in code are `SUPABASE_URL`, `SUPABASE_A
 
 | Source | Branch/commit or state | Compared with production | Result |
 | --- | --- | --- | --- |
-| GitHub | `main` at `1b92e82` | Code authority | Current production baseline |
-| Vercel | `main` at `1b92e82` | GitHub | Exact commit match |
-| Render | `main` at `1b92e82` | GitHub/Vercel | Exact commit match |
+| GitHub | `main` at `8b5236b` | Code authority | Current production baseline |
+| Vercel | `main` at `8b5236b` | GitHub | Exact commit match |
+| Render | `main` at `8b5236b` | GitHub/Vercel | Exact commit match |
 | Supabase | Healthy; feature migrations applied | Repository migrations | Feature schema matches deployed code |
-| Local checkout | Follow-up branch from `1b92e82` | GitHub | Contains intentional, not-yet-deployed hardening changes |
+| Local checkout | `main` at `8b5236b` | GitHub | Exact tracked-file match; user-owned untracked files excluded |
 
-No production-only application feature was found that is absent from GitHub. No merged GitHub feature is missing from either deployment. The material differences are deployment-setting metadata on Render, production database migration version labels generated by the platform versus local filenames, and the intentional follow-up branch changes described below.
+No production-only application feature was found that is absent from GitHub. No merged GitHub feature is missing from either deployment. The previously observed Render setting drift is resolved; remaining differences are limited to platform-generated migration version labels versus local filenames.
 
 ## 7. Supabase structure related to the requested features
 
