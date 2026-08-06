@@ -15,5 +15,10 @@
     "multer": "^2.0.2",
     "onnxruntime-node": "^1.23.2",
     "ppu-paddle-ocr": "^5.1.1"
+  },
+  "overrides": {
+    "onnxruntime-node": {
+      "adm-zip": "0.6.0"
+    }
   }
 }

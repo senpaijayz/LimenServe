@@ -139,7 +139,7 @@ They correspond to the repository's additive, data-preserving migration files un
 - At the audit snapshot, Supabase's security advisor reported three mutable-search-path functions and five authenticated SECURITY DEFINER role helpers. The reviewed security follow-up removed all eight warnings. The remaining RLS-without-policy findings are informational for intentionally inaccessible/internal tables; leaked-password protection remains disabled because it is Pro-only.
 - Supabase performance advisor reports pre-existing unused indexes and multiple permissive policies. Removing indexes or merging policies without representative workload evidence is unsafe and outside this feature change.
 - React Router's RSC-only CSRF advisory did not affect LimenServe's declarative `BrowserRouter` architecture. The supported React Router 8.3 upgrade is included in the security follow-up and removes the advisory from `npm audit`.
-- Backend npm audit retains three linked high findings from `adm-zip` inside ONNX/Paddle OCR. It is used during trusted runtime installation, not to unpack uploaded invoices. Forced audit remediation would downgrade incompatible OCR packages, so it is retained and documented pending an upstream compatible release.
+- Backend npm audit reports zero vulnerabilities after a scoped npm override moved ONNX's install-only `adm-zip` dependency to patched version 0.6.0. A clean `npm ci`, ONNX/Paddle initialization, and the exact archive extraction APIs used by ONNX were verified. The invoice OCR adapter now passes an `ArrayBuffer`, matching the installed Paddle package's Node API instead of relying on its incompatible file-path example.
 - The optional 3D stockroom bundle is large, but it is route-lazy and excluded from initial preload.
 - Supabase leaked-password protection should be enabled in Auth settings when available on the selected plan after testing the user-registration flow.
 
@@ -208,7 +208,7 @@ Recommended reviewed platform settings:
 - Browser: production desktop/mobile home and catalog, stock labels, registration labels, protected-route redirect, cache headers, Render health, and CORS allow/deny behavior.
 - Authenticated mutation flows: exercised against isolated test data inside a rolled-back transaction. Production aggregate verification is read-only because no production test credentials or disposable business records were authorized.
 
-Current local evidence: 102/102 frontend tests pass, 14/14 backend tests pass, ESLint passes, the Vite production build passes, and the frontend npm audit reports zero vulnerabilities after the React Router 8.3 migration.
+Current local evidence: 102/102 frontend tests pass, 14/14 backend tests pass, ESLint passes, the Vite production build passes, and both frontend and backend npm audits report zero vulnerabilities. The backend dependency fix also passes a clean-install OCR initialization and production-shaped image-recognition smoke test.
 
 ## 14. Deployment and rollback plan
 
