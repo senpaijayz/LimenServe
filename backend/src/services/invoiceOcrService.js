@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { supabaseAdmin } from '../config/supabase.js';
@@ -270,7 +270,9 @@ async function getPaddleService() {
 
 async function recognizeImage(filePath) {
   const service = await getPaddleService();
-  const result = await service.recognize(filePath, {
+  const file = await readFile(filePath);
+  const image = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
+  const result = await service.recognize(image, {
     flatten: true,
     strategy: 'per-line',
     noCache: true,
