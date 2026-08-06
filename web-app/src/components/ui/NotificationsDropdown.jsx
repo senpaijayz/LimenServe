@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Bell, Check, FileText, Info, LoaderCircle, X } from 'lucide-react';
 import {
     dismissNotification,
@@ -133,19 +133,19 @@ const NotificationsDropdown = () => {
             >
                 <Bell className="h-5 w-5 text-primary-400" />
                 {unreadCount > 0 && (
-                    <motion.span
+                    <Motion.span
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
                         className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-accent-blue"
                     >
                         <span className="text-[10px] font-bold text-white">{unreadCount}</span>
-                    </motion.span>
+                    </Motion.span>
                 )}
             </button>
 
             <AnimatePresence>
                 {isOpen && (
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0, y: -8, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -8, scale: 0.95 }}
@@ -221,7 +221,7 @@ const NotificationsDropdown = () => {
                                 })
                             )}
                         </div>
-                    </motion.div>
+                    </Motion.div>
                 )}
             </AnimatePresence>
         </div>

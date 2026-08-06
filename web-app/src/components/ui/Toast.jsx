@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { TOAST } from '../../utils/constants';
@@ -76,6 +76,8 @@ export function ToastProvider({ children }) {
 /**
  * Hook to use toast
  */
+// The provider and its small companion hook intentionally share one module.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToast() {
     const context = useContext(ToastContext);
     if (!context) {
@@ -106,7 +108,7 @@ function ToastContainer({ toasts, removeToast }) {
         <div className="toast-container">
             <AnimatePresence>
                 {toasts.map((toast) => (
-                    <motion.div
+                    <Motion.div
                         key={toast.id}
                         className={`toast ${variants[toast.type]}`}
                         initial={{ opacity: 0, y: -20, scale: 0.95 }}
@@ -122,7 +124,7 @@ function ToastContainer({ toasts, removeToast }) {
                         >
                             <X className="w-4 h-4 text-primary-400" />
                         </button>
-                    </motion.div>
+                    </Motion.div>
                 ))}
             </AnimatePresence>
         </div>,

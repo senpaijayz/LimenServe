@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { X, Wrench, User, Phone, Car, FileText, Save, CheckCircle, ArrowRight, Archive, CreditCard, Package, CalendarDays, UserCheck, Printer, Search, Plus, Trash2 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
+import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import Input from '../../../components/ui/Input';
 import { formatCurrency, formatDateTime, formatRelativeTime } from '../../../utils/formatters';
 import { StatusBadge } from '../../../components/ui/Badge';
@@ -554,6 +555,7 @@ export const ServiceOrderDetailModal = ({
     const [assignmentError, setAssignmentError] = useState('');
     const [assignmentSaving, setAssignmentSaving] = useState(false);
     const [assignmentRemoving, setAssignmentRemoving] = useState(false);
+    const [removeConfirmationOpen, setRemoveConfirmationOpen] = useState(false);
     const [mechanicId, setMechanicId] = useState('');
     const [scheduledStart, setScheduledStart] = useState('');
     const [scheduledEnd, setScheduledEnd] = useState('');
@@ -676,6 +678,7 @@ export const ServiceOrderDetailModal = ({
         try {
             await onRemoveMechanic?.(order.id);
             setMechanicId('');
+            setRemoveConfirmationOpen(false);
         } catch (error) {
             setAssignmentError(error.message || 'Unable to remove the assignment.');
         } finally {
@@ -700,6 +703,7 @@ export const ServiceOrderDetailModal = ({
     };
 
     return (
+        <>
         <AnimatePresence>
             <Motion.div
                 initial={{ opacity: 0 }}
@@ -714,6 +718,9 @@ export const ServiceOrderDetailModal = ({
                     exit={{ scale: 0.95, opacity: 0 }}
                     className="w-full max-w-4xl overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-xl"
                     onClick={e => e.stopPropagation()}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="service-order-detail-title"
                 >
                     <div className="flex items-start justify-between gap-4 border-b border-primary-100 bg-primary-50 px-5 py-4 sm:px-6">
                         <div className="min-w-0">
@@ -721,7 +728,7 @@ export const ServiceOrderDetailModal = ({
                                 <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-primary-500">{order.orderNumber || order.id}</p>
                                 <StatusBadge status={order.status} />
                             </div>
-                            <h2 className="mt-2 text-xl font-display font-bold text-primary-950 sm:text-2xl">Customer Service Order</h2>
+                            <h2 id="service-order-detail-title" className="mt-2 text-xl font-display font-bold text-primary-950 sm:text-2xl">Customer Service Order</h2>
                             <p className="mt-1 text-sm text-primary-500">Review customer, vehicle, services, parts, and completion record.</p>
                         </div>
                         <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white transition-colors">
@@ -837,7 +844,7 @@ export const ServiceOrderDetailModal = ({
                                             </div>
                                             <div className="mt-3 flex flex-wrap gap-2">
                                                 <Button type="submit" size="sm" variant="confirm" isLoading={assignmentSaving} leftIcon={<UserCheck className="h-4 w-4" />}>{order.assignment ? 'Change assignment' : 'Assign mechanic'}</Button>
-                                                {order.assignment && <Button size="sm" variant="delete" isLoading={assignmentRemoving} onClick={handleAssignmentRemove}>Remove</Button>}
+                                                {order.assignment && <Button size="sm" variant="delete" isLoading={assignmentRemoving} onClick={() => setRemoveConfirmationOpen(true)}>Remove</Button>}
                                             </div>
                                         </form>
                                     )}
@@ -894,5 +901,16 @@ export const ServiceOrderDetailModal = ({
                 </Motion.div>
             </Motion.div>
         </AnimatePresence>
+        <ConfirmDialog
+            isOpen={removeConfirmationOpen}
+            title="Remove mechanic assignment?"
+            message={`This will unassign ${mechanicName || 'the current mechanic'} from ${order.orderNumber || 'this service order'} while preserving the assignment history.`}
+            confirmLabel="Remove assignment"
+            confirmVariant="delete"
+            isLoading={assignmentRemoving}
+            onConfirm={handleAssignmentRemove}
+            onClose={() => setRemoveConfirmationOpen(false)}
+        />
+        </>
     );
 };

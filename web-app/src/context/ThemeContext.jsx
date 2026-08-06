@@ -71,6 +71,8 @@ export function ThemeProvider({ children }) {
 /**
  * Hook to access theme context
  */
+// The provider and its small companion hook intentionally share one module.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTheme() {
     const context = useContext(ThemeContext);
 

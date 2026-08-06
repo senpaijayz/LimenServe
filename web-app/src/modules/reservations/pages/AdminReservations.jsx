@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Check, Clock3, Eye, Filter, PackageCheck, RefreshCw, X, XCircle } from 'lucide-react';
 import Button from '../../../components/ui/Button';
+import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import { useToast } from '../../../components/ui/Toast';
 import { getReservation, listReservations, processReservation } from '../../../services/reservationsApi';
 import { formatDateTime } from '../../../utils/formatters';
@@ -24,6 +25,7 @@ export default function AdminReservations() {
   const [processing, setProcessing] = useState('');
   const [availabilityDates, setAvailabilityDates] = useState({});
   const [activity, setActivity] = useState(null);
+  const [confirmation, setConfirmation] = useState(null);
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
@@ -52,11 +54,44 @@ export default function AdminReservations() {
       });
       setReservations((current) => current.map((item) => item.id === updated.id ? updated : item));
       success(`${reservation.reservationNumber} updated to ${STATUS_LABELS[updated.status] || updated.status}.`);
+      return true;
     } catch (error) {
       showError(error.message || 'Unable to update the reservation.');
+      return false;
     } finally {
       setProcessing('');
     }
+  };
+
+  const requestConfirmation = (reservation, action) => {
+    const copy = {
+      complete: {
+        title: 'Complete reservation?',
+        message: `This will finalize ${reservation.reservationNumber} and consume its allocated inventory.`,
+        confirmLabel: 'Complete reservation',
+        confirmVariant: 'confirm',
+      },
+      reject: {
+        title: 'Reject reservation?',
+        message: `This will reject ${reservation.reservationNumber} and release any allocated stock back to availability.`,
+        confirmLabel: 'Reject reservation',
+        confirmVariant: 'reject',
+      },
+      cancel: {
+        title: 'Cancel reservation?',
+        message: `This will cancel ${reservation.reservationNumber} and release any allocated stock back to availability.`,
+        confirmLabel: 'Cancel reservation',
+        confirmVariant: 'warning',
+      },
+    }[action];
+
+    setConfirmation({ reservation, action, ...copy });
+  };
+
+  const confirmAction = async () => {
+    if (!confirmation) return;
+    const completed = await applyAction(confirmation.reservation, confirmation.action);
+    if (completed) setConfirmation(null);
   };
 
   const showActivity = async (reservation) => {
@@ -126,9 +161,9 @@ export default function AdminReservations() {
                   <div className="flex flex-wrap gap-2">
                     {reservation.status === 'pending' && <Button size="sm" variant="approve" onClick={() => applyAction(reservation, 'approve')} isLoading={isProcessing(reservation, 'approve')} leftIcon={<Check className="h-4 w-4" />}>Approve</Button>}
                     {['approved', 'waiting_for_stock', 'partially_available'].includes(reservation.status) && <Button size="sm" variant="warning" onClick={() => applyAction(reservation, 'allocate')} isLoading={isProcessing(reservation, 'allocate')} leftIcon={<Clock3 className="h-4 w-4" />}>Allocate stock</Button>}
-                    {reservation.status === 'available' && <Button size="sm" variant="confirm" onClick={() => applyAction(reservation, 'complete')} isLoading={isProcessing(reservation, 'complete')} leftIcon={<PackageCheck className="h-4 w-4" />}>Complete</Button>}
-                    {reservation.isActive && <Button size="sm" variant="reject" onClick={() => applyAction(reservation, 'reject')} isLoading={isProcessing(reservation, 'reject')} leftIcon={<XCircle className="h-4 w-4" />}>Reject</Button>}
-                    {reservation.isActive && <Button size="sm" variant="cancel" onClick={() => applyAction(reservation, 'cancel')} isLoading={isProcessing(reservation, 'cancel')}>Cancel</Button>}
+                    {reservation.status === 'available' && <Button size="sm" variant="confirm" onClick={() => requestConfirmation(reservation, 'complete')} isLoading={isProcessing(reservation, 'complete')} leftIcon={<PackageCheck className="h-4 w-4" />}>Complete</Button>}
+                    {reservation.isActive && <Button size="sm" variant="reject" onClick={() => requestConfirmation(reservation, 'reject')} isLoading={isProcessing(reservation, 'reject')} leftIcon={<XCircle className="h-4 w-4" />}>Reject</Button>}
+                    {reservation.isActive && <Button size="sm" variant="cancel" onClick={() => requestConfirmation(reservation, 'cancel')} isLoading={isProcessing(reservation, 'cancel')}>Cancel</Button>}
                     <Button size="sm" variant="edit" onClick={() => applyAction(reservation, 'update')} isLoading={isProcessing(reservation, 'update')}>Save date</Button>
                     <Button size="sm" variant="ghost" onClick={() => showActivity(reservation)} isLoading={isProcessing(reservation, 'activity')} leftIcon={<Eye className="h-4 w-4" />}>Activity</Button>
                   </div>
@@ -151,6 +186,17 @@ export default function AdminReservations() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={Boolean(confirmation)}
+        title={confirmation?.title}
+        message={confirmation?.message}
+        confirmLabel={confirmation?.confirmLabel}
+        confirmVariant={confirmation?.confirmVariant}
+        isLoading={confirmation ? isProcessing(confirmation.reservation, confirmation.action) : false}
+        onConfirm={confirmAction}
+        onClose={() => setConfirmation(null)}
+      />
     </div>
   );
 }

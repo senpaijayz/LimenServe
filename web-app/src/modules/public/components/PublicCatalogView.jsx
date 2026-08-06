@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -107,6 +107,8 @@ const PublicCatalogView = () => {
   const [preorderRequestKey, setPreorderRequestKey] = useState('');
   const [preorderSubmitting, setPreorderSubmitting] = useState(false);
   const [preorderError, setPreorderError] = useState('');
+  const productDialogRef = useRef(null);
+  const preorderDialogRef = useRef(null);
   const { vehicle, updateVehicle, clearVehicle, hasVehicle } = usePublicVehicleSelection({
     persist: false,
     readFromSearch: false,
@@ -152,6 +154,32 @@ const PublicCatalogView = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (!selectedProduct && !preorderProduct) return undefined;
+
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    const activeDialog = preorderProduct ? preorderDialogRef.current : productDialogRef.current;
+    document.body.style.overflow = 'hidden';
+    window.requestAnimationFrame(() => activeDialog?.focus());
+
+    const handleDialogKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      if (preorderProduct) {
+        if (!preorderSubmitting) setPreorderProduct(null);
+        return;
+      }
+      setSelectedProduct(null);
+    };
+
+    document.addEventListener('keydown', handleDialogKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleDialogKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus?.();
+    };
+  }, [preorderProduct, preorderSubmitting, selectedProduct]);
 
   useEffect(() => {
     let active = true;
@@ -679,12 +707,18 @@ const PublicCatalogView = () => {
             onClick={() => setSelectedProduct(null)}
           >
             <Motion.div
+              ref={productDialogRef}
               initial={{ scale: 0.98, opacity: 0, y: 28 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.98, opacity: 0, y: 28 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               onClick={(event) => event.stopPropagation()}
               className="relative w-full overflow-hidden rounded-t-[2rem] border border-primary-200 bg-white shadow-2xl sm:my-3 sm:max-w-[min(98vw,1320px)] sm:rounded-3xl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="product-detail-title"
+              aria-hidden={preorderProduct ? 'true' : undefined}
+              tabIndex={-1}
             >
               <div className="pointer-events-none flex justify-center pt-3 sm:hidden">
                 <span className="h-1.5 w-14 rounded-full bg-primary-300" />
@@ -732,7 +766,7 @@ const PublicCatalogView = () => {
                       )}
                     </div>
 
-                    <h2 className="mb-2 pr-12 text-xl font-display font-bold leading-tight text-primary-950 sm:text-2xl">{selectedProduct.name}</h2>
+                    <h2 id="product-detail-title" className="mb-2 pr-12 text-xl font-display font-bold leading-tight text-primary-950 sm:text-2xl">{selectedProduct.name}</h2>
                     <p className="mb-2 line-clamp-2 text-sm leading-relaxed text-primary-600">{selectedProduct.description} Designed to meet exact specifications and ensure optimal performance for your vehicle.</p>
                     <div className={`mb-3 rounded-xl border px-4 py-3 text-sm ${selectedProduct.inStock ? 'border-blue-100 bg-blue-50 text-blue-900' : 'border-red-200 bg-red-50 text-red-900'}`}>
                       <strong>{selectedProduct.availableStock} unit{selectedProduct.availableStock === 1 ? '' : 's'} available</strong>
@@ -810,17 +844,19 @@ const PublicCatalogView = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="modal-overlay"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="preorder-title"
             onClick={() => !preorderSubmitting && setPreorderProduct(null)}
           >
             <Motion.div
+              ref={preorderDialogRef}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
               className="modal max-w-lg"
               onClick={(event) => event.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="preorder-title"
+              tabIndex={-1}
             >
               <div className="modal-header">
                 <div>
