@@ -4,9 +4,9 @@ Snapshot: 2026-08-06 (Asia/Taipei)
 
 ## Verified production baseline
 
-- GitHub: `senpaijayz/LimenServe`, branch `main`, commit `1b92e829cfcd2cf1066f07f9437608b4016ffa35`.
-- Vercel: `https://limen-serve.vercel.app`, deployment `dpl_6gxjitbgRVrUcr8ht8UQ4haK1AMp`, state `READY`, same Git commit.
-- Render: `https://limen-backend.onrender.com`, service `srv-d6rqmefdiees73bvimg0`, deployment `dep-d9q4ll3l550s7382m4g0`, state `live`, same Git commit.
+- GitHub: `senpaijayz/LimenServe`, branch `main`, commit `8b5236ba826af3dcccca6b3fab9396aa5f7abf95`.
+- Vercel: `https://limen-serve.vercel.app`, deployment `dpl_7aQvEm1ry46TRPSZ18p6skCyJNQy`, state `READY`, same Git commit.
+- Render: `https://limen-backend.onrender.com`, service `srv-d6rqmefdiees73bvimg0`, deployment `dep-d9q7732d0e5s7393rggg`, state `live`, same Git commit.
 - Supabase: project `bxrdmfdokslnnluztmgl`, URL `https://bxrdmfdokslnnluztmgl.supabase.co`, Free plan, status `ACTIVE_HEALTHY`.
 - Database migrations: authorization hardening, mechanic assignments, and part reservations are applied.
 
@@ -47,8 +47,8 @@ For this security follow-up, `20260806101020_move_rls_helpers_to_private_schema.
 
 ## Application rollback
 
-1. Frontend: promote or redeploy Vercel deployment `dpl_6gxjitbgRVrUcr8ht8UQ4haK1AMp` as the last audited baseline.
-2. Backend: roll Render back/redeploy deployment `dep-d9q4ll3l550s7382m4g0` or commit `1b92e829cfcd2cf1066f07f9437608b4016ffa35`.
+1. Frontend: promote or redeploy Vercel deployment `dpl_9vGNy6AS6Yz5ca3PfiPQBNt7PovF` or the prior verified production deployment shown in Vercel history.
+2. Backend: roll Render back/redeploy deployment `dep-d9q6evbbc2fs7393stig` or commit `b115926fe0a7bebf306ab11f6426e9e492807f65`.
 3. Verify the two baseline deployments still use compatible `/api` routes and CORS.
 4. Repeat the read-only health, cache, CORS, and Supabase invariant checks.
 
