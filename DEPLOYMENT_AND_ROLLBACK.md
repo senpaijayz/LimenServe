@@ -62,6 +62,17 @@ For this security follow-up, `20260806101020_move_rls_helpers_to_private_schema.
 - If allocation must be paused, disable only `trg_allocate_part_reservations_after_restock` in a reviewed emergency migration, then re-enable it after correction.
 - Do not re-grant feature RPC execution to `PUBLIC`, `anon`, or `authenticated`, and do not restore role self-escalation paths.
 
-## Platform-setting follow-up
+## Render settings alignment and rollback
 
-The current Render service metadata has an empty health-check path and inconsistent build metadata, while its successful deployment log executed `cd backend && npm install` and `cd backend && npm start`. Align the Render dashboard with the intended `backend` root, deterministic install command, start command, and `/api/health` in a separate reviewed settings change. This repository deployment does not alter the live service plan or billing.
+The reviewed target configuration for the existing dashboard-managed Render service is:
+
+- Root directory: `backend`
+- Build command: `npm ci`
+- Start command: `npm start`
+- Node version: `22.22.0`
+- Health-check path: `/api/health`
+- Plan: the existing Starter plan; do not create a replacement service or change billing
+
+After applying settings, confirm the deploy checks out the intended `main` commit, reports zero npm vulnerabilities, starts successfully, reaches `live`, and passes the health/CORS/cache checks above.
+
+To roll back settings without changing application code or data, restore the root directory to blank, build command to `cd backend && npm install`, start command to `cd backend && npm start`, and health-check path to blank. Redeploy the same known-good commit, then repeat the read-only production checks. No Supabase migration or data rollback is involved.
