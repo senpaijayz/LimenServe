@@ -1,6 +1,5 @@
-import { forwardRef } from 'react';
+import { forwardRef, useId, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import { useState } from 'react';
 
 /**
  * Input Component
@@ -23,9 +22,20 @@ const Input = forwardRef(({
     containerClassName = '',
     disabled = false,
     required = false,
+    id,
+    'aria-describedby': ariaDescribedBy,
     ...props
 }, ref) => {
     const [showPassword, setShowPassword] = useState(false);
+    const generatedId = useId();
+    const inputId = id || generatedId;
+    const errorId = `${inputId}-error`;
+    const helperId = `${inputId}-helper`;
+    const describedBy = [
+        ariaDescribedBy,
+        error ? errorId : null,
+        helperText && !error ? helperId : null,
+    ].filter(Boolean).join(' ') || undefined;
 
     const isPassword = type === 'password';
     const inputType = isPassword ? (showPassword ? 'text' : 'password') : type;
@@ -42,7 +52,7 @@ const Input = forwardRef(({
     return (
         <div className={`input-group ${fullWidth ? 'w-full' : ''} ${containerClassName}`}>
             {label && (
-                <label className="input-label">
+                <label className="input-label" htmlFor={inputId}>
                     {label}
                     {required && <span className="text-accent-danger ml-1">*</span>}
                 </label>
@@ -50,17 +60,21 @@ const Input = forwardRef(({
 
             <div className="relative">
                 {leftIcon && (
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-primary-500">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-primary-500" aria-hidden="true">
                         {leftIcon}
                     </span>
                 )}
 
                 <input
                     ref={ref}
+                    id={inputId}
                     type={inputType}
                     placeholder={placeholder}
                     disabled={disabled}
                     className={inputClasses}
+                    required={required}
+                    aria-invalid={Boolean(error) || undefined}
+                    aria-describedby={describedBy}
                     {...props}
                 />
 
@@ -69,19 +83,20 @@ const Input = forwardRef(({
                         type="button"
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-500 hover:text-primary-300 transition-colors"
                         onClick={() => setShowPassword(!showPassword)}
-                        tabIndex={-1}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        aria-pressed={showPassword}
                     >
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                 ) : rightIcon ? (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-500">
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-500" aria-hidden="true">
                         {rightIcon}
                     </span>
                 ) : null}
             </div>
 
-            {error && <p className="input-error-text">{error}</p>}
-            {helperText && !error && <p className="input-helper">{helperText}</p>}
+            {error && <p id={errorId} className="input-error-text">{error}</p>}
+            {helperText && !error && <p id={helperId} className="input-helper">{helperText}</p>}
         </div>
     );
 });

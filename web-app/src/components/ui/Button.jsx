@@ -20,6 +20,7 @@ const Button = forwardRef(({
     disabled = false,
     leftIcon,
     rightIcon,
+    loadingLabel,
     fullWidth = false,
     className = '',
     type = 'button',
@@ -38,6 +39,12 @@ const Button = forwardRef(({
         success: 'btn-success',
         warning: 'btn-warning',
         danger: 'btn-danger',
+        edit: 'btn-edit',
+        delete: 'btn-danger',
+        approve: 'btn-success',
+        reject: 'btn-danger',
+        confirm: 'btn-primary',
+        cancel: 'btn-secondary',
     };
 
     // Size classes
@@ -63,6 +70,7 @@ const Button = forwardRef(({
             type={type}
             className={buttonClasses}
             disabled={isUnavailable}
+            aria-busy={isLoading || undefined}
             onClick={onClick}
             whileTap={shouldReduceMotion || isUnavailable ? undefined : { scale: 0.98 }}
             {...props}
@@ -70,13 +78,13 @@ const Button = forwardRef(({
             {isLoading ? (
                 <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>{children}</span>
+                    <span>{loadingLabel || children}</span>
                 </>
             ) : (
                 <>
-                    {leftIcon && <span className="w-4 h-4">{leftIcon}</span>}
+                    {leftIcon && <span className="w-4 h-4" aria-hidden="true">{leftIcon}</span>}
                     <span>{children}</span>
-                    {rightIcon && <span className="w-4 h-4">{rightIcon}</span>}
+                    {rightIcon && <span className="w-4 h-4" aria-hidden="true">{rightIcon}</span>}
                 </>
             )}
         </Motion.button>

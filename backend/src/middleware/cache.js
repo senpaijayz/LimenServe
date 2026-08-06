@@ -123,8 +123,19 @@ export function isPublicCacheableRequest(req) {
   return Boolean(getPublicCacheRule(req));
 }
 
-export function clearPublicResponseCache() {
-  responseCache.clear();
+export function clearPublicResponseCache(tags = []) {
+  const requestedTags = new Set(Array.isArray(tags) ? tags : [tags]);
+
+  if (requestedTags.size === 0) {
+    responseCache.clear();
+    return;
+  }
+
+  for (const [key, entry] of responseCache.entries()) {
+    if (entry.tags?.some((tag) => requestedTags.has(tag))) {
+      responseCache.delete(key);
+    }
+  }
 }
 
 export function publicResponseCache(req, res, next) {
@@ -167,6 +178,7 @@ export function publicResponseCache(req, res, next) {
         body,
         statusCode,
         timestamp: Date.now(),
+        tags: [...rule.tags],
       });
       trimResponseCache();
     }

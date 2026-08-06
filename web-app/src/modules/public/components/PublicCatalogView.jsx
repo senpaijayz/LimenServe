@@ -15,6 +15,7 @@ import {
   Sparkles,
   CarFront,
   ScanLine,
+  PackagePlus,
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { formatCurrency } from '../../../utils/formatters';
@@ -27,6 +28,11 @@ import PublicVehicleSelector from './PublicVehicleSelector';
 import VehiclePackageShowcase from './VehiclePackageShowcase';
 import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import { getPublicFeaturedCatalogItems } from '../../cms/api/cmsCatalogApi';
+import Button from '../../../components/ui/Button';
+import { useToast } from '../../../components/ui/Toast';
+import { useAuth } from '../../../context/useAuth';
+import { createPartReservation } from '../../../services/reservationsApi';
+import { ROLES } from '../../../utils/constants';
 
 const PAGE_SIZE = 12;
 
@@ -38,7 +44,7 @@ const SORT_OPTIONS = [
 ];
 
 const PublicProductSummary = ({ product }) => {
-  const statusLabel = product.inStock ? 'In Stock' : 'Out of Stock';
+  const statusLabel = product.inStock ? `${product.availableStock} Available` : 'Out of Stock';
 
   return (
     <div className="flex min-h-[300px] flex-col justify-between rounded-2xl border border-primary-200 bg-gradient-to-br from-white via-primary-50/70 to-white p-5">
@@ -84,6 +90,8 @@ const FeaturedCatalogProductCard = ({ item, onSelect }) => (
 );
 
 const PublicCatalogView = () => {
+  const { isAuthenticated, user } = useAuth();
+  const { success, error: showError } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -93,6 +101,12 @@ const PublicCatalogView = () => {
   const [largeBarcodeProduct, setLargeBarcodeProduct] = useState(null);
   const [featuredItems, setFeaturedItems] = useState([]);
   const [viewMode, setViewMode] = useState('grid');
+  const [preorderProduct, setPreorderProduct] = useState(null);
+  const [preorderQuantity, setPreorderQuantity] = useState(1);
+  const [preorderNote, setPreorderNote] = useState('');
+  const [preorderRequestKey, setPreorderRequestKey] = useState('');
+  const [preorderSubmitting, setPreorderSubmitting] = useState(false);
+  const [preorderError, setPreorderError] = useState('');
   const { vehicle, updateVehicle, clearVehicle, hasVehicle } = usePublicVehicleSelection({
     persist: false,
     readFromSearch: false,
@@ -169,7 +183,10 @@ const PublicCatalogView = () => {
     sku: product.sku,
     category: product.category,
     price: Number(product.price ?? 0),
-    inStock: Number(product.stock ?? 0) > 0,
+    physicalStock: Number(product.physicalStock ?? product.stock ?? 0),
+    reservedStock: Number(product.reservedStock ?? 0),
+    availableStock: Number(product.availableStock ?? product.stock ?? 0),
+    inStock: Number(product.availableStock ?? product.stock ?? 0) > 0,
     model: product.model || 'Universal',
     compatibility: [product.model || 'Universal'],
     description: `Genuine Mitsubishi ${product.name} for ${product.model || vehicle.displayLabel || 'Universal'}. Engineered for exact fitment.`,
@@ -257,6 +274,49 @@ const PublicCatalogView = () => {
       pathname: '/estimate',
       search: params.toString() ? `?${params.toString()}` : '',
     };
+  };
+
+  const openPreorder = (product) => {
+    setPreorderProduct(product);
+    setPreorderQuantity(Math.min(Math.max(Number(product.availableStock || 0) + 1, 1), 999));
+    setPreorderNote('');
+    setPreorderError('');
+    setPreorderRequestKey(window.crypto.randomUUID());
+  };
+
+  const submitPreorder = async (event) => {
+    event.preventDefault();
+    const quantity = Number(preorderQuantity);
+
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
+      setPreorderError('Quantity must be a whole number from 1 to 999.');
+      return;
+    }
+
+    if (quantity <= Number(preorderProduct?.availableStock || 0)) {
+      setPreorderError(`Choose more than the ${preorderProduct.availableStock} units currently available, or use the normal quote flow.`);
+      return;
+    }
+
+    setPreorderSubmitting(true);
+    setPreorderError('');
+    try {
+      const reservation = await createPartReservation({
+        productId: preorderProduct.id,
+        quantity,
+        note: preorderNote.trim(),
+        requestKey: preorderRequestKey,
+      });
+      success(`${reservation.reservationNumber} was submitted. Track it in My Reservations.`);
+      setPreorderProduct(null);
+      setSelectedProduct(null);
+    } catch (error) {
+      const message = error.message || 'Unable to submit this reservation.';
+      setPreorderError(message);
+      showError(message);
+    } finally {
+      setPreorderSubmitting(false);
+    }
   };
 
   return (
@@ -490,13 +550,15 @@ const PublicCatalogView = () => {
               {viewMode === 'grid' ? (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {visibleProducts.map((product, index) => (
-                    <Motion.div
+                    <Motion.button
                       key={product.catalogEntryId || product.id}
+                      type="button"
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.5, delay: index * 0.05 }}
                       onClick={() => setSelectedProduct(product)}
-                      className="h-full"
+                      className="h-full text-left"
+                      aria-label={`View ${product.name}, ${product.inStock ? `${product.availableStock} available` : 'out of stock'}`}
                     >
                       <div className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
                         <div className="absolute bottom-0 left-0 w-full h-1 bg-accent-primary scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left z-20" />
@@ -505,6 +567,9 @@ const PublicCatalogView = () => {
                           <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
                             {product.inStock && (
                               <span className="bg-accent-blue text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 shadow-[0_0_15px_rgba(37,99,235,0.4)] rounded-sm">Available</span>
+                            )}
+                            {!product.inStock && (
+                              <span className="rounded-sm bg-red-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white">Out of Stock</span>
                             )}
                             {hasVehicle && (
                               <span className="bg-primary-950 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-sm">Vehicle matched</span>
@@ -525,7 +590,7 @@ const PublicCatalogView = () => {
                           </div>
                         </div>
                       </div>
-                    </Motion.div>
+                    </Motion.button>
                   ))}
                 </div>
               ) : (
@@ -657,6 +722,11 @@ const PublicCatalogView = () => {
                           <Check className="w-3 h-3" /> In Stock
                         </span>
                       )}
+                      {!selectedProduct.inStock && (
+                        <span className="flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-red-700">
+                          Out of Stock
+                        </span>
+                      )}
                       {hasVehicle && (
                         <span className="rounded-full bg-accent-blue/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-accent-blue">For {vehicle.displayLabel}</span>
                       )}
@@ -664,6 +734,11 @@ const PublicCatalogView = () => {
 
                     <h2 className="mb-2 pr-12 text-xl font-display font-bold leading-tight text-primary-950 sm:text-2xl">{selectedProduct.name}</h2>
                     <p className="mb-2 line-clamp-2 text-sm leading-relaxed text-primary-600">{selectedProduct.description} Designed to meet exact specifications and ensure optimal performance for your vehicle.</p>
+                    <div className={`mb-3 rounded-xl border px-4 py-3 text-sm ${selectedProduct.inStock ? 'border-blue-100 bg-blue-50 text-blue-900' : 'border-red-200 bg-red-50 text-red-900'}`}>
+                      <strong>{selectedProduct.availableStock} unit{selectedProduct.availableStock === 1 ? '' : 's'} available</strong>
+                      {selectedProduct.reservedStock > 0 && <span> · {selectedProduct.reservedStock} reserved</span>}
+                      <p className="mt-1 text-xs opacity-80">Reserve only when your requested quantity is greater than current availability.</p>
+                    </div>
 
                     <div className="mb-2">
                       <h4 className="mb-2 text-[11px] font-bold uppercase tracking-[0.22em] text-primary-500">Model Compatibility</h4>
@@ -705,11 +780,96 @@ const PublicCatalogView = () => {
                         <Link to={buildEstimateHref()} className="btn btn-primary w-full sm:w-auto px-8" onClick={() => setSelectedProduct(null)}>
                           <ShoppingCart className="w-5 h-5" /> Calculate Quote
                         </Link>
+                        {isAuthenticated && user?.role === ROLES.CUSTOMER ? (
+                          <Button variant={selectedProduct.inStock ? 'warning' : 'approve'} onClick={() => openPreorder(selectedProduct)} leftIcon={<PackagePlus className="h-5 w-5" />}>
+                            {selectedProduct.inStock ? 'Reserve extra quantity' : 'Pre-Order'}
+                          </Button>
+                        ) : !isAuthenticated ? (
+                          <Link to="/login" className="btn btn-secondary w-full sm:w-auto">
+                            Sign in to reserve
+                          </Link>
+                        ) : (
+                          <Button variant="secondary" disabled title="Reservations require a customer account.">
+                            Customer account required
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
+            </Motion.div>
+          </Motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {preorderProduct && (
+          <Motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="preorder-title"
+            onClick={() => !preorderSubmitting && setPreorderProduct(null)}
+          >
+            <Motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="modal max-w-lg"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="modal-header">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent-primary">Part reservation</p>
+                  <h2 id="preorder-title" className="modal-title mt-1">{preorderProduct.inStock ? 'Reserve extra quantity' : 'Pre-order unavailable part'}</h2>
+                </div>
+                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setPreorderProduct(null)} disabled={preorderSubmitting} aria-label="Close reservation form"><X className="h-5 w-5" /></button>
+              </div>
+
+              <form onSubmit={submitPreorder}>
+                <div className="modal-body space-y-5">
+                  <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4">
+                    <p className="font-bold text-primary-950">{preorderProduct.name}</p>
+                    <p className="mt-1 font-mono text-sm text-primary-500">{preorderProduct.sku}</p>
+                    <p className="mt-3 text-sm text-primary-700">Current available quantity: <strong>{preorderProduct.availableStock}</strong></p>
+                  </div>
+
+                  {preorderError && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">{preorderError}</div>}
+
+                  <label className="block text-sm font-semibold text-primary-700">
+                    Requested quantity
+                    <input
+                      type="number"
+                      min="1"
+                      max="999"
+                      step="1"
+                      required
+                      className="input mt-2"
+                      value={preorderQuantity}
+                      onChange={(event) => { setPreorderQuantity(event.target.value); setPreorderError(''); }}
+                    />
+                    <span className="mt-2 block text-xs font-normal text-primary-500">Whole quantities from 1 to 999. For in-stock parts, request more than current availability.</span>
+                  </label>
+
+                  <label className="block text-sm font-semibold text-primary-700">
+                    Note (optional)
+                    <textarea className="input mt-2 min-h-24 resize-y" maxLength="1000" value={preorderNote} onChange={(event) => setPreorderNote(event.target.value)} placeholder="Vehicle details or preferred contact information" />
+                  </label>
+
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+                    This is a reservation request, not a confirmed sale. An administrator must approve it before stock is allocated.
+                  </p>
+                </div>
+
+                <div className="modal-footer">
+                  <Button variant="cancel" onClick={() => setPreorderProduct(null)} disabled={preorderSubmitting}>Cancel</Button>
+                  <Button type="submit" variant="confirm" isLoading={preorderSubmitting} loadingLabel="Submitting request" leftIcon={<PackagePlus className="h-4 w-4" />}>Submit reservation</Button>
+                </div>
+              </form>
             </Motion.div>
           </Motion.div>
         )}

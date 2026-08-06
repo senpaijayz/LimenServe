@@ -118,6 +118,22 @@
     @apply btn bg-transparent text-primary-600 hover:bg-primary-100 hover:text-primary-950;
   }
 
+  .btn-success {
+    @apply btn bg-emerald-700 text-white shadow-sm hover:-translate-y-0.5 hover:bg-emerald-800 hover:shadow-md;
+  }
+
+  .btn-warning {
+    @apply btn bg-amber-500 text-primary-950 shadow-sm hover:-translate-y-0.5 hover:bg-amber-600 hover:shadow-md;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-700 text-white shadow-sm hover:-translate-y-0.5 hover:bg-red-800 hover:shadow-md;
+  }
+
+  .btn-edit {
+    @apply btn border border-blue-300 bg-blue-50 text-blue-800 hover:border-blue-400 hover:bg-blue-100;
+  }
+
   /* Inputs */
   .input {
     @apply min-h-11 w-full rounded-xl border border-primary-300 bg-white px-4 py-3 font-sans text-base text-primary-900 placeholder-primary-500 shadow-sm transition-colors focus:border-accent-primary focus:outline-none focus:ring-2 focus:ring-blue-100 sm:text-sm;

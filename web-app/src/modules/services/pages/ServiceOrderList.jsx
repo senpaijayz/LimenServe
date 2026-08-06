@@ -7,7 +7,16 @@ import Tabs from '../../../components/ui/Tabs';
 import { formatCurrency, formatRelativeTime } from '../../../utils/formatters';
 import { CreateServiceOrderModal, ServiceOrderDetailModal } from '../components/ServiceOrderModals';
 import { useToast } from '../../../components/ui/Toast';
-import { completeServiceOrder, createServiceOrder, listServiceOrders, updateServiceOrder } from '../../../services/serviceOrdersApi';
+import {
+    assignMechanicToServiceOrder,
+    completeServiceOrder,
+    createServiceOrder,
+    listServiceOrders,
+    removeMechanicFromServiceOrder,
+    updateServiceOrder,
+} from '../../../services/serviceOrdersApi';
+import { useAuth } from '../../../context/useAuth';
+import { ROLES } from '../../../utils/constants';
 
 /**
  * Service Order List Page
@@ -15,6 +24,7 @@ import { completeServiceOrder, createServiceOrder, listServiceOrders, updateServ
  */
 const ServiceOrderList = () => {
     const { success, error: showError } = useToast();
+    const { user } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -111,6 +121,32 @@ const ServiceOrderList = () => {
             success('Service order completed and archived successfully');
         } catch (error) {
             showError(error.message || 'Unable to finish, archive, and post the service order to Sales.');
+            throw error;
+        }
+    };
+
+    const handleAssignMechanic = async (orderId, payload) => {
+        try {
+            const updatedOrder = await assignMechanicToServiceOrder(orderId, payload);
+            setOrders((current) => current.map((order) => order.id === orderId ? updatedOrder : order));
+            setSelectedOrder(updatedOrder);
+            success(`${updatedOrder.assignedMechanic?.name || 'Mechanic'} assigned successfully.`);
+            return updatedOrder;
+        } catch (error) {
+            showError(error.message || 'Unable to assign the mechanic.');
+            throw error;
+        }
+    };
+
+    const handleRemoveMechanic = async (orderId) => {
+        try {
+            const updatedOrder = await removeMechanicFromServiceOrder(orderId);
+            setOrders((current) => current.map((order) => order.id === orderId ? updatedOrder : order));
+            setSelectedOrder(updatedOrder);
+            success('Mechanic assignment removed.');
+            return updatedOrder;
+        } catch (error) {
+            showError(error.message || 'Unable to remove the assignment.');
             throw error;
         }
     };
@@ -413,6 +449,9 @@ const ServiceOrderList = () => {
                 order={selectedOrder}
                 onStatusUpdate={handleStatusUpdate}
                 onComplete={handleCompleteOrder}
+                canAssignMechanic={user?.role === ROLES.ADMIN}
+                onAssignMechanic={handleAssignMechanic}
+                onRemoveMechanic={handleRemoveMechanic}
             />
         </div>
     );

@@ -108,22 +108,6 @@ const LoginPage = () => {
                             {...register('password')}
                         />
 
-                        <div className="flex items-center justify-between">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    className="w-4 h-4 rounded border-primary-600 bg-primary-800 text-accent-primary focus:ring-accent-primary/20"
-                                />
-                                <span className="text-sm text-primary-400">Remember me</span>
-                            </label>
-                            <button
-                                type="button"
-                                className="text-sm text-accent-primary hover:text-red-400 transition-colors"
-                            >
-                                Forgot password?
-                            </button>
-                        </div>
-
                         <Button
                             type="submit"
                             variant="primary"
@@ -135,13 +119,20 @@ const LoginPage = () => {
                         </Button>
                     </form>
 
+                    <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-center text-sm text-primary-700">
+                        Need to reserve an unavailable part?{' '}
+                        <Link to="/register" className="font-bold text-accent-primary underline-offset-4 hover:underline">
+                            Create a customer account
+                        </Link>
+                    </div>
+
                     <div className="mt-6 pt-6 border-t border-primary-200">
                         <p className="text-xs font-bold text-primary-500 text-center mb-3 uppercase tracking-widest">
                             Contact Admin
                         </p>
                         <div className="rounded-xl border border-primary-100 bg-primary-50 px-4 py-3 text-xs text-primary-500">
                             <p className="text-center">
-                                To forgot password contact administration.
+                                Staff password support is handled by an administrator.
                             </p>
                         </div>
                     </div>

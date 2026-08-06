@@ -187,10 +187,56 @@ async function uploadMechanicPhoto(payload = {}) {
 
 router.use(requireRole('admin'));
 
-router.get('/', async (_req, res, next) => {
+router.get('/', async (req, res, next) => {
   try {
     const mechanics = await callRpc('list_mechanics');
-    res.json({ mechanics: (mechanics ?? []).map(normalizeMechanic) });
+    const { data: assignments, error: assignmentsError } = await supabaseAdmin
+      .schema('operations')
+      .from('mechanic_assignments')
+      .select('mechanic_id, service_order_id, scheduled_start, scheduled_end')
+      .eq('status', 'assigned');
+
+    if (assignmentsError && !String(assignmentsError.message || '').includes('mechanic_assignments')) {
+      throw assignmentsError;
+    }
+
+    const now = Date.now();
+    const activeOnly = String(req.query.activeOnly || '').toLowerCase() === 'true';
+    const excludedServiceOrderId = String(req.query.orderId || '').trim();
+    const requestedStart = Date.parse(String(req.query.start || ''));
+    const requestedEnd = Date.parse(String(req.query.end || ''));
+    const hasRequestedWindow = Number.isFinite(requestedStart)
+      && Number.isFinite(requestedEnd)
+      && requestedEnd > requestedStart;
+
+    const normalized = (mechanics ?? [])
+      .map(normalizeMechanic)
+      .map((mechanic) => {
+        const mechanicAssignments = (assignments ?? []).filter(
+          (assignment) => assignment.mechanic_id === mechanic.id,
+        );
+        const hasConflict = hasRequestedWindow && mechanicAssignments.some((assignment) => {
+          if (assignment.service_order_id === excludedServiceOrderId) return false;
+          const start = Date.parse(assignment.scheduled_start);
+          const end = Date.parse(assignment.scheduled_end);
+          return start < requestedEnd && end > requestedStart;
+        });
+
+        return {
+          ...mechanic,
+          isActive: mechanic.is_active !== false,
+          currentWorkload: mechanicAssignments.filter(
+            (assignment) => Date.parse(assignment.scheduled_end) >= now,
+          ).length,
+          hasScheduleConflict: hasConflict,
+          availableForRequestedWindow: mechanic.is_active !== false
+            && mechanic.availability_status !== 'off_duty'
+            && !hasConflict,
+        };
+      })
+      .filter((mechanic) => !activeOnly || mechanic.isActive);
+
+    res.json({ mechanics: normalized });
   } catch (error) {
     if (isMissingLegacyMechanicsError(error)) {
       res.json({
@@ -210,7 +256,7 @@ router.post('/', async (req, res, next) => {
     const mechanicId = await callRpc('upsert_mechanic', {
       p_payload: payload,
     });
-    clearPublicResponseCache();
+    clearPublicResponseCache('public-mechanics');
     res.status(201).json({
       mechanicId,
       mechanic: normalizeMechanic({
@@ -237,7 +283,7 @@ router.patch('/:mechanicId', async (req, res, next) => {
     const mechanicId = await callRpc('upsert_mechanic', {
       p_payload: payload,
     });
-    clearPublicResponseCache();
+    clearPublicResponseCache('public-mechanics');
     res.json({
       mechanicId,
       mechanic: normalizeMechanic({
@@ -260,7 +306,7 @@ router.delete('/:mechanicId', async (req, res, next) => {
     const deleted = await callRpc('delete_mechanic', {
       p_mechanic_id: req.params.mechanicId,
     });
-    clearPublicResponseCache();
+    clearPublicResponseCache('public-mechanics');
     res.json({ deleted: Boolean(deleted) });
   } catch (error) {
     if (isMissingLegacyMechanicsError(error)) {

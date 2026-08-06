@@ -9,6 +9,7 @@ import {
     Truck,
     Users,
     Wrench,
+    ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../../context/useAuth';
 import { NAV_ITEMS } from '../../utils/constants';
@@ -23,6 +24,7 @@ const iconMap = {
     Wrench,
     Users,
     Truck,
+    ClipboardList,
 };
 
 const mobilePaths = new Set([
@@ -35,6 +37,8 @@ const mobilePaths = new Set([
     '/services',
     '/reports',
     '/users',
+    '/reservations',
+    '/my-reservations',
 ]);
 
 export default function MobileBottomNav() {

@@ -14,6 +14,7 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import partsMappingRoutes from './routes/partsMappingRoutes.js';
 import posRoutes from './routes/posRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
+import reservationRoutes from './routes/reservationRoutes.js';
 import serviceOrderRoutes from './routes/serviceOrderRoutes.js';
 import stockroomRoutes from './routes/stockroomRoutes.js';
 import userRoutes from './routes/userRoutes.js';
@@ -58,7 +59,9 @@ app.use(cors({
       return;
     }
 
-    callback(new Error(`Origin ${origin} is not allowed by CORS.`));
+    const error = new Error('Request origin is not allowed by CORS.');
+    error.statusCode = 403;
+    callback(error);
   },
   credentials: true,
 }));
@@ -83,6 +86,7 @@ app.use('/api/pos', posRoutes);
 app.use('/api/estimates', estimateRoutes);
 app.use('/api/mechanics', mechanicsRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/reservations', reservationRoutes);
 app.use('/api/service-orders', serviceOrderRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/inventory/stockroom', inventoryStockroomRoutes);

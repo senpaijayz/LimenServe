@@ -11,6 +11,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { queryClient } from './lib/queryClient';
 
 const LoginPage = lazy(() => import('./modules/auth/pages/LoginPage'));
+const RegisterPage = lazy(() => import('./modules/auth/pages/RegisterPage'));
 const AdminDashboard = lazy(() => import('./modules/dashboard/pages/AdminDashboard'));
 const InventoryList = lazy(() => import('./modules/inventory/pages/InventoryList'));
 const InventoryLogs = lazy(() => import('./modules/inventory/pages/InventoryLogs'));
@@ -24,6 +25,9 @@ const InventoryReport = lazy(() => import('./modules/reports/pages/InventoryRepo
 const UserManagement = lazy(() => import('./modules/users/pages/UserManagement'));
 const CmsAdmin = lazy(() => import('./modules/cms/pages/CmsAdmin'));
 const Locator3DAdmin = lazy(() => import('./modules/locator3d/pages/Locator3DAdmin'));
+const AdminReservations = lazy(() => import('./modules/reservations/pages/AdminReservations'));
+const CustomerReservations = lazy(() => import('./modules/reservations/pages/CustomerReservations'));
+const CustomerServiceOrders = lazy(() => import('./modules/services/pages/CustomerServiceOrders'));
 
 const PublicHome = lazy(() => import('./modules/public/pages/PublicHome'));
 const PublicCatalog = lazy(() => import('./modules/public/pages/PublicCatalog'));
@@ -81,6 +85,7 @@ function App() {
                   </Route>
 
                 <Route path="/login" element={renderRoute(LoginPage, <PageLoader />)} />
+                <Route path="/register" element={renderRoute(RegisterPage, <PageLoader />)} />
 
                 <Route element={<MainLayout />}>
                   <Route path="/dashboard" element={renderRoute(AdminDashboard, <WorkspaceRouteFallback title="Loading dashboard" />)} />
@@ -97,6 +102,9 @@ function App() {
                   <Route path="/users" element={renderRoute(UserManagement, <WorkspaceRouteFallback title="Loading user management" />)} />
                   <Route path="/cms" element={renderRoute(CmsAdmin, <WorkspaceRouteFallback title="Loading CMS workspace" />)} />
                   <Route path="/locator-3d" element={renderRoute(Locator3DAdmin, <WorkspaceRouteFallback title="Loading 3D locator" />)} />
+                  <Route path="/reservations" element={renderRoute(AdminReservations, <WorkspaceRouteFallback title="Loading part reservations" />)} />
+                  <Route path="/my-reservations" element={renderRoute(CustomerReservations, <WorkspaceRouteFallback title="Loading your reservations" />)} />
+                  <Route path="/my-services" element={renderRoute(CustomerServiceOrders, <WorkspaceRouteFallback title="Loading your service orders" />)} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />

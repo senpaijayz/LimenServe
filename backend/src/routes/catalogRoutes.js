@@ -799,7 +799,7 @@ function invalidateProductCatalogCache() {
     fetchedAt: 0,
   };
   archivedProductIdsPromise = null;
-  clearPublicResponseCache();
+  clearPublicResponseCache(['catalog-products', 'recommendations']);
 }
 
 function parsePositiveStockQuantity(value) {
@@ -906,6 +906,11 @@ function mapCatalogRow(row) {
     && runtimeClassification.category === row.category
     ? storedClassification
     : runtimeClassification.trace;
+  const physicalStock = Number(row.on_hand ?? row.physicalStock ?? row.stock ?? 0);
+  const reservedStock = Math.max(Number(row.reserved ?? row.reservedStock ?? 0), 0);
+  const availableStock = Math.max(Number(
+    row.available_stock ?? row.availableStock ?? physicalStock - reservedStock,
+  ), 0);
 
   return {
     id: row.id,
@@ -917,8 +922,15 @@ function mapCatalogRow(row) {
     sourceCategory: runtimeClassification.sourceCategory ?? sourceCategory,
     classification,
     price: Number(row.price ?? 0),
-    stock: Number(row.stock ?? 0),
-    status: row.status,
+    stock: availableStock,
+    physicalStock,
+    reservedStock,
+    availableStock,
+    status: availableStock <= 0
+      ? 'out_of_stock'
+      : availableStock <= 5
+        ? 'low_stock'
+        : row.status,
     uom: row.uom,
     brand: row.brand,
     createdAt: row.created_at ?? row.createdAt ?? row.date_added ?? row.dateAdded ?? row.metadata?.createdAt ?? null,
@@ -966,7 +978,7 @@ async function getProductByPartNumber(partNumber) {
     supabaseAdmin
       .schema('catalog')
       .from('inventory_balances')
-      .select('on_hand, location')
+      .select('on_hand, reserved, location')
       .eq('product_id', product.id)
       .maybeSingle(),
   ]);
@@ -979,7 +991,9 @@ async function getProductByPartNumber(partNumber) {
     category: product.category,
     source_category: product.source_category,
     price: Number(price?.amount ?? 0),
-    stock: Number(balance?.on_hand ?? 0),
+    stock: Math.max(Number(balance?.on_hand ?? 0) - Number(balance?.reserved ?? 0), 0),
+    on_hand: Number(balance?.on_hand ?? 0),
+    reserved: Number(balance?.reserved ?? 0),
     status: product.status,
     uom: product.uom,
     brand: product.brand,
@@ -1207,6 +1221,38 @@ async function enrichCatalogProducts(products = []) {
 
   const productById = new Map(products.map((product) => [product.id, { ...product }]));
 
+  const { data: balances, error: balancesError } = await selectByInChunks({
+    client: supabaseAdmin,
+    schema: 'catalog',
+    table: 'inventory_balances',
+    select: 'product_id, on_hand, reserved, location',
+    column: 'product_id',
+    values: productIds,
+  });
+
+  if (balancesError && !isPrivateSchemaAccessError(balancesError)) {
+    throw balancesError;
+  }
+
+  (balancesError ? [] : (balances ?? [])).forEach((balance) => {
+    const product = productById.get(balance.product_id);
+    if (!product) return;
+
+    const physicalStock = Number(balance.on_hand ?? 0);
+    const reservedStock = Math.max(Number(balance.reserved ?? 0), 0);
+    const availableStock = Math.max(physicalStock - reservedStock, 0);
+    product.physicalStock = physicalStock;
+    product.reservedStock = reservedStock;
+    product.availableStock = availableStock;
+    product.stock = availableStock;
+    product.status = availableStock <= 0
+      ? 'out_of_stock'
+      : availableStock <= 5
+        ? 'low_stock'
+        : product.status;
+    product.location = balance.location ?? product.location ?? {};
+  });
+
   try {
     const { data: images, error: imagesError } = await selectByInChunks({
       client: supabaseAdmin,
@@ -1331,7 +1377,7 @@ async function enrichPricelistCatalogProducts(products = []) {
       client: supabaseAdmin,
       schema: 'catalog',
       table: 'inventory_balances',
-      select: 'product_id, on_hand, location',
+      select: 'product_id, on_hand, reserved, location',
       column: 'product_id',
       values: productIds,
       chunkSize: PRICE_LIST_LOOKUP_BATCH_SIZE,
@@ -1357,7 +1403,18 @@ async function enrichPricelistCatalogProducts(products = []) {
       brand: catalogProduct?.brand || product.brand,
       uom: product.uom || catalogProduct?.uom || 'PC',
       status: product.status || catalogProduct?.status || 'out_of_stock',
-      stock: Number(balance?.on_hand ?? product.stock ?? 0),
+      stock: Math.max(
+        Number(balance?.on_hand ?? product.physicalStock ?? product.stock ?? 0)
+          - Number(balance?.reserved ?? product.reservedStock ?? 0),
+        0,
+      ),
+      physicalStock: Number(balance?.on_hand ?? product.physicalStock ?? product.stock ?? 0),
+      reservedStock: Number(balance?.reserved ?? product.reservedStock ?? 0),
+      availableStock: Math.max(
+        Number(balance?.on_hand ?? product.physicalStock ?? product.stock ?? 0)
+          - Number(balance?.reserved ?? product.reservedStock ?? 0),
+        0,
+      ),
       createdAt: catalogProduct?.created_at ?? product.createdAt ?? null,
       dateAdded: product.dateAdded ?? catalogProduct?.created_at ?? null,
       location: balance?.location ?? product.location ?? {},

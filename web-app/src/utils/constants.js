@@ -13,17 +13,27 @@ export const API_BASE_URL = import.meta.env.PROD && !useDirectApiUrl
 export const ROLES = {
     ADMIN: 'admin',
     CASHIER: 'cashier',
+    STAFF: 'staff',
     STOCK_CLERK: 'stock_clerk',
+    VIEWER: 'viewer',
+    CUSTOMER: 'customer',
 };
 
 // Role Display Names
 export const ROLE_LABELS = {
     [ROLES.ADMIN]: 'Administrator',
     [ROLES.CASHIER]: 'Cashier',
+    [ROLES.STAFF]: 'Staff',
     [ROLES.STOCK_CLERK]: 'Clerk',
+    [ROLES.VIEWER]: 'Viewer',
+    [ROLES.CUSTOMER]: 'Customer',
 };
 
 export function getDefaultAuthenticatedPath(role) {
+    if (role === ROLES.CUSTOMER) {
+        return '/my-reservations';
+    }
+
     if (role === ROLES.CASHIER) {
         return '/pos';
     }
@@ -104,10 +114,13 @@ export const NAV_ITEMS = {
         { path: '/pos', label: 'Point of Sale', icon: 'ShoppingCart', roles: [ROLES.ADMIN, ROLES.CASHIER] },
         { path: '/inventory', label: 'Inventory', icon: 'Package', roles: [ROLES.ADMIN, ROLES.STOCK_CLERK] },
         { path: '/services', label: 'Service Orders', icon: 'Wrench', roles: [ROLES.ADMIN, ROLES.CASHIER] },
+        { path: '/my-services', label: 'My Services', icon: 'Wrench', roles: [ROLES.CUSTOMER] },
+        { path: '/my-reservations', label: 'My Reservations', icon: 'ClipboardList', roles: [ROLES.CUSTOMER] },
     ],
     admin: [
         { path: '/products', label: 'Products', icon: 'Boxes', roles: [ROLES.ADMIN] },
         { path: '/suppliers', label: 'Suppliers', icon: 'Truck', roles: [ROLES.ADMIN] },
+        { path: '/reservations', label: 'Part Reservations', icon: 'ClipboardList', roles: [ROLES.ADMIN] },
         { path: '/quotation', label: 'Quotation', icon: 'FileText', roles: [ROLES.ADMIN] },
         { path: '/reports', label: 'Reports', icon: 'BarChart3', roles: [ROLES.ADMIN] },
         { path: '/users', label: 'User Management', icon: 'Users', roles: [ROLES.ADMIN] },
