@@ -1,50 +1,63 @@
 # Deployment and rollback plan
 
-## Current preview constraints
+Snapshot: 2026-08-06 (Asia/Taipei)
 
-- Render pull-request previews and preview generation are currently disabled. Do not repoint the production `limen-backend` service to the feature branch.
-- Render's live dashboard settings still use repository root `yarn` plus `cd backend && npm start`, with no health-check path. Before production, align them with `render.yaml` (`backend`, `npm install`, `npm start`, `/api/health`) in a reviewed settings change.
-- Supabase database branching is unavailable on the current plan. Schema validation therefore requires a free isolated Supabase staging project because local Docker/Postgres is unavailable and the repository does not contain every historical production schema migration.
+## Verified production baseline
 
-## $0/month Supabase staging method
+- GitHub: `senpaijayz/LimenServe`, branch `main`, commit `1b92e829cfcd2cf1066f07f9437608b4016ffa35`.
+- Vercel: `https://limen-serve.vercel.app`, deployment `dpl_6gxjitbgRVrUcr8ht8UQ4haK1AMp`, state `READY`, same Git commit.
+- Render: `https://limen-backend.onrender.com`, service `srv-d6rqmefdiees73bvimg0`, deployment `dep-d9q4ll3l550s7382m4g0`, state `live`, same Git commit.
+- Supabase: project `bxrdmfdokslnnluztmgl`, URL `https://bxrdmfdokslnnluztmgl.supabase.co`, Free plan, status `ACTIVE_HEALTHY`.
+- Database migrations: authorization hardening, mechanic assignments, and part reservations are applied.
 
-- Project: `LimenServe Staging Free` (`tncekqyecihscadayufs`), in the existing organization and `ap-southeast-2` region.
-- Confirmed project cost at creation: `$0/month`. No paid database branch was created and the production project `bxrdmfdokslnnluztmgl` was not changed.
-- The staging project contains a minimal production-shaped, test-only bootstrap plus the additive feature migrations. It contains no copied production users or business records.
-- Database invariants and the full assignment/reservation flow run inside a transaction and end with `ROLLBACK`. Post-test counts are zero for assignments, reservations, reservation events, and Auth users.
-- Supabase's security advisor reports no findings after the policy refinement. Performance notices for unused indexes are expected until the empty staging database receives representative traffic; bootstrap-only foreign-key notices correspond to indexes already verified on production.
-- Keep all staging environment variables separate from production. Never reuse or expose the production service-role key. A backend staging deployment requires a staging-only secret key supplied through Render's encrypted environment settings.
-- Free projects can be paused or constrained by the provider's free-plan quotas. Restore/health-check staging before preview testing; this does not affect production.
+Production record counts were unchanged after migration: 3 user profiles, 1 mechanic, 15 service orders, 26 customers, 33,215 products, and 33,215 inventory balances. Assignment and reservation feature tables contain no production records at this snapshot. Invariant checks found no negative/over-reserved inventory and no duplicate active reservations.
 
-## Safe deployment order
+## Preview and staging constraints
 
-1. Snapshot production schema metadata and counts for customers, mechanics, service orders, balances, and reservations.
-2. Apply the test-only production-shaped bootstrap and the three additive migrations to the isolated Supabase staging project first.
-3. Run the SQL invariants and concurrent assignment/reservation integration tests.
-4. Deploy the Render backend from the feature commit and verify `/api/health`, CORS, auth, assignment, reservation, and stock APIs.
-5. Deploy the Vercel preview from the same commit and run desktop/mobile end-to-end flows, including customer My Services visibility for an explicitly linked test customer.
-6. Apply the migrations to production only after preview verification and a fresh production-data preflight.
-7. Deploy Render production, then Vercel production, from the same immutable commit.
-8. Verify production without editing existing records: health, login roles, catalog availability, service detail, and empty/read-only reservation queries.
+- Vercel creates a preview from the GitHub pull request. Verify the public UI and same-origin API behavior there.
+- Render pull-request previews are disabled on the production service. Do not repoint the production service to a feature branch.
+- The follow-up hardening requires no database DDL. Do not create another Supabase project, branch, or paid resource. The previously created unused Free staging project `tncekqyecihscadayufs` is not part of this rollout.
+- Authenticated production mutations are not used as smoke tests unless the user supplies a disposable production account and explicitly authorizes test records.
 
-## Rollback
+## Deployment sequence
 
-- Frontend: promote the last known-good Vercel deployment.
-- Backend: roll Render back to the last known-good commit/deploy.
-- Database: keep the additive tables and columns in place. Do not drop reservation or assignment tables after they may contain production history.
-- Disable new mutations by rolling back the backend first. The prior application ignores additive columns and tables.
-- Security hardening is forward-only. Do not restore unsafe `PUBLIC`, `anon`, or `authenticated` execution on service-role RPCs and do not restore self-update access to profile roles.
-- If a database function is defective, ship a corrective `CREATE OR REPLACE FUNCTION` migration. If allocation must be paused, disable only the named restock allocation trigger in a reviewed emergency migration, then re-enable it after correction.
+1. Confirm the follow-up branch is based on the currently deployed `main` commit.
+2. Run `npm ci`, all frontend/backend tests, ESLint, the production build, and npm audits.
+3. Confirm `git diff --check` and review the exact file list; exclude local `outputs/` and root `package.json`.
+4. Push the branch and open a pull request to `main`.
+5. Verify the Vercel preview: home, catalog, product detail, reservation sign-in path, responsive navigation, cache headers, console errors, and protected-route redirects.
+6. Review the PR checks and merge only when green.
+7. Confirm Render automatically deploys the merge commit and reaches `live`.
+8. Confirm Vercel production reaches `READY` on the same merge commit.
+9. Run read-only production checks: `/api/health`, public catalog response, stock labels, cache headers, CORS allow/deny behavior, and Supabase invariants/counts.
+10. Record the final merge commit and deployment IDs in the handoff.
 
-## Production preflight and recovery evidence
+## Post-deployment checks
 
-Record before/after counts and constraint checks for:
+- `GET https://limen-backend.onrender.com/api/health` returns success.
+- `https://limen-serve.vercel.app` and `/catalog` render on desktop and mobile without console errors.
+- `https://limen-serve.vercel.app/my-reservations` redirects an unauthenticated user to login.
+- Product catalog responses are publicly cacheable with the documented short TTL; authenticated/private endpoints return `Cache-Control: no-store`.
+- Direct Render requests allow `https://limen-serve.vercel.app` and reject unrelated origins.
+- Vercel and Render report the same Git commit.
+- Supabase counts and inventory invariants remain unchanged unless real users have created legitimate records during rollout.
 
-- `operations.mechanic_assignments`
-- `operations.part_reservations`
-- `operations.part_reservation_events`
-- `catalog.inventory_balances` rows where `on_hand < 0`, `reserved < 0`, or `reserved > on_hand`
-- active duplicate reservations per customer/part
-- overlapping active mechanic schedules
+## Application rollback
 
-No rollback step deletes existing users, customers, inventory, services, assignments, reservations, or activity history.
+1. Frontend: promote or redeploy Vercel deployment `dpl_6gxjitbgRVrUcr8ht8UQ4haK1AMp` as the last audited baseline.
+2. Backend: roll Render back/redeploy deployment `dep-d9q4ll3l550s7382m4g0` or commit `1b92e829cfcd2cf1066f07f9437608b4016ffa35`.
+3. Verify the two baseline deployments still use compatible `/api` routes and CORS.
+4. Repeat the read-only health, cache, CORS, and Supabase invariant checks.
+
+## Database rollback policy
+
+- Do not drop `operations.mechanic_assignments`, `operations.part_reservations`, or `operations.part_reservation_events` after they may contain history.
+- Do not reset, restore over, or recreate project `bxrdmfdokslnnluztmgl` as part of application rollback.
+- The previous application safely ignores the additive columns and tables.
+- If a function is defective, ship a reviewed `CREATE OR REPLACE FUNCTION` corrective migration.
+- If allocation must be paused, disable only `trg_allocate_part_reservations_after_restock` in a reviewed emergency migration, then re-enable it after correction.
+- Do not re-grant feature RPC execution to `PUBLIC`, `anon`, or `authenticated`, and do not restore role self-escalation paths.
+
+## Platform-setting follow-up
+
+The current Render service metadata has an empty health-check path and inconsistent build metadata, while its successful deployment log executed `cd backend && npm install` and `cd backend && npm start`. Align the Render dashboard with the intended `backend` root, deterministic install command, start command, and `/api/health` in a separate reviewed settings change. This repository deployment does not alter the live service plan or billing.

@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 import { Package } from 'lucide-react';
 
 const PageLoader = () => {
@@ -12,12 +12,12 @@ const PageLoader = () => {
             <div className="relative z-10 flex flex-col items-center">
                 {/* Core Icon Assembly */}
                 <div className="relative w-24 h-24 mb-6 flex items-center justify-center">
-                    <motion.div
+                    <Motion.div
                         animate={{ rotate: 360 }}
                         transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
                         className="absolute inset-0 border-t-2 border-r-2 border-primary-300 rounded-full opacity-50"
                     />
-                    <motion.div
+                    <Motion.div
                         animate={{ rotate: -360 }}
                         transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
                         className="absolute inset-2 border-b-2 border-l-2 border-accent-blue rounded-full opacity-80"
@@ -44,7 +44,7 @@ const PageLoader = () => {
 
                 {/* Progress Bar */}
                 <div className="w-64 h-1 bg-primary-100 rounded-full overflow-hidden relative">
-                    <motion.div
+                    <Motion.div
                         initial={{ left: '-100%' }}
                         animate={{ left: '100%' }}
                         transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}

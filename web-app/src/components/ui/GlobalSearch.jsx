@@ -55,6 +55,15 @@ const GlobalSearch = () => {
     const [selectedIndex, setSelectedIndex] = useState(0);
     const inputRef = useRef(null);
     const containerRef = useRef(null);
+    const searchablePages = useMemo(() => [...NAV_ITEMS.main, ...NAV_ITEMS.admin]
+        .filter((item) => item.roles.includes(user?.role))
+        .map((item) => ({
+            id: `nav-${item.path}`,
+            name: item.label,
+            path: item.path,
+            icon: iconMap[item.icon] || LayoutDashboard,
+            type: 'page',
+        })), [user?.role]);
 
     const openSearch = () => {
         setQuery('');
@@ -95,22 +104,12 @@ const GlobalSearch = () => {
             o.name.toLowerCase().includes(q) || o.id.toLowerCase().includes(q)
         ).slice(0, 3) : [];
 
-        const searchablePages = [...NAV_ITEMS.main, ...NAV_ITEMS.admin]
-            .filter((item) => item.roles.includes(user?.role))
-            .map((item) => ({
-                id: `nav-${item.path}`,
-                name: item.label,
-                path: item.path,
-                icon: iconMap[item.icon] || LayoutDashboard,
-                type: 'page',
-            }));
-
         const pages = searchablePages.filter(p =>
             p.name.toLowerCase().includes(q)
         ).slice(0, 4);
 
         return [...pages, ...products, ...orders];
-    }, [query, storeProducts, user?.role]);
+    }, [query, searchablePages, storeProducts, user?.role]);
 
     // Keyboard shortcut to open (Ctrl+K)
     useEffect(() => {
