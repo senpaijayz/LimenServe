@@ -3,13 +3,13 @@ services:
     name: limen-backend
     runtime: node
     rootDir: backend
-    plan: free
-    buildCommand: npm install
+    plan: starter
+    buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
-        value: 22
+        value: 22.22.0
       - key: FRONTEND_URLS
         value: https://limen-serve.vercel.app,https://limen-serve*.vercel.app,http://localhost:5173,http://127.0.0.1:5173
       - key: SUPABASE_URL

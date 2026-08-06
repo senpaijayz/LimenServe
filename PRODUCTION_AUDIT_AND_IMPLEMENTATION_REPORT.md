@@ -73,7 +73,7 @@ The Vercel connector does not expose a read-only environment-variable listing. R
 - CORS: exact production Vercel origin, Vercel preview pattern, and local development origins are allowed; an unrelated origin is rejected.
 - Background workers and cron jobs: none detected.
 
-Render's service metadata reports an empty root directory, blank health-check path, and a stale `yarn` build value even though the deployment log proves that `cd backend && npm install` executed. `render.yaml` describes the desired root-directory/health-check configuration but is not the effective source for the existing dashboard-managed service. This drift should be corrected in a separate reviewed Render settings change; it does not change the currently running commit.
+At the audit snapshot, Render's service metadata reported an empty root directory, blank health-check path, and a stale `yarn` build value even though the deployment log proved that `cd backend && npm install` executed. The reviewed Render settings follow-up aligns the dashboard-managed service and `render.yaml` on root directory `backend`, build command `npm ci`, start command `npm start`, health check `/api/health`, and Node 22.22.0 without creating a service or changing its existing Starter plan.
 
 Required backend environment names found in code are `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `FRONTEND_URLS` (or legacy `FRONTEND_URL`), and `PORT`. Optional operational names are `OCR_SPACE_API_KEY`, `AUTH_USER_CACHE_TTL_MS`, and `AUTH_USER_CACHE_MAX_ENTRIES`. The connector did not expose secret values or a read-only configured-name list.
 
@@ -134,7 +134,7 @@ They correspond to the repository's additive, data-preserving migration files un
 ## 8. Existing issues and risks
 
 - Render logged intermittent `ENOTFOUND` lookups for the correct Supabase host before the feature rollout. The latest deploy and live requests are healthy, so this is an external DNS/transient-connectivity risk to monitor rather than a configuration substitution.
-- Render dashboard metadata does not fully match the executed build command or `render.yaml`; health check is blank in the live service metadata.
+- Render settings drift is addressed by the reviewed dashboard/repository alignment. Rollback restores the previous repository-root commands and blank health-check path; it does not require application or database rollback.
 - A previously created Render staging service (`srv-d9q4et942hec739p91fg`) is not connected to production and its attempted deploy failed because no staging-only service secret was supplied. It is not used by this rollout and was not deleted without explicit authorization.
 - At the audit snapshot, Supabase's security advisor reported three mutable-search-path functions and five authenticated SECURITY DEFINER role helpers. The reviewed security follow-up removed all eight warnings. The remaining RLS-without-policy findings are informational for intentionally inaccessible/internal tables; leaked-password protection remains disabled because it is Pro-only.
 - Supabase performance advisor reports pre-existing unused indexes and multiple permissive policies. Removing indexes or merging policies without representative workload evidence is unsafe and outside this feature change.
@@ -178,7 +178,7 @@ No new environment variable is required by mechanic assignment, reservations, co
 
 Recommended reviewed platform settings:
 
-1. Render: set the health check to `/api/health` and make the dashboard root/build/start values unambiguous (`backend`, `npm ci`, `npm start`, or the equivalent repository-root commands).
+1. Render: keep the dashboard and `render.yaml` aligned on `backend`, `npm ci`, `npm start`, Node 22.22.0, and `/api/health`; verify these values after any service recreation or ownership transfer.
 2. Vercel: keep the project root on `web-app`, framework Vite, build `npm run build`, output `dist`, and keep the `/api` rewrite.
 3. Vercel: keep production API traffic same-origin; do not set `VITE_USE_DIRECT_API_URL=true` in production.
 4. Supabase: keep the project on Free and use only `https://bxrdmfdokslnnluztmgl.supabase.co`.
