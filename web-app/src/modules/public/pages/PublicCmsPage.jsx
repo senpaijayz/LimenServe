@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router';
 import { ArrowLeft, LoaderCircle } from 'lucide-react';
 import { getPublicCmsPage } from '../../../services/cmsApi';
 import DynamicPageRenderer from '../components/DynamicPageRenderer';

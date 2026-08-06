@@ -16,7 +16,8 @@ Production record counts were unchanged after migration: 3 user profiles, 1 mech
 
 - Vercel creates a preview from the GitHub pull request. Verify the public UI and same-origin API behavior there.
 - Render pull-request previews are disabled on the production service. Do not repoint the production service to a feature branch.
-- The follow-up hardening requires no database DDL. Do not create another Supabase project, branch, or paid resource. The previously created unused Free staging project `tncekqyecihscadayufs` is not part of this rollout.
+- The first UI/dependency follow-up required no database DDL. Do not create another Supabase project, branch, or paid resource. The previously created unused Free staging project `tncekqyecihscadayufs` is not part of this rollout.
+- The later security follow-up contains one schema-only migration that moves existing RLS helper functions to a non-exposed schema and fixes their stockroom table references. It creates no database, table, or paid resource and changes no production rows.
 - Authenticated production mutations are not used as smoke tests unless the user supplies a disposable production account and explicitly authorizes test records.
 
 ## Deployment sequence
@@ -31,6 +32,8 @@ Production record counts were unchanged after migration: 3 user profiles, 1 mech
 8. Confirm Vercel production reaches `READY` on the same merge commit.
 9. Run read-only production checks: `/api/health`, public catalog response, stock labels, cache headers, CORS allow/deny behavior, and Supabase invariants/counts.
 10. Record the final merge commit and deployment IDs in the handoff.
+
+For this security follow-up, `20260806101020_move_rls_helpers_to_private_schema.sql` was applied only after the Vercel preview and automated checks passed. The security advisor, read-only SQL invariant file, stockroom policy-role checks, and production aggregate counts were rerun successfully before merge.
 
 ## Post-deployment checks
 
@@ -55,6 +58,7 @@ Production record counts were unchanged after migration: 3 user profiles, 1 mech
 - Do not reset, restore over, or recreate project `bxrdmfdokslnnluztmgl` as part of application rollback.
 - The previous application safely ignores the additive columns and tables.
 - If a function is defective, ship a reviewed `CREATE OR REPLACE FUNCTION` corrective migration.
+- If the private-helper migration must be reversed, use a forward corrective migration that moves the same function OIDs back to `app`, restores their qualified internal references, and verifies every dependent policy. No table or row rollback is involved.
 - If allocation must be paused, disable only `trg_allocate_part_reservations_after_restock` in a reviewed emergency migration, then re-enable it after correction.
 - Do not re-grant feature RPC execution to `PUBLIC`, `anon`, or `authenticated`, and do not restore role self-escalation paths.
 

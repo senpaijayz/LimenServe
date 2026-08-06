@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { ArrowDownCircle, ArrowUpCircle, ClipboardList, RefreshCw } from 'lucide-react';
 import Card from '../../../components/ui/Card';
 import { getInventoryMovements } from '../../../services/catalogApi';

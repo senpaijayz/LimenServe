@@ -1,6 +1,6 @@
 import { BatteryCharging, Droplets, Gauge, ShieldCheck, Sparkles, Thermometer, ArrowRight, Filter, Shuffle } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { formatCurrency } from '../../../utils/formatters';
 import {
   buildPackageTiers,

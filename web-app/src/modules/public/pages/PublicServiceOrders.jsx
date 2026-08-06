@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion as Motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import {
     ArrowRight,
     CheckCircle2,

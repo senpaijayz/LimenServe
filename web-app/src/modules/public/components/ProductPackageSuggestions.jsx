@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Loader2, Sparkles, Wrench, PackagePlus, ArrowRight } from 'lucide-react';
 import { getProductRecommendationPackages } from '../../../services/analyticsApi';
 import { formatCurrency } from '../../../utils/formatters';

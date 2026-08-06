@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion as Motion } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router';
 import {
     ArrowRight,
     BatteryCharging,

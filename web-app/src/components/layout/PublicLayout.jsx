@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
 import { CarFront, Clock, MapPin, Menu, Phone, ShieldCheck, X } from 'lucide-react';
-import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Link, Navigate, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../../context/useAuth';
 import usePublicCmsSite from '../../hooks/usePublicCmsSite';
 import { getDefaultAuthenticatedPath } from '../../utils/constants';

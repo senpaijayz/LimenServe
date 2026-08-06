@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CalendarClock, PackageSearch, RefreshCw, ShoppingBag, XCircle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import Button from '../../../components/ui/Button';
 import { useToast } from '../../../components/ui/Toast';
 import { cancelMyReservation, listMyReservations } from '../../../services/reservationsApi';

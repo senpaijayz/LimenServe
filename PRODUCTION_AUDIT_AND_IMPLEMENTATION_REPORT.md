@@ -23,7 +23,7 @@ The application contains public catalog/CMS/estimate pages, staff dashboards, in
 
 ## 2. Technologies and connected services
 
-- Frontend: React 19, React Router, Vite, Tailwind CSS, Framer Motion, TanStack Query, Zustand, Supabase JS, Axios, Vitest, and a self-destroying PWA service worker.
+- Frontend: React 19.2.8, React Router 8.3, Vite, Tailwind CSS, Framer Motion, TanStack Query, Zustand, Supabase JS, Axios, Vitest, and a self-destroying PWA service worker.
 - Backend: Node.js/Express, Supabase JS, CORS, Multer, and Paddle/ONNX invoice OCR with OCR.space fallback.
 - Database: Supabase Postgres 17 in `ap-southeast-2`, project `bxrdmfdokslnnluztmgl`, status `ACTIVE_HEALTHY`.
 - Authentication and storage: Supabase Auth and Supabase Storage.
@@ -136,9 +136,9 @@ They correspond to the repository's additive, data-preserving migration files un
 - Render logged intermittent `ENOTFOUND` lookups for the correct Supabase host before the feature rollout. The latest deploy and live requests are healthy, so this is an external DNS/transient-connectivity risk to monitor rather than a configuration substitution.
 - Render dashboard metadata does not fully match the executed build command or `render.yaml`; health check is blank in the live service metadata.
 - A previously created Render staging service (`srv-d9q4et942hec739p91fg`) is not connected to production and its attempted deploy failed because no staging-only service secret was supplied. It is not used by this rollout and was not deleted without explicit authorization.
-- Supabase's security advisor reports pre-existing warnings outside the new feature tables: several intentionally inaccessible RLS-without-policy tables, three mutable-search-path functions, authenticated SECURITY DEFINER role helper functions, and leaked-password protection disabled. The new feature RPC grants and RLS were verified separately. Remediation must be a reviewed migration/auth-setting change, not an ad hoc production edit.
+- At the audit snapshot, Supabase's security advisor reported three mutable-search-path functions and five authenticated SECURITY DEFINER role helpers. The reviewed security follow-up removed all eight warnings. The remaining RLS-without-policy findings are informational for intentionally inaccessible/internal tables; leaked-password protection remains disabled because it is Pro-only.
 - Supabase performance advisor reports pre-existing unused indexes and multiple permissive policies. Removing indexes or merging policies without representative workload evidence is unsafe and outside this feature change.
-- Frontend npm audit retains two high findings for React Router's RSC action mode. LimenServe is a Vite SPA and does not enable RSC actions, so the vulnerable path is not used. A supported patched release should replace it when available.
+- React Router's RSC-only CSRF advisory did not affect LimenServe's declarative `BrowserRouter` architecture. The supported React Router 8.3 upgrade is included in the security follow-up and removes the advisory from `npm audit`.
 - Backend npm audit retains three linked high findings from `adm-zip` inside ONNX/Paddle OCR. It is used during trusted runtime installation, not to unpack uploaded invoices. Forced audit remediation would downgrade incompatible OCR packages, so it is retained and documented pending an upstream compatible release.
 - The optional 3D stockroom bundle is large, but it is route-lazy and excluded from initial preload.
 - Supabase leaked-password protection should be enabled in Auth settings when available on the selected plan after testing the user-registration flow.
@@ -164,7 +164,9 @@ It removes the unused one-off `web-app/bg-remover.js` and its vulnerable `@imgly
 
 ## 10. Required migrations and RLS changes
 
-No additional production migration is required for this follow-up. The three required migrations are already applied and validated on `bxrdmfdokslnnluztmgl`.
+The authorization, assignment, reservation, and security follow-up migrations are applied and validated on `bxrdmfdokslnnluztmgl`. `20260806101020_move_rls_helpers_to_private_schema.sql` moves five RLS authorization helpers from the exposed `app` schema to a non-exposed `private` schema without recreating policies or changing data, fixes two incorrect stockroom relation references, and pins three remaining function `search_path` values.
+
+The migration was rehearsed in a rolled-back transaction against production metadata, then applied only after the Vercel preview passed. PostgreSQL policy dependencies followed the moved function OIDs automatically; admin, cashier, published-layout, function-grant, policy-access, invariant, advisor, and unchanged-row-count assertions passed after application.
 
 Rollback is forward-only for data-bearing tables: do not drop assignment, reservation, or event history. If a defect appears, roll back application mutations first and use a corrective additive migration or `CREATE OR REPLACE FUNCTION` migration. Never reset the production project.
 
@@ -180,7 +182,7 @@ Recommended reviewed platform settings:
 2. Vercel: keep the project root on `web-app`, framework Vite, build `npm run build`, output `dist`, and keep the `/api` rewrite.
 3. Vercel: keep production API traffic same-origin; do not set `VITE_USE_DIRECT_API_URL=true` in production.
 4. Supabase: keep the project on Free and use only `https://bxrdmfdokslnnluztmgl.supabase.co`.
-5. Supabase Auth: consider leaked-password protection after verifying plan availability and registration behavior.
+5. Supabase Auth: leaked-password protection is Pro-only and must remain disabled while the project stays at the required $0/month. Continue enforcing the application's existing password validation and consider MFA for privileged staff instead.
 
 ## 12. Implementation plan and completed sequence
 
@@ -206,7 +208,7 @@ Recommended reviewed platform settings:
 - Browser: production desktop/mobile home and catalog, stock labels, registration labels, protected-route redirect, cache headers, Render health, and CORS allow/deny behavior.
 - Authenticated mutation flows: exercised against isolated test data inside a rolled-back transaction. Production aggregate verification is read-only because no production test credentials or disposable business records were authorized.
 
-Current local evidence: 102/102 frontend tests pass, 14/14 backend tests pass, ESLint passes, and the Vite production build passes.
+Current local evidence: 102/102 frontend tests pass, 14/14 backend tests pass, ESLint passes, the Vite production build passes, and the frontend npm audit reports zero vulnerabilities after the React Router 8.3 migration.
 
 ## 14. Deployment and rollback plan
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { formatVehicleDisplayLabel } from '../modules/public/utils/smartBundleUtils';
 
 const STORAGE_KEY = 'limen-public-vehicle-context';
