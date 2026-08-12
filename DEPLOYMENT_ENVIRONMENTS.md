@@ -25,6 +25,13 @@ Set the project root to `web-app`. Configure these values independently in Verce
 4. If a Vercel custom Staging environment is enabled, give it the same staging values explicitly rather than inheriting Production.
 5. Redeploy each environment after changing variables; Vercel environment-variable changes do not modify an existing deployment.
 
+The repository also carries `web-app/.env.production` with browser-safe production
+defaults so a production build remains reproducible when the Vercel environment
+panel is unavailable. Vercel Project Settings should still override these values;
+the file contains only the public Supabase URL/key and production API origin. It is
+not a substitute for configuring Preview/Staging, which remains intentionally
+blocked until an isolated backend and Supabase project are supplied.
+
 Vercel supplies `VERCEL_ENV` during the build and exposes framework-prefixed Vite environment metadata. Do not manually override those system values. To validate a prospective hosted build without deploying:
 
 ```text
