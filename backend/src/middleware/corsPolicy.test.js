@@ -29,6 +29,7 @@ test('limits preflight methods and headers and exposes operational headers', () 
 
   assert.deepEqual(options.methods, ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
   assert.ok(options.allowedHeaders.includes('Idempotency-Key'));
+  assert.ok(options.allowedHeaders.includes('X-Limen-Client-Cache'));
   assert.ok(options.exposedHeaders.includes('X-Request-ID'));
   assert.equal(options.maxAge, 600);
 });

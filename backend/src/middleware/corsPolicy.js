@@ -41,7 +41,13 @@ export function createCorsOptions(allowedOrigins) {
     origin: createOriginPolicy(allowedOrigins),
     credentials: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key', 'X-Request-ID'],
+    allowedHeaders: [
+      'Authorization',
+      'Content-Type',
+      'Idempotency-Key',
+      'X-Limen-Client-Cache',
+      'X-Request-ID',
+    ],
     exposedHeaders: [
       'ETag',
       'RateLimit',

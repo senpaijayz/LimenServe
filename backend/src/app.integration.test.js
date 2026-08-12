@@ -89,12 +89,13 @@ test('health and CORS error responses include request IDs and defensive headers'
       headers: {
         Origin: 'https://app.example.com',
         'Access-Control-Request-Method': 'POST',
-        'Access-Control-Request-Headers': 'content-type,x-request-id',
+        'Access-Control-Request-Headers': 'content-type,x-request-id,x-limen-client-cache',
       },
     });
     assert.equal(allowedPreflight.status, 204);
     assert.equal(allowedPreflight.headers.get('access-control-allow-origin'), 'https://app.example.com');
     assert.match(allowedPreflight.headers.get('access-control-allow-headers'), /X-Request-ID/i);
+    assert.match(allowedPreflight.headers.get('access-control-allow-headers'), /X-Limen-Client-Cache/i);
 
     const denied = await fetch(`${baseUrl}/api/health/live`, {
       headers: { Origin: 'https://limen-serve-attacker.vercel.app' },
