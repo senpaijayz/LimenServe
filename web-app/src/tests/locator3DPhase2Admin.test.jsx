@@ -30,10 +30,11 @@ describe('3D Locator Phase 2 admin controls', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Lock selected object' }));
         expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-4-a').isLocked).toBe(true);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Object Library' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Unlock All Objects' }));
-        expect(useLocator3DStore.getState().sceneObjects.every((object) => !object.isLocked)).toBe(true);
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock selected object' }));
+        expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-4-a').isLocked).toBe(false);
 
+        fireEvent.click(screen.getByRole('button', { name: 'More layout actions' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Advanced...' }));
         fireEvent.change(screen.getByLabelText('Aisle name'), { target: { value: 'Electronics' } });
         fireEvent.change(screen.getByLabelText('Shelf Number'), { target: { value: '9' } });
         fireEvent.change(screen.getByLabelText('Number of Bins'), { target: { value: '10' } });
@@ -43,11 +44,12 @@ describe('3D Locator Phase 2 admin controls', () => {
         expect(updatedShelf.aisle).toBe('Electronics');
         expect(updatedShelf.shelfNumber).toBe(9);
         expect(updatedShelf.binCount).toBe(10);
+        fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
 
         fireEvent.click(screen.getByRole('button', { name: 'Go to Floor 2' }));
         expect(useLocator3DStore.getState().activeFloor).toBe(2);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Delete selected object' }));
+        fireEvent.click(screen.getAllByRole('button', { name: 'Delete selected object' })[0]);
         expect(useLocator3DStore.getState().sceneObjects.some((object) => object.id === 'shelf-4-a')).toBe(false);
     });
 });

@@ -55,7 +55,7 @@ describe('3D Locator redesign store behavior', () => {
         }));
     });
 
-    it('updates editable dimensions and transforms from the properties panel', () => {
+    it('uses a quarter-unit grid snap for direct editor transforms', () => {
         resetLocator3DStore();
         useLocator3DStore.getState().forceSelectObject('shelf-4-a');
 
@@ -71,7 +71,7 @@ describe('3D Locator redesign store behavior', () => {
 
         const shelf = useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-4-a');
         expect(shelf.dimensions).toEqual({ width: 4.4, height: 2.8, depth: 1.2 });
-        expect(shelf.position).toEqual([-2.5, 0, 1]);
+        expect(shelf.position).toEqual([-2.25, 0, 1.25]);
         expect(shelf.rotation).toEqual([0, 0.785, 0]);
     });
 });

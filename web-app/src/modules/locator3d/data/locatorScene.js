@@ -1,6 +1,6 @@
 export const FLOOR_HEIGHT = 4.5;
 export const LOCATOR_LAYOUT_NAME = 'main-store';
-export const SNAP_STEP = 0.5;
+export const SNAP_STEP = 0.25;
 export const SHELF_BIN_RANGE = {
     MIN: 2,
     MAX: 12,
@@ -22,6 +22,14 @@ export const LOCATOR_OBJECT_LIBRARY = [
         icon: 'BrickWall',
         color: '#64748b',
         description: 'Store perimeter walls',
+    },
+    {
+        type: 'wall',
+        label: 'Wall',
+        category: 'Structure',
+        icon: 'BrickWall',
+        color: '#64748b',
+        description: 'Draw a room divider or boundary',
     },
     {
         type: 'shelf-2-layer',
@@ -223,6 +231,14 @@ export const LOCATOR_SCENE_OBJECTS = [
     },
 ];
 
+export const WALL_OBJECT_TEMPLATE = {
+    type: 'wall',
+    name: 'Wall',
+    isLocked: false,
+    dimensions: { width: 3, depth: 0.18, height: 2.7 },
+    rotation: [0, 0, 0],
+};
+
 export function getLocatorObjectSummary(objects = LOCATOR_SCENE_OBJECTS) {
     const floors = new Set();
 
@@ -268,6 +284,46 @@ export function cloneLocatorSceneObjects() {
     return LOCATOR_SCENE_OBJECTS.map(cloneSceneObject);
 }
 
+function normalizeWallPoint(point, fallback = [0, 0, 0]) {
+    return [
+        Number(Number(point?.[0] ?? fallback[0]).toFixed(3)),
+        Number(Number(point?.[1] ?? fallback[1]).toFixed(3)),
+        Number(Number(point?.[2] ?? fallback[2]).toFixed(3)),
+    ];
+}
+
+export function buildWallObjectFromEndpoints({
+    end,
+    floor = 1,
+    id = `wall-${Date.now().toString(36)}`,
+    name = 'Wall',
+    start,
+} = {}) {
+    const safeFloor = Number(floor) === 2 ? 2 : 1;
+    const floorY = safeFloor === 2 ? FLOOR_HEIGHT : 0;
+    const wallStart = normalizeWallPoint(start, [-1.5, floorY, 0]);
+    const wallEnd = normalizeWallPoint(end, [1.5, floorY, 0]);
+    const deltaX = wallEnd[0] - wallStart[0];
+    const deltaZ = wallEnd[2] - wallStart[2];
+    const length = Math.max(0.25, Math.hypot(deltaX, deltaZ));
+
+    return {
+        ...cloneSceneObject(WALL_OBJECT_TEMPLATE),
+        id,
+        name,
+        floor: safeFloor,
+        position: [
+            Number(((wallStart[0] + wallEnd[0]) / 2).toFixed(3)),
+            floorY,
+            Number(((wallStart[2] + wallEnd[2]) / 2).toFixed(3)),
+        ],
+        rotation: [0, Number(Math.atan2(-deltaZ, deltaX).toFixed(3)), 0],
+        dimensions: { ...WALL_OBJECT_TEMPLATE.dimensions, width: Number(length.toFixed(3)) },
+        wallStart,
+        wallEnd,
+    };
+}
+
 function getDefaultObjectName(object, count) {
     if (object.type === 'shelf-2-layer' || object.type === 'shelf-4-layer' || object.type === 'parts-cabinet') {
         const shelfNumber = count + 1;
@@ -301,10 +357,27 @@ function getDefaultObjectPosition(object, activeFloor, count) {
         return [8.7, floorY, -5.9 + (count % 2) * 1.2];
     }
 
+    if (object.type === 'wall') {
+        return [-2 + offset, floorY, 2.5];
+    }
+
     return [-2 + offset, floorY, -1.2];
 }
 
 export function createLocatorSceneObject(type, { activeFloor = 1, count = 0 } = {}) {
+    if (type === 'wall') {
+        const floor = Number(activeFloor) === 2 ? 2 : 1;
+        const floorY = floor === 2 ? FLOOR_HEIGHT : 0;
+        const startX = -2 + ((count % 4) * 1.25);
+        return buildWallObjectFromEndpoints({
+            floor,
+            id: `wall-${Date.now().toString(36)}-${count + 1}`,
+            name: `Wall ${count + 1}`,
+            start: [startX, floorY, 2.5],
+            end: [startX + 3, floorY, 2.5],
+        });
+    }
+
     const source = LOCATOR_SCENE_OBJECTS.find((object) => object.type === type) ?? LOCATOR_SCENE_OBJECTS[0];
     const object = cloneSceneObject(source);
     const floor = Number(activeFloor) === 2 ? 2 : 1;
@@ -327,7 +400,20 @@ export function normalizeLayoutObjects(objects) {
         return cloneLocatorSceneObjects();
     }
 
-    return objects.map(cloneSceneObject);
+    return objects.map((object) => {
+        if (object?.type === 'wall' && Array.isArray(object.wallStart) && Array.isArray(object.wallEnd)) {
+            return {
+                ...buildWallObjectFromEndpoints({
+                    ...object,
+                    end: object.wallEnd,
+                    start: object.wallStart,
+                }),
+                isLocked: Boolean(object.isLocked),
+            };
+        }
+
+        return cloneSceneObject(object);
+    });
 }
 
 export function buildDefaultLayoutData() {

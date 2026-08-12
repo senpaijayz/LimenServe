@@ -56,6 +56,7 @@ describe('3D Locator Phase 3 admin integration', () => {
         await waitFor(() => expect(loadStoreLayout).toHaveBeenCalled());
 
         fireEvent.click(screen.getByRole('button', { name: 'Reset to Default' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset Layout' }));
         expect(useLocator3DStore.getState().sceneObjects.length).toBeGreaterThan(7);
 
         act(() => {
@@ -65,6 +66,8 @@ describe('3D Locator Phase 3 admin integration', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Center Camera on Selected Object' }));
         expect(useLocator3DStore.getState().cameraFocusRequest.objectId).toBe('shelf-4-a');
 
+        fireEvent.click(screen.getByRole('button', { name: 'More layout actions' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Advanced...' }));
         fireEvent.click(screen.getByRole('button', { name: 'Assign Product to Shelf' }));
         fireEvent.change(await screen.findByLabelText('Product'), { target: { value: 'product-1' } });
         fireEvent.change(screen.getByLabelText('Bin Number'), { target: { value: '4' } });

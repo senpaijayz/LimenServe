@@ -28,7 +28,12 @@ const REQUIRED_OBJECT_TYPES = [
 
 describe('3D Locator foundation', () => {
     it('defines the Phase 1 object library and seed scene', () => {
-        expect(LOCATOR_OBJECT_LIBRARY.map((object) => object.type)).toEqual(REQUIRED_OBJECT_TYPES);
+        expect(LOCATOR_OBJECT_LIBRARY.map((object) => object.type)).toEqual([
+            'floor',
+            'walls',
+            'wall',
+            ...REQUIRED_OBJECT_TYPES.slice(2),
+        ]);
         expect(LOCATOR_SCENE_OBJECTS.map((object) => object.type)).toEqual(expect.arrayContaining(REQUIRED_OBJECT_TYPES));
     });
 

@@ -11,11 +11,13 @@ import {
     Camera,
     CheckCircle2,
     ChevronDown,
+    Copy,
     DoorOpen,
     ExternalLink,
     Grid3X3,
     LayoutDashboard,
     Lock,
+    MousePointer2,
     Maximize2,
     Monitor,
     Minimize2,
@@ -25,12 +27,15 @@ import {
     PanelLeftClose,
     PanelLeftOpen,
     RefreshCw,
+    Redo2,
+    RotateCcw,
     Route,
     Save,
     Search,
     SlidersHorizontal,
     Store,
     Trash2,
+    Undo2,
     Unlock,
     Waypoints,
     X,
@@ -88,7 +93,7 @@ function toRadians(value) {
     return (Number(value || 0) * Math.PI) / 180;
 }
 
-function DesignModeSwitch() {
+function DesignModeSwitch({ onChange }) {
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const setDesignMode = useLocator3DStore((state) => state.setDesignMode);
 
@@ -102,7 +107,7 @@ function DesignModeSwitch() {
                     ? 'border-sky-300/60 bg-sky-400/15 text-sky-50 shadow-sm shadow-sky-950/20'
                     : 'border-emerald-300/30 bg-emerald-400/10 text-emerald-50 hover:border-emerald-300/50 hover:bg-emerald-400/15',
             )}
-            onClick={() => setDesignMode(!isDesignMode)}
+            onClick={() => (onChange ? onChange(!isDesignMode) : setDesignMode(!isDesignMode))}
             role="switch"
             type="button"
         >
@@ -185,16 +190,12 @@ function TopBar({
     onSaveNameChange,
     onSelectLayout,
     onToggleSidebar,
+    onToggleDesignMode,
     selectedLayoutName,
 }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const goToFloor = useLocator3DStore((state) => state.goToFloor);
     const requestCameraPreset = useLocator3DStore((state) => state.requestCameraPreset);
-    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
-    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
-    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
-    const toggleObjectLock = useLocator3DStore((state) => state.toggleObjectLock);
-    const selectedObject = getLocatorObjectById(selectedObjectId, sceneObjects);
     const [isSaveOpen, setIsSaveOpen] = useState(false);
     const busy = isLoadingLayout || isSavingLayout;
 
@@ -281,7 +282,7 @@ function TopBar({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                        <DesignModeSwitch />
+                        <DesignModeSwitch onChange={onToggleDesignMode} />
                         <div className="relative flex items-center gap-2">
                             {isSaveOpen && (
                                 <input
@@ -311,16 +312,6 @@ function TopBar({
                             Reset
                         </TopButton>
 
-                        {isDesignMode && selectedObject && (
-                            <TopButton
-                                aria-label={selectedObject.isLocked ? 'Unlock selected object' : 'Lock selected object'}
-                                className={selectedObject.isLocked ? 'border-emerald-300/30 bg-emerald-400/12 text-emerald-100' : 'border-amber-300/30 bg-amber-400/12 text-amber-100'}
-                                onClick={() => toggleObjectLock(selectedObject.id)}
-                            >
-                                {selectedObject.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                                {selectedObject.isLocked ? 'Unlock' : 'Lock'}
-                            </TopButton>
-                        )}
                     </div>
                 </div>
             </div>
@@ -400,6 +391,103 @@ function ObjectLibraryDropdown() {
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+function DesignToolbar({ onDiscardChanges, onResetCurrentFloor, onResetEntireStockroom, onSave }) {
+    const addSceneObject = useLocator3DStore((state) => state.addSceneObject);
+    const activeTool = useLocator3DStore((state) => state.activeTool);
+    const centerCameraOnSelected = useLocator3DStore((state) => state.centerCameraOnSelected);
+    const duplicateSelectedObject = useLocator3DStore((state) => state.duplicateSelectedObject);
+    const history = useLocator3DStore((state) => state.history);
+    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
+    const objectLibrary = useLocator3DStore((state) => state.objectLibrary);
+    const redo = useLocator3DStore((state) => state.redo);
+    const resetCamera = useLocator3DStore((state) => state.resetCamera);
+    const rotateSelectedObject = useLocator3DStore((state) => state.rotateSelectedObject);
+    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
+    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
+    const setActiveTool = useLocator3DStore((state) => state.setActiveTool);
+    const toggleObjectLock = useLocator3DStore((state) => state.toggleObjectLock);
+    const deleteSelectedObject = useLocator3DStore((state) => state.deleteSelectedObject);
+    const undo = useLocator3DStore((state) => state.undo);
+    const snapEnabled = useLocator3DStore((state) => state.snapEnabled);
+    const toggleSceneOption = useLocator3DStore((state) => state.toggleSceneOption);
+    const selected = getLocatorObjectById(selectedObjectId, sceneObjects);
+    const [isAddOpen, setIsAddOpen] = useState(false);
+    const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+    const [isMoreOpen, setIsMoreOpen] = useState(false);
+
+    if (!isDesignMode) {
+        return null;
+    }
+
+    const addObject = (type) => {
+        addSceneObject(type);
+        setActiveTool('move');
+        setIsAddOpen(false);
+    };
+
+    return (
+        <div aria-label="Design toolbar" className="pointer-events-auto absolute inset-x-3 top-3 z-30 flex flex-wrap items-center gap-2 rounded-2xl border border-sky-300/25 bg-slate-950/90 p-2 shadow-[0_18px_48px_rgba(2,6,23,0.36)] backdrop-blur-xl">
+            <div className="relative">
+                <SceneControlButton aria-expanded={isAddOpen} aria-label="Add Object" className="border-sky-300/35 bg-sky-400/15 text-sky-50" onClick={() => setIsAddOpen((value) => !value)}>
+                    <Box className="h-4 w-4" />
+                    Add Object
+                    <ChevronDown className="h-3.5 w-3.5" />
+                </SceneControlButton>
+                {isAddOpen && (
+                    <div className="absolute left-0 top-12 grid w-60 gap-1 rounded-xl border border-white/10 bg-slate-950 p-2 shadow-2xl">
+                        {objectLibrary.map((object) => {
+                            const Icon = libraryIconMap[object.icon] ?? Box;
+                            return (
+                                <button className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold text-slate-100 hover:bg-sky-400/15" key={object.type} onClick={() => addObject(object.type)} type="button">
+                                    <Icon className="h-4 w-4 text-sky-200" /> {object.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+            <SceneControlButton aria-label="Select tool" className={activeTool === 'move' || activeTool === 'select' ? 'border-sky-300/35 bg-sky-400/15 text-sky-50' : ''} onClick={() => setActiveTool('move')}>
+                <MousePointer2 className="h-4 w-4" /> Select
+            </SceneControlButton>
+            <SceneControlButton aria-label="Draw Wall" className={activeTool === 'draw-wall' ? 'border-sky-300/35 bg-sky-400/15 text-sky-50' : ''} onClick={() => setActiveTool('draw-wall')}>
+                <BrickWall className="h-4 w-4" /> Draw Wall
+            </SceneControlButton>
+            <span className="hidden h-6 w-px bg-white/10 sm:block" />
+            {selected ? (
+                <>
+                    <span className="max-w-[150px] truncate px-2 text-xs font-black text-sky-100">Selected: {selected.name}</span>
+                    <SceneControlButton aria-label="Rotate selected object left" onClick={() => rotateSelectedObject(-15)}><RotateCcw className="h-4 w-4" /> Rotate</SceneControlButton>
+                    <SceneControlButton aria-label="Rotate selected object right" onClick={() => rotateSelectedObject(90)}>90°</SceneControlButton>
+                    <SceneControlButton aria-label="Duplicate selected object" onClick={duplicateSelectedObject}><Copy className="h-4 w-4" /> Duplicate</SceneControlButton>
+                    <SceneControlButton aria-label="Center Camera on Selected Object" onClick={centerCameraOnSelected}><Camera className="h-4 w-4" /> Fit</SceneControlButton>
+                    <SceneControlButton aria-label={selected.isLocked ? 'Unlock selected object' : 'Lock selected object'} onClick={() => toggleObjectLock(selected.id)}>{selected.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}{selected.isLocked ? 'Unlock' : 'Lock'}</SceneControlButton>
+                    <SceneControlButton aria-label="Delete selected object" className="border-rose-300/25 text-rose-100" onClick={deleteSelectedObject}><Trash2 className="h-4 w-4" /> Delete</SceneControlButton>
+                </>
+            ) : null}
+            <span className="hidden h-6 w-px bg-white/10 md:block" />
+            <SceneControlButton aria-label="Undo layout change" disabled={!history?.past?.length} onClick={undo}><Undo2 className="h-4 w-4" /> Undo</SceneControlButton>
+            <SceneControlButton aria-label="Redo layout change" disabled={!history?.future?.length} onClick={redo}><Redo2 className="h-4 w-4" /> Redo</SceneControlButton>
+            <SceneControlButton aria-label="Toggle grid snapping" className={snapEnabled ? 'border-emerald-300/35 bg-emerald-400/15 text-emerald-50' : ''} onClick={() => toggleSceneOption('snapEnabled')}>Snap {snapEnabled ? '✓' : 'Off'}</SceneControlButton>
+            <div className="relative ml-auto">
+                <SceneControlButton aria-expanded={isMoreOpen} aria-label="More layout actions" onClick={() => setIsMoreOpen((value) => !value)}>More <ChevronDown className="h-3.5 w-3.5" /></SceneControlButton>
+                {isMoreOpen && (
+                    <div className="absolute right-0 top-12 z-40 grid w-56 gap-1 rounded-xl border border-white/10 bg-slate-950 p-2 shadow-2xl">
+                        <button className="rounded-lg px-3 py-2 text-left text-xs font-bold text-slate-100 hover:bg-white/10" onClick={resetCamera} type="button">Reset Camera</button>
+                        <button className="rounded-lg px-3 py-2 text-left text-xs font-bold text-slate-100 hover:bg-white/10" onClick={() => setIsAdvancedOpen(true)} type="button">Advanced...</button>
+                        <button className="rounded-lg px-3 py-2 text-left text-xs font-bold text-amber-100 hover:bg-amber-400/10" onClick={onDiscardChanges} type="button">Discard Unsaved Changes</button>
+                        <button className="rounded-lg px-3 py-2 text-left text-xs font-bold text-amber-100 hover:bg-amber-400/10" onClick={onResetCurrentFloor} type="button">Reset Current Floor</button>
+                        <button className="rounded-lg px-3 py-2 text-left text-xs font-bold text-rose-100 hover:bg-rose-400/10" onClick={onResetEntireStockroom} type="button">Reset Entire Stockroom</button>
+                    </div>
+                )}
+            </div>
+            <SceneControlButton aria-label="Save layout changes" className="border-sky-300/40 bg-sky-400/20 text-sky-50" onClick={onSave}><Save className="h-4 w-4" /> Save</SceneControlButton>
+            <Modal isOpen={isAdvancedOpen} onClose={() => setIsAdvancedOpen(false)} size="lg" title="Advanced object details">
+                <PropertiesPanel />
+            </Modal>
         </div>
     );
 }
@@ -1107,7 +1195,7 @@ function SceneStats() {
             <span className="rounded-full border border-white/10 bg-slate-950/75 px-3 py-1 text-xs font-black text-slate-300 backdrop-blur">{summary.objects} objects</span>
             <span className="rounded-full border border-white/10 bg-slate-950/75 px-3 py-1 text-xs font-black text-slate-300 backdrop-blur">{summary.shelves} shelves</span>
             {selectedObjectIds?.length > 1 && <span className="rounded-full border border-violet-400/30 bg-violet-400/15 px-3 py-1 text-xs font-black text-violet-100 backdrop-blur">{selectedObjectIds.length} selected</span>}
-            {isDesignMode && <span className="rounded-full border border-sky-400/30 bg-sky-400/15 px-3 py-1 text-xs font-black text-sky-100 backdrop-blur">0.5 snap grid</span>}
+            {isDesignMode && <span className="rounded-full border border-sky-400/30 bg-sky-400/15 px-3 py-1 text-xs font-black text-sky-100 backdrop-blur">0.25 snap grid</span>}
             {isDesignMode && layoutIssues.length > 0 && <span className="rounded-full border border-amber-400/30 bg-amber-400/15 px-3 py-1 text-xs font-black text-amber-100 backdrop-blur">{layoutIssues.length} layout issue{layoutIssues.length === 1 ? '' : 's'}</span>}
             {locatedProduct && <span className="rounded-full border border-emerald-400/30 bg-emerald-400/15 px-3 py-1 text-xs font-black text-emerald-100 backdrop-blur">Locate mode</span>}
         </div>
@@ -1433,10 +1521,13 @@ function LocatorContextPanel({ canEditLayout, onAnimatePath, onOpenEditLayout, p
 }
 
 function useLocatorKeyboardShortcuts(onSaveLayout) {
+    const activeTool = useLocator3DStore((state) => state.activeTool);
+    const cancelWallDrawing = useLocator3DStore((state) => state.cancelWallDrawing);
     const clearSelection = useLocator3DStore((state) => state.clearSelection);
     const deleteSelectedObject = useLocator3DStore((state) => state.deleteSelectedObject);
     const duplicateSelectedObject = useLocator3DStore((state) => state.duplicateSelectedObject);
     const redo = useLocator3DStore((state) => state.redo);
+    const nudgeSelectedObjects = useLocator3DStore((state) => state.nudgeSelectedObjects);
     const undo = useLocator3DStore((state) => state.undo);
 
     useEffect(() => {
@@ -1445,6 +1536,10 @@ function useLocatorKeyboardShortcuts(onSaveLayout) {
             const isEditingInput = targetTag === 'input' || targetTag === 'textarea' || targetTag === 'select';
 
             if (event.key === 'Escape') {
+                if (activeTool === 'draw-wall') {
+                    cancelWallDrawing();
+                    return;
+                }
                 clearSelection();
                 return;
             }
@@ -1475,6 +1570,12 @@ function useLocatorKeyboardShortcuts(onSaveLayout) {
 
             if ((event.key === 'Delete' || event.key === 'Backspace') && !isEditingInput) {
                 deleteSelectedObject();
+                return;
+            }
+
+            if (event.key.startsWith('Arrow') && !isEditingInput) {
+                event.preventDefault();
+                nudgeSelectedObjects(event.key, event.shiftKey ? 4 : 1);
             }
         };
 
@@ -1483,7 +1584,7 @@ function useLocatorKeyboardShortcuts(onSaveLayout) {
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
         };
-    }, [clearSelection, deleteSelectedObject, duplicateSelectedObject, onSaveLayout, redo, undo]);
+    }, [activeTool, cancelWallDrawing, clearSelection, deleteSelectedObject, duplicateSelectedObject, nudgeSelectedObjects, onSaveLayout, redo, undo]);
 }
 
 function LocatorSummaryCards() {
@@ -1615,6 +1716,9 @@ export default function Locator3DAdmin() {
     const locateProduct = useLocator3DStore((state) => state.locateProduct);
     const productLocations = useLocator3DStore((state) => state.productLocations);
     const resetToDefaultLayout = useLocator3DStore((state) => state.resetToDefaultLayout);
+    const resetCurrentFloor = useLocator3DStore((state) => state.resetCurrentFloor);
+    const discardUnsavedChanges = useLocator3DStore((state) => state.discardUnsavedChanges);
+    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const setDesignMode = useLocator3DStore((state) => state.setDesignMode);
     const setProductLocations = useLocator3DStore((state) => state.setProductLocations);
     const setSelectedProductForLocation = useLocator3DStore((state) => state.setSelectedProductForLocation);
@@ -1628,6 +1732,7 @@ export default function Locator3DAdmin() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [productLocationState, setProductLocationState] = useState(PRODUCT_LOCATION_INITIAL_STATE);
     const [autosaveSnapshot, setAutosaveSnapshot] = useState(null);
+    const [pendingLayoutAction, setPendingLayoutAction] = useState(null);
     const canvasShellRef = useRef(null);
     const productId = searchParams.get('productId') || routeLocation.state?.productId || routeStateProduct?.id || '';
     const productName = searchParams.get('name') || routeStateProduct?.name || '';
@@ -1674,8 +1779,10 @@ export default function Locator3DAdmin() {
             setSelectedLayoutName(safeName);
             setLayoutOptions((current) => [...new Set([safeName, ...current])]);
             success('3D layout saved.');
+            return true;
         } catch (saveError) {
             showError(saveError.message || 'Unable to save 3D layout.');
+            return false;
         } finally {
             setIsSavingLayout(false);
         }
@@ -1806,8 +1913,46 @@ export default function Locator3DAdmin() {
         resetToDefaultLayout();
         setProductLocationState(PRODUCT_LOCATION_INITIAL_STATE);
         setSelectedProductForLocation(null);
-        success('Default two-floor 3D layout restored.');
+        success('Default two-floor 3D layout restored locally. Save when you are ready.');
     }, [resetToDefaultLayout, setSelectedProductForLocation, success]);
+
+    const handleResetCurrentFloor = useCallback(() => {
+        resetCurrentFloor();
+        setProductLocationState(PRODUCT_LOCATION_INITIAL_STATE);
+        setSelectedProductForLocation(null);
+        success('Current floor reset locally. Save when you are ready.');
+    }, [resetCurrentFloor, setSelectedProductForLocation, success]);
+
+    const handleDiscardChanges = useCallback(() => {
+        discardUnsavedChanges();
+        setAutosaveSnapshot(null);
+        success('Unsaved layout changes discarded.');
+    }, [discardUnsavedChanges, success]);
+
+    const handleDesignModeChange = useCallback((nextDesignMode) => {
+        if (nextDesignMode || !hasUnsavedChanges) {
+            setDesignMode(nextDesignMode);
+            return;
+        }
+        setPendingLayoutAction('exit');
+    }, [hasUnsavedChanges, setDesignMode]);
+
+    const confirmLayoutAction = useCallback(async () => {
+        const action = pendingLayoutAction;
+        setPendingLayoutAction(null);
+        if (action === 'reset-floor') {
+            handleResetCurrentFloor();
+        } else if (action === 'reset-all') {
+            handleResetLayout();
+        } else if (action === 'exit-discard') {
+            handleDiscardChanges();
+            setDesignMode(false);
+        } else if (action === 'exit-save') {
+            if (await handleSaveLayout(layoutName)) {
+                setDesignMode(false);
+            }
+        }
+    }, [handleDiscardChanges, handleResetCurrentFloor, handleResetLayout, handleSaveLayout, layoutName, pendingLayoutAction, setDesignMode]);
 
     const handleLocateProductFromSearch = useCallback((product) => {
         const location = productLocations.find((item) => item.productId === product.id);
@@ -1938,10 +2083,11 @@ export default function Locator3DAdmin() {
                 layoutOptions={layoutOptions}
                 onConfirmSaveLayout={() => void handleSaveLayout(layoutName)}
                 onLoadLayout={() => void handleLoadLayout()}
-                onResetLayout={handleResetLayout}
+                onResetLayout={() => setPendingLayoutAction('reset-all')}
                 onSaveNameChange={setLayoutName}
                 onSelectLayout={setSelectedLayoutName}
                 onToggleSidebar={() => setIsSidebarOpen((value) => !value)}
+                onToggleDesignMode={handleDesignModeChange}
                 selectedLayoutName={selectedLayoutName}
             />
 
@@ -1967,21 +2113,25 @@ export default function Locator3DAdmin() {
             <div
                 className={cx(
                     'grid items-start gap-4',
-                    isSidebarOpen
+                    isDesignMode
+                        ? 'xl:grid-cols-[minmax(0,1fr)]'
+                        : isSidebarOpen
                         ? 'xl:grid-cols-[320px_minmax(0,1fr)_340px]'
                         : 'xl:grid-cols-[minmax(0,1fr)_340px]',
                 )}
             >
-                <ProductLocatorSidebar
-                    isLoadingLayout={isLoadingLayout}
-                    isLoadingProducts={isLoadingProducts}
-                    isOpen={isSidebarOpen}
-                    onCollapse={() => setIsSidebarOpen(false)}
-                    onLocateProduct={handleLocateProductFromSearch}
-                    productLocations={productLocations}
-                    products={products}
-                    sceneObjects={sceneObjects}
-                />
+                {!isDesignMode && (
+                    <ProductLocatorSidebar
+                        isLoadingLayout={isLoadingLayout}
+                        isLoadingProducts={isLoadingProducts}
+                        isOpen={isSidebarOpen}
+                        onCollapse={() => setIsSidebarOpen(false)}
+                        onLocateProduct={handleLocateProductFromSearch}
+                        productLocations={productLocations}
+                        products={products}
+                        sceneObjects={sceneObjects}
+                    />
+                )}
 
                 <main
                     aria-label="3D stockroom canvas"
@@ -1989,9 +2139,14 @@ export default function Locator3DAdmin() {
                     ref={canvasShellRef}
                 >
                     <Locator3DScene />
-                    <LocatorMinimap />
-                    <ObjectLibraryDropdown />
-                    <SceneControlsDock canvasShellRef={canvasShellRef} />
+                    {!isDesignMode && <LocatorMinimap />}
+                    <DesignToolbar
+                        onDiscardChanges={handleDiscardChanges}
+                        onResetCurrentFloor={() => setPendingLayoutAction('reset-floor')}
+                        onResetEntireStockroom={() => setPendingLayoutAction('reset-all')}
+                        onSave={() => void handleSaveLayout(layoutName)}
+                    />
+                    {!isDesignMode && <SceneControlsDock canvasShellRef={canvasShellRef} />}
                     <CanvasLoadingOverlay isLoading={isWorkspaceLoading} />
                     <SceneStats />
                     <div className="pointer-events-none absolute bottom-4 left-4 z-10 hidden rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-[11px] font-bold text-slate-300 backdrop-blur sm:block">
@@ -2000,14 +2155,40 @@ export default function Locator3DAdmin() {
                     <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-slate-950/50 to-transparent" />
                 </main>
 
-                <LocatorContextPanel
-                    canEditLayout={canEditLayout}
-                    onAnimatePath={handleAnimatePathFromCounter}
-                    onOpenEditLayout={handleOpenEditLayout}
-                    productLocationState={productLocationState}
-                />
+                {!isDesignMode && (
+                    <LocatorContextPanel
+                        canEditLayout={canEditLayout}
+                        onAnimatePath={handleAnimatePathFromCounter}
+                        onOpenEditLayout={handleOpenEditLayout}
+                        productLocationState={productLocationState}
+                    />
+                )}
             </div>
             <LocatorSummaryCards />
+            <Modal
+                closeOnBackdrop={pendingLayoutAction !== 'exit'}
+                isOpen={Boolean(pendingLayoutAction)}
+                onClose={() => setPendingLayoutAction(null)}
+                title={pendingLayoutAction === 'exit' ? 'Unsaved layout changes' : pendingLayoutAction === 'reset-floor' ? 'Reset current floor?' : 'Reset entire stockroom layout?'}
+                footer={pendingLayoutAction === 'exit' ? (
+                    <div className="flex flex-wrap justify-end gap-2">
+                        <TopButton onClick={() => setPendingLayoutAction(null)}>Keep Editing</TopButton>
+                        <TopButton className="border-amber-300/35 bg-amber-400/15 text-amber-50" onClick={() => setPendingLayoutAction('exit-discard')}>Discard Changes</TopButton>
+                        <TopButton className="border-sky-300/35 bg-sky-400/20 text-sky-50" onClick={() => setPendingLayoutAction('exit-save')}>Save and Exit</TopButton>
+                    </div>
+                ) : (
+                    <div className="flex justify-end gap-2">
+                        <TopButton onClick={() => setPendingLayoutAction(null)}>Cancel</TopButton>
+                        <TopButton className="border-rose-300/35 bg-rose-400/15 text-rose-50" onClick={() => void confirmLayoutAction}>Reset Layout</TopButton>
+                    </div>
+                )}
+            >
+                {pendingLayoutAction === 'exit' ? (
+                    <p className="text-sm leading-6 text-slate-300">Save your layout before leaving Design Mode, or discard only the unsaved layout edits. Product, inventory, and business records are unaffected.</p>
+                ) : (
+                    <p className="text-sm leading-6 text-slate-300">This restores the default {pendingLayoutAction === 'reset-floor' ? 'objects on the active floor' : 'two-floor scene'} in your working layout. It does not delete inventory, products, or saved business records. Save afterwards to keep the reset.</p>
+                )}
+            </Modal>
         </div>
     );
 }

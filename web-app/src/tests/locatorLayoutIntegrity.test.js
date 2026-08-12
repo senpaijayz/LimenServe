@@ -32,11 +32,11 @@ describe('3D layout integrity and editor history', () => {
         const originalX = useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-2-a').position[0];
 
         store.updateObjectTransform('shelf-2-a', { position: [-2.2, 0, -1.6] });
-        expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-2-a').position[0]).toBe(-2);
+        expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-2-a').position[0]).toBe(-2.25);
         store.undo();
         expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-2-a').position[0]).toBe(originalX);
         store.redo();
-        expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-2-a').position[0]).toBe(-2);
+        expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-2-a').position[0]).toBe(-2.25);
 
         store.forceSelectObject('shelf-4-a');
         store.duplicateSelectedObject();
@@ -60,7 +60,7 @@ describe('3D layout integrity and editor history', () => {
         useLocator3DStore.getState().loadLayoutData({ objects: cloneLocatorSceneObjects() });
         expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-2-a').position[0]).toBe(-7.2);
         expect(useLocator3DStore.getState().recoverAutosave()).toBe(true);
-        expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-2-a').position[0]).toBe(-2);
+        expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-2-a').position[0]).toBe(-2.25);
         useLocator3DStore.getState().discardAutosave();
         expect(getLocatorAutosave()).toBeNull();
     });

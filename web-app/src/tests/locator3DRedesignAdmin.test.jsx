@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../components/ui/Toast';
@@ -164,28 +164,26 @@ describe('3D Locator premium redesign', () => {
         expect(screen.getAllByText('Edit Layout mode').length).toBeGreaterThan(0);
     });
 
-    it('shows design controls only in design mode and supports layout names, object adds, and property edits', async () => {
+    it('keeps Design Mode canvas-first while supporting object adds and saves', async () => {
         resetLocator3DStore();
         renderLocator();
 
         fireEvent.click(screen.getByRole('switch', { name: 'Design Mode' }));
         expect(screen.getAllByText('Edit Layout mode').length).toBeGreaterThan(0);
-        expect(screen.getByRole('button', { name: 'Object Library' })).toBeTruthy();
+        expect(screen.getByLabelText('Design toolbar')).toBeTruthy();
+        expect(screen.queryByRole('complementary', { name: 'Properties' })).toBeNull();
 
         const initialCount = useLocator3DStore.getState().sceneObjects.length;
-        fireEvent.click(screen.getByRole('button', { name: 'Object Library' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Add 2-Layer Shelf' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Object' }));
+        fireEvent.click(screen.getByRole('button', { name: '2-Layer Shelf' }));
         expect(useLocator3DStore.getState().sceneObjects).toHaveLength(initialCount + 1);
 
         act(() => {
             useLocator3DStore.getState().forceSelectObject('shelf-4-a');
+            useLocator3DStore.getState().updateObjectDimensions('shelf-4-a', { width: 4.5 });
+            useLocator3DStore.getState().updateObjectTransform('shelf-4-a', { position: [-3.5, 0, 1], rotation: [0, Math.PI / 4, 0] });
+            useLocator3DStore.getState().updateShelfProperties('shelf-4-a', { aisle: 'Electronics' });
         });
-
-        const properties = await screen.findByRole('complementary', { name: 'Properties' });
-        fireEvent.change(within(properties).getByLabelText('Width'), { target: { value: '4.5' } });
-        fireEvent.change(within(properties).getByLabelText('Position X'), { target: { value: '-3.5' } });
-        fireEvent.change(within(properties).getByLabelText('Rotation Y'), { target: { value: '45' } });
-        fireEvent.change(within(properties).getByLabelText('Aisle name'), { target: { value: 'Electronics' } });
 
         const shelf = useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-4-a');
         expect(shelf.dimensions.width).toBe(4.5);

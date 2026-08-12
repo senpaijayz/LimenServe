@@ -60,7 +60,7 @@ describe('3D Locator Phase 2 store behavior', () => {
         expect(shelf.name).toBe('Aisle Electronics Shelf 7');
     });
 
-    it('updates object transforms on the 0.5 unit snap grid', () => {
+    it('updates object transforms on the 0.25 unit snap grid', () => {
         resetLocator3DStore();
 
         act(() => {
@@ -72,7 +72,7 @@ describe('3D Locator Phase 2 store behavior', () => {
 
         const shelf = useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-4-a');
 
-        expect(shelf.position).toEqual([-1.5, 0, 2.5]);
+        expect(shelf.position).toEqual([-1.25, 0, 2.25]);
         expect(shelf.rotation).toEqual([0, 1.124, 0]);
     });
 

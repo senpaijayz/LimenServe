@@ -5,6 +5,7 @@ import { ContactShadows, Edges, Environment, Grid, Html, Line, OrbitControls, Tr
 import { Bloom, EffectComposer } from '@react-three/postprocessing';
 import {
     FLOOR_HEIGHT,
+    SNAP_STEP,
     getCounterObject,
     isShelfObject,
     normalizeAisle,
@@ -218,13 +219,16 @@ function ObjectInfoBadge({ object }) {
 
 function TransformableObject({ children, object, onTransformingChange }) {
     const groupRef = useRef();
+    const dragRef = useRef(null);
     const activeTool = useLocator3DStore((state) => state.activeTool);
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const selectObject = useLocator3DStore((state) => state.selectObject);
     const toggleFloorFocus = useLocator3DStore((state) => state.toggleFloorFocus);
-    const updateObjectTransform = useLocator3DStore((state) => state.updateObjectTransform);
+    const beginObjectTransform = useLocator3DStore((state) => state.beginObjectTransform);
+    const commitObjectTransform = useLocator3DStore((state) => state.commitObjectTransform);
+    const previewObjectTransform = useLocator3DStore((state) => state.previewObjectTransform);
     const selected = selectedObjectId === object.id;
     const located = locatedProduct?.shelfObjectId === object.id;
     const transformMode = activeTool === 'rotate' ? 'rotate' : 'translate';
@@ -244,7 +248,7 @@ function TransformableObject({ children, object, onTransformingChange }) {
             return;
         }
 
-        updateObjectTransform(object.id, {
+        previewObjectTransform(object.id, {
             position: [groupRef.current.position.x, groupRef.current.position.y, groupRef.current.position.z],
             rotation: [groupRef.current.rotation.x, groupRef.current.rotation.y, groupRef.current.rotation.z],
         });
@@ -264,37 +268,89 @@ function TransformableObject({ children, object, onTransformingChange }) {
         }
     };
 
+    const handlePointerDown = (event) => {
+        if (!isDesignMode || activeTool !== 'move' || object.isLocked || !selected) {
+            return;
+        }
+
+        event.stopPropagation?.();
+        event.target?.setPointerCapture?.(event.pointerId);
+        const floorY = Number(object.floor) === 2 ? FLOOR_HEIGHT : 0;
+        dragRef.current = {
+            floor: new THREE.Plane(new THREE.Vector3(0, 1, 0), -floorY),
+            offset: new THREE.Vector3(object.position[0] - event.point.x, 0, object.position[2] - event.point.z),
+        };
+        beginObjectTransform(object.id);
+        onTransformingChange(true);
+    };
+
+    const handlePointerMove = (event) => {
+        if (!dragRef.current) {
+            return;
+        }
+
+        const point = new THREE.Vector3();
+        if (!event.ray?.intersectPlane?.(dragRef.current.floor, point)) {
+            return;
+        }
+
+        previewObjectTransform(object.id, {
+            position: [point.x + dragRef.current.offset.x, object.position[1], point.z + dragRef.current.offset.z],
+            rotation: object.rotation,
+        });
+    };
+
+    const finishPointerDrag = (event) => {
+        if (!dragRef.current) {
+            return;
+        }
+        event.target?.releasePointerCapture?.(event.pointerId);
+        dragRef.current = null;
+        onTransformingChange(false);
+        commitObjectTransform(object.id);
+    };
+
     return (
         <>
             <group
                 data-testid={`locator-object-${object.id}`}
                 name={object.id}
                 onClick={handleClick}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={finishPointerDrag}
+                onPointerOver={(event) => {
+                    if (isDesignMode && !object.isLocked) event.nativeEvent?.target && (event.nativeEvent.target.style.cursor = selected ? 'grab' : 'pointer');
+                }}
                 position={object.position}
                 ref={groupRef}
                 rotation={object.rotation}
             >
                 {children({ located, locked: object.isLocked, selected })}
+                <ResizeHandles object={object} />
                 {located && <HighlightHalo object={object} />}
                 {object.isLocked && <LockBadge position={[0, (object.dimensions?.height ?? 1) + 0.45, 0]} />}
                 <ObjectInfoBadge object={object} />
             </group>
-            {canTransform && (
+            {canTransform && activeTool === 'rotate' && (
                 <TransformControls
                     mode={transformMode}
                     object={groupRef}
-                    onMouseDown={() => onTransformingChange(true)}
+                    onMouseDown={() => {
+                        beginObjectTransform(object.id);
+                        onTransformingChange(true);
+                    }}
                     onMouseUp={() => {
                         onTransformingChange(false);
-                        handleObjectChange();
+                        commitObjectTransform(object.id);
                     }}
                     onObjectChange={handleObjectChange}
                     rotationSnap={Math.PI / 12}
-                    showX
+                    showX={false}
                     showY
-                    showZ
+                    showZ={false}
                     size={0.82}
-                    translationSnap={0.5}
+                    translationSnap={0.25}
                 />
             )}
         </>
@@ -365,6 +421,144 @@ function WallsObject({ object, onTransformingChange }) {
                     <Block args={[10, 1.15, 0.18]} color="#d1d5db" located={located} locked={locked} opacity={0.54} position={[3.7, FLOOR_HEIGHT + 0.72, 0.45]} selected={selected} />
                     <Block args={[0.18, 1.15, 7]} color="#d1d5db" located={located} locked={locked} opacity={0.54} position={[-1.35, FLOOR_HEIGHT + 0.72, -3.1]} selected={selected} />
                     <Block args={[0.18, 1.15, 7]} color="#d1d5db" located={located} locked={locked} opacity={0.54} position={[8.75, FLOOR_HEIGHT + 0.72, -3.1]} selected={selected} />
+                </>
+            )}
+        </TransformableObject>
+    );
+}
+
+function WallEndpoint({ endpoint, object }) {
+    const dragRef = useRef(null);
+    const beginObjectTransform = useLocator3DStore((state) => state.beginObjectTransform);
+    const commitObjectTransform = useLocator3DStore((state) => state.commitObjectTransform);
+    const previewWallEndpoint = useLocator3DStore((state) => state.previewWallEndpoint);
+
+    const getPoint = (event) => {
+        const point = new THREE.Vector3();
+        return event.ray?.intersectPlane?.(dragRef.current?.floor, point)
+            ? [point.x, point.y, point.z]
+            : null;
+    };
+
+    return (
+        <mesh
+            onPointerDown={(event) => {
+                event.stopPropagation();
+                event.target?.setPointerCapture?.(event.pointerId);
+                const floorY = Number(object.floor) === 2 ? FLOOR_HEIGHT : 0;
+                dragRef.current = { floor: new THREE.Plane(new THREE.Vector3(0, 1, 0), -floorY) };
+                beginObjectTransform(object.id);
+            }}
+            onPointerMove={(event) => {
+                if (!dragRef.current) return;
+                event.stopPropagation();
+                const point = getPoint(event);
+                if (point) previewWallEndpoint(object.id, endpoint, point);
+            }}
+            onPointerUp={(event) => {
+                event.stopPropagation();
+                event.target?.releasePointerCapture?.(event.pointerId);
+                dragRef.current = null;
+                commitObjectTransform(object.id);
+            }}
+            position={[endpoint === 'start' ? -Number(object.dimensions?.width || 1) / 2 : Number(object.dimensions?.width || 1) / 2, 0.14, 0]}
+        >
+            <sphereGeometry args={[0.16, 16, 16]} />
+            <meshStandardMaterial color="#f8fafc" emissive="#38bdf8" emissiveIntensity={0.8} roughness={0.32} />
+        </mesh>
+    );
+}
+
+function ResizeHandle({ object, signX, signZ }) {
+    const dragRef = useRef(null);
+    const beginObjectTransform = useLocator3DStore((state) => state.beginObjectTransform);
+    const commitObjectTransform = useLocator3DStore((state) => state.commitObjectTransform);
+    const previewObjectDimensions = useLocator3DStore((state) => state.previewObjectDimensions);
+    const width = Number(object.dimensions?.width || 1);
+    const depth = Number(object.dimensions?.depth || 1);
+
+    const resizeFromPoint = (event) => {
+        const point = new THREE.Vector3();
+        if (!event.ray?.intersectPlane?.(dragRef.current?.floor, point)) {
+            return;
+        }
+        const deltaX = point.x - Number(object.position?.[0] || 0);
+        const deltaZ = point.z - Number(object.position?.[2] || 0);
+        const yaw = Number(object.rotation?.[1] || 0);
+        const localX = (Math.cos(yaw) * deltaX) - (Math.sin(yaw) * deltaZ);
+        const localZ = (Math.sin(yaw) * deltaX) + (Math.cos(yaw) * deltaZ);
+        previewObjectDimensions(object.id, {
+            depth: Math.max(0.25, Math.abs(localZ) * 2),
+            width: Math.max(0.25, Math.abs(localX) * 2),
+        });
+    };
+
+    return (
+        <mesh
+            onPointerDown={(event) => {
+                event.stopPropagation();
+                event.target?.setPointerCapture?.(event.pointerId);
+                const floorY = Number(object.floor) === 2 ? FLOOR_HEIGHT : 0;
+                dragRef.current = { floor: new THREE.Plane(new THREE.Vector3(0, 1, 0), -floorY) };
+                beginObjectTransform(object.id);
+            }}
+            onPointerMove={(event) => {
+                if (!dragRef.current) return;
+                event.stopPropagation();
+                resizeFromPoint(event);
+            }}
+            onPointerUp={(event) => {
+                if (!dragRef.current) return;
+                event.stopPropagation();
+                event.target?.releasePointerCapture?.(event.pointerId);
+                dragRef.current = null;
+                commitObjectTransform(object.id);
+            }}
+            position={[signX * width / 2, 0.14, signZ * depth / 2]}
+        >
+            <sphereGeometry args={[0.13, 16, 16]} />
+            <meshStandardMaterial color="#f8fafc" emissive="#22d3ee" emissiveIntensity={0.92} roughness={0.24} />
+        </mesh>
+    );
+}
+
+function ResizeHandles({ object }) {
+    const activeTool = useLocator3DStore((state) => state.activeTool);
+    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
+    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
+
+    if (!isDesignMode || selectedObjectId !== object.id || object.isLocked || activeTool === 'rotate' || ['floor', 'walls', 'wall', 'stairs'].includes(object.type)) {
+        return null;
+    }
+
+    return (
+        <>
+            {[[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([signX, signZ]) => (
+                <ResizeHandle key={`${signX}-${signZ}`} object={object} signX={signX} signZ={signZ} />
+            ))}
+        </>
+    );
+}
+
+function WallSegmentObject({ object, onTransformingChange }) {
+    const activeTool = useLocator3DStore((state) => state.activeTool);
+    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
+    const width = Number(object.dimensions?.width || 1);
+    const height = Number(object.dimensions?.height || 2.7);
+    const depth = Number(object.dimensions?.depth || 0.18);
+
+    return (
+        <TransformableObject object={object} onTransformingChange={onTransformingChange}>
+            {({ located, locked, selected }) => (
+                <>
+                    <Block args={[width, height, depth]} color="#64748b" located={located} locked={locked} opacity={0.9} position={[0, height / 2, 0]} selected={selected} />
+                    {selected && isDesignMode && activeTool !== 'rotate' && !locked && (
+                        <>
+                            <WallEndpoint endpoint="start" object={object} />
+                            <WallEndpoint endpoint="end" object={object} />
+                            <Label position={[0, height + 0.34, 0]} tone="floor">{`${width.toFixed(2)}m wall`}</Label>
+                        </>
+                    )}
                 </>
             )}
         </TransformableObject>
@@ -635,6 +829,10 @@ function LocatorObject({ object, onTransformingChange }) {
 
     if (object.type === 'walls') {
         return <WallsObject object={object} onTransformingChange={onTransformingChange} />;
+    }
+
+    if (object.type === 'wall') {
+        return <WallSegmentObject object={object} onTransformingChange={onTransformingChange} />;
     }
 
     if (object.type === 'shelf-2-layer' || object.type === 'shelf-4-layer') {
@@ -957,11 +1155,74 @@ class CanvasErrorBoundary extends Component {
     }
 }
 
+function WallDrawTool() {
+    const activeFloor = useLocator3DStore((state) => state.activeFloor);
+    const activeTool = useLocator3DStore((state) => state.activeTool);
+    const beginWallDrawing = useLocator3DStore((state) => state.beginWallDrawing);
+    const completeWallDrawing = useLocator3DStore((state) => state.completeWallDrawing);
+    const previewWallDrawing = useLocator3DStore((state) => state.previewWallDrawing);
+    const wallDraft = useLocator3DStore((state) => state.wallDraft);
+    const floorY = activeFloor === 2 ? FLOOR_HEIGHT : 0;
+    const preview = wallDraft?.start && wallDraft?.end
+        ? (() => {
+            const start = wallDraft.start;
+            const end = wallDraft.end;
+            const deltaX = end[0] - start[0];
+            const deltaZ = end[2] - start[2];
+            return {
+                length: Math.hypot(deltaX, deltaZ),
+                position: [(start[0] + end[0]) / 2, floorY + 1.35, (start[2] + end[2]) / 2],
+                rotation: [0, Math.atan2(-deltaZ, deltaX), 0],
+            };
+        })()
+        : null;
+
+    if (activeTool !== 'draw-wall') {
+        return null;
+    }
+
+    const getPoint = (event) => [event.point.x, floorY, event.point.z];
+
+    return (
+        <>
+            <mesh
+                onClick={(event) => {
+                    event.stopPropagation();
+                    if (wallDraft?.start) completeWallDrawing(getPoint(event));
+                    else beginWallDrawing(getPoint(event));
+                }}
+                onPointerMove={(event) => {
+                    event.stopPropagation();
+                    if (wallDraft?.start) previewWallDrawing(getPoint(event));
+                }}
+                position={[0, floorY + 0.035, 0]}
+                rotation={[-Math.PI / 2, 0, 0]}
+            >
+                <planeGeometry args={[24, 16]} />
+                <meshBasicMaterial color="#38bdf8" opacity={0.025} transparent />
+            </mesh>
+            {preview && preview.length >= 0.01 && (
+                <mesh position={preview.position} rotation={preview.rotation}>
+                    <boxGeometry args={[preview.length, 2.7, 0.18]} />
+                    <meshStandardMaterial color="#38bdf8" emissive="#38bdf8" emissiveIntensity={0.55} opacity={0.48} transparent />
+                </mesh>
+            )}
+            {wallDraft?.start && (
+                <mesh position={[wallDraft.start[0], floorY + 0.12, wallDraft.start[2]]}>
+                    <sphereGeometry args={[0.14, 16, 16]} />
+                    <meshBasicMaterial color="#f8fafc" />
+                </mesh>
+            )}
+        </>
+    );
+}
+
 function SceneContents({ quality, onContextLost }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
+    const activeTool = useLocator3DStore((state) => state.activeTool);
     const showGrid = useLocator3DStore((state) => state.showGrid);
     const controlsRef = useRef();
     const [isTransforming, setIsTransforming] = useState(false);
@@ -1001,7 +1262,7 @@ function SceneContents({ quality, onContextLost }) {
                 <>
                     <Grid
                         cellColor="#38bdf8"
-                        cellSize={0.5}
+                        cellSize={0.25}
                         cellThickness={0.7}
                         fadeDistance={20}
                         fadeStrength={1.4}
@@ -1013,7 +1274,7 @@ function SceneContents({ quality, onContextLost }) {
                     />
                     <Grid
                         cellColor="#38bdf8"
-                        cellSize={0.5}
+                        cellSize={0.25}
                         cellThickness={0.65}
                         fadeDistance={16}
                         fadeStrength={1.2}
@@ -1025,6 +1286,7 @@ function SceneContents({ quality, onContextLost }) {
                     />
                 </>
             )}
+            <WallDrawTool />
             {visibleSceneObjects.map((object) => (
                 <LocatorObject key={object.id} object={object} onTransformingChange={setIsTransforming} />
             ))}
@@ -1036,7 +1298,7 @@ function SceneContents({ quality, onContextLost }) {
                         : 'border-white/10 bg-slate-950/80 text-slate-300'
                 }`}
                 >
-                    {isDesignMode ? 'Design Mode / 0.5 Snap' : 'View Mode'}
+                    {isDesignMode ? `${activeTool === 'draw-wall' ? 'Draw Wall / ' : 'Design Mode / '}${SNAP_STEP} Snap` : 'View Mode'}
                 </div>
             </Html>}
             {quality.contactShadows && <ContactShadows blur={2.8} far={16} frames={1} opacity={0.38} position={[0, activeGridY + 0.003, 0]} scale={20} />}
