@@ -1,5 +1,4 @@
 import process from 'node:process';
-import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -16,29 +15,6 @@ const KNOWN_PRODUCTION_API_HOSTS = new Set([
 
 function clean(value) {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function readProductionDefaults() {
-  const envPath = path.resolve(process.cwd(), '.env.production');
-  try {
-    const source = fs.readFileSync(envPath, 'utf8');
-    return Object.fromEntries(
-      source
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line && !line.startsWith('#'))
-        .map((line) => {
-          const separator = line.indexOf('=');
-          if (separator < 1) return null;
-          const key = line.slice(0, separator).trim();
-          const value = line.slice(separator + 1).trim().replace(/^(['"])(.*)\1$/, '$2');
-          return [key, value];
-        })
-        .filter(Boolean),
-    );
-  } catch {
-    return {};
-  }
 }
 
 function parseHttpsUrl(value, variableName, errors) {
@@ -114,10 +90,7 @@ export function validateDeploymentEnvironment(env = process.env) {
   }
 
   const errors = [];
-  const productionDefaults = vercelEnvironment === 'production'
-    ? readProductionDefaults()
-    : {};
-  const appEnvironment = clean(env.VITE_APP_ENV) || clean(productionDefaults.VITE_APP_ENV);
+  const appEnvironment = clean(env.VITE_APP_ENV);
 
   if (!ALLOWED_APP_ENVIRONMENTS.has(appEnvironment)) {
     errors.push(
@@ -137,12 +110,12 @@ export function validateDeploymentEnvironment(env = process.env) {
   }
 
   const apiUrl = parseHttpsUrl(
-    env.VITE_API_URL || productionDefaults.VITE_API_URL,
+    env.VITE_API_URL,
     'VITE_API_URL',
     errors,
   );
   parseHttpsUrl(
-    env.VITE_SUPABASE_URL || productionDefaults.VITE_SUPABASE_URL,
+    env.VITE_SUPABASE_URL,
     'VITE_SUPABASE_URL',
     errors,
   );
@@ -152,7 +125,7 @@ export function validateDeploymentEnvironment(env = process.env) {
   }
 
   validatePublicSupabaseKey(
-    env.VITE_SUPABASE_ANON_KEY || productionDefaults.VITE_SUPABASE_ANON_KEY,
+    env.VITE_SUPABASE_ANON_KEY,
     errors,
   );
 

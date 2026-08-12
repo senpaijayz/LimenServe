@@ -12,7 +12,6 @@ dist-ssr/
 .env
 .env.*
 !.env.example
-!web-app/.env.production
 /supabase/.branches/
 /supabase/.temp/
 *.log
