@@ -1,4 +1,5 @@
-import apiClient, { clearApiClientCache, extractApiError } from './apiClient';
+import apiClient, { extractApiError } from './apiClient';
+import { invalidateCatalogClientCaches } from './catalogApi';
 
 export async function listMyReservations() {
   try {
@@ -48,7 +49,7 @@ export async function getReservation(reservationId) {
 export async function processReservation(reservationId, payload) {
   try {
     const { data } = await apiClient.patch(`/reservations/${reservationId}`, payload);
-    clearApiClientCache('/catalog/products');
+    void invalidateCatalogClientCaches();
     return data.reservation;
   } catch (error) {
     extractApiError(error, 'Failed to update the reservation.');

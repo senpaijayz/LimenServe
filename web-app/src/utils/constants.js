@@ -1,13 +1,11 @@
 // Application constants for LimenServe
 
+import { resolveApiBaseUrl } from '../config/runtimeEnvironment';
+
 // API Configuration
-// Production defaults to the Vercel same-origin `/api` proxy so public GET
-// responses can use CDN caching. Set VITE_USE_DIRECT_API_URL=true to bypass it.
-const configuredApiUrl = import.meta.env.VITE_API_URL;
-const useDirectApiUrl = import.meta.env.VITE_USE_DIRECT_API_URL === 'true';
-export const API_BASE_URL = import.meta.env.PROD && !useDirectApiUrl
-    ? '/api'
-    : (configuredApiUrl || 'http://localhost:3001/api');
+// Every hosted build uses its environment-scoped backend URL. Local development
+// retains a safe localhost default when no Vite environment has been configured.
+export const API_BASE_URL = resolveApiBaseUrl(import.meta.env);
 
 // User Roles
 export const ROLES = {

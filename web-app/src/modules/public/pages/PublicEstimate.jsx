@@ -3,6 +3,7 @@ import { motion as Motion } from 'framer-motion';
 import { useSearchParams } from 'react-router';
 import { Search, Plus, Minus, Calculator, Printer, User, Phone, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
+import { normalizePhilippinePhoneNumber } from '../../../utils/phone';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
 import usePublicVehicleSelection from '../../../hooks/usePublicVehicleSelection';
@@ -111,26 +112,47 @@ const addDaysAsIsoDate = (days) => {
 
 const isUuid = (value) => UUID_PATTERN.test(String(value || ''));
 
-const buildEstimatePayload = ({
+// Exported for the display-vs-submission pricing regression test.
+// eslint-disable-next-line react-refresh/only-export-components
+export const normalizePublicRecommendationPricing = ({
+    recommendationRuleId,
+    resolvedPrice,
+    catalogPrice,
+    bundleMeta,
+}) => {
+    const hasVerifiableBundle = Boolean(bundleMeta?.bundleKey) && isUuid(recommendationRuleId);
+
+    return {
+        price: Number(hasVerifiableBundle ? resolvedPrice : catalogPrice),
+        catalogPrice: Number(catalogPrice),
+        recommendationRuleId: hasVerifiableBundle ? recommendationRuleId : null,
+        bundleMeta: hasVerifiableBundle ? bundleMeta : {
+            bundleKey: null,
+            bundleName: null,
+            bundleTierKey: null,
+            bundleTierLabel: null,
+            bundleCatalogTotal: null,
+            bundleSmartTotal: null,
+            bundleSavings: null,
+        },
+    };
+};
+
+// eslint-disable-next-line react-refresh/only-export-components
+export const buildEstimatePayload = ({
     customerName,
     customerPhone,
     vehicle,
     selectedParts,
     selectedServices,
-    subtotal,
-    subtotalBeforeDiscount,
-    discountTotal = 0,
-    bundleSummaries = [],
-    vat,
-    total,
 }) => {
     const issuedAt = new Date();
     const trimmedName = customerName.trim();
-    const trimmedPhone = customerPhone.trim();
+    const trimmedPhone = normalizePhilippinePhoneNumber(customerPhone);
     const customer = {
         customer_type: 'walk_in',
         name: trimmedName || 'Walk-in Customer',
-        phone: trimmedPhone || null,
+        phone: trimmedPhone,
         metadata: {
             source: 'public_estimate_page',
         },
@@ -146,8 +168,63 @@ const buildEstimatePayload = ({
         },
     } : undefined;
 
-    const bundleNote = bundleSummaries.length
-        ? ` Bundle pricing applied: ${bundleSummaries.map((bundle) => `${bundle.bundleName} (${bundle.bundleTierLabel})`).join(', ')}.`
+    const items = [
+        ...selectedParts.map((part) => {
+            const quantity = Number(part.quantity ?? 1);
+            const catalogUnitPrice = Number(part.catalogPrice ?? part.price ?? 0);
+            const hasVerifiableBundle = Boolean(part.bundleKey) && isUuid(part.recommendationRuleId);
+            const unitPrice = hasVerifiableBundle ? Number(part.price ?? 0) : catalogUnitPrice;
+
+            return {
+                line_type: 'product',
+                product_id: isUuid(part.id) ? part.id : null,
+                product_name: part.name,
+                product_sku: part.sku || null,
+                quantity,
+                unit_price: unitPrice,
+                line_total: Number((unitPrice * quantity).toFixed(2)),
+                recommendation_rule_id: hasVerifiableBundle ? part.recommendationRuleId : null,
+                is_upsell: Boolean(part.isUpsell),
+                bundle_key: hasVerifiableBundle ? part.bundleKey : null,
+                bundle_name: hasVerifiableBundle ? part.bundleName || null : null,
+                bundle_tier_label: hasVerifiableBundle ? part.bundleTierLabel || null : null,
+                catalog_unit_price: catalogUnitPrice,
+            };
+        }),
+        ...selectedServices.map((service) => {
+            const catalogUnitPrice = Number(service.catalogPrice ?? service.price ?? 0);
+            const hasVerifiableBundle = Boolean(service.bundleKey) && isUuid(service.recommendationRuleId);
+            const unitPrice = hasVerifiableBundle ? Number(service.price ?? 0) : catalogUnitPrice;
+
+            return {
+                line_type: 'service',
+                service_id: isUuid(service.id) ? service.id : null,
+                service_name: service.name,
+                quantity: 1,
+                unit_price: unitPrice,
+                line_total: Number(unitPrice.toFixed(2)),
+                recommendation_rule_id: hasVerifiableBundle ? service.recommendationRuleId : null,
+                is_upsell: Boolean(service.isUpsell),
+                bundle_key: hasVerifiableBundle ? service.bundleKey : null,
+                bundle_name: hasVerifiableBundle ? service.bundleName || null : null,
+                bundle_tier_label: hasVerifiableBundle ? service.bundleTierLabel || null : null,
+                catalog_unit_price: catalogUnitPrice,
+            };
+        }),
+    ];
+    const catalogSubtotal = roundCurrency(items.reduce(
+        (sum, item) => sum + (Number(item.catalog_unit_price) * Number(item.quantity)),
+        0,
+    ));
+    const pricedSubtotal = roundCurrency(items.reduce((sum, item) => sum + Number(item.line_total), 0));
+    const discountTotal = roundCurrency(Math.max(catalogSubtotal - pricedSubtotal, 0));
+    const taxTotal = roundCurrency(pricedSubtotal * 0.12);
+    const grandTotal = roundCurrency(pricedSubtotal + taxTotal);
+    const verifiedBundleLabels = [...new Set(items
+        .filter((item) => item.bundle_key)
+        .map((item) => `${item.bundle_name} (${item.bundle_tier_label})`))];
+    const bundleNote = verifiedBundleLabels.length
+        ? ` Bundle pricing applied: ${verifiedBundleLabels.join(', ')}.`
         : '';
 
     return {
@@ -157,54 +234,15 @@ const buildEstimatePayload = ({
             status: 'sent',
             source: 'public',
             note: `Public estimate generated from LimenServe quote builder.${bundleNote}`,
-            subtotal: Number((subtotalBeforeDiscount ?? subtotal).toFixed(2)),
-            discount_total: Number(discountTotal.toFixed(2)),
-            tax_total: Number(vat.toFixed(2)),
-            grand_total: Number(total.toFixed(2)),
+            subtotal: catalogSubtotal,
+            discount_total: discountTotal,
+            tax_total: taxTotal,
+            grand_total: grandTotal,
             issued_at: issuedAt.toISOString(),
             valid_until: addDaysAsIsoDate(QUOTE_VALID_DAYS),
             revision_note: 'Public quote created',
         },
-        items: [
-            ...selectedParts.map((part) => {
-                const quantity = Number(part.quantity ?? 1);
-                const unitPrice = Number(part.price ?? 0);
-
-                return {
-                    line_type: 'product',
-                    product_id: isUuid(part.id) ? part.id : null,
-                    product_name: part.name,
-                    product_sku: part.sku || null,
-                    quantity,
-                    unit_price: unitPrice,
-                    line_total: Number((unitPrice * quantity).toFixed(2)),
-                    recommendation_rule_id: isUuid(part.recommendationRuleId) ? part.recommendationRuleId : null,
-                    is_upsell: Boolean(part.isUpsell),
-                    bundle_key: part.bundleKey || null,
-                    bundle_name: part.bundleName || null,
-                    bundle_tier_label: part.bundleTierLabel || null,
-                    catalog_unit_price: Number(part.catalogPrice ?? unitPrice),
-                };
-            }),
-            ...selectedServices.map((service) => {
-                const unitPrice = Number(service.price ?? 0);
-
-                return {
-                    line_type: 'service',
-                    service_id: isUuid(service.id) ? service.id : null,
-                    service_name: service.name,
-                    quantity: 1,
-                    unit_price: unitPrice,
-                    line_total: Number(unitPrice.toFixed(2)),
-                    recommendation_rule_id: isUuid(service.recommendationRuleId) ? service.recommendationRuleId : null,
-                    is_upsell: Boolean(service.isUpsell),
-                    bundle_key: service.bundleKey || null,
-                    bundle_name: service.bundleName || null,
-                    bundle_tier_label: service.bundleTierLabel || null,
-                    catalog_unit_price: Number(service.catalogPrice ?? unitPrice),
-                };
-            }),
-        ],
+        items,
     };
 };
 
@@ -250,8 +288,8 @@ const buildRetrievedPrintableQuote = (quote) => {
         vat: Number(quote.estimate?.tax_total ?? 0),
         total: Number(quote.estimate?.grand_total ?? 0),
         note: quote.estimate?.note || '',
-        items: (quote.items ?? []).map((item) => ({
-            id: item.id || `${item.product_id || item.service_id || 'line'}-${item.line_type || 'item'}`,
+        items: (quote.items ?? []).map((item, index) => ({
+            id: item.id || `${item.line_type || 'item'}-${item.product_name || item.service_name || 'line'}-${index}`,
             quantity: Number(item.quantity ?? 1),
             name: item.product_name || item.service_name || 'Quotation line',
             subtitle: item.bundle_name
@@ -302,6 +340,7 @@ const PublicEstimate = () => {
     const [showSummaryDrawer, setShowSummaryDrawer] = useState(false);
     const [printSource, setPrintSource] = useState('draft');
     const [lookupEstimateNumber, setLookupEstimateNumber] = useState('');
+    const [lookupPhone, setLookupPhone] = useState('');
     const [lookupLoading, setLookupLoading] = useState(false);
     const [lookupError, setLookupError] = useState('');
     const [retrievedQuote, setRetrievedQuote] = useState(null);
@@ -412,6 +451,7 @@ const PublicEstimate = () => {
     const incomingServiceGroup = searchParams.get('serviceGroup') || '';
     const highlightedVehiclePackageKey = incomingPackageKey.startsWith('vehicle-') ? incomingPackageKey : incomingServiceGroup ? `vehicle-${incomingServiceGroup}` : '';
     const vehicleInfo = [vehicle.displayLabel, vehicle.plateNo].filter(Boolean).join(' / ');
+    const normalizedCustomerPhone = normalizePhilippinePhoneNumber(customerPhone);
 
     useEffect(() => {
         if (!highlightedVehiclePackageKey || !hasVehicle) {
@@ -457,6 +497,12 @@ const PublicEstimate = () => {
     const canGoNext = pagination.page < totalPages;
 
     const addPart = (product, extra = {}) => {
+        if (!isUuid(product?.id)) {
+            setSaveError('This pricelist item is not yet linked to an active catalogue product and cannot be quoted online.');
+            return;
+        }
+
+        setSaveError('');
         setFocusedProduct(product);
         setSavedDraftQuote(null);
         setSelectedParts((parts) => {
@@ -536,19 +582,28 @@ const PublicEstimate = () => {
             ?? matchedProduct.price
             ?? 0
         );
+        const recommendationRuleId = recommendation.packageItemId || recommendation.ruleId || null;
+        const catalogPrice = Number(recommendation.catalogPrice ?? recommendation.catalog_price ?? matchedProduct.price ?? recommendedPrice);
+        const approvedPricing = normalizePublicRecommendationPricing({
+            recommendationRuleId,
+            resolvedPrice: recommendedPrice,
+            catalogPrice,
+            bundleMeta: recommendation.bundleMeta,
+        });
 
         setSelectedParts((parts) => {
             const existing = parts.find((part) => part.id === productId);
-            const recommendationRuleId = recommendation.packageItemId || recommendation.ruleId || null;
 
             if (existing) {
                 return parts.map((part) => (part.id === productId ? {
                     ...part,
                     isUpsell: true,
-                    recommendationRuleId: recommendationRuleId || part.recommendationRuleId || null,
-                    catalogPrice: Number(recommendation.catalogPrice ?? recommendation.catalog_price ?? part.catalogPrice ?? part.price ?? recommendedPrice),
-                    ...(recommendation.bundleMeta ?? {}),
-                    price: Math.min(Number(part.price ?? recommendedPrice), recommendedPrice),
+                    recommendationRuleId: approvedPricing.recommendationRuleId || part.recommendationRuleId || null,
+                    catalogPrice: approvedPricing.catalogPrice,
+                    ...approvedPricing.bundleMeta,
+                    price: approvedPricing.recommendationRuleId
+                        ? Math.min(Number(part.price ?? approvedPricing.price), approvedPricing.price)
+                        : approvedPricing.price,
                 } : part));
             }
 
@@ -556,14 +611,14 @@ const PublicEstimate = () => {
                 id: matchedProduct.id,
                 name: matchedProduct.name,
                 sku: matchedProduct.sku,
-                price: recommendedPrice,
+                price: approvedPricing.price,
                 category: matchedProduct.category,
                 model: matchedProduct.model,
                 quantity: 1,
                 isUpsell: true,
-                recommendationRuleId,
-                catalogPrice: Number(recommendation.catalogPrice ?? recommendation.catalog_price ?? matchedProduct.price ?? recommendedPrice),
-                ...(recommendation.bundleMeta ?? {}),
+                recommendationRuleId: approvedPricing.recommendationRuleId,
+                catalogPrice: approvedPricing.catalogPrice,
+                ...approvedPricing.bundleMeta,
             }];
         });
     };
@@ -577,15 +632,24 @@ const PublicEstimate = () => {
             return;
         }
 
+        const recommendationRuleId = recommendation.packageItemId || recommendation.ruleId || null;
+        const resolvedPrice = Number(recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? recommendedService?.price ?? 0);
+        const catalogPrice = Number(recommendation.catalogPrice ?? recommendation.catalog_price ?? recommendation.recommendedPrice ?? recommendedService?.price ?? resolvedPrice);
+        const approvedPricing = normalizePublicRecommendationPricing({
+            recommendationRuleId,
+            resolvedPrice,
+            catalogPrice,
+            bundleMeta: recommendation.bundleMeta,
+        });
         const service = {
             id: serviceId,
             name: recommendation.recommendedServiceName || recommendedService?.name || 'Recommended service',
-            price: Number(recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? recommendedService?.price ?? 0),
+            price: approvedPricing.price,
             quantity: 1,
             isUpsell: true,
-            recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
-            catalogPrice: Number(recommendation.catalogPrice ?? recommendation.catalog_price ?? recommendation.recommendedPrice ?? recommendedService?.price ?? 0),
-            ...(recommendation.bundleMeta ?? {}),
+            recommendationRuleId: approvedPricing.recommendationRuleId,
+            catalogPrice: approvedPricing.catalogPrice,
+            ...approvedPricing.bundleMeta,
         };
 
         setSelectedServices((services) => {
@@ -650,11 +714,17 @@ const PublicEstimate = () => {
     const printableQuote = printSource === 'retrieved' ? retrievedPrintableQuote : savedDraftPrintableQuote;
 
     const handleLookupQuote = async () => {
+        if (!lookupEstimateNumber.trim() || !lookupPhone.trim()) {
+            setRetrievedQuote(null);
+            setLookupError('Enter both the quote number and the phone number used for the quote.');
+            return;
+        }
+
         setLookupLoading(true);
         setLookupError('');
 
         try {
-            const estimate = await lookupPublicEstimate(lookupEstimateNumber);
+            const estimate = await lookupPublicEstimate(lookupEstimateNumber, lookupPhone);
             setRetrievedQuote(estimate);
         } catch (lookupFailure) {
             setRetrievedQuote(null);
@@ -667,6 +737,18 @@ const PublicEstimate = () => {
     const saveDraftQuote = async () => {
         if (savedDraftQuote?.estimate?.estimate_number) {
             return savedDraftQuote;
+        }
+
+        if (selectedParts.some((part) => !isUuid(part.id))) {
+            setSaveError('Remove unlinked pricelist items before saving. Only active catalogue products can be quoted online.');
+            setEstimatePhase('catalog');
+            return null;
+        }
+
+        if (!normalizedCustomerPhone) {
+            setSaveError('Enter a valid Philippine phone number before saving. It is required to securely retrieve this quote.');
+            setEstimatePhase('details');
+            return null;
         }
 
         const payload = buildEstimatePayload({
@@ -793,7 +875,7 @@ const PublicEstimate = () => {
     const cartPanelDescription = estimatePhase === 'catalog'
         ? 'Added parts and services stay visible while you browse. Adjust quantities or remove items before review.'
         : savedDraftQuote?.estimate?.estimate_number
-            ? 'Quote finished. Use this generated quote number to retrieve it later.'
+            ? 'Quote finished. Use this quote number and the verified phone number to retrieve it later.'
             : 'Review the final draft, add last recommendations, then finish to generate a retrievable quote number.';
 
     const summaryPanelClassName = isDesktopDock
@@ -845,7 +927,7 @@ const PublicEstimate = () => {
                     <div className="rounded-[24px] border border-accent-success/25 bg-accent-success/10 p-4">
                         <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-accent-success">Quote created</p>
                         <p className="mt-2 text-2xl font-display font-bold text-primary-950">{quoteNumber}</p>
-                        <p className="mt-2 text-sm text-primary-600">Stored in Supabase. Customers can retrieve this later using the quote number.</p>
+                        <p className="mt-2 text-sm text-primary-600">Stored in Supabase. Retrieval requires this quote number and the phone number used to create it.</p>
                     </div>
                 )}
 
@@ -862,7 +944,7 @@ const PublicEstimate = () => {
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                             <div className="rounded-2xl bg-white px-3 py-3">
                                 <span className="block text-[0.65rem] font-bold uppercase tracking-[0.18em] text-primary-400">Phone</span>
-                                <span className="mt-1 block font-semibold text-primary-950">{customerPhone || 'Optional'}</span>
+                                <span className="mt-1 block font-semibold text-primary-950">{customerPhone || 'Required before saving'}</span>
                             </div>
                             <div className="rounded-2xl bg-white px-3 py-3">
                                 <span className="block text-[0.65rem] font-bold uppercase tracking-[0.18em] text-primary-400">Vehicle</span>
@@ -1078,7 +1160,7 @@ const PublicEstimate = () => {
                     <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div>
                             <p className="text-3xl font-display font-bold text-primary-950">{quoteNumber}</p>
-                            <p className="mt-2 text-sm text-primary-600">Use this quote number in Retrieve Quote to open the saved quotation again.</p>
+                            <p className="mt-2 text-sm text-primary-600">Use this quote number and the same phone number in Retrieve Quote to open the saved quotation again.</p>
                         </div>
                         <Button variant="primary" leftIcon={<Printer className="h-4 w-4" />} onClick={() => openPreview('draft')}>
                             Open Printable Preview
@@ -1101,7 +1183,7 @@ const PublicEstimate = () => {
                     <div className="mt-5 grid gap-3 text-sm">
                         <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-4 py-3">
                             <span className="block text-[0.65rem] font-bold uppercase tracking-[0.18em] text-primary-400">Phone</span>
-                            <span className="mt-1 block font-semibold text-primary-950">{customerPhone || 'Not provided'}</span>
+                            <span className="mt-1 block font-semibold text-primary-950">{customerPhone || 'Required before saving'}</span>
                         </div>
                         <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-4 py-3">
                             <span className="block text-[0.65rem] font-bold uppercase tracking-[0.18em] text-primary-400">Vehicle</span>
@@ -1223,7 +1305,7 @@ const PublicEstimate = () => {
                         </h1>
                         <p className="mt-4 text-lg text-primary-600 max-w-2xl">
                             {workflowStage === 'choice'
-                                ? 'Start a polished customer quotation or retrieve an existing quote number without loading unnecessary tools.'
+                                ? 'Start a polished customer quotation or retrieve an existing quote with its number and verified phone.'
                                 : mode === 'retrieve'
                                     ? 'Look up a saved quotation and open a printable copy for the customer.'
                                     : estimatePhase === 'summary'
@@ -1310,6 +1392,8 @@ const PublicEstimate = () => {
                     <PublicQuoteLookupCard
                         estimateNumber={lookupEstimateNumber}
                         onEstimateNumberChange={setLookupEstimateNumber}
+                        phone={lookupPhone}
+                        onPhoneChange={setLookupPhone}
                         onLookup={handleLookupQuote}
                         loading={lookupLoading}
                         error={lookupError}
@@ -1338,14 +1422,20 @@ const PublicEstimate = () => {
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-semibold text-primary-700 mb-2">Phone Number</label>
+                                        <label htmlFor="public-estimate-phone" className="block text-sm font-semibold text-primary-700 mb-2">Phone Number</label>
                                         <div className="relative">
                                             <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
-                                            <input value={customerPhone} onChange={(event) => {
+                                            <input id="public-estimate-phone" type="tel" inputMode="tel" autoComplete="tel" required aria-describedby="public-estimate-phone-help" aria-invalid={Boolean(customerPhone.trim()) && !normalizedCustomerPhone} value={customerPhone} onChange={(event) => {
                                                 setSavedDraftQuote(null);
+                                                setSaveError('');
                                                 setCustomerPhone(event.target.value);
                                             }} placeholder="09XX XXX XXXX" className="input pl-10 py-2.5 text-sm" />
                                         </div>
+                                        <p id="public-estimate-phone-help" className={`mt-2 text-xs ${customerPhone.trim() && !normalizedCustomerPhone ? 'text-accent-danger' : 'text-primary-500'}`}>
+                                            {customerPhone.trim() && !normalizedCustomerPhone
+                                                ? 'Enter a valid Philippine mobile or landline number.'
+                                                : 'Required to securely retrieve the saved quote.'}
+                                        </p>
                                     </div>
                                 </div>
 
@@ -1496,11 +1586,14 @@ const PublicEstimate = () => {
                                         </div>
                                     ) : filteredProducts.map((product) => {
                                         const isSelected = selectedParts.some((part) => part.id === product.id);
+                                        const canQuoteOnline = isUuid(product.id);
                                         return (
                                             <button
                                                 key={product.catalogEntryId || product.id}
                                                 onClick={() => addPart(product)}
-                                                className={`min-h-[112px] rounded-xl border p-3 text-left flex flex-col gap-1.5 transition-all duration-300 ${isSelected
+                                                disabled={!canQuoteOnline}
+                                                title={canQuoteOnline ? `Add ${product.name} to the quote` : 'This pricelist item is not linked to an active catalogue product.'}
+                                                className={`min-h-[112px] rounded-xl border p-3 text-left flex flex-col gap-1.5 transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected
                                                     ? 'bg-accent-primary/5 border-accent-primary/30 ring-1 ring-accent-primary/30'
                                                     : 'bg-white border-primary-200 hover:border-accent-primary hover:bg-primary-50 shadow-sm'
                                                     }`}
@@ -1509,6 +1602,7 @@ const PublicEstimate = () => {
                                                 <span className="text-base font-display font-medium text-primary-950 line-clamp-1">{product.name}</span>
                                                 <span className="line-clamp-1 text-xs text-primary-400">{product.model || 'Universal fitment'}</span>
                                                 <span className="text-sm font-bold text-accent-blue mt-auto">{formatCurrency(product.price)}</span>
+                                                {!canQuoteOnline && <span className="text-[0.68rem] font-semibold text-accent-danger">Not yet available for online quotes</span>}
                                             </button>
                                         );
                                     })}
@@ -1662,7 +1756,7 @@ const PublicEstimate = () => {
                             {estimatePhase === 'details' && (
                                 <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
                                     <PhaseBackButton onClick={goToModeChoice} label="Back to Flow Choice" />
-                                    <Button variant="primary" onClick={() => setEstimatePhase('catalog')}>
+                                    <Button variant="primary" onClick={() => setEstimatePhase('catalog')} isDisabled={!normalizedCustomerPhone}>
                                         Continue to Parts and Services
                                     </Button>
                                 </div>
@@ -1741,7 +1835,7 @@ const PublicEstimate = () => {
                                             <div className="rounded-[24px] border border-accent-success/30 bg-accent-success/10 p-4 shadow-sm">
                                                 <span className="text-[0.68rem] font-bold uppercase tracking-[0.24em] text-accent-success">Quote created</span>
                                                 <p className="mt-2 text-2xl font-display font-bold text-primary-950">{savedDraftQuote.estimate.estimate_number}</p>
-                                                <p className="mt-2 text-sm text-primary-600">This quote is stored in Supabase and can be retrieved later using this quote number.</p>
+                                                <p className="mt-2 text-sm text-primary-600">This quote is stored in Supabase and can be retrieved with this quote number and the verified phone number.</p>
                                             </div>
                                         )}
 
@@ -1758,7 +1852,7 @@ const PublicEstimate = () => {
                                                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                                     <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-3 py-3">
                                                         <span className="block text-[0.65rem] font-bold uppercase tracking-[0.2em] text-primary-400">Phone Number</span>
-                                                        <span className="mt-1 block text-sm font-semibold text-primary-950">{customerPhone || 'Not provided yet'}</span>
+                                                        <span className="mt-1 block text-sm font-semibold text-primary-950">{customerPhone || 'Required before saving'}</span>
                                                     </div>
                                                     <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-3 py-3">
                                                         <span className="block text-[0.65rem] font-bold uppercase tracking-[0.2em] text-primary-400">Vehicle Info</span>

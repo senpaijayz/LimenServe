@@ -8,14 +8,17 @@ describe('3D Locator redesign store behavior', () => {
         expect(useLocator3DStore.getState().showLabels).toBe(true);
         expect(useLocator3DStore.getState().showPaths).toBe(true);
         expect(useLocator3DStore.getState().showGrid).toBe(true);
+        expect(useLocator3DStore.getState().xrayMode).toBe(false);
 
         useLocator3DStore.getState().toggleSceneOption('showLabels');
         useLocator3DStore.getState().toggleSceneOption('showPaths');
+        useLocator3DStore.getState().toggleSceneOption('xrayMode');
         useLocator3DStore.getState().requestCameraPreset('counter');
 
         expect(useLocator3DStore.getState().showLabels).toBe(false);
         expect(useLocator3DStore.getState().showPaths).toBe(false);
         expect(useLocator3DStore.getState().showGrid).toBe(true);
+        expect(useLocator3DStore.getState().xrayMode).toBe(true);
         expect(useLocator3DStore.getState().cameraPresetRequest).toEqual({
             preset: 'counter',
             sequence: 1,
@@ -48,7 +51,7 @@ describe('3D Locator redesign store behavior', () => {
         expect(state.sceneObjects.at(-1)).toEqual(expect.objectContaining({
             type: 'shelf-2-layer',
             floor: state.activeFloor,
-            dimensions: expect.objectContaining({ width: 3.2, depth: 0.9, height: 1.35 }),
+            dimensions: expect.objectContaining({ width: 3.5, depth: 1.05, height: 1.55 }),
         }));
     });
 

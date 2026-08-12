@@ -6,6 +6,7 @@ import { requireRole } from '../middleware/auth.js';
 import { clearPublicResponseCache } from '../middleware/cache.js';
 import { analyzeSupplierInvoiceImage } from '../services/invoiceOcrService.js';
 import { callRpc } from '../services/supabaseRpc.js';
+import { receiveCatalogStock, receiveSupplierInvoiceStock, requireIdempotencyKey } from '../services/stockReceipt.js';
 import { selectByInChunks } from '../utils/supabaseBatchSelect.js';
 import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 
@@ -834,19 +835,6 @@ function getStatusForStockLevel(stock) {
   }
 
   return 'in_stock';
-}
-
-function buildStockReceiveNotes({ supplierName, referenceNumber, reason }) {
-  return [
-    supplierName ? `Supplier: ${supplierName}` : null,
-    referenceNumber ? `Reference: ${referenceNumber}` : null,
-    reason ? `Reason: ${reason}` : 'Reason: Stock receiving',
-  ].filter(Boolean).join(' | ');
-}
-
-function buildOperationalReference(prefix = 'REF', date = new Date()) {
-  const stamp = date.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
-  return `${prefix}-${stamp}`;
 }
 
 function normalizeSku(value, fallbackPrefix = 'SKU') {
@@ -3634,11 +3622,12 @@ router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, ne
 
 router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
+    const idempotencyKey = requireIdempotencyKey(req.get('Idempotency-Key'));
     const productId = String(req.body?.productId || '').trim();
     const quantity = parsePositiveStockQuantity(req.body?.quantity);
     const supplierId = String(req.body?.supplierId || '').trim() || null;
     const supplierName = String(req.body?.supplierName || '').trim();
-    const referenceNumber = String(req.body?.referenceNumber || '').trim() || buildOperationalReference('RCV');
+    const referenceNumber = String(req.body?.referenceNumber || '').trim() || `RCV-${idempotencyKey.slice(0, 60)}`;
     const reason = String(req.body?.reason || '').trim();
 
     if (!productId) {
@@ -3656,143 +3645,29 @@ router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, r
       return;
     }
 
-    const { data: product, error: productError } = await supabaseAdmin
-      .schema('catalog')
-      .from('products')
-      .select('id, sku, name')
-      .eq('id', productId)
-      .maybeSingle();
-
-    if (productError) {
-      throw productError;
-    }
-
-    if (!product) {
-      res.status(404).json({ error: 'Product was not found in the catalog.' });
-      return;
-    }
-
-    const { data: currentBalance, error: balanceError } = await supabaseAdmin
-      .schema('catalog')
-      .from('inventory_balances')
-      .select('product_id, on_hand, reserved, reorder_point, reorder_quantity, location')
-      .eq('product_id', productId)
-      .maybeSingle();
-
-    if (balanceError) {
-      throw balanceError;
-    }
-
-    const previousStock = Number(currentBalance?.on_hand ?? 0);
-    const updatedStock = Number((previousStock + quantity).toFixed(2));
-    const nowIso = new Date().toISOString();
-    let effectiveSupplierId = supplierId;
-
-    const { error: upsertError } = await supabaseAdmin
-      .schema('catalog')
-      .from('inventory_balances')
-      .upsert({
-        product_id: productId,
-        on_hand: updatedStock,
-        reserved: Number(currentBalance?.reserved ?? 0),
-        reorder_point: Number(currentBalance?.reorder_point ?? 0),
-        reorder_quantity: Number(currentBalance?.reorder_quantity ?? 0),
-        location: currentBalance?.location ?? {},
-        as_of_date: nowIso.slice(0, 10),
-        business_date: nowIso.slice(0, 10),
-        updated_at: nowIso,
-      }, { onConflict: 'product_id' });
-
-    if (upsertError) {
-      throw upsertError;
-    }
-
-    if (!effectiveSupplierId && supplierName) {
-      try {
-        const { data: supplier, error: supplierError } = await supabaseAdmin
-          .schema('catalog')
-          .from('suppliers')
-          .upsert({
-            supplier_code: normalizeSku(`SUP-${supplierName}`, 'SUP'),
-            name: supplierName,
-            phone: normalizeOptionalText(req.body?.supplierContact, 80),
-            address: normalizeOptionalText(req.body?.supplierAddress, 500),
-            updated_at: nowIso,
-          }, { onConflict: 'supplier_code' })
-          .select('id')
-          .single();
-
-        if (supplierError && !isPrivateSchemaAccessError(supplierError)) {
-          throw supplierError;
-        }
-
-        effectiveSupplierId = supplier?.id ?? effectiveSupplierId;
-      } catch (error) {
-        if (!String(error.message || '').includes('suppliers')) {
-          throw error;
-        }
-      }
-    }
-
-    await linkProductSupplier(productId, effectiveSupplierId);
-
-    const { data: movement, error: movementError } = await supabaseAdmin
-      .schema('catalog')
-      .from('inventory_movements')
-      .insert({
-        product_id: productId,
-        movement_type: 'stock_in',
+    const receipt = await receiveCatalogStock({
+      payload: {
+        productId,
         quantity,
-        reference_type: 'supplier_receipt',
-        reference_id: null,
-        notes: buildStockReceiveNotes({ supplierName, referenceNumber, reason }),
-        performed_by: req.user?.id || null,
-        business_date: nowIso.slice(0, 10),
-      })
-      .select('id, created_at')
-      .single();
-
-    if (movementError) {
-      throw movementError;
-    }
-
-    try {
-      await supabaseAdmin.schema('catalog').from('stock_receiving_logs').insert({
-        product_id: productId,
-        supplier_id: effectiveSupplierId,
-        quantity_added: quantity,
-        previous_stock: previousStock,
-        updated_stock: updatedStock,
-        reference_number: referenceNumber,
-        received_date: req.body?.receivedDate || nowIso.slice(0, 10),
-        notes: reason || null,
-        performed_by: req.user?.id || null,
-        movement_id: movement.id,
-      });
-    } catch (error) {
-      if (!isPrivateSchemaAccessError(error) && !String(error.message || '').includes('stock_receiving_logs')) {
-        throw error;
-      }
-    }
+        supplierId,
+        supplierName,
+        supplierContact: normalizeOptionalText(req.body?.supplierContact, 80),
+        supplierAddress: normalizeOptionalText(req.body?.supplierAddress, 500),
+        referenceNumber,
+        receivedDate: String(req.body?.receivedDate || '').trim() || null,
+        reason: reason || null,
+      },
+      performedBy: req.user?.id || null,
+      idempotencyKey,
+      invokeRpc: callRpc,
+    });
 
     invalidateProductCatalogCache();
 
-    res.status(201).json({
-      product: {
-        id: product.id,
-        sku: product.sku,
-        name: product.name,
-      },
-      movement: {
-        id: movement.id,
-        createdAt: movement.created_at,
-      },
-      previousStock,
-      quantityAdded: quantity,
-      updatedStock,
-      supplierName,
-      referenceNumber,
-    });
+    res
+      .set('Idempotency-Key', idempotencyKey)
+      .status(receipt?.idempotentReplay ? 200 : 201)
+      .json(receipt);
   } catch (error) {
     next(error);
   }
@@ -3800,20 +3675,24 @@ router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, r
 
 router.post('/stock/receive-invoice', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
-    const rpcName = req.body?.allowNewProducts === false
-      ? 'receive_existing_supplier_invoice_stock'
-      : 'receive_supplier_invoice_stock';
-    const receipt = await callRpc(rpcName, {
-      p_invoice: req.body,
-      p_performed_by: req.user?.id ?? null,
+    const idempotencyKey = requireIdempotencyKey(req.get('Idempotency-Key'));
+    const receipt = await receiveSupplierInvoiceStock({
+      invoice: req.body,
+      performedBy: req.user?.id ?? null,
+      idempotencyKey,
+      allowNewProducts: req.body?.allowNewProducts !== false,
+      invokeRpc: callRpc,
     });
 
     invalidateProductCatalogCache();
 
-    res.status(201).json({
-      receipt,
-      items: receipt?.items ?? [],
-    });
+    res
+      .set('Idempotency-Key', idempotencyKey)
+      .status(receipt?.idempotentReplay ? 200 : 201)
+      .json({
+        receipt,
+        items: receipt?.items ?? [],
+      });
   } catch (error) {
     next(error);
   }

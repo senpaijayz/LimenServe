@@ -69,6 +69,7 @@ const publicCacheRules = [
 ];
 
 const responseCache = new Map();
+let publicCacheVersion = 1;
 
 function getRequestPath(req) {
   return String(req.originalUrl || req.url || '').split('?')[0];
@@ -97,6 +98,7 @@ function setPublicCacheHeaders(res, rule) {
   res.set('Vercel-CDN-Cache-Control', cdnCacheControl);
   res.set('Surrogate-Control', `max-age=${rule.sharedMaxAge}, stale-while-revalidate=${rule.staleWhileRevalidate}`);
   res.set('Vercel-Cache-Tag', rule.tags.join(','));
+  res.set('X-Limen-Cache-Version', String(publicCacheVersion));
   res.set('Vary', 'Accept-Encoding');
 }
 
@@ -124,6 +126,7 @@ export function isPublicCacheableRequest(req) {
 }
 
 export function clearPublicResponseCache(tags = []) {
+  publicCacheVersion += 1;
   const requestedTags = new Set(Array.isArray(tags) ? tags : [tags]);
 
   if (requestedTags.size === 0) {

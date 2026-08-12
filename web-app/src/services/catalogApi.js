@@ -1,6 +1,8 @@
 import apiClient, { cachedApiGet, clearApiClientCache, extractApiError, INVENTORY_API_TIMEOUT_MS, PRICE_LIST_UPLOAD_TIMEOUT_MS } from './apiClient';
 import { ALL_VEHICLE_MODELS, products as fallbackProducts } from '../data/productData';
 import inventoryClassifier from '../lib/inventoryClassifier';
+import { queryClient } from '../lib/queryClient';
+import { createIdempotencyKey } from '../utils/idempotency';
 
 const { OPERATIONAL_CATEGORIES, classifyInventoryItem } = inventoryClassifier;
 
@@ -92,9 +94,14 @@ function clearRequestCache(matcher = null) {
   }
 }
 
-function clearProductCatalogCaches() {
+export function invalidateCatalogClientCaches() {
   clearApiClientCache('/catalog/products');
   clearRequestCache((key) => key.startsWith('catalog-products:') || key.startsWith('full-product-catalog:'));
+  return queryClient.invalidateQueries({ queryKey: ['product-catalog'] });
+}
+
+function clearProductCatalogCaches() {
+  void invalidateCatalogClientCaches();
 }
 
 function normalizeText(value) {
@@ -404,7 +411,9 @@ export async function getProductCatalog(params = {}) {
   try {
     const cacheKey = buildRequestKey('catalog-products', params);
     return await withCachedRequest(cacheKey, CATALOG_CACHE_TTL_MS, async () => {
-      const { data } = await cachedApiGet('/catalog/products', { params });
+      // The catalog service cache is the browser-memory owner for this endpoint.
+      // React Query owns view-level freshness; avoid a third API-client cache.
+      const { data } = await apiClient.get('/catalog/products', { params });
       return {
         products: data.products ?? [],
         pagination: data.pagination ?? { page: 1, pageSize: 12, totalCount: 0, totalPages: 1 },
@@ -598,10 +607,15 @@ export async function deleteManagedCategory(categoryId) {
   }
 }
 
-export async function receiveInventoryStock(payload) {
+export async function receiveInventoryStock(payload, options = {}) {
+  const idempotencyKey = options.idempotencyKey || createIdempotencyKey('stock');
+
   try {
     const { data } = await apiClient.post('/catalog/stock/receive', payload, {
       timeout: INVENTORY_API_TIMEOUT_MS,
+      headers: {
+        'Idempotency-Key': idempotencyKey,
+      },
     });
     clearProductCatalogCaches();
     return data;

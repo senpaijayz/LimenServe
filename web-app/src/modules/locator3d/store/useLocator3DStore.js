@@ -11,6 +11,59 @@ import {
     isShelfObject,
     normalizeLayoutObjects,
 } from '../data/locatorScene';
+import { normalizeLocatorQualityPreference } from '../utils/qualityTier';
+import { validateLayoutObjects } from '../utils/layoutValidation';
+
+const AUTOSAVE_STORAGE_KEY = 'limen:locator3d:autosave:v1';
+const MAX_HISTORY_ENTRIES = 50;
+
+function cloneObjects(objects) {
+    return objects.map((object) => ({
+        ...object,
+        dimensions: object.dimensions ? { ...object.dimensions } : undefined,
+        floors: object.floors ? [...object.floors] : undefined,
+        position: [...(object.position || [0, 0, 0])],
+        rotation: [...(object.rotation || [0, 0, 0])],
+    }));
+}
+
+function readAutosave() {
+    try {
+        if (typeof localStorage === 'undefined') {
+            return null;
+        }
+
+        const parsed = JSON.parse(localStorage.getItem(AUTOSAVE_STORAGE_KEY) || 'null');
+        return Array.isArray(parsed?.objects) ? parsed : null;
+    } catch {
+        return null;
+    }
+}
+
+function writeAutosave(objects) {
+    try {
+        if (typeof localStorage === 'undefined') {
+            return;
+        }
+
+        localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify({
+            createdAt: new Date().toISOString(),
+            objects: cloneObjects(objects),
+        }));
+    } catch {
+        // Storage may be unavailable in private browsing or embedded contexts.
+    }
+}
+
+function clearAutosaveStorage() {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem(AUTOSAVE_STORAGE_KEY);
+        }
+    } catch {
+        // Ignore storage cleanup failures.
+    }
+}
 
 function createInitialState() {
     const sceneObjects = cloneLocatorSceneObjects();
@@ -18,6 +71,7 @@ function createInitialState() {
     return {
         activeFloor: 1,
         activeTool: 'select',
+        autosaveAvailable: Boolean(readAutosave()),
         cameraFocusRequest: null,
         cameraPresetRequest: null,
         isDesignMode: false,
@@ -26,6 +80,7 @@ function createInitialState() {
         objects: sceneObjects,
         pathAnimationRequest: 0,
         productLocations: [],
+        qualityPreference: 'auto',
         recentlyReceivedStock: {
             createdAt: null,
             items: [],
@@ -34,11 +89,16 @@ function createInitialState() {
             source: null,
         },
         sceneObjects,
+        selectedObjectIds: [],
         selectedObjectId: null,
         selectedProductForLocation: null,
         showGrid: true,
         showLabels: true,
         showPaths: true,
+        xrayMode: false,
+        history: { future: [], past: [] },
+        hasUnsavedChanges: false,
+        layoutIssues: validateLayoutObjects(sceneObjects),
     };
 }
 
@@ -79,15 +139,25 @@ function clampDimension(value, fallback = 1) {
 function withSceneObjects(set, updater) {
     set((state) => {
         const sceneObjects = updater(state.sceneObjects);
+        const past = [...(state.history?.past || []), cloneObjects(state.sceneObjects)].slice(-MAX_HISTORY_ENTRIES);
+        writeAutosave(sceneObjects);
 
         return {
             objects: sceneObjects,
             sceneObjects,
+            history: { future: [], past },
+            hasUnsavedChanges: true,
+            autosaveAvailable: true,
+            layoutIssues: validateLayoutObjects(sceneObjects),
         };
     });
 }
 
 const initialState = createInitialState();
+
+export function getLocatorAutosave() {
+    return readAutosave();
+}
 
 export const useLocator3DStore = create((set, get) => ({
     ...initialState,
@@ -103,12 +173,45 @@ export const useLocator3DStore = create((set, get) => ({
                 count,
             });
             const sceneObjects = [...state.sceneObjects, object];
+            const past = [...(state.history?.past || []), cloneObjects(state.sceneObjects)].slice(-MAX_HISTORY_ENTRIES);
+            writeAutosave(sceneObjects);
 
             return {
                 objects: sceneObjects,
                 sceneObjects,
+                history: { future: [], past },
+                hasUnsavedChanges: true,
+                autosaveAvailable: true,
+                layoutIssues: validateLayoutObjects(sceneObjects),
+                selectedObjectIds: [object.id],
                 selectedObjectId: object.id,
             };
+        });
+    },
+    alignSelectedObjects: (axis, mode = 'center') => {
+        const { selectedObjectIds = [] } = get();
+        if (selectedObjectIds.length < 2 || !['x', 'z'].includes(axis)) {
+            return;
+        }
+
+        withSceneObjects(set, (objects) => {
+            const selected = objects.filter((object) => selectedObjectIds.includes(object.id));
+            const values = selected.map((object) => Number(object.position?.[axis === 'x' ? 0 : 2] || 0));
+            const target = mode === 'min'
+                ? Math.min(...values)
+                : mode === 'max'
+                    ? Math.max(...values)
+                    : values.reduce((total, value) => total + value, 0) / values.length;
+
+            return objects.map((object) => {
+                if (!selectedObjectIds.includes(object.id) || object.isLocked) {
+                    return object;
+                }
+
+                const position = [...object.position];
+                position[axis === 'x' ? 0 : 2] = snapToGrid(target);
+                return { ...object, position };
+            });
         });
     },
     centerCameraOnSelected: () => {
@@ -151,26 +254,133 @@ export const useLocator3DStore = create((set, get) => ({
         pathAnimationRequest: state.pathAnimationRequest + 1,
     })),
     clearLocatedProduct: () => set({ cameraPresetRequest: null, locatedProduct: null, selectedProductForLocation: null }),
-    clearSelection: () => set({ selectedObjectId: null }),
+    clearSelection: () => set({ selectedObjectIds: [], selectedObjectId: null }),
+    clearAutosave: () => {
+        clearAutosaveStorage();
+        set({ autosaveAvailable: false });
+    },
+    discardAutosave: () => {
+        clearAutosaveStorage();
+        set({ autosaveAvailable: false });
+    },
+    duplicateSelectedObject: () => {
+        const { sceneObjects, selectedObjectIds = [] } = get();
+        const selected = sceneObjects.filter((object) => selectedObjectIds.includes(object.id) && !object.isLocked);
+        if (!selected.length) {
+            return;
+        }
+
+        const duplicates = selected.map((object, index) => ({
+            ...cloneObjects([object])[0],
+            id: `${object.type}-${Date.now().toString(36)}-copy-${index + 1}`,
+            name: `${object.name || object.type} Copy`,
+            position: [snapToGrid((object.position?.[0] || 0) + 1), object.position?.[1] || 0, snapToGrid((object.position?.[2] || 0) + 1)],
+            isLocked: false,
+        }));
+        const nextObjects = [...sceneObjects, ...duplicates];
+        const past = [...(get().history?.past || []), cloneObjects(sceneObjects)].slice(-MAX_HISTORY_ENTRIES);
+        writeAutosave(nextObjects);
+        set({
+            objects: nextObjects,
+            sceneObjects: nextObjects,
+            history: { future: [], past },
+            hasUnsavedChanges: true,
+            autosaveAvailable: true,
+            layoutIssues: validateLayoutObjects(nextObjects),
+            selectedObjectIds: duplicates.map((object) => object.id),
+            selectedObjectId: duplicates[0].id,
+        });
+    },
+    markLayoutSaved: () => {
+        clearAutosaveStorage();
+        set({ autosaveAvailable: false, hasUnsavedChanges: false });
+    },
+    redo: () => {
+        const { history, sceneObjects } = get();
+        const nextObjects = history?.future?.[0];
+        if (!nextObjects) {
+            return;
+        }
+
+        const future = history.future.slice(1);
+        const past = [...(history.past || []), cloneObjects(sceneObjects)].slice(-MAX_HISTORY_ENTRIES);
+        const restored = cloneObjects(nextObjects);
+        writeAutosave(restored);
+        set({
+            objects: restored,
+            sceneObjects: restored,
+            history: { future, past },
+            hasUnsavedChanges: true,
+            autosaveAvailable: true,
+            layoutIssues: validateLayoutObjects(restored),
+        });
+    },
+    recoverAutosave: () => {
+        const autosave = readAutosave();
+        if (!autosave) {
+            return false;
+        }
+
+        const recovered = normalizeLayoutObjects(autosave.objects);
+        set((state) => ({
+            objects: recovered,
+            sceneObjects: recovered,
+            history: { future: [], past: [...(state.history?.past || []), cloneObjects(state.sceneObjects)].slice(-MAX_HISTORY_ENTRIES) },
+            hasUnsavedChanges: true,
+            autosaveAvailable: true,
+            layoutIssues: validateLayoutObjects(recovered),
+            selectedObjectIds: [],
+            selectedObjectId: null,
+        }));
+        return true;
+    },
+    undo: () => {
+        const { history, sceneObjects } = get();
+        const previous = history?.past?.at(-1);
+        if (!previous) {
+            return;
+        }
+
+        const past = history.past.slice(0, -1);
+        const restored = cloneObjects(previous);
+        const future = [cloneObjects(sceneObjects), ...(history.future || [])].slice(0, MAX_HISTORY_ENTRIES);
+        writeAutosave(restored);
+        set({
+            objects: restored,
+            sceneObjects: restored,
+            history: { future, past },
+            hasUnsavedChanges: true,
+            autosaveAvailable: true,
+            layoutIssues: validateLayoutObjects(restored),
+        });
+    },
     deleteSelectedObject: () => {
-        const { sceneObjects, selectedObjectId } = get();
-        const selectedObject = sceneObjects.find((object) => object.id === selectedObjectId);
+        const { sceneObjects, selectedObjectId, selectedObjectIds = [] } = get();
+        const ids = selectedObjectIds.length ? selectedObjectIds : selectedObjectId ? [selectedObjectId] : [];
+        const selectedObject = sceneObjects.find((object) => ids.includes(object.id) && !object.isLocked);
 
         if (!selectedObject || selectedObject.isLocked) {
             return;
         }
 
-        const nextObjects = sceneObjects.filter((object) => object.id !== selectedObjectId);
+        const nextObjects = sceneObjects.filter((object) => !ids.includes(object.id) || object.isLocked);
+        const past = [...(get().history?.past || []), cloneObjects(sceneObjects)].slice(-MAX_HISTORY_ENTRIES);
+        writeAutosave(nextObjects);
 
         set({
             objects: nextObjects,
             sceneObjects: nextObjects,
+            history: { future: [], past },
+            hasUnsavedChanges: true,
+            autosaveAvailable: true,
+            layoutIssues: validateLayoutObjects(nextObjects),
             locatedProduct: null,
             selectedProductForLocation: null,
+            selectedObjectIds: [],
             selectedObjectId: null,
         });
     },
-    forceSelectObject: (objectId) => set({ selectedObjectId: objectId }),
+    forceSelectObject: (objectId) => set({ selectedObjectIds: objectId ? [objectId] : [], selectedObjectId: objectId }),
     goToFloor: (floor) => set({ activeFloor: floor === 2 ? 2 : 1 }),
     loadLayoutData: (layoutData) => {
         const sceneObjects = normalizeLayoutObjects(Array.isArray(layoutData) ? layoutData : layoutData?.objects);
@@ -180,6 +390,11 @@ export const useLocator3DStore = create((set, get) => ({
             cameraPresetRequest: null,
             objects: sceneObjects,
             sceneObjects,
+            history: { future: [], past: [] },
+            hasUnsavedChanges: false,
+            autosaveAvailable: false,
+            layoutIssues: validateLayoutObjects(sceneObjects),
+            selectedObjectIds: [],
             locatedProduct: null,
             selectedProductForLocation: null,
             selectedObjectId: null,
@@ -215,23 +430,41 @@ export const useLocator3DStore = create((set, get) => ({
             selectedObjectId: shelfObjectId || get().selectedObjectId,
         });
     },
-    selectObject: (objectId) => {
+    selectObject: (objectId, { additive = false } = {}) => {
         const object = get().sceneObjects.find((sceneObject) => sceneObject.id === objectId);
 
         if (!object || object.isLocked) {
             return;
         }
 
-        set({ selectedObjectId: objectId });
+        set((state) => {
+            const currentIds = Array.isArray(state.selectedObjectIds) ? state.selectedObjectIds : [];
+            const selectedObjectIds = additive
+                ? currentIds.includes(objectId)
+                    ? currentIds.filter((id) => id !== objectId)
+                    : [...currentIds, objectId]
+                : [objectId];
+
+            return {
+                selectedObjectIds,
+                selectedObjectId: selectedObjectIds.at(-1) || null,
+            };
+        });
     },
     resetToDefaultLayout: () => {
         const sceneObjects = cloneLocatorSceneObjects();
+        writeAutosave(sceneObjects);
 
         set({
             activeFloor: 1,
             cameraPresetRequest: null,
             objects: sceneObjects,
             sceneObjects,
+            history: { future: [], past: [] },
+            hasUnsavedChanges: true,
+            autosaveAvailable: true,
+            layoutIssues: validateLayoutObjects(sceneObjects),
+            selectedObjectIds: [],
             locatedProduct: null,
             selectedProductForLocation: null,
             selectedObjectId: null,
@@ -243,6 +476,9 @@ export const useLocator3DStore = create((set, get) => ({
         isDesignMode,
     })),
     setProductLocations: (productLocations) => set({ productLocations: Array.isArray(productLocations) ? productLocations : [] }),
+    setQualityPreference: (qualityPreference) => set({
+        qualityPreference: normalizeLocatorQualityPreference(qualityPreference),
+    }),
     setRecentlyReceivedStock: (receiptContext = {}) => {
         const items = Array.isArray(receiptContext.items)
             ? receiptContext.items
@@ -279,7 +515,7 @@ export const useLocator3DStore = create((set, get) => ({
     },
     isRecentlyReceivedProduct: (productIdOrSku) => Boolean(get().getRecentlyReceivedProduct(productIdOrSku)),
     toggleSceneOption: (option) => {
-        if (!['showGrid', 'showLabels', 'showPaths'].includes(option)) {
+        if (!['showGrid', 'showLabels', 'showPaths', 'xrayMode'].includes(option)) {
             return;
         }
 

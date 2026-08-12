@@ -23,6 +23,7 @@ const REQUIRED_OBJECT_TYPES = [
     'stairs',
     'counter-computer',
     'entrance-door',
+    'parts-cabinet',
 ];
 
 describe('3D Locator foundation', () => {
@@ -34,8 +35,8 @@ describe('3D Locator foundation', () => {
     it('summarizes the initial two-floor store layout', () => {
         expect(getLocatorObjectSummary(LOCATOR_SCENE_OBJECTS)).toEqual({
             floors: 2,
-            objects: 9,
-            shelves: 4,
+            objects: 12,
+            shelves: 6,
         });
     });
 

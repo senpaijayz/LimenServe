@@ -72,6 +72,10 @@ describe('3D Locator premium redesign', () => {
         expect(screen.getByLabelText('Product Search')).toBeTruthy();
         expect(screen.getByText('Located Products')).toBeTruthy();
         expect(screen.getByRole('region', { name: 'Camera and scene controls' })).toBeTruthy();
+        expect(screen.getByText(/Touch controls: drag to orbit/i)).toBeTruthy();
+        expect(screen.getByRole('region', { name: 'Floor 1 minimap' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Aisle B 4-Layer Shelf' }));
+        expect(useLocator3DStore.getState().selectedObjectId).toBe('shelf-4-a');
         expect(screen.getByRole('button', { name: 'Overview camera' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Counter View camera' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Top-down camera' })).toBeTruthy();
@@ -79,6 +83,12 @@ describe('3D Locator premium redesign', () => {
         expect(screen.getByRole('button', { name: 'Show Labels' }).getAttribute('aria-pressed')).toBe('true');
         expect(screen.getByRole('button', { name: 'Show Paths' }).getAttribute('aria-pressed')).toBe('true');
         expect(screen.getByRole('button', { name: 'Show Grid' }).getAttribute('aria-pressed')).toBe('true');
+        expect(screen.getByRole('button', { name: 'X-ray Mode' }).getAttribute('aria-pressed')).toBe('false');
+        fireEvent.click(screen.getByRole('button', { name: 'X-ray Mode' }));
+        expect(useLocator3DStore.getState().xrayMode).toBe(true);
+        expect(screen.getByLabelText('3D rendering quality').value).toBe('auto');
+        fireEvent.change(screen.getByLabelText('3D rendering quality'), { target: { value: 'low' } });
+        expect(useLocator3DStore.getState().qualityPreference).toBe('low');
         expect(screen.queryByText('Object Library')).toBeNull();
         expect(screen.queryByText('Properties')).toBeNull();
 

@@ -10,8 +10,14 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22.22.0
+      - key: APP_ENV
+        value: production
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: PUBLIC_RATE_LIMIT_STORE
+        value: supabase
       - key: FRONTEND_URLS
-        value: https://limen-serve.vercel.app,https://limen-serve*.vercel.app,http://localhost:5173,http://127.0.0.1:5173
+        value: https://limen-serve.vercel.app
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY

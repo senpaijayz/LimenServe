@@ -5,10 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/verify-deployment-env.mjs",
     "build": "vite build",
+    "postbuild": "node scripts/verify-bundle-budget.mjs",
+    "generate:pricelist-fixture": "node scripts/generate-pricelist-fixture.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+    "test:bundle": "node scripts/verify-bundle-budget.mjs",
+    "test:responsive": "node scripts/responsive-audit.mjs",
+    "verify:deployment-env": "node scripts/verify-deployment-env.mjs",
+    "verify:pricelist-fixture": "node scripts/generate-pricelist-fixture.mjs --check"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

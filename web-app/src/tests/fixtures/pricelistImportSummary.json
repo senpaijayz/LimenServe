@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "sourceFile": "public/data/fullPricelist.json",
+  "sourceRows": 28980,
+  "importedRows": 28980,
+  "uniqueSkuRows": 28945,
+  "duplicateSourceRows": 35,
+  "catalogRows": 28945,
+  "catalogSha256": "cdd7d70eaa285f0ad21f02a110f7861a31ef41c57673e572cf7903ebbfb31941"
+}

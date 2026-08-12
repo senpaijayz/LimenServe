@@ -65,10 +65,11 @@ export async function getEstimateRevisions(estimateId) {
   }
 }
 
-export async function lookupPublicEstimate(estimateNumber) {
+export async function lookupPublicEstimate(estimateNumber, phone) {
   try {
     const { data } = await apiClient.post('/estimates/public/lookup', {
-      estimateNumber,
+      estimateNumber: String(estimateNumber ?? '').trim(),
+      phone: String(phone ?? '').trim(),
     });
     return data.estimate ?? null;
   } catch (error) {

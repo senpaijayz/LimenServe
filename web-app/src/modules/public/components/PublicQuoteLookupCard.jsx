@@ -45,6 +45,8 @@ const getLineMeta = (item) => (item?.line_type === 'service' ? 'Service / Labor'
 const PublicQuoteLookupCard = ({
     estimateNumber,
     onEstimateNumberChange,
+    phone,
+    onPhoneChange,
     onLookup,
     loading,
     error,
@@ -56,32 +58,55 @@ const PublicQuoteLookupCard = ({
     const vehicleSummary = formatVehicleSummary(result?.vehicle);
 
     return (
-        <div className="surface p-6 md:p-8">
+        <div className="surface min-w-0 p-4 sm:p-6 md:p-8">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div className="max-w-2xl">
+                <div className="min-w-0 max-w-2xl">
                     <p className="text-xs font-bold tracking-[0.3em] text-primary-400 uppercase">Retrieve quotation</p>
                     <h2 className="mt-2 text-2xl font-display font-bold text-primary-950">Look up a saved quote for 30 days</h2>
-                    <p className="mt-2 text-sm text-primary-500">Enter the quote number to retrieve an existing quotation and open a printable preview without rebuilding it.</p>
+                    <p className="mt-2 text-sm text-primary-500">Enter the quote number and the phone number used for the quote to retrieve a printable preview.</p>
                 </div>
-                <div className="grid w-full gap-3 md:grid-cols-[minmax(0,1fr)_auto] lg:max-w-2xl">
+                <div
+                    role="group"
+                    aria-label="Quote lookup verification"
+                    className="grid min-w-0 w-full gap-3 md:grid-cols-2 lg:max-w-3xl lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+                >
                     <input
                         value={estimateNumber}
                         onChange={(event) => onEstimateNumberChange(event.target.value)}
                         onKeyDown={(event) => {
-                            if (event.key === 'Enter' && estimateNumber.trim()) {
+                            if (event.key === 'Enter' && estimateNumber.trim() && phone.trim()) {
                                 onLookup();
                             }
                         }}
                         aria-label="Quote number"
                         placeholder="Quote number"
-                        className="input py-2.5 text-sm"
+                        required
+                        spellCheck={false}
+                        className="input min-w-0 w-full py-2.5 text-sm"
+                    />
+                    <input
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        value={phone}
+                        onChange={(event) => onPhoneChange(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Enter' && estimateNumber.trim() && phone.trim()) {
+                                onLookup();
+                            }
+                        }}
+                        aria-label="Phone number used for quote"
+                        placeholder="Phone number used for quote"
+                        required
+                        className="input min-w-0 w-full py-2.5 text-sm"
                     />
                     <Button
                         variant="secondary"
                         onClick={onLookup}
                         isLoading={loading}
-                        isDisabled={!estimateNumber.trim()}
+                        isDisabled={!estimateNumber.trim() || !phone.trim()}
                         leftIcon={<Search className="w-4 h-4" />}
+                        className="w-full md:col-span-2 lg:col-span-1 lg:w-auto"
                     >
                         Retrieve Quote
                     </Button>
@@ -138,8 +163,8 @@ const PublicQuoteLookupCard = ({
                     </div>
 
                     <div className="mt-6 rounded-2xl border border-primary-200 bg-primary-50/40 p-4">
-                        <div className="flex items-center justify-between gap-3 border-b border-primary-200 pb-3">
-                            <div>
+                        <div className="flex flex-col gap-3 border-b border-primary-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
                                 <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-400">Quoted Items</p>
                                 <p className="mt-1 text-sm text-primary-500">Retrieved parts and services ready for review or printing.</p>
                             </div>
@@ -148,6 +173,7 @@ const PublicQuoteLookupCard = ({
                                 onClick={onPreviewPrint}
                                 leftIcon={<Printer className="w-4 h-4" />}
                                 isDisabled={!result}
+                                className="w-full shrink-0 sm:w-auto"
                             >
                                 Printable Preview
                             </Button>
@@ -159,10 +185,10 @@ const PublicQuoteLookupCard = ({
                                     This quotation has no line items.
                                 </div>
                             ) : (
-                                items.map((item) => (
-                                    <div key={item.id || `${item.product_id || item.service_id}-${item.line_type}`} className="flex items-start justify-between gap-4 rounded-2xl border border-primary-200 bg-white px-4 py-3">
+                                items.map((item, index) => (
+                                    <div key={`${item.line_type}-${getLineName(item)}-${index}`} className="flex items-start justify-between gap-4 rounded-2xl border border-primary-200 bg-white px-4 py-3">
                                         <div className="min-w-0">
-                                            <p className="text-sm font-semibold text-primary-950">{getLineName(item)}</p>
+                                            <p className="break-words text-sm font-semibold text-primary-950">{getLineName(item)}</p>
                                             <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary-400">{getLineMeta(item)}</p>
                                             <p className="mt-2 text-xs text-primary-500">
                                                 Qty {Number(item.quantity ?? 1)} - Unit {formatCurrency(Number(item.unit_price ?? 0))}

@@ -965,7 +965,7 @@ const InventoryList = () => {
                     await refreshInventoryMeta();
                     success(`Posted invoice ${receipt.invoiceNumber}. Received ${formatNumber(receipt.totalQuantity)} units across ${formatNumber(receipt.totalLines)} parts.`);
                 }}
-                onSave={async ({ product, quantity, supplierId, supplierName, supplierContact, supplierAddress, referenceNumber, receivedDate, reason, _bulkMode }) => {
+                onSave={async ({ product, quantity, supplierId, supplierName, supplierContact, supplierAddress, referenceNumber, receivedDate, reason, idempotencyKey, _bulkMode }) => {
                     const result = await receiveInventoryStock({
                         productId: product.id,
                         quantity,
@@ -976,6 +976,8 @@ const InventoryList = () => {
                         referenceNumber,
                         receivedDate,
                         reason,
+                    }, {
+                        idempotencyKey,
                     });
                     const updatedProduct = {
                         ...product,

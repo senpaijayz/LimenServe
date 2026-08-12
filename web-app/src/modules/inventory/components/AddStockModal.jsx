@@ -9,6 +9,7 @@ import useDataStore from '../../../store/useDataStore';
 import { getSuppliers } from '../../../services/catalogApi';
 import { formatNumber } from '../../../utils/formatters';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
+import { createIdempotencyKey } from '../../../utils/idempotency';
 import { useLocator3DStore } from '../../locator3d/store/useLocator3DStore';
 import { analyzeSupplierInvoiceImage, receiveStockFromSupplierInvoice } from '../services/receiveStock';
 
@@ -223,6 +224,8 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
     const [showInvoiceImageChoices, setShowInvoiceImageChoices] = useState(false);
     const invoiceCameraInputRef = useRef(null);
     const invoiceUploadInputRef = useRef(null);
+    const stockReceiptKeysRef = useRef(new Map());
+    const invoiceReceiptKeyRef = useRef(null);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -240,6 +243,8 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
         setBulkSuccess(false);
         setBulkResults([]);
         setShowInvoiceImageChoices(false);
+        stockReceiptKeysRef.current.clear();
+        invoiceReceiptKeyRef.current = null;
 
         const loadSuppliers = async () => {
             setLoadingSuppliers(true);
@@ -486,6 +491,16 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
             for (let i = 0; i < validBulkItems.length; i += 1) {
                 const item = validBulkItems[i];
                 const qty = Number(item.quantity);
+                const receiptFingerprint = JSON.stringify({
+                    productId: item.product.id,
+                    quantity: qty,
+                    supplierId: supplier.id,
+                    referenceNumber: supplier.referenceNumber.trim(),
+                    receivedDate: supplier.receivedDate,
+                });
+                const idempotencyKey = stockReceiptKeysRef.current.get(receiptFingerprint)
+                    || createIdempotencyKey('stock');
+                stockReceiptKeysRef.current.set(receiptFingerprint, idempotencyKey);
                 await onSave({
                     product: item.product,
                     quantity: qty,
@@ -496,6 +511,7 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                     referenceNumber: supplier.referenceNumber.trim(),
                     receivedDate: supplier.receivedDate,
                     reason: supplier.reason.trim() || 'Stock receiving',
+                    idempotencyKey,
                     _bulkMode: true,
                 });
                 results.push({ name: item.product.name, sku: getProductPartNumber(item.product), qty });
@@ -549,6 +565,9 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
         setError('');
 
         try {
+            if (!invoiceReceiptKeyRef.current) {
+                invoiceReceiptKeyRef.current = createIdempotencyKey('invoice');
+            }
             const receipt = await receiveStockFromSupplierInvoice({
                 invoiceNumber: invoiceDraft.invoiceNumber,
                 invoiceDate: invoiceDraft.invoiceDate,
@@ -560,6 +579,8 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                 ocrReady: true,
                 allowNewProducts: false,
                 items,
+            }, {
+                idempotencyKey: invoiceReceiptKeyRef.current,
             });
             const receiptItems = (receipt.items || []).map((item) => ({
                 productId: item.productId,

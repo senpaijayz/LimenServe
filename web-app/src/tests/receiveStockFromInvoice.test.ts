@@ -39,20 +39,26 @@ describe('receiveStockFromSupplierInvoice', () => {
         { part_number: ' md360935 ', description: 'FILTER, OIL', quantity: 2, unit_cost: 100 },
         { part_number: '*MD360935*', description: 'FILTER, OIL', quantity: 3, unit_cost: 166.6667 },
       ],
-    }, { postReceipt });
+    }, {
+      postReceipt,
+      idempotencyKey: 'invoice-test-100',
+    });
 
     expect(postReceipt).toHaveBeenCalledTimes(1);
-    expect(postReceipt).toHaveBeenCalledWith(expect.objectContaining({
-      invoiceNumber: 'INV-100',
-      supplierName: 'Diamond Motor Corporation',
-      items: [
-        expect.objectContaining({
-          partNumber: 'MD360935',
-          quantity: 5,
-          unitCost: 0,
-        }),
-      ],
-    }));
+    expect(postReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invoiceNumber: 'INV-100',
+        supplierName: 'Diamond Motor Corporation',
+        items: [
+          expect.objectContaining({
+            partNumber: 'MD360935',
+            quantity: 5,
+            unitCost: 0,
+          }),
+        ],
+      }),
+      'invoice-test-100',
+    );
     expect(result.receiptId).toBe('receipt-1');
   });
 

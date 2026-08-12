@@ -14,7 +14,7 @@ Production record counts were unchanged after migration: 3 user profiles, 1 mech
 
 ## Preview and staging constraints
 
-- Vercel creates a preview from the GitHub pull request. Verify the public UI and same-origin API behavior there.
+- Vercel creates a preview from the GitHub pull request. Preview must use the isolated staging API and Supabase values documented in `DEPLOYMENT_ENVIRONMENTS.md`; there is no same-origin production API rewrite.
 - Render pull-request previews are disabled on the production service. Do not repoint the production service to a feature branch.
 - The first UI/dependency follow-up required no database DDL. Do not create another Supabase project, branch, or paid resource. The previously created unused Free staging project `tncekqyecihscadayufs` is not part of this rollout.
 - The later security follow-up contains one schema-only migration that moves existing RLS helper functions to a non-exposed schema and fixes their stockroom table references. It creates no database, table, or paid resource and changes no production rows.
@@ -26,7 +26,7 @@ Production record counts were unchanged after migration: 3 user profiles, 1 mech
 2. Run `npm ci`, all frontend/backend tests, ESLint, the production build, and npm audits.
 3. Confirm `git diff --check` and review the exact file list; exclude local `outputs/` and root `package.json`.
 4. Push the branch and open a pull request to `main`.
-5. Verify the Vercel preview: home, catalog, product detail, reservation sign-in path, responsive navigation, cache headers, console errors, and protected-route redirects.
+5. Verify the Vercel preview uses only staging hosts, then check home, catalog, product detail, reservation sign-in path, responsive navigation, cache headers, console errors, and protected-route redirects.
 6. Review the PR checks and merge only when green.
 7. Confirm Render automatically deploys the merge commit and reaches `live`.
 8. Confirm Vercel production reaches `READY` on the same merge commit.

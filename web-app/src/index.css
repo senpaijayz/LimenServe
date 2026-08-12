@@ -54,7 +54,6 @@
   body {
     @apply bg-primary-100 text-primary-900 antialiased font-sans selection:bg-accent-blue selection:text-white;
     -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
   }
 
   * {

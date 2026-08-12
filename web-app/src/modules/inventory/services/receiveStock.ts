@@ -1,4 +1,6 @@
-import apiClient, { INVENTORY_API_TIMEOUT_MS, clearApiClientCache, extractApiError } from '../../../services/apiClient';
+import apiClient, { INVENTORY_API_TIMEOUT_MS, extractApiError } from '../../../services/apiClient';
+import { invalidateCatalogClientCaches } from '../../../services/catalogApi';
+import { createIdempotencyKey } from '../../../utils/idempotency';
 import {
   supplierInvoiceStockReceiptSchema,
   type SupplierInvoiceStockReceiptFormValues,
@@ -84,7 +86,8 @@ export interface StockReceiptProcessingIssue {
 }
 
 export interface ReceiveStockFromSupplierInvoiceOptions {
-  postReceipt?: (payload: SupplierInvoiceStockReceiptInput) => Promise<StockReceiptPostResult>;
+  postReceipt?: (payload: SupplierInvoiceStockReceiptInput, idempotencyKey: string) => Promise<StockReceiptPostResult>;
+  idempotencyKey?: string;
 }
 
 export class StockReceiptProcessingError extends Error {
@@ -214,12 +217,15 @@ export function normalizeSupplierInvoicePayload(payload: FlexibleSupplierInvoice
   return mergeDuplicatePartNumbers(parsed.data);
 }
 
-async function postStockReceipt(payload: SupplierInvoiceStockReceiptInput): Promise<StockReceiptPostResult> {
+async function postStockReceipt(payload: SupplierInvoiceStockReceiptInput, idempotencyKey: string): Promise<StockReceiptPostResult> {
   try {
     const { data } = await apiClient.post('/catalog/stock/receive-invoice', payload, {
       timeout: INVENTORY_API_TIMEOUT_MS,
+      headers: {
+        'Idempotency-Key': idempotencyKey,
+      },
     });
-    clearApiClientCache('/catalog/products');
+    void invalidateCatalogClientCaches();
     return data.receipt as StockReceiptPostResult;
   } catch (error) {
     extractApiError(error, 'Failed to receive stock from invoice.');
@@ -258,9 +264,10 @@ export async function receiveStockFromSupplierInvoice(
 ): Promise<StockReceiptPostResult> {
   const normalizedPayload = normalizeSupplierInvoicePayload(payload);
   const postReceipt = options.postReceipt ?? postStockReceipt;
+  const idempotencyKey = options.idempotencyKey ?? createIdempotencyKey('invoice');
 
   try {
-    return await postReceipt(normalizedPayload);
+    return await postReceipt(normalizedPayload, idempotencyKey);
   } catch (error) {
     if (error instanceof StockReceiptProcessingError) {
       throw error;

@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, Suspense, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { ContactShadows, Edges, Environment, Grid, Html, Line, OrbitControls, TransformControls } from '@react-three/drei';
@@ -6,12 +6,12 @@ import { Bloom, EffectComposer } from '@react-three/postprocessing';
 import {
     FLOOR_HEIGHT,
     getCounterObject,
-    getShelfBinWorldPosition,
-    getShelfObjectByLocation,
-    getStairsObject,
+    isShelfObject,
     normalizeAisle,
 } from '../data/locatorScene';
 import { useLocator3DStore } from '../store/useLocator3DStore';
+import { getLocatorQualityCapabilities, getLocatorQualityProfile } from '../utils/qualityTier';
+import { buildObstacleAwarePath } from '../utils/locatorPathfinding';
 
 const SELECTED_EDGE = '#0ea5e9';
 const SELECTED_EMISSIVE = '#38bdf8';
@@ -19,15 +19,16 @@ const LOCKED_EDGE = '#f59e0b';
 const LOCATED_EDGE = '#facc15';
 const LOCATED_EMISSIVE = '#fde047';
 const SHARED_FLOOR_TYPES = new Set(['floor', 'walls', 'stairs']);
+const LocatorQualityContext = createContext(getLocatorQualityProfile('high'));
 
 const CAMERA_TARGETS = {
     1: {
         lookAt: [0, 1.45, 0],
-        position: [10.5, 8.4, 10.5],
+        position: [14, 10.2, 14],
     },
     2: {
         lookAt: [1.8, FLOOR_HEIGHT + 1.25, -2.8],
-        position: [10.5, FLOOR_HEIGHT + 7.2, 10.5],
+        position: [14, FLOOR_HEIGHT + 8.8, 14],
     },
 };
 
@@ -46,7 +47,7 @@ function buildTopDownCameraTarget(activeFloor) {
 
     return {
         lookAt: new THREE.Vector3(x, y, z),
-        position: new THREE.Vector3(x, y + 16, z + 0.01),
+        position: new THREE.Vector3(x, y + 18.5, z + 0.01),
     };
 }
 
@@ -76,6 +77,7 @@ function Block({
     located,
     selected,
 }) {
+    const xrayMode = useLocator3DStore((state) => state.xrayMode);
     const edgeColor = located ? LOCATED_EDGE : locked ? LOCKED_EDGE : SELECTED_EDGE;
     const active = selected || located;
 
@@ -87,9 +89,10 @@ function Block({
                 emissive={located ? LOCATED_EMISSIVE : selected ? SELECTED_EMISSIVE : emissive}
                 emissiveIntensity={located ? 1.05 : selected ? 0.34 : 0.02}
                 metalness={located ? 0.18 : 0.1}
-                opacity={locked ? Math.min(opacity, 0.68) : opacity}
+                depthWrite={!xrayMode}
+                opacity={xrayMode && !active ? 0.18 : locked ? Math.min(opacity, 0.68) : opacity}
                 roughness={located ? 0.38 : 0.56}
-                transparent={opacity < 1 || locked}
+                transparent={xrayMode || opacity < 1 || locked}
             />
             {(active || locked) && <Edges color={edgeColor} scale={active ? 1.045 : 1.015} threshold={12} />}
         </mesh>
@@ -98,8 +101,9 @@ function Block({
 
 function Label({ children, position, rotation = [0, 0, 0], testId, tone = 'default' }) {
     const showLabels = useLocator3DStore((state) => state.showLabels);
+    const quality = useContext(LocatorQualityContext);
 
-    if (!showLabels) {
+    if (!showLabels || !quality.labels) {
         return null;
     }
 
@@ -150,12 +154,13 @@ function objectVisibleOnFloor(object, activeFloor) {
 
 function HighlightHalo({ object }) {
     const haloRef = useRef();
+    const quality = useContext(LocatorQualityContext);
     const width = Number(object.dimensions?.width || 1);
     const height = Number(object.dimensions?.height || 1);
     const depth = Number(object.dimensions?.depth || 1);
 
     useFrame(({ clock }) => {
-        if (!haloRef.current) {
+        if (!quality.bloom || !haloRef.current) {
             return;
         }
 
@@ -165,6 +170,7 @@ function HighlightHalo({ object }) {
         if (haloRef.current.material) {
             haloRef.current.material.opacity = 0.18 + (Math.sin(clock.elapsedTime * 3.2) * 0.045);
         }
+
     });
 
     return (
@@ -179,13 +185,14 @@ function ObjectInfoBadge({ object }) {
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const productLocations = useLocator3DStore((state) => state.productLocations);
     const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
+    const quality = useContext(LocatorQualityContext);
 
-    if (isDesignMode || selectedObjectId !== object.id) {
+    if (!quality.labels || isDesignMode || selectedObjectId !== object.id) {
         return null;
     }
 
     const height = Number(object.dimensions?.height || 1);
-    const isShelf = object.type === 'shelf-2-layer' || object.type === 'shelf-4-layer';
+    const isShelf = isShelfObject(object);
     const matchingLocations = productLocations.filter((location) => (
         location.shelfObjectId === object.id
         || (normalizeAisle(location.aisle) === normalizeAisle(object.aisle) && Number(location.shelfNumber) === Number(object.shelfNumber))
@@ -250,7 +257,7 @@ function TransformableObject({ children, object, onTransformingChange }) {
             return;
         }
 
-        selectObject(object.id);
+        selectObject(object.id, { additive: Boolean(event.shiftKey) });
 
         if (object.type === 'stairs') {
             toggleFloorFocus();
@@ -305,6 +312,23 @@ function FloorObject({ object, onTransformingChange }) {
             {({ located, locked, selected }) => (
                 <>
                     <Block args={[width, 0.18, depth]} color="#1f1f1f" located={located} locked={locked} position={[0, -0.09, 0]} selected={selected} />
+                    <mesh position={[0, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+                        <planeGeometry args={[Math.max(1, width - 0.55), Math.max(1, depth - 0.55)]} />
+                        <meshStandardMaterial color="#263246" roughness={0.82} metalness={0.08} />
+                    </mesh>
+                    <mesh position={[0, 0.026, 5.65]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+                        <planeGeometry args={[5.2, 1.4]} />
+                        <meshStandardMaterial color="#243b53" roughness={0.72} />
+                    </mesh>
+                    {[[-7.2, 3.2], [-2.8, 3.2], [2.2, 3.2], [6.9, 3.2]].map(([x, z]) => (
+                        <mesh key={`lane-${x}`} position={[x, 0.028, z]} rotation={[-Math.PI / 2, 0, 0]}>
+                            <planeGeometry args={[0.075, 5.1]} />
+                            <meshBasicMaterial color="#f8c76a" transparent opacity={0.62} />
+                        </mesh>
+                    ))}
+                    <Label position={[-9.6, 0.1, 5.65]} tone="floor">ENTRANCE</Label>
+                    <Label position={[-6.4, 0.18, 4.62]} tone="floor">CHECKOUT</Label>
+                    <Label position={[0, 0.12, 5.55]} tone="floor">CUSTOMER WALKWAY</Label>
                     <Block args={[upperWidth, 0.2, upperDepth]} color="#2c2c2c" located={located} locked={locked} opacity={0.92} position={[3.7, FLOOR_HEIGHT, -3.1]} selected={selected} />
                     {[
                         [0.4, FLOOR_HEIGHT / 2, -6.1],
@@ -351,10 +375,11 @@ function ProductMarker({ highlighted, location, position }) {
     const markerRef = useRef();
     const showLabels = useLocator3DStore((state) => state.showLabels);
     const isRecentlyReceived = useLocator3DStore((state) => state.isRecentlyReceivedProduct(location.productId || location.sku));
+    const quality = useContext(LocatorQualityContext);
     const activeHighlight = highlighted || isRecentlyReceived;
 
     useFrame(({ clock }) => {
-        if (!activeHighlight || !markerRef.current?.material) {
+        if (!quality.bloom || !activeHighlight || !markerRef.current?.material) {
             return;
         }
 
@@ -374,7 +399,7 @@ function ProductMarker({ highlighted, location, position }) {
                 />
                 {activeHighlight && <Edges color="#facc15" scale={1.25} threshold={8} />}
             </mesh>
-            {activeHighlight && showLabels && (
+            {activeHighlight && showLabels && quality.labels && (
                 <Html center position={[0, 0.42, 0]}>
                     <div className="rounded-full border border-yellow-200 bg-yellow-100 px-2 py-1 text-[10px] font-black text-yellow-900 shadow-lg">
                         {isRecentlyReceived ? 'Newly Received' : `Bin ${location.binNumber}`}
@@ -388,6 +413,7 @@ function ProductMarker({ highlighted, location, position }) {
 function ShelfObject({ object, onTransformingChange }) {
     const productLocations = useLocator3DStore((state) => state.productLocations);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
+    const quality = useContext(LocatorQualityContext);
     const layers = object.layerCount ?? (object.type === 'shelf-4-layer' ? 4 : 2);
     const binCount = object.binCount ?? 6;
     const width = Number(object.dimensions?.width || 3.2);
@@ -418,6 +444,14 @@ function ShelfObject({ object, onTransformingChange }) {
                     {shelfLevels.map((level) => (
                         <group key={level}>
                             <Block
+                                args={[width + 0.1, 0.08, 0.05]}
+                                color="#f3c969"
+                                located={located}
+                                locked={locked}
+                                position={[0, level + 0.09, depth / 2 + 0.02]}
+                                selected={selected}
+                            />
+                            <Block
                                 args={[width + 0.35, 0.12, depth + 0.18]}
                                 color={accentColor}
                                 located={located}
@@ -425,7 +459,7 @@ function ShelfObject({ object, onTransformingChange }) {
                                 position={[0, level, 0]}
                                 selected={selected}
                             />
-                            {slotPositions.map((x, index) => (
+                            {quality.tier !== 'low' && slotPositions.map((x, index) => (
                                 <Block
                                     key={`${level}-${index}`}
                                     args={[Math.max(slotWidth * 0.72, 0.12), 0.12, 0.22]}
@@ -438,6 +472,26 @@ function ShelfObject({ object, onTransformingChange }) {
                             ))}
                         </group>
                     ))}
+                    <Block
+                        args={[width, height - 0.2, 0.08]}
+                        color="#1e293b"
+                        located={located}
+                        locked={locked}
+                        opacity={0.7}
+                        position={[0, height / 2, depth / 2 - 0.05]}
+                        selected={selected}
+                    />
+                    <Block
+                        args={[width + 0.12, 0.28, depth + 0.08]}
+                        color="#111827"
+                        located={located}
+                        locked={locked}
+                        position={[0, height + 0.14, 0]}
+                        selected={selected}
+                    />
+                    <Label position={[0, height + 0.38, depth / 2 + 0.18]} tone="floor">
+                        {`AISLE ${normalizeAisle(object.aisle)} · ${object.binCount || 0} BINS`}
+                    </Label>
                     {shelfLocations.map((location, index) => {
                         const safeBin = Math.min(binCount, Math.max(1, Number(location.binNumber || 1)));
                         const markerLevel = shelfLevels[index % shelfLevels.length] ?? shelfLevels[0];
@@ -455,6 +509,43 @@ function ShelfObject({ object, onTransformingChange }) {
                     <Label position={[0, height + 0.18, depth / 2 + 0.28]} rotation={[-0.5, 0, 0]} testId={`locator-label-${object.id}`}>
                         {`Aisle ${object.aisle} Shelf ${object.shelfNumber}`}
                     </Label>
+                </>
+            )}
+        </TransformableObject>
+    );
+}
+
+function PartsCabinetObject({ object, onTransformingChange }) {
+    const width = Number(object.dimensions?.width || 3.2);
+    const depth = Number(object.dimensions?.depth || 0.9);
+    const height = Number(object.dimensions?.height || 2.35);
+    const drawerCount = Math.max(6, Math.min(16, Number(object.binCount || 12)));
+    const columns = 4;
+    const rows = Math.ceil(drawerCount / columns);
+    const drawerWidth = (width - 0.35) / columns;
+    const drawerHeight = Math.max(0.16, (height - 0.38) / rows);
+
+    return (
+        <TransformableObject object={object} onTransformingChange={onTransformingChange}>
+            {({ located, locked, selected }) => (
+                <>
+                    <Block args={[width, height, depth]} color="#312e81" located={located} locked={locked} position={[0, height / 2, 0]} selected={selected} />
+                    {Array.from({ length: drawerCount }, (_, index) => {
+                        const column = index % columns;
+                        const row = Math.floor(index / columns);
+                        return (
+                            <Block
+                                args={[Math.max(0.18, drawerWidth - 0.08), Math.max(0.1, drawerHeight - 0.08), 0.08]}
+                                color={index % 3 === 0 ? '#8b5cf6' : '#6366f1'}
+                                key={`drawer-${index}`}
+                                located={located}
+                                locked={locked}
+                                position={[-width / 2 + drawerWidth / 2 + column * drawerWidth, 0.22 + drawerHeight / 2 + row * drawerHeight, depth / 2 + 0.04]}
+                                selected={selected}
+                            />
+                        );
+                    })}
+                    <Label position={[0, height + 0.28, depth / 2 + 0.16]} tone="floor">SMALL PARTS</Label>
                 </>
             )}
         </TransformableObject>
@@ -562,39 +653,15 @@ function LocatorObject({ object, onTransformingChange }) {
         return <EntranceDoorObject object={object} onTransformingChange={onTransformingChange} />;
     }
 
+    if (object.type === 'parts-cabinet') {
+        return <PartsCabinetObject object={object} onTransformingChange={onTransformingChange} />;
+    }
+
     return null;
 }
 
 function buildPathPoints(sceneObjects, locatedProduct) {
-    if (!locatedProduct) {
-        return [];
-    }
-
-    const counter = getCounterObject(sceneObjects);
-    const stairs = getStairsObject(sceneObjects);
-    const shelf = getShelfObjectByLocation(locatedProduct, sceneObjects);
-    const target = locatedProduct.targetPosition || getShelfBinWorldPosition(shelf, locatedProduct.binNumber);
-
-    if (!counter || !shelf) {
-        return [];
-    }
-
-    const start = [
-        counter.position[0],
-        counter.position[1] + 1.25,
-        counter.position[2],
-    ];
-
-    if (Number(locatedProduct.floor) === 2 && stairs) {
-        return [
-            start,
-            [stairs.position[0], 1.05, stairs.position[2] + 2.2],
-            [stairs.position[0], FLOOR_HEIGHT + 0.95, stairs.position[2] - 2.2],
-            target,
-        ];
-    }
-
-    return [start, target];
+    return buildObstacleAwarePath(sceneObjects, locatedProduct);
 }
 
 function MovingPathDot({ points, sequence }) {
@@ -606,7 +673,7 @@ function MovingPathDot({ points, sequence }) {
         animationStartRef.current = null;
     }, [points, sequence]);
 
-    useFrame(({ clock }) => {
+    useFrame(({ clock, invalidate }) => {
         if (!dotRef.current || vectors.length < 2) {
             return;
         }
@@ -616,11 +683,18 @@ function MovingPathDot({ points, sequence }) {
         }
 
         const totalSegments = vectors.length - 1;
-        const progress = ((clock.elapsedTime - animationStartRef.current) * 0.32) % 1;
+        const elapsed = clock.elapsedTime - animationStartRef.current;
+        const progress = (elapsed * 0.32) % 1;
         const segmentProgress = progress * totalSegments;
         const segmentIndex = Math.min(totalSegments - 1, Math.floor(segmentProgress));
         const localProgress = segmentProgress - segmentIndex;
         dotRef.current.position.lerpVectors(vectors[segmentIndex], vectors[segmentIndex + 1], localProgress);
+
+        // A route is a brief directional cue, not a permanent render loop.
+        // The next explicit locate/path action restarts it through `sequence`.
+        if (elapsed < 5) {
+            invalidate();
+        }
     });
 
     if (vectors.length < 2) {
@@ -764,7 +838,7 @@ function CameraRig({ controlsRef, isTransforming }) {
         isAnimatingRef.current = true;
     }, [isTransforming, target, targetTrigger]);
 
-    useFrame(() => {
+    useFrame((state) => {
         if (!isAnimatingRef.current || !activeTargetRef.current) {
             return;
         }
@@ -778,13 +852,112 @@ function CameraRig({ controlsRef, isTransforming }) {
 
         if (camera.position.distanceTo(activeTargetRef.current.position) < 0.04) {
             isAnimatingRef.current = false;
+            return;
         }
+
+        state.invalidate();
     });
 
     return null;
 }
 
-function SceneContents() {
+function RenderScheduler() {
+    const { invalidate = () => {}, setFrameloop = () => {} } = useThree();
+
+    useEffect(() => {
+        const updateRenderState = () => {
+            const isHidden = typeof document !== 'undefined' && document.hidden;
+            setFrameloop(isHidden ? 'never' : 'demand');
+
+            if (!isHidden) {
+                invalidate();
+            }
+        };
+
+        updateRenderState();
+        document?.addEventListener?.('visibilitychange', updateRenderState);
+
+        return () => document?.removeEventListener?.('visibilitychange', updateRenderState);
+    }, [invalidate, setFrameloop]);
+
+    return null;
+}
+
+function WebGLContextLossHandler({ onContextLost }) {
+    const { gl } = useThree();
+
+    useEffect(() => {
+        const canvas = gl?.domElement;
+        if (!canvas) {
+            return undefined;
+        }
+
+        const handleContextLoss = (event) => {
+            event.preventDefault?.();
+            onContextLost();
+        };
+
+        canvas.addEventListener('webglcontextlost', handleContextLoss, false);
+        return () => canvas.removeEventListener('webglcontextlost', handleContextLoss, false);
+    }, [gl, onContextLost]);
+
+    return null;
+}
+
+export function Locator2DFallback({ message = 'The interactive 3D map is unavailable on this device.' }) {
+    const activeFloor = useLocator3DStore((state) => state.activeFloor);
+    const productLocations = useLocator3DStore((state) => state.productLocations);
+    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
+    const rows = productLocations
+        .filter((location) => Number(location.floor || 1) === activeFloor)
+        .slice(0, 50);
+    const shelfCount = sceneObjects.filter((object) => objectVisibleOnFloor(object, activeFloor) && object.type?.startsWith('shelf-')).length;
+
+    return (
+        <section className="h-full overflow-auto bg-slate-950 p-5 text-slate-100" data-testid="locator-2d-fallback">
+            <div className="mx-auto max-w-3xl space-y-4">
+                <div className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4">
+                    <p className="text-sm font-black text-amber-100">2D stockroom fallback</p>
+                    <p className="mt-1 text-sm text-amber-50/80">{message} Use the product search and this floor’s location table to continue locating inventory.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3"><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Floor</span><strong>Floor {activeFloor}</strong></div>
+                    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3"><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Shelves</span><strong>{shelfCount}</strong></div>
+                </div>
+                <div className="overflow-hidden rounded-xl border border-white/10">
+                    <table className="min-w-full text-left text-sm">
+                        <thead className="bg-white/[0.06] text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Product</th><th className="px-3 py-2">Aisle</th><th className="px-3 py-2">Shelf</th><th className="px-3 py-2">Bin</th></tr></thead>
+                        <tbody>
+                            {rows.map((location) => <tr className="border-t border-white/10" key={`${location.productId}-${location.binNumber}`}><td className="px-3 py-2">{location.productName || location.sku || 'Unassigned product'}</td><td className="px-3 py-2">{normalizeAisle(location.aisle) || '-'}</td><td className="px-3 py-2">{location.shelfNumber || '-'}</td><td className="px-3 py-2">{location.binNumber || '-'}</td></tr>)}
+                            {rows.length === 0 && <tr><td className="px-3 py-5 text-slate-400" colSpan="4">No saved product locations on this floor.</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    );
+}
+
+class CanvasErrorBoundary extends Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false };
+    }
+
+    static getDerivedStateFromError() {
+        return { hasError: true };
+    }
+
+    componentDidCatch() {
+        this.props.onFailure();
+    }
+
+    render() {
+        return this.state.hasError ? <Locator2DFallback /> : this.props.children;
+    }
+}
+
+function SceneContents({ quality, onContextLost }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
@@ -799,12 +972,14 @@ function SceneContents() {
     const activeGridY = activeFloor === 2 ? FLOOR_HEIGHT + 0.012 : 0.012;
 
     return (
-        <>
+        <LocatorQualityContext.Provider value={quality}>
+            <RenderScheduler />
+            <WebGLContextLossHandler onContextLost={onContextLost} />
             <color args={['#0b1120']} attach="background" />
             <ambientLight intensity={0.44} />
             <hemisphereLight args={['#bfdbfe', '#111827', 0.56]} />
-            <directionalLight castShadow intensity={1.45} position={[7, 11, 6]} shadow-mapSize={[2048, 2048]} />
-            <spotLight angle={0.42} color="#e0f2fe" intensity={1.35} penumbra={0.55} position={[-7, 9, 7]} />
+            <directionalLight castShadow={quality.shadows} intensity={1.45} position={[7, 11, 6]} shadow-mapSize={[quality.shadowMapSize, quality.shadowMapSize]} />
+            <spotLight angle={0.42} color="#e0f2fe" intensity={quality.tier === 'low' ? 0.7 : 1.35} penumbra={0.55} position={[-7, 9, 7]} />
             <pointLight color="#38bdf8" intensity={0.42} position={[-4, 4, 3]} />
             <pointLight color="#facc15" intensity={locatedProduct ? 0.58 : 0.24} position={[5.6, activeFloor === 2 ? FLOOR_HEIGHT + 4 : 4, -5.6]} />
             <pointLight color="#22c55e" intensity={locatedProduct ? 0.42 : 0.16} position={[-6, activeFloor === 2 ? FLOOR_HEIGHT + 3 : 3, 5.2]} />
@@ -854,7 +1029,7 @@ function SceneContents() {
                 <LocatorObject key={object.id} object={object} onTransformingChange={setIsTransforming} />
             ))}
             <LocatorPath />
-            <Html position={[-7.7, activeFloor === 1 ? 3.45 : FLOOR_HEIGHT + 2.25, -6.7]}>
+            {quality.labels && <Html position={[-7.7, activeFloor === 1 ? 3.45 : FLOOR_HEIGHT + 2.25, -6.7]}>
                 <div className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] shadow-lg backdrop-blur ${
                     isDesignMode
                         ? 'border-sky-300 bg-sky-100/95 text-sky-900'
@@ -863,42 +1038,63 @@ function SceneContents() {
                 >
                     {isDesignMode ? 'Design Mode / 0.5 Snap' : 'View Mode'}
                 </div>
-            </Html>
-            <ContactShadows blur={2.8} far={16} frames={1} opacity={0.38} position={[0, activeGridY + 0.003, 0]} scale={20} />
-            <Environment preset="city" />
-            <EffectComposer multisampling={2}>
-                <Bloom intensity={locatedProduct ? 0.58 : 0.26} luminanceThreshold={0.48} mipmapBlur />
-            </EffectComposer>
+            </Html>}
+            {quality.contactShadows && <ContactShadows blur={2.8} far={16} frames={1} opacity={0.38} position={[0, activeGridY + 0.003, 0]} scale={20} />}
+            {quality.environment && <Environment preset="city" />}
+            {quality.bloom && (
+                <EffectComposer multisampling={2}>
+                    <Bloom intensity={locatedProduct ? 0.58 : 0.26} luminanceThreshold={0.48} mipmapBlur />
+                </EffectComposer>
+            )}
             <CameraRig controlsRef={controlsRef} isTransforming={isTransforming} />
             <OrbitControls
                 dampingFactor={0.08}
                 enabled={!isTransforming}
                 enablePan
                 enableDamping
+                panSpeed={0.72}
                 makeDefault
                 maxDistance={80}
                 minDistance={1.2}
                 ref={controlsRef}
+                rotateSpeed={0.62}
+                screenSpacePanning
+                zoomSpeed={0.82}
                 target={CAMERA_TARGETS[activeFloor].lookAt}
             />
-        </>
+        </LocatorQualityContext.Provider>
     );
 }
 
 export default function Locator3DScene() {
     const clearSelection = useLocator3DStore((state) => state.clearSelection);
+    const qualityPreference = useLocator3DStore((state) => state.qualityPreference);
+    const [webglFailed, setWebglFailed] = useState(false);
+    const quality = useMemo(
+        () => getLocatorQualityProfile(qualityPreference, getLocatorQualityCapabilities()),
+        [qualityPreference],
+    );
+
+    if (webglFailed) {
+        return <Locator2DFallback message="WebGL was interrupted, so the locator switched to the accessible 2D/table view." />;
+    }
 
     return (
-        <Canvas
-            camera={{ fov: 46, position: CAMERA_TARGETS[1].position }}
-            dpr={[1, 1.75]}
-            gl={{ antialias: true, powerPreference: 'high-performance' }}
-            onPointerMissed={clearSelection}
-            shadows
-        >
-            <Suspense fallback={null}>
-                <SceneContents />
-            </Suspense>
-        </Canvas>
+        <CanvasErrorBoundary onFailure={() => setWebglFailed(true)}>
+            <Canvas
+                camera={{ fov: 46, position: CAMERA_TARGETS[1].position }}
+                dpr={quality.dpr}
+                fallback={<Locator2DFallback />}
+                frameloop="demand"
+                gl={{ antialias: quality.antialias, powerPreference: quality.tier === 'high' ? 'high-performance' : 'default' }}
+                onPointerMissed={clearSelection}
+                shadows={quality.shadows}
+                style={{ touchAction: 'none' }}
+            >
+                <Suspense fallback={null}>
+                    <SceneContents onContextLost={() => setWebglFailed(true)} quality={quality} />
+                </Suspense>
+            </Canvas>
+        </CanvasErrorBoundary>
     );
 }

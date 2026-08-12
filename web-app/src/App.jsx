@@ -1,6 +1,6 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router';
 import MainLayout from './components/layout/MainLayout';
 import PublicLayout from './components/layout/PublicLayout';
 import PageLoader from './components/ui/PageLoader';
@@ -9,6 +9,7 @@ import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { queryClient } from './lib/queryClient';
+import { recordRouteLoad } from './observability/performance';
 
 const LoginPage = lazy(() => import('./modules/auth/pages/LoginPage'));
 const RegisterPage = lazy(() => import('./modules/auth/pages/RegisterPage'));
@@ -66,9 +67,23 @@ function renderRoute(Component, fallback) {
   );
 }
 
+function RoutePerformanceTracker() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const schedule = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 0));
+    const cancel = window.cancelAnimationFrame || window.clearTimeout;
+    const frame = schedule(() => recordRouteLoad(location.pathname));
+    return () => cancel(frame);
+  }, [location.pathname]);
+
+  return null;
+}
+
 function App() {
   return (
     <BrowserRouter>
+      <RoutePerformanceTracker />
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <ThemeProvider>

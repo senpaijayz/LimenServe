@@ -1,0 +1,49 @@
+name: Database checks
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/database-tests.yml"
+      - "supabase/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/database-tests.yml"
+      - "supabase/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migration_consistency:
+    runs-on: ubuntu-latest
+    outputs:
+      clean_replay_ready: ${{ steps.history.outputs.clean_replay_ready }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify immutable migration history and SQL test manifest
+        id: history
+        run: node supabase/scripts/check-migration-consistency.mjs --github-output
+
+  database-tests:
+    needs: migration_consistency
+    if: needs.migration_consistency.outputs.clean_replay_ready == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.113.0
+      - name: Start isolated local database and replay migrations
+        run: supabase db start
+      - name: Run SQL assertions with fail-fast semantics
+        env:
+          SUPABASE_DB_TEST_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: node supabase/scripts/run-database-tests.mjs

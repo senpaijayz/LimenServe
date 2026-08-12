@@ -63,6 +63,14 @@ export const LOCATOR_OBJECT_LIBRARY = [
         color: '#f59e0b',
         description: 'Customer entrance',
     },
+    {
+        type: 'parts-cabinet',
+        label: 'Parts Cabinet',
+        category: 'Storage',
+        icon: 'Archive',
+        color: '#7c3aed',
+        description: 'Back-wall drawers for small parts',
+    },
 ];
 
 export const LOCATOR_SCENE_OBJECTS = [
@@ -74,7 +82,7 @@ export const LOCATOR_SCENE_OBJECTS = [
         floors: [1, 2],
         isLocked: false,
         position: [0, 0, 0],
-        dimensions: { width: 18, depth: 14, height: FLOOR_HEIGHT },
+        dimensions: { width: 24, depth: 16, height: FLOOR_HEIGHT },
     },
     {
         id: 'walls-main',
@@ -84,35 +92,63 @@ export const LOCATOR_SCENE_OBJECTS = [
         floors: [1, 2],
         isLocked: false,
         position: [0, 0, 0],
-        dimensions: { width: 18, depth: 14, height: FLOOR_HEIGHT },
+        dimensions: { width: 24, depth: 16, height: FLOOR_HEIGHT },
     },
     {
         id: 'shelf-2-a',
         type: 'shelf-2-layer',
         name: 'Aisle A 2-Layer Shelf',
         aisle: 'A',
-        binCount: 6,
+        binCount: 8,
         floor: 1,
         isLocked: false,
         layerCount: 2,
-        position: [-4.8, 0, -1.6],
-        rotation: [0, Math.PI / 2, 0],
+        position: [-7.2, 0, -2.2],
+        rotation: [0, 0, 0],
         shelfNumber: 1,
-        dimensions: { width: 3.2, depth: 0.9, height: 1.35 },
+        dimensions: { width: 3.5, depth: 1.05, height: 1.55 },
     },
     {
         id: 'shelf-4-a',
         type: 'shelf-4-layer',
         name: 'Aisle B 4-Layer Shelf',
         aisle: 'B',
-        binCount: 8,
+        binCount: 10,
         floor: 1,
         isLocked: false,
         layerCount: 4,
-        position: [-1.2, 0, -1.8],
-        rotation: [0, Math.PI / 2, 0],
+        position: [-2.8, 0, -2.2],
+        rotation: [0, 0, 0],
         shelfNumber: 2,
-        dimensions: { width: 3.2, depth: 0.9, height: 2.35 },
+        dimensions: { width: 4.2, depth: 1.05, height: 2.55 },
+    },
+    {
+        id: 'shelf-4-c',
+        type: 'shelf-4-layer',
+        name: 'Aisle C 4-Layer Shelf',
+        aisle: 'C',
+        binCount: 10,
+        floor: 1,
+        isLocked: false,
+        layerCount: 4,
+        position: [2.2, 0, -2.2],
+        rotation: [0, 0, 0],
+        shelfNumber: 3,
+        dimensions: { width: 4.2, depth: 1.05, height: 2.55 },
+    },
+    {
+        id: 'shelf-2-c',
+        type: 'shelf-2-layer',
+        name: 'Aisle D 2-Layer Shelf',
+        aisle: 'D',
+        binCount: 8,
+        floor: 1,
+        isLocked: false,
+        layerCount: 2,
+        position: [6.9, 0, -2.2],
+        rotation: [0, 0, 0],
+        shelfNumber: 4,
+        dimensions: { width: 3.5, depth: 1.05, height: 1.55 },
     },
     {
         id: 'stairs-a',
@@ -120,9 +156,9 @@ export const LOCATOR_SCENE_OBJECTS = [
         name: 'Upper Floor Stairs',
         floor: 1,
         isLocked: false,
-        position: [5.5, 0, 1.6],
+        position: [9.1, 0, 0.5],
         rotation: [0, 0, 0],
-        dimensions: { width: 2.3, depth: 5.4, height: FLOOR_HEIGHT },
+        dimensions: { width: 2.6, depth: 4.8, height: FLOOR_HEIGHT },
     },
     {
         id: 'shelf-4-b',
@@ -133,7 +169,7 @@ export const LOCATOR_SCENE_OBJECTS = [
         floor: 2,
         isLocked: false,
         layerCount: 4,
-        position: [2.1, FLOOR_HEIGHT, -4.8],
+        position: [-3.5, FLOOR_HEIGHT, -5.2],
         rotation: [0, 0, 0],
         shelfNumber: 3,
         dimensions: { width: 3.2, depth: 0.9, height: 2.35 },
@@ -147,7 +183,7 @@ export const LOCATOR_SCENE_OBJECTS = [
         floor: 2,
         isLocked: false,
         layerCount: 2,
-        position: [6.1, FLOOR_HEIGHT, -2.1],
+        position: [3.1, FLOOR_HEIGHT, -5.2],
         rotation: [0, Math.PI / 2, 0],
         shelfNumber: 4,
         dimensions: { width: 3.2, depth: 0.9, height: 1.35 },
@@ -158,9 +194,9 @@ export const LOCATOR_SCENE_OBJECTS = [
         name: 'Cashier Counter',
         floor: 1,
         isLocked: false,
-        position: [-6.1, 0, 4.7],
-        rotation: [0, -0.2, 0],
-        dimensions: { width: 2.8, depth: 1.15, height: 1.45 },
+        position: [-6.4, 0, 5.6],
+        rotation: [0, 0, 0],
+        dimensions: { width: 3.4, depth: 1.35, height: 1.55 },
     },
     {
         id: 'entrance-door-a',
@@ -168,9 +204,22 @@ export const LOCATOR_SCENE_OBJECTS = [
         name: 'Front Entrance',
         floor: 1,
         isLocked: false,
-        position: [1.3, 0, 7.08],
+        position: [1.2, 0, 7.82],
         rotation: [0, 0, 0],
-        dimensions: { width: 1.7, depth: 0.16, height: 2.35 },
+        dimensions: { width: 2.2, depth: 0.16, height: 2.45 },
+    },
+    {
+        id: 'parts-cabinet-a',
+        type: 'parts-cabinet',
+        name: 'Back Wall Parts Cabinet',
+        aisle: 'Back Wall',
+        binCount: 12,
+        floor: 1,
+        isLocked: false,
+        position: [9.1, 0, -5.9],
+        rotation: [0, 0, 0],
+        shelfNumber: 5,
+        dimensions: { width: 3.2, depth: 0.9, height: 2.35 },
     },
 ];
 
@@ -198,7 +247,7 @@ export function getLocatorObjectById(id, objects = LOCATOR_SCENE_OBJECTS) {
 }
 
 export function isShelfObject(object) {
-    return object?.type === 'shelf-2-layer' || object?.type === 'shelf-4-layer';
+    return object?.type === 'shelf-2-layer' || object?.type === 'shelf-4-layer' || object?.type === 'parts-cabinet';
 }
 
 export function normalizeAisle(value) {
@@ -220,7 +269,7 @@ export function cloneLocatorSceneObjects() {
 }
 
 function getDefaultObjectName(object, count) {
-    if (object.type === 'shelf-2-layer' || object.type === 'shelf-4-layer') {
+    if (object.type === 'shelf-2-layer' || object.type === 'shelf-4-layer' || object.type === 'parts-cabinet') {
         const shelfNumber = count + 1;
         return `Aisle ${object.aisle || 'A'} Shelf ${shelfNumber}`;
     }
@@ -246,6 +295,10 @@ function getDefaultObjectPosition(object, activeFloor, count) {
 
     if (object.type === 'entrance-door') {
         return [1.2 + offset, floorY, 6.8];
+    }
+
+    if (object.type === 'parts-cabinet') {
+        return [8.7, floorY, -5.9 + (count % 2) * 1.2];
     }
 
     return [-2 + offset, floorY, -1.2];

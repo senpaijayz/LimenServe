@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node --test",
+    "test:db:stock-concurrency": "node scripts/run-stock-receiving-concurrency.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.1",

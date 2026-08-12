@@ -49,8 +49,10 @@ function runCache(path, generatedBody = null) {
 
 test('invalidates only matching public response cache tags', () => {
   clearPublicResponseCache();
-  runCache('/api/catalog/products', { products: [{ id: 'part-1' }] });
+  const firstCatalogResponse = runCache('/api/catalog/products', { products: [{ id: 'part-1' }] });
   runCache('/api/public/mechanics', { mechanics: [{ id: 'mechanic-1' }] });
+
+  const firstVersion = Number(firstCatalogResponse.res.getHeader('x-limen-cache-version'));
 
   assert.equal(runCache('/api/catalog/products').reachedHandler, false);
   assert.equal(runCache('/api/public/mechanics').reachedHandler, false);
@@ -61,7 +63,9 @@ test('invalidates only matching public response cache tags', () => {
   assert.equal(runCache('/api/public/mechanics').reachedHandler, true);
 
   clearPublicResponseCache('catalog-products');
-  assert.equal(runCache('/api/catalog/products').reachedHandler, true);
+  const invalidatedCatalogResponse = runCache('/api/catalog/products');
+  assert.equal(invalidatedCatalogResponse.reachedHandler, true);
+  assert.ok(Number(invalidatedCatalogResponse.res.getHeader('x-limen-cache-version')) > firstVersion);
 });
 
 test('marks authenticated and user-specific GET routes as no-store', () => {

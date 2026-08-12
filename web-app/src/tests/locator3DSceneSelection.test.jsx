@@ -37,7 +37,7 @@ vi.mock('@react-three/postprocessing', () => ({
     EffectComposer: ({ children }) => <>{children}</>,
 }));
 
-import Locator3DScene from '../modules/locator3d/components/Locator3DScene';
+import Locator3DScene, { Locator2DFallback } from '../modules/locator3d/components/Locator3DScene';
 
 describe('Locator3DScene selection', () => {
     beforeEach(() => {
@@ -88,7 +88,7 @@ describe('Locator3DScene selection', () => {
 
         expect(useLocator3DStore.getState().selectedObjectId).toBe('shelf-4-a');
         expect(screen.getByText('Aisle B 4-Layer Shelf')).toBeTruthy();
-        expect(screen.getByText('Shelf 2 / 8 bins')).toBeTruthy();
+        expect(screen.getByText('Shelf 2 / 10 bins')).toBeTruthy();
     });
 
     it('renders only objects for the active floor while keeping shared structure visible', () => {
@@ -139,5 +139,24 @@ describe('Locator3DScene selection', () => {
         expect(screen.getByTestId('locator-label-shelf-4-a')).toBeTruthy();
         expect(screen.getByText('Aisle B Shelf 2')).toBeTruthy();
         expect(screen.getByText('Bin 4')).toBeTruthy();
+    });
+
+    it('keeps an accessible location table available when WebGL cannot be used', () => {
+        resetLocator3DStore();
+        useLocator3DStore.getState().setProductLocations([{
+            aisle: 'B',
+            binNumber: 4,
+            floor: 1,
+            productId: 'product-1',
+            productName: 'Oil Filter',
+            shelfNumber: 2,
+        }]);
+
+        render(<Locator2DFallback />);
+
+        expect(screen.getByTestId('locator-2d-fallback')).toBeTruthy();
+        expect(screen.getByRole('table')).toBeTruthy();
+        expect(screen.getByText('Oil Filter')).toBeTruthy();
+        expect(screen.getByText('2D stockroom fallback')).toBeTruthy();
     });
 });
