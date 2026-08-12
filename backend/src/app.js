@@ -76,7 +76,7 @@ export function createApp({
   // explicit Kubernetes-style liveness and readiness contracts.
   app.get('/api/health', sendLiveness);
   app.get('/api/health/live', sendLiveness);
-  app.get('/api/health/ready', async (req, res, next) => {
+  const sendReadiness = async (req, res, next) => {
     try {
       if (!lifecycle.isAcceptingTraffic()) {
         res.setHeader('Cache-Control', 'no-store');
@@ -107,7 +107,9 @@ export function createApp({
     } catch (error) {
       next(error);
     }
-  });
+  };
+  app.get('/api/health/ready', sendReadiness);
+  app.get('/api/ready', sendReadiness);
 
   const globalRateLimiter = createInMemoryRateLimiter({
     windowMs: runtimeEnv.globalRateLimitWindowMs,
