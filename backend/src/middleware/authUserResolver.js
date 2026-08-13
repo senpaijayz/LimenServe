@@ -80,15 +80,16 @@ export function createAuthUserResolver({
 
     const profile = await fetchProfile(data.user.id);
     const fallbackFullName = data.user.user_metadata?.full_name || '';
-    // The managed database profile is authoritative. Auth metadata is only a
-    // fallback during the short window before the profile trigger completes.
-    const fallbackRole = profile?.role || data.user.app_metadata?.role;
+    // The managed database profile is the only authorization source. If the
+    // profile lookup is unavailable or the row is not provisioned yet, fail
+    // closed as a customer instead of trusting mutable/stale token metadata.
+    const resolvedRole = profile?.role || 'customer';
 
     return {
       id: data.user.id,
       email: data.user.email,
       fullName: profile?.full_name || fallbackFullName,
-      role: normalizeRole(fallbackRole),
+      role: normalizeRole(resolvedRole),
       profile,
     };
   }

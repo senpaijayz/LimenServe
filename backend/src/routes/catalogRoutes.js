@@ -932,6 +932,33 @@ function mapCatalogRow(row) {
   };
 }
 
+function mapPublicCatalogProduct(product = {}) {
+  const availableStock = Math.max(Number(product.availableStock ?? product.stock ?? 0), 0);
+
+  return {
+    id: product.id,
+    catalogEntryId: product.catalogEntryId ?? product.id,
+    sku: product.sku,
+    name: product.name,
+    model: product.model,
+    category: product.category,
+    sourceCategory: product.sourceCategory,
+    price: Number(product.price ?? 0),
+    stock: availableStock,
+    availableStock,
+    status: product.status,
+    uom: product.uom,
+    brand: product.brand,
+    createdAt: product.createdAt,
+    dateAdded: product.dateAdded,
+    imageUrl: product.imageUrl,
+  };
+}
+
+function canViewInternalCatalogFields(req) {
+  return ['admin', 'stock_clerk'].includes(req.user?.role);
+}
+
 async function getProductByPartNumber(partNumber) {
   const sku = normalizePartNumber(partNumber);
 
@@ -3510,7 +3537,9 @@ router.get('/products', async (req, res, next) => {
     }
 
     res.json({
-      products,
+      products: canViewInternalCatalogFields(req)
+        ? products
+        : products.map(mapPublicCatalogProduct),
       categories,
       pagination: {
         page,
@@ -3524,7 +3553,7 @@ router.get('/products', async (req, res, next) => {
   }
 });
 
-router.get('/products/all', async (_req, res, next) => {
+router.get('/products/all', requireRole('admin', 'stock_clerk'), async (_req, res, next) => {
   try {
     const products = await getCachedProductCatalog();
     res.json({ products: products ?? [] });

@@ -148,3 +148,23 @@ test('uses the safe customer role for unknown metadata roles', async () => {
 
   assert.equal(user?.role, 'customer');
 });
+
+test('does not promote a user from token metadata when the profile is unavailable', async () => {
+  const clients = createFakeClients({
+    user: {
+      id: 'unprovisioned-1',
+      email: 'unprovisioned@example.com',
+      app_metadata: { role: 'admin' },
+      user_metadata: {},
+    },
+    profile: null,
+  });
+  const { resolveUser } = createAuthUserResolver({
+    supabaseAuth: clients.supabaseAuth,
+    supabaseAdmin: clients.supabaseAdmin,
+  });
+
+  const user = await resolveUser(jwtWithExpiry(Date.now() + 60_000));
+
+  assert.equal(user?.role, 'customer');
+});

@@ -282,7 +282,10 @@ async function recognizeImage(filePath) {
 }
 
 async function recognizeImageWithOcrSpace(file) {
-  const apiKey = process.env.OCR_SPACE_API_KEY || 'helloworld';
+  const apiKey = process.env.OCR_SPACE_API_KEY;
+  if (!apiKey) {
+    throw new Error('OCR.space fallback is not configured. Set OCR_SPACE_API_KEY on the server.');
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 75_000);
   const formData = new FormData();

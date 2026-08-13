@@ -1,8 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Connection keys should be stored in .env.local
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://mock-url.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'mock-key';
+// Connection keys must be supplied by the deployment environment. Never hide
+// a missing configuration behind a mock URL or key in a browser build.
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Supabase browser configuration is missing. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 

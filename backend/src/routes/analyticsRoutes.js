@@ -6,6 +6,11 @@ const router = Router();
 const DASHBOARD_CACHE_TTL_MS = 2 * 60 * 1000;
 const dashboardCache = new Map();
 
+// Analytics reads use service-role RPCs and expose internal sales, forecast,
+// and inventory-risk data. Keep every analytics endpoint behind the same
+// server-side role boundary, including read-only routes.
+router.use(requireRole('admin'));
+
 function getDashboardCacheKey(query = {}) {
   return JSON.stringify({
     startDate: query.startDate || null,

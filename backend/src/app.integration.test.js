@@ -236,3 +236,26 @@ test('sensitive estimate lookup and creation routes enforce their own counters',
     assert.equal((await createLimited.json()).error, 'Too many quotation requests. Please try again later.');
   });
 });
+
+test('analytics reads require an authenticated admin role', async () => {
+  const lifecycle = createRuntimeState();
+  lifecycle.markReady();
+  const app = createApp({
+    runtimeEnv: appEnvironment(),
+    applicationLogger: createTestLogger(),
+    lifecycle,
+    readinessCheck: async () => ({ ok: true, status: 'ready' }),
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/analytics/dashboard`);
+    const body = await response.json();
+
+    assert.equal(response.status, 401);
+    assert.equal(body.error, 'Authentication required.');
+
+    const fullCatalogResponse = await fetch(`${baseUrl}/api/catalog/products/all`);
+    assert.equal(fullCatalogResponse.status, 401);
+    assert.equal((await fullCatalogResponse.json()).error, 'Authentication required.');
+  });
+});
