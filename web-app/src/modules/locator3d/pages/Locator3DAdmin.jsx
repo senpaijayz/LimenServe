@@ -1,10 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
-import { AnimatePresence, motion as Motion } from 'framer-motion';
+import { useLocation, useSearchParams } from 'react-router';
 import {
     AlertTriangle,
-    Archive,
-    ArrowLeft,
     Box,
     Boxes,
     BrickWall,
@@ -13,31 +10,25 @@ import {
     ChevronDown,
     Copy,
     DoorOpen,
-    ExternalLink,
     Grid3X3,
     LayoutDashboard,
     Lock,
-    MousePointer2,
-    Maximize2,
-    Monitor,
-    Minimize2,
     MapPin,
-    Navigation,
+    Maximize2,
+    Minimize2,
+    Monitor,
+    MousePointer2,
+    MoreHorizontal,
     Package,
-    PanelLeftClose,
-    PanelLeftOpen,
-    RefreshCw,
+    Plus,
     Redo2,
+    RefreshCw,
     RotateCcw,
-    Route,
     Save,
     Search,
-    SlidersHorizontal,
-    Store,
     Trash2,
     Undo2,
     Unlock,
-    Waypoints,
     X,
 } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
@@ -56,81 +47,99 @@ import {
 } from '../data/locatorScene';
 import {
     assignProductLocation,
-    getProductLocation,
     getProductLocations,
     listStoreLayouts,
     loadStoreLayout,
     saveStoreLayout,
 } from '../services/locator3DApi';
 import { getLocatorAutosave, useLocator3DStore } from '../store/useLocator3DStore';
-import { getObjectFootprint } from '../utils/layoutValidation';
 
 const libraryIconMap = {
-    Archive,
+    Archive: Box,
     Box,
     Boxes,
     BrickWall,
     DoorOpen,
     Monitor,
     Package,
-    Store,
-    Waypoints,
+};
+
+const EMPTY_LOCATION_NOTICE = {
+    message: '',
+    tone: 'neutral',
 };
 
 function cx(...classes) {
     return classes.filter(Boolean).join(' ');
 }
 
-function formatNumber(value) {
-    return Number(Number(value || 0).toFixed(3));
+function getProductStock(product = {}) {
+    const value = product.quantity ?? product.stock ?? product.onHand ?? product.on_hand ?? 0;
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : 0;
 }
 
-function toDegrees(value) {
-    return Math.round((Number(value || 0) * 180) / Math.PI);
+function resolveProductDetails({ catalogProducts = [], fallbackProduct = null, location = null, productId = '', productName = '', productSku = '' }) {
+    const matched = catalogProducts.find((product) => String(product.id) === String(productId)) ?? fallbackProduct ?? {};
+
+    return {
+        ...matched,
+        id: matched.id || productId,
+        name: matched.name || location?.productName || productName || 'Selected product',
+        quantity: getProductStock(matched),
+        sku: matched.sku || location?.sku || productSku || '',
+        stock: getProductStock(matched),
+    };
 }
 
-function toRadians(value) {
-    return (Number(value || 0) * Math.PI) / 180;
+function formatLocation(location) {
+    if (!location) {
+        return 'Location not assigned';
+    }
+
+    const parts = [
+        location.floor ? 'Floor ' + location.floor : null,
+        location.aisle ? 'Aisle ' + normalizeAisle(location.aisle) : null,
+        location.shelfNumber ? 'Shelf ' + location.shelfNumber : null,
+        location.binNumber ? 'Bin ' + location.binNumber : null,
+    ].filter(Boolean);
+
+    return parts.join(' · ') || 'Location not assigned';
 }
 
-function DesignModeSwitch({ onChange }) {
-    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
-    const setDesignMode = useLocator3DStore((state) => state.setDesignMode);
+function Button({ children, className = '', tone = 'secondary', type = 'button', ...props }) {
+    const tones = {
+        danger: 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100',
+        primary: 'border-indigo-600 bg-indigo-600 text-white shadow-[0_8px_20px_rgba(79,70,229,0.24)] hover:bg-indigo-500',
+        secondary: 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
+        subtle: 'border-transparent bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-950',
+        success: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
+    };
 
     return (
         <button
-            aria-checked={isDesignMode}
-            aria-label="Design Mode"
             className={cx(
-                'group flex min-h-11 min-w-[220px] items-center justify-between gap-4 rounded-xl border px-4 text-left transition',
-                isDesignMode
-                    ? 'border-sky-300/60 bg-sky-400/15 text-sky-50 shadow-sm shadow-sky-950/20'
-                    : 'border-emerald-300/30 bg-emerald-400/10 text-emerald-50 hover:border-emerald-300/50 hover:bg-emerald-400/15',
+                'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50',
+                tones[tone],
+                className,
             )}
-            onClick={() => (onChange ? onChange(!isDesignMode) : setDesignMode(!isDesignMode))}
-            role="switch"
-            type="button"
+            type={type}
+            {...props}
         >
-            <span>
-                <span className="block text-sm font-black">{isDesignMode ? 'Edit Layout mode' : 'Locate / View mode'}</span>
-                <span className="block text-[11px] font-bold uppercase tracking-[0.18em] opacity-70">
-                    {isDesignMode ? 'Editing enabled' : 'Product locating'}
-                </span>
-            </span>
-            <span className={cx('flex h-6 w-11 items-center rounded-full p-1 transition', isDesignMode ? 'bg-sky-200/25' : 'bg-emerald-100/25')}>
-                <span className={cx('h-4 w-4 rounded-full bg-white shadow transition', isDesignMode ? 'translate-x-5' : 'translate-x-0')} />
-            </span>
+            {children}
         </button>
     );
 }
 
-function TopButton({ children, className = '', ...props }) {
+function IconButton({ label, children, className = '', ...props }) {
     return (
         <button
+            aria-label={label}
             className={cx(
-                'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-xs font-black text-slate-200 shadow-sm transition hover:border-sky-300/40 hover:bg-white/[0.1] disabled:cursor-wait disabled:opacity-60',
+                'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-45',
                 className,
             )}
+            title={label}
             type="button"
             {...props}
         >
@@ -139,266 +148,415 @@ function TopButton({ children, className = '', ...props }) {
     );
 }
 
-const PRODUCT_LOCATION_INITIAL_STATE = {
-    location: null,
-    message: '',
-    product: null,
-    status: 'idle',
-};
+function ProductSearch({ isLoading, notice, onLocateProduct, productLocations, products, sceneObjects }) {
+    const [query, setQuery] = useState('');
+    const [isOpen, setIsOpen] = useState(false);
+    const normalizedQuery = query.trim().toLowerCase();
+    const searchableProducts = useMemo(() => {
+        const knownIds = new Set(products.map((product) => String(product.id)));
+        const mappedFallbacks = productLocations
+            .filter((location) => location.productId && !knownIds.has(String(location.productId)))
+            .map((location) => ({
+                id: location.productId,
+                name: location.productName || 'Mapped product',
+                sku: location.sku || '',
+            }));
 
-function getProductStock(product = {}) {
-    const value = product.quantity ?? product.stock ?? product.onHand ?? product.on_hand ?? 0;
-    const numericValue = Number(value);
+        return [...products, ...mappedFallbacks];
+    }, [productLocations, products]);
 
-    return Number.isFinite(numericValue) ? numericValue : 0;
-}
-
-function resolveProductDetails({ catalogProducts = [], fallbackProduct = null, location = null, productId = '', productName = '', productSku = '' }) {
-    const matchedProduct = catalogProducts.find((product) => product.id === productId) ?? fallbackProduct ?? {};
-
-    return {
-        ...matchedProduct,
-        id: matchedProduct.id || productId,
-        name: matchedProduct.name || location?.productName || productName || 'Selected product',
-        quantity: getProductStock(matchedProduct),
-        sku: matchedProduct.sku || location?.sku || productSku || '',
-        stock: getProductStock(matchedProduct),
-    };
-}
-
-function formatLocatorTextLocation(location) {
-    if (!location) {
-        return 'Unassigned';
-    }
-
-    return [
-        location.aisle ? `Aisle ${normalizeAisle(location.aisle)}` : null,
-        location.shelfNumber ? `Shelf ${location.shelfNumber}` : null,
-        location.binNumber ? `Bin ${location.binNumber}` : null,
-    ].filter(Boolean).join(' - ') || 'Unassigned';
-}
-
-function TopBar({
-    isSidebarOpen,
-    isLoadingLayout,
-    isSavingLayout,
-    layoutName,
-    layoutOptions,
-    onConfirmSaveLayout,
-    onLoadLayout,
-    onResetLayout,
-    onSaveNameChange,
-    onSelectLayout,
-    onToggleSidebar,
-    onToggleDesignMode,
-    selectedLayoutName,
-}) {
-    const activeFloor = useLocator3DStore((state) => state.activeFloor);
-    const goToFloor = useLocator3DStore((state) => state.goToFloor);
-    const requestCameraPreset = useLocator3DStore((state) => state.requestCameraPreset);
-    const [isSaveOpen, setIsSaveOpen] = useState(false);
-    const busy = isLoadingLayout || isSavingLayout;
-
-    const handleSaveClick = () => {
-        if (!isSaveOpen) {
-            setIsSaveOpen(true);
-            return;
+    const results = useMemo(() => {
+        if (!normalizedQuery) {
+            return [];
         }
 
-        onConfirmSaveLayout();
+        return searchableProducts
+            .map((product) => {
+                const location = productLocations.find((item) => String(item.productId) === String(product.id)) ?? null;
+                const shelf = location ? getShelfObjectByLocation(location, sceneObjects) : null;
+                const searchable = [
+                    product.name,
+                    product.sku,
+                    product.barcode,
+                    product.materialCode,
+                    product.material_code,
+                    product.partCode,
+                    product.part_number,
+                    location?.aisle,
+                    location?.shelfNumber,
+                    location?.binNumber,
+                    location?.productName,
+                    location?.sku,
+                ].filter(Boolean).join(' ').toLowerCase();
+
+                return { location, product, searchable, shelf };
+            })
+            .filter((item) => item.searchable.includes(normalizedQuery))
+            .slice(0, 7);
+    }, [normalizedQuery, productLocations, sceneObjects, searchableProducts]);
+
+    const chooseResult = (result) => {
+        setQuery(result.product.name || result.product.sku || '');
+        setIsOpen(false);
+        onLocateProduct(result.product);
     };
 
     return (
-        <header className="rounded-[22px] border border-white/10 bg-slate-950 bg-[linear-gradient(135deg,#0b1225_0%,#101a35_58%,#121a2b_100%)] p-4 text-white shadow-[0_24px_80px_rgba(2,6,23,0.3)]">
-            <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
-                <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="relative w-full max-w-3xl">
+            <div className="relative">
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                <input
+                    aria-controls="locator-product-results"
+                    aria-expanded={isOpen && Boolean(query.trim())}
+                    aria-label="Search products, material codes, shelves, or barcodes"
+                    className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100"
+                    onChange={(event) => {
+                        setQuery(event.target.value);
+                        setIsOpen(true);
+                    }}
+                    onFocus={() => setIsOpen(true)}
+                    placeholder="Search product, material code, SKU, shelf, bin, or barcode..."
+                    role="combobox"
+                    value={query}
+                />
+                {query && (
                     <button
-                        aria-label={isSidebarOpen ? 'Collapse locator sidebar' : 'Expand locator sidebar'}
-                        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-slate-200 transition hover:border-sky-300/40 hover:bg-white/[0.1] xl:hidden"
-                        onClick={onToggleSidebar}
+                        aria-label="Clear product search"
+                        className="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
+                        onClick={() => {
+                            setQuery('');
+                            setIsOpen(false);
+                        }}
                         type="button"
                     >
-                        {isSidebarOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
+                        <X className="h-4 w-4" />
                     </button>
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-400/15 text-sky-200 ring-1 ring-sky-300/25">
-                        <LayoutDashboard className="h-5 w-5" />
-                    </span>
-                    <div className="min-w-0">
-                        <p className="bg-gradient-to-r from-rose-400 via-fuchsia-400 to-indigo-300 bg-clip-text text-[11px] font-black uppercase tracking-[0.18em] text-transparent">{activeFloor === 1 ? '1st Floor' : '2nd Floor'} - Parts Mapping</p>
-                        <h1 className="truncate text-2xl font-black text-white">3D Stockroom Locator</h1>
-                        <p className="mt-1 text-xs font-semibold text-slate-400">Interactive 3D map · Find parts instantly</p>
-                    </div>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] 2xl:min-w-[720px]">
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <div className="min-w-[210px] rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2">
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Current layout</p>
-                            <div className="mt-1 flex items-center gap-2">
-                                <span className="truncate text-sm font-black text-slate-100">{selectedLayoutName || LOCATOR_LAYOUT_NAME}</span>
-                                <select
-                                    aria-label="Saved layouts"
-                                    className="h-8 min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-2 text-xs font-black text-slate-200 outline-none transition focus:border-sky-300/50"
-                                    onChange={(event) => onSelectLayout(event.target.value)}
-                                    value={selectedLayoutName}
-                                >
-                                    {layoutOptions.map((layout) => (
-                                        <option key={layout} value={layout}>{layout}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="inline-flex min-h-11 rounded-xl border border-white/10 bg-white/[0.05] p-1" aria-label="Floor switching">
-                            {[1, 2].map((floor) => (
-                                <button
-                                    aria-label={`Go to Floor ${floor}`}
-                                    className={cx(
-                                        'min-h-9 rounded-lg px-4 text-xs font-black transition',
-                                            activeFloor === floor
-                                            ? 'bg-gradient-to-r from-rose-500 via-fuchsia-500 to-indigo-500 text-white shadow-[0_8px_22px_rgba(236,72,153,0.24)]'
-                                            : 'text-slate-400 hover:bg-white/[0.08] hover:text-slate-100',
-                                    )}
-                                    key={floor}
-                                    onClick={() => goToFloor(floor)}
-                                    type="button"
-                                >
-                                    Floor {floor}
-                                </button>
-                            ))}
-                        </div>
-
-                        <Link
-                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-xs font-black text-slate-200 transition hover:border-sky-300/40 hover:bg-white/[0.1]"
-                            to="/inventory"
-                        >
-                            <ArrowLeft className="h-4 w-4" />
-                            Back to Inventory
-                        </Link>
-                        <TopButton aria-label="2D floor plan" onClick={() => requestCameraPreset('topDown')}>
-                            <Grid3X3 className="h-4 w-4" />
-                            2D View
-                        </TopButton>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                        <DesignModeSwitch onChange={onToggleDesignMode} />
-                        <div className="relative flex items-center gap-2">
-                            {isSaveOpen && (
-                                <input
-                                    aria-label="Layout name"
-                                    className="h-10 w-44 rounded-xl border border-white/10 bg-slate-900 px-3 text-xs font-bold text-white outline-none transition placeholder:text-slate-500 focus:border-sky-300/50"
-                                    onChange={(event) => onSaveNameChange(event.target.value)}
-                                    placeholder="Layout name"
-                                    value={layoutName}
-                                />
-                            )}
-                            <TopButton
-                                aria-label={isSaveOpen ? 'Confirm Save Layout' : 'Save Layout'}
-                                className="border-sky-300/40 bg-sky-400/20 text-sky-50 hover:bg-sky-400/25"
-                                disabled={busy}
-                                onClick={handleSaveClick}
-                            >
-                                <Save className="h-4 w-4" />
-                                {isSavingLayout ? 'Saving' : isSaveOpen ? 'Save' : 'Save Layout'}
-                            </TopButton>
-                        </div>
-                        <TopButton aria-label="Load Layout" disabled={busy} onClick={onLoadLayout}>
-                            <RefreshCw className={cx('h-4 w-4', isLoadingLayout && 'animate-spin')} />
-                            Load Layout
-                        </TopButton>
-                        <TopButton aria-label="Reset to Default" onClick={onResetLayout}>
-                            <Store className="h-4 w-4" />
-                            Reset
-                        </TopButton>
-
-                    </div>
-                </div>
+                )}
             </div>
-        </header>
-    );
-}
 
-function ObjectLibraryDropdown() {
-    const addSceneObject = useLocator3DStore((state) => state.addSceneObject);
-    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
-    const lockAllObjects = useLocator3DStore((state) => state.lockAllObjects);
-    const objectLibrary = useLocator3DStore((state) => state.objectLibrary);
-    const unlockAllObjects = useLocator3DStore((state) => state.unlockAllObjects);
-    const [isOpen, setIsOpen] = useState(false);
+            {notice.message && (
+                <p className={cx(
+                    'mt-2 text-xs font-medium',
+                    notice.tone === 'warning' ? 'text-amber-700' : notice.tone === 'success' ? 'text-emerald-700' : 'text-slate-500',
+                )}
+                >
+                    {notice.message}
+                </p>
+            )}
 
-    if (!isDesignMode) {
-        return null;
-    }
-
-    return (
-        <div className="absolute left-4 top-4 z-20 w-[280px]">
-            <button
-                aria-expanded={isOpen}
-                aria-label="Object Library"
-                className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-slate-950/88 px-4 py-3 text-sm font-black text-white shadow-[0_18px_48px_rgba(2,6,23,0.32)] backdrop-blur-xl transition hover:border-sky-400/40"
-                onClick={() => setIsOpen((value) => !value)}
-                type="button"
-            >
-                <span className="flex items-center gap-2">
-                    <Box className="h-4 w-4 text-sky-300" />
-                    Object Library
-                </span>
-                <ChevronDown className={cx('h-4 w-4 transition', isOpen && 'rotate-180')} />
-            </button>
-            {isOpen && (
-                <div className="mt-2 rounded-2xl border border-white/10 bg-slate-950/94 p-2 shadow-[0_24px_70px_rgba(2,6,23,0.46)] backdrop-blur-xl">
-                    <div className="grid gap-2">
-                        {objectLibrary.map((object) => {
-                            const Icon = libraryIconMap[object.icon] ?? Box;
-
-                            return (
-                                <button
-                                    aria-label={`Add ${object.label}`}
-                                    className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-left transition hover:border-sky-400/40 hover:bg-sky-400/10"
-                                    key={object.type}
-                                    onClick={() => addSceneObject(object.type)}
-                                    type="button"
+            {isOpen && normalizedQuery && (
+                <div
+                    className="absolute inset-x-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-[0_20px_48px_rgba(15,23,42,0.16)]"
+                    id="locator-product-results"
+                    role="listbox"
+                >
+                    {results.length ? (
+                        results.map((result) => (
+                            <button
+                                aria-label={'Locate ' + result.product.name}
+                                className="flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition hover:bg-indigo-50"
+                                key={String(result.product.id)}
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => chooseResult(result)}
+                                type="button"
+                            >
+                                <span className="min-w-0">
+                                    <span className="block truncate text-sm font-bold text-slate-900">{result.product.name || 'Unnamed product'}</span>
+                                    <span className="mt-1 block truncate font-mono text-xs text-slate-500">{result.product.sku || result.product.materialCode || 'No SKU'}</span>
+                                </span>
+                                <span className={cx(
+                                    'max-w-[54%] shrink-0 truncate rounded-full px-2.5 py-1 text-[11px] font-semibold',
+                                    result.location && result.shelf ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700',
+                                )}
                                 >
-                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10" style={{ backgroundColor: object.color }}>
-                                        <Icon className="h-4 w-4 text-white" />
-                                    </span>
-                                    <span className="min-w-0">
-                                        <span className="block truncate text-sm font-black text-white">{object.label}</span>
-                                        <span className="block truncate text-xs font-semibold text-slate-500">{object.description}</span>
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2 border-t border-white/10 pt-2">
-                        <button
-                            aria-label="Lock All Objects"
-                            className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs font-black text-amber-100 transition hover:bg-amber-400/15"
-                            onClick={lockAllObjects}
-                            type="button"
-                        >
-                            Lock All
-                        </button>
-                        <button
-                            aria-label="Unlock All Objects"
-                            className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-black text-emerald-100 transition hover:bg-emerald-400/15"
-                            onClick={unlockAllObjects}
-                            type="button"
-                        >
-                            Unlock All
-                        </button>
-                    </div>
+                                    {result.location && result.shelf ? formatLocation(result.location) : 'Not mapped'}
+                                </span>
+                            </button>
+                        ))
+                    ) : isLoading ? (
+                        <div className="px-4 py-5 text-sm font-medium text-slate-500">Loading products...</div>
+                    ) : (
+                        <div className="px-4 py-5 text-sm font-medium text-slate-500">No matching products or saved locations.</div>
+                    )}
                 </div>
             )}
         </div>
     );
 }
 
-function DesignToolbar({ onDiscardChanges, onResetCurrentFloor, onResetEntireStockroom, onSave }) {
+function HeaderActions({
+    canEditLayout,
+    hasUnsavedChanges,
+    isSaving,
+    layoutName,
+    layoutOptions,
+    onChangeLayoutName,
+    onExitDesignMode,
+    onLoadLayout,
+    onSaveLayout,
+    onSelectLayout,
+}) {
+    const activeFloor = useLocator3DStore((state) => state.activeFloor);
+    const goToFloor = useLocator3DStore((state) => state.goToFloor);
+    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
+    const requestCameraPreset = useLocator3DStore((state) => state.requestCameraPreset);
+    const [isMoreOpen, setIsMoreOpen] = useState(false);
+    const [saveAsName, setSaveAsName] = useState('');
+
+    return (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+            <div aria-label="Floor selector" className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                {[1, 2].map((floor) => (
+                    <button
+                        className={cx(
+                            'min-h-8 rounded-lg px-3 text-xs font-bold transition',
+                            activeFloor === floor ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-950',
+                        )}
+                        key={floor}
+                        onClick={() => goToFloor(floor)}
+                        type="button"
+                    >
+                        Floor {floor}
+                    </button>
+                ))}
+            </div>
+            <Button
+                aria-label="Top-down 2D floor view"
+                className="hidden sm:inline-flex"
+                onClick={() => requestCameraPreset('topDown')}
+            >
+                <Grid3X3 className="h-4 w-4" />
+                2D View
+            </Button>
+            {canEditLayout && (
+                <Button
+                    onClick={() => {
+                        if (isDesignMode) {
+                            onExitDesignMode();
+                        } else {
+                            useLocator3DStore.getState().setDesignMode(true);
+                        }
+                    }}
+                    tone={isDesignMode ? 'success' : 'primary'}
+                >
+                    {isDesignMode ? <CheckCircle2 className="h-4 w-4" /> : <MousePointer2 className="h-4 w-4" />}
+                    {isDesignMode ? 'Exit Design' : 'Design Mode'}
+                </Button>
+            )}
+            <div className="relative">
+                <IconButton label="More stockroom actions" onClick={() => setIsMoreOpen((value) => !value)}>
+                    <MoreHorizontal className="h-5 w-5" />
+                </IconButton>
+                {isMoreOpen && (
+                    <div className="absolute right-0 top-12 z-50 w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_20px_48px_rgba(15,23,42,0.16)]">
+                        <p className="px-2 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Saved layouts</p>
+                        <select
+                            aria-label="Select saved layout"
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 outline-none focus:border-indigo-400"
+                            onChange={(event) => onSelectLayout(event.target.value)}
+                            value={layoutName}
+                        >
+                            {layoutOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                        </select>
+                        <Button className="mt-2 w-full" onClick={() => {
+                            setIsMoreOpen(false);
+                            onLoadLayout(layoutName);
+                        }}
+                        >
+                            <RefreshCw className="h-4 w-4" />
+                            Load selected layout
+                        </Button>
+                        <div className="my-3 border-t border-slate-100" />
+                        <p className="px-2 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Save a copy</p>
+                        <input
+                            aria-label="Save layout as"
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 outline-none focus:border-indigo-400"
+                            onChange={(event) => setSaveAsName(event.target.value)}
+                            placeholder="e.g. Layout Backup"
+                            value={saveAsName}
+                        />
+                        <Button
+                            className="mt-2 w-full"
+                            disabled={!saveAsName.trim() || isSaving}
+                            onClick={() => {
+                                onChangeLayoutName(saveAsName.trim());
+                                onSaveLayout(saveAsName.trim());
+                                setSaveAsName('');
+                                setIsMoreOpen(false);
+                            }}
+                            tone="primary"
+                        >
+                            <Save className="h-4 w-4" />
+                            Save As
+                        </Button>
+                        {hasUnsavedChanges && <p className="px-2 pt-3 text-[11px] font-medium text-amber-700">Unsaved design changes are open in this browser.</p>}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function StockroomHeader(props) {
+    const activeFloor = useLocator3DStore((state) => state.activeFloor);
+    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
+
+    return (
+        <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)] sm:p-6">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-indigo-600">
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50">
+                            <LayoutDashboard className="h-4 w-4" />
+                        </span>
+                        {activeFloor === 1 ? '1st Floor' : '2nd Floor'} · Parts Mapping
+                    </div>
+                    <h1 className="mt-3 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+                        {isDesignMode ? '3D Stockroom · Design' : '3D Stockroom'}
+                    </h1>
+                    <p className="mt-1.5 text-sm font-medium text-slate-500">
+                        {isDesignMode ? 'Drag objects to rearrange the stockroom.' : 'Interactive 3D map · Find parts instantly'}
+                    </p>
+                </div>
+                <HeaderActions {...props} />
+            </div>
+            {!isDesignMode && (
+                <div className="mt-6 border-t border-slate-100 pt-5">
+                    <ProductSearch
+                        isLoading={props.isLoadingProducts}
+                        notice={props.locationNotice}
+                        onLocateProduct={props.onLocateProduct}
+                        productLocations={props.productLocations}
+                        products={props.products}
+                        sceneObjects={props.sceneObjects}
+                    />
+                </div>
+            )}
+        </header>
+    );
+}
+
+function ViewportControls({ canvasShellRef }) {
+    const resetCamera = useLocator3DStore((state) => state.resetCamera);
+    const requestCameraPreset = useLocator3DStore((state) => state.requestCameraPreset);
+    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
+    const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [isViewOpen, setIsViewOpen] = useState(false);
+
+    useEffect(() => {
+        const updateFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement));
+        document.addEventListener('fullscreenchange', updateFullscreen);
+        return () => document.removeEventListener('fullscreenchange', updateFullscreen);
+    }, []);
+
+    const toggleFullscreen = () => {
+        const target = canvasShellRef.current;
+        if (!target) {
+            return;
+        }
+        if (document.fullscreenElement) {
+            void document.exitFullscreen?.();
+            return;
+        }
+        void target.requestFullscreen?.();
+    };
+
+    const nudgeZoom = (deltaY) => {
+        const canvas = canvasShellRef.current?.querySelector('canvas');
+        canvas?.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY }));
+    };
+
+    return (
+        <>
+            <div className="pointer-events-auto absolute right-4 top-4 z-20 flex items-center gap-2">
+                <div className="relative">
+                    <Button className="bg-white/95 shadow-sm" onClick={() => setIsViewOpen((value) => !value)}>
+                        <Camera className="h-4 w-4" />
+                        View
+                        <ChevronDown className="h-3.5 w-3.5" />
+                    </Button>
+                    {isViewOpen && (
+                        <div className="absolute right-0 top-12 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
+                            {[
+                                ['overview', 'Overview'],
+                                ['counter', 'Counter View'],
+                                ['topDown', 'Top View'],
+                                ['selected', 'Focus Selected'],
+                            ].map(([preset, label]) => (
+                                <button
+                                    className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-indigo-50 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                    disabled={preset === 'selected' && !selectedObjectId && !locatedProduct}
+                                    key={preset}
+                                    onClick={() => {
+                                        requestCameraPreset(preset);
+                                        setIsViewOpen(false);
+                                    }}
+                                    type="button"
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <IconButton className="bg-white/95" label="Reset camera" onClick={resetCamera}>
+                    <RefreshCw className="h-4 w-4" />
+                </IconButton>
+                <IconButton className="bg-white/95" label={isFullscreen ? 'Exit fullscreen' : 'Open fullscreen'} onClick={toggleFullscreen}>
+                    {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </IconButton>
+            </div>
+            <div className="pointer-events-auto absolute right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.16)]">
+                <button aria-label="Zoom in" className="flex h-10 w-10 items-center justify-center text-lg font-medium text-slate-700 transition hover:bg-indigo-50 hover:text-indigo-700" onClick={() => nudgeZoom(-140)} type="button">+</button>
+                <span className="mx-2 h-px bg-slate-100" />
+                <button aria-label="Zoom out" className="flex h-10 w-10 items-center justify-center text-lg font-medium text-slate-700 transition hover:bg-indigo-50 hover:text-indigo-700" onClick={() => nudgeZoom(140)} type="button">−</button>
+            </div>
+        </>
+    );
+}
+
+function FloorInfo() {
+    const activeFloor = useLocator3DStore((state) => state.activeFloor);
+    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
+    const objects = sceneObjects.filter((object) => Number(object.floor || 1) === activeFloor);
+    const shelfCount = objects.filter((object) => isShelfObject(object)).length;
+    const counterCount = objects.filter((object) => object.type === 'counter-computer').length;
+    const stairCount = objects.filter((object) => object.type === 'stairs').length;
+
+    return (
+        <div className="pointer-events-none absolute bottom-4 left-4 z-10 rounded-xl border border-white/35 bg-white/90 px-3.5 py-3 shadow-sm backdrop-blur">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-600">{activeFloor === 1 ? '1st Floor' : '2nd Floor'}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-700">{shelfCount} Shelves · {counterCount} Counter · {stairCount} Stair</p>
+        </div>
+    );
+}
+
+function LocatedProductNote({ notice }) {
+    const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
+
+    if (!locatedProduct) {
+        return null;
+    }
+
+    return (
+        <div className="pointer-events-none absolute left-4 top-4 z-10 max-w-[min(320px,calc(100%-8rem))] rounded-xl border border-amber-200 bg-amber-50/95 px-3.5 py-3 shadow-sm backdrop-blur">
+            <span className="flex items-start gap-2">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <span className="min-w-0">
+                    <span className="block truncate text-xs font-bold text-amber-950">{locatedProduct.productName || 'Product located'}</span>
+                    <span className="mt-0.5 block truncate text-[11px] font-medium text-amber-700">{locatedProduct.locationLabel || notice.message}</span>
+                </span>
+            </span>
+        </div>
+    );
+}
+
+function DesignToolbar({ onDiscardChanges, onOpenAssignment, onRequestDelete, onRequestResetFloor, onRequestResetStockroom, onSave }) {
     const addSceneObject = useLocator3DStore((state) => state.addSceneObject);
     const activeTool = useLocator3DStore((state) => state.activeTool);
     const centerCameraOnSelected = useLocator3DStore((state) => state.centerCameraOnSelected);
+    const deleteSelectedObject = useLocator3DStore((state) => state.deleteSelectedObject);
     const duplicateSelectedObject = useLocator3DStore((state) => state.duplicateSelectedObject);
     const history = useLocator3DStore((state) => state.history);
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
@@ -406,17 +564,15 @@ function DesignToolbar({ onDiscardChanges, onResetCurrentFloor, onResetEntireSto
     const redo = useLocator3DStore((state) => state.redo);
     const resetCamera = useLocator3DStore((state) => state.resetCamera);
     const rotateSelectedObject = useLocator3DStore((state) => state.rotateSelectedObject);
-    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
+    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
     const setActiveTool = useLocator3DStore((state) => state.setActiveTool);
-    const toggleObjectLock = useLocator3DStore((state) => state.toggleObjectLock);
-    const deleteSelectedObject = useLocator3DStore((state) => state.deleteSelectedObject);
-    const undo = useLocator3DStore((state) => state.undo);
     const snapEnabled = useLocator3DStore((state) => state.snapEnabled);
+    const toggleObjectLock = useLocator3DStore((state) => state.toggleObjectLock);
     const toggleSceneOption = useLocator3DStore((state) => state.toggleSceneOption);
+    const undo = useLocator3DStore((state) => state.undo);
     const selected = getLocatorObjectById(selectedObjectId, sceneObjects);
     const [isAddOpen, setIsAddOpen] = useState(false);
-    const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
     const [isMoreOpen, setIsMoreOpen] = useState(false);
 
     if (!isDesignMode) {
@@ -430,1252 +586,139 @@ function DesignToolbar({ onDiscardChanges, onResetCurrentFloor, onResetEntireSto
     };
 
     return (
-        <div aria-label="Design toolbar" className="pointer-events-auto absolute inset-x-3 top-3 z-30 flex flex-wrap items-center gap-2 rounded-2xl border border-sky-300/25 bg-slate-950/90 p-2 shadow-[0_18px_48px_rgba(2,6,23,0.36)] backdrop-blur-xl">
+        <div aria-label="Design toolbar" className="pointer-events-auto absolute inset-x-3 top-3 z-30 flex flex-wrap items-center gap-2 rounded-2xl border border-indigo-100 bg-white/95 p-2 shadow-[0_16px_38px_rgba(15,23,42,0.16)] backdrop-blur">
             <div className="relative">
-                <SceneControlButton aria-expanded={isAddOpen} aria-label="Add Object" className="border-sky-300/35 bg-sky-400/15 text-sky-50" onClick={() => setIsAddOpen((value) => !value)}>
-                    <Box className="h-4 w-4" />
+                <Button onClick={() => setIsAddOpen((value) => !value)} tone="primary">
+                    <Plus className="h-4 w-4" />
                     Add Object
                     <ChevronDown className="h-3.5 w-3.5" />
-                </SceneControlButton>
+                </Button>
                 {isAddOpen && (
-                    <div className="absolute left-0 top-12 grid w-60 gap-1 rounded-xl border border-white/10 bg-slate-950 p-2 shadow-2xl">
+                    <div className="absolute left-0 top-12 z-40 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
                         {objectLibrary.map((object) => {
                             const Icon = libraryIconMap[object.icon] ?? Box;
                             return (
-                                <button className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold text-slate-100 hover:bg-sky-400/15" key={object.type} onClick={() => addObject(object.type)} type="button">
-                                    <Icon className="h-4 w-4 text-sky-200" /> {object.label}
+                                <button
+                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-slate-700 transition hover:bg-indigo-50 hover:text-indigo-700"
+                                    key={object.type}
+                                    onClick={() => addObject(object.type)}
+                                    type="button"
+                                >
+                                    <Icon className="h-4 w-4" />
+                                    {object.label}
                                 </button>
                             );
                         })}
                     </div>
                 )}
             </div>
-            <SceneControlButton aria-label="Select tool" className={activeTool === 'move' || activeTool === 'select' ? 'border-sky-300/35 bg-sky-400/15 text-sky-50' : ''} onClick={() => setActiveTool('move')}>
-                <MousePointer2 className="h-4 w-4" /> Select
-            </SceneControlButton>
-            <SceneControlButton aria-label="Draw Wall" className={activeTool === 'draw-wall' ? 'border-sky-300/35 bg-sky-400/15 text-sky-50' : ''} onClick={() => setActiveTool('draw-wall')}>
-                <BrickWall className="h-4 w-4" /> Draw Wall
-            </SceneControlButton>
-            <span className="hidden h-6 w-px bg-white/10 sm:block" />
-            {selected ? (
-                <>
-                    <span className="max-w-[150px] truncate px-2 text-xs font-black text-sky-100">Selected: {selected.name}</span>
-                    <SceneControlButton aria-label="Rotate selected object left" onClick={() => rotateSelectedObject(-15)}><RotateCcw className="h-4 w-4" /> Rotate</SceneControlButton>
-                    <SceneControlButton aria-label="Rotate selected object right" onClick={() => rotateSelectedObject(90)}>90°</SceneControlButton>
-                    <SceneControlButton aria-label="Duplicate selected object" onClick={duplicateSelectedObject}><Copy className="h-4 w-4" /> Duplicate</SceneControlButton>
-                    <SceneControlButton aria-label="Center Camera on Selected Object" onClick={centerCameraOnSelected}><Camera className="h-4 w-4" /> Fit</SceneControlButton>
-                    <SceneControlButton aria-label={selected.isLocked ? 'Unlock selected object' : 'Lock selected object'} onClick={() => toggleObjectLock(selected.id)}>{selected.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}{selected.isLocked ? 'Unlock' : 'Lock'}</SceneControlButton>
-                    <SceneControlButton aria-label="Delete selected object" className="border-rose-300/25 text-rose-100" onClick={deleteSelectedObject}><Trash2 className="h-4 w-4" /> Delete</SceneControlButton>
-                </>
-            ) : null}
-            <span className="hidden h-6 w-px bg-white/10 md:block" />
-            <SceneControlButton aria-label="Undo layout change" disabled={!history?.past?.length} onClick={undo}><Undo2 className="h-4 w-4" /> Undo</SceneControlButton>
-            <SceneControlButton aria-label="Redo layout change" disabled={!history?.future?.length} onClick={redo}><Redo2 className="h-4 w-4" /> Redo</SceneControlButton>
-            <SceneControlButton aria-label="Toggle grid snapping" className={snapEnabled ? 'border-emerald-300/35 bg-emerald-400/15 text-emerald-50' : ''} onClick={() => toggleSceneOption('snapEnabled')}>Snap {snapEnabled ? '✓' : 'Off'}</SceneControlButton>
-            <div className="relative ml-auto">
-                <SceneControlButton aria-expanded={isMoreOpen} aria-label="More layout actions" onClick={() => setIsMoreOpen((value) => !value)}>More <ChevronDown className="h-3.5 w-3.5" /></SceneControlButton>
-                {isMoreOpen && (
-                    <div className="absolute right-0 top-12 z-40 grid w-56 gap-1 rounded-xl border border-white/10 bg-slate-950 p-2 shadow-2xl">
-                        <button className="rounded-lg px-3 py-2 text-left text-xs font-bold text-slate-100 hover:bg-white/10" onClick={resetCamera} type="button">Reset Camera</button>
-                        <button className="rounded-lg px-3 py-2 text-left text-xs font-bold text-slate-100 hover:bg-white/10" onClick={() => setIsAdvancedOpen(true)} type="button">Advanced...</button>
-                        <button className="rounded-lg px-3 py-2 text-left text-xs font-bold text-amber-100 hover:bg-amber-400/10" onClick={onDiscardChanges} type="button">Discard Unsaved Changes</button>
-                        <button className="rounded-lg px-3 py-2 text-left text-xs font-bold text-amber-100 hover:bg-amber-400/10" onClick={onResetCurrentFloor} type="button">Reset Current Floor</button>
-                        <button className="rounded-lg px-3 py-2 text-left text-xs font-bold text-rose-100 hover:bg-rose-400/10" onClick={onResetEntireStockroom} type="button">Reset Entire Stockroom</button>
-                    </div>
-                )}
-            </div>
-            <SceneControlButton aria-label="Save layout changes" className="border-sky-300/40 bg-sky-400/20 text-sky-50" onClick={onSave}><Save className="h-4 w-4" /> Save</SceneControlButton>
-            <Modal isOpen={isAdvancedOpen} onClose={() => setIsAdvancedOpen(false)} size="lg" title="Advanced object details">
-                <PropertiesPanel />
-            </Modal>
-        </div>
-    );
-}
-
-function ProductLocatorSidebar({ isLoadingLayout, isLoadingProducts, isOpen, onCollapse, onLocateProduct, productLocations, products, sceneObjects }) {
-    const activeFloor = useLocator3DStore((state) => state.activeFloor);
-    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
-    const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
-    const [query, setQuery] = useState('');
-    const normalizedQuery = query.trim().toLowerCase();
-    const mappedProducts = useMemo(() => (
-        productLocations
-            .map((location) => {
-                const shelf = getShelfObjectByLocation(location, sceneObjects);
-
-                if (!shelf) {
-                    return null;
-                }
-
-                const product = resolveProductDetails({
-                    catalogProducts: products,
-                    location,
-                    productId: location.productId,
-                    productName: location.productName,
-                    productSku: location.sku,
-                });
-
-                return {
-                    location: {
-                        ...location,
-                        floor: Number(location.floor || shelf.floor || 1),
-                        shelfObjectId: shelf.id || location.shelfObjectId,
-                    },
-                    product,
-                    shelf,
-                };
-            })
-            .filter(Boolean)
-            .sort((left, right) => {
-                const floorDelta = Number(left.location.floor || 1) - Number(right.location.floor || 1);
-
-                if (floorDelta !== 0) {
-                    return floorDelta;
-                }
-
-                return String(left.product.name).localeCompare(String(right.product.name));
-            })
-    ), [productLocations, products, sceneObjects]);
-    const filteredProducts = useMemo(() => {
-        if (!normalizedQuery) {
-            return mappedProducts;
-        }
-
-        return mappedProducts.filter(({ location, product }) => {
-            const haystack = [
-                product.name,
-                product.sku,
-                location.productName,
-                location.sku,
-                formatLocatorTextLocation(location),
-                `floor ${location.floor}`,
-            ].filter(Boolean).join(' ').toLowerCase();
-
-            return haystack.includes(normalizedQuery);
-        });
-    }, [mappedProducts, normalizedQuery]);
-    const recentlyLocated = locatedProduct
-        ? mappedProducts.find(({ product }) => product.id === locatedProduct.productId)
-        : null;
-    const sidebarIsBusy = isLoadingLayout || isLoadingProducts;
-
-    return (
-        <AnimatePresence initial={false}>
-            {isOpen && (
-                <Motion.aside
-                    animate={{ opacity: 1, x: 0 }}
-                    aria-label="Product locator sidebar"
-                    className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-slate-950 text-white shadow-[0_20px_70px_rgba(2,6,23,0.22)]"
-                    exit={{ opacity: 0, x: -18 }}
-                    initial={{ opacity: 0, x: -18 }}
-                    transition={{ duration: 0.2, ease: 'easeOut' }}
-                >
-                    <div className="border-b border-white/10 p-4">
-                        <div className="flex items-start justify-between gap-3">
-                            <div>
-                                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Product finder</p>
-                                <h2 className="mt-1 text-lg font-black text-white">Located Products</h2>
-                            </div>
-                            <button
-                                aria-label="Collapse locator sidebar"
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] text-slate-300 transition hover:bg-white/[0.09] xl:hidden"
-                                onClick={onCollapse}
-                                type="button"
-                            >
-                                <X className="h-4 w-4" />
-                            </button>
-                        </div>
-                        <p className="mt-2 text-xs font-semibold leading-5 text-slate-400">
-                            Search by product name or SKU, then jump straight to the matching shelf in the 3D stockroom.
-                        </p>
-                        <label className="mt-4 block">
-                            <span className="sr-only">Product Search</span>
-                            <span className="relative block">
-                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                                <input
-                                    aria-label="Product Search"
-                                    className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.06] pl-10 pr-3 text-sm font-bold text-white outline-none transition placeholder:text-slate-500 focus:border-sky-300/50 focus:bg-white/[0.09]"
-                                    onChange={(event) => setQuery(event.target.value)}
-                                    placeholder="Search name, SKU, aisle, bin"
-                                    value={query}
-                                />
-                            </span>
-                        </label>
-                    </div>
-
-                    <div className="max-h-[calc(76vh-180px)] min-h-[360px] overflow-auto p-3">
-                        {sidebarIsBusy ? (
-                            <div className="space-y-3" aria-label="Loading mapped products">
-                                {[1, 2, 3, 4].map((item) => (
-                                    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3" key={item}>
-                                        <div className="h-4 w-2/3 animate-pulse rounded bg-white/10" />
-                                        <div className="mt-3 h-3 w-1/2 animate-pulse rounded bg-white/10" />
-                                    </div>
-                                ))}
-                            </div>
-                        ) : filteredProducts.length > 0 ? (
-                            <div className="space-y-2">
-                                {recentlyLocated && (
-                                    <div className="mb-2 rounded-xl border border-emerald-300/25 bg-emerald-400/10 p-3">
-                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200">Recently located</p>
-                                        <p className="mt-1 truncate text-sm font-black text-white">{recentlyLocated.product.name}</p>
-                                    </div>
-                                )}
-                                {filteredProducts.map(({ location, product }) => {
-                                    const isSelected = locatedProduct?.productId === product.id;
-                                    const stock = getProductStock(product);
-
-                                    return (
-                                        <button
-                                            aria-label={`Locate ${product.name} in 3D`}
-                                            className={cx(
-                                                'w-full rounded-xl border p-3 text-left transition',
-                                                isSelected
-                                                    ? 'border-emerald-300/60 bg-emerald-400/15 shadow-[0_12px_35px_rgba(16,185,129,0.16)]'
-                                                    : 'border-white/10 bg-white/[0.04] hover:border-sky-300/35 hover:bg-white/[0.07]',
-                                            )}
-                                            key={`${product.id}-${location.shelfObjectId || location.aisle}-${location.binNumber}`}
-                                            onClick={() => onLocateProduct(product)}
-                                            type="button"
-                                        >
-                                            <span className="flex items-start justify-between gap-3">
-                                                <span className="min-w-0">
-                                                    <span className="block truncate text-sm font-black text-white">{product.name}</span>
-                                                    <span className="mt-1 block truncate font-mono text-xs font-bold text-slate-400">{product.sku || 'No SKU'}</span>
-                                                </span>
-                                                <span className={cx(
-                                                    'shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em]',
-                                                    Number(location.floor || 1) === activeFloor
-                                                        ? 'bg-sky-400/15 text-sky-100 ring-1 ring-sky-300/25'
-                                                        : 'bg-white/10 text-slate-300',
-                                                )}
-                                                >
-                                                    F{location.floor || 1}
-                                                </span>
-                                            </span>
-                                            <span className="mt-3 flex items-center justify-between gap-2 text-xs font-bold text-slate-400">
-                                                <span className="truncate">{formatLocatorTextLocation(location)}</span>
-                                                <span className={stock > 0 ? 'text-emerald-200' : 'text-rose-200'}>{formatNumber(stock)} stock</span>
-                                            </span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <div className="rounded-xl border border-dashed border-white/15 bg-white/[0.03] p-4 text-sm font-semibold leading-6 text-slate-400">
-                                {mappedProducts.length === 0
-                                    ? 'No products are mapped to shelves in this layout yet.'
-                                    : 'No located products match that search.'}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className={cx(
-                        'border-t border-white/10 px-4 py-3 text-xs font-black uppercase tracking-[0.18em]',
-                        isDesignMode ? 'bg-sky-400/10 text-sky-100' : 'bg-emerald-400/10 text-emerald-100',
-                    )}
-                    >
-                        {isDesignMode ? 'Edit Layout mode' : 'Locate / View mode'}
-                    </div>
-                </Motion.aside>
-            )}
-        </AnimatePresence>
-    );
-}
-
-function ProductLocationCard({ canEditLayout, onAnimatePath, onOpenEditLayout, state }) {
-    const product = state?.product || {};
-    const location = state?.location;
-    const stock = formatNumber(getProductStock(product));
-    const sku = product.sku || location?.sku || 'No part number';
-    const productName = product.name || location?.productName || 'Selected product';
-    const stockStatus = Number(stock) <= 0
-        ? { className: 'border-rose-300/30 bg-rose-400/12 text-rose-100', label: 'Out of Stock' }
-        : Number(stock) <= 5
-            ? { className: 'border-amber-300/30 bg-amber-400/12 text-amber-100', label: 'Low Stock' }
-            : { className: 'border-emerald-300/30 bg-emerald-400/12 text-emerald-100', label: 'In Stock' };
-
-    if (!state || state.status === 'idle') {
-        return (
-            <section className="rounded-2xl border border-white/10 bg-slate-950 p-4 text-white shadow-[0_20px_70px_rgba(2,6,23,0.18)]" aria-label="Product Location">
-                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Product Location</p>
-                <h2 className="mt-2 text-lg font-black text-white">Ready to locate a product</h2>
-                <p className="mt-3 text-sm font-semibold leading-6 text-slate-400">
-                    Pick a mapped item from the sidebar or arrive from Inventory to focus the camera on its shelf and bin.
-                </p>
-            </section>
-        );
-    }
-
-    if (state.status === 'loading') {
-        return (
-            <section className="rounded-2xl border border-white/10 bg-slate-950 p-4 text-white shadow-[0_20px_70px_rgba(2,6,23,0.18)]" aria-label="Product Location">
-                <div className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-400/15 text-sky-200">
-                        <MapPin className="h-5 w-5 animate-pulse" />
-                    </span>
-                    <div>
-                        <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Product Location</p>
-                        <h2 className="mt-1 text-base font-black text-white">Loading stockroom location...</h2>
-                    </div>
-                </div>
-                <div className="mt-5 space-y-3">
-                    <div className="h-4 w-3/4 animate-pulse rounded bg-white/10" />
-                    <div className="h-20 animate-pulse rounded-xl bg-white/[0.06]" />
-                    <div className="h-11 animate-pulse rounded-xl bg-white/[0.06]" />
-                </div>
-            </section>
-        );
-    }
-
-    if (state.status === 'error') {
-        return (
-            <section className="rounded-2xl border border-rose-300/30 bg-rose-950/70 p-4 text-white shadow-[0_20px_70px_rgba(2,6,23,0.18)]" aria-label="Product Location">
-                <div className="flex items-start gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-400/15 text-rose-100">
-                        <AlertTriangle className="h-5 w-5" />
-                    </span>
-                    <div>
-                        <p className="text-[11px] font-black uppercase tracking-[0.22em] text-rose-200">Product Location</p>
-                        <h2 className="mt-1 text-base font-black text-white">Unable to load product location</h2>
-                        <p className="mt-2 text-xs font-semibold leading-5 text-rose-100/80">{state.message || 'Please reload the locator and try again.'}</p>
-                    </div>
-                </div>
-            </section>
-        );
-    }
-
-    if (state.status === 'empty') {
-        return (
-            <section className="rounded-2xl border border-amber-300/30 bg-slate-950 p-4 text-white shadow-[0_20px_70px_rgba(2,6,23,0.18)]" aria-label="Product Location">
-                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-amber-200">Product Location</p>
-                <h2 className="mt-2 text-base font-black text-white">This product has no stockroom location assigned yet</h2>
-                <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.05] p-3">
-                    <p className="truncate text-sm font-black text-white">{productName}</p>
-                    <p className="mt-1 font-mono text-xs font-bold text-slate-400">{sku}</p>
-                </div>
-                <p className="mt-3 text-xs font-semibold leading-5 text-amber-100/80">
-                    {state.message || 'Assign this item to a shelf and bin before using 3D locate mode.'}
-                </p>
-                {canEditLayout && (
-                    <button
-                        className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-amber-300/30 bg-amber-400/12 px-3 text-xs font-black text-amber-100 shadow-sm transition hover:bg-amber-400/18"
-                        onClick={onOpenEditLayout}
-                        type="button"
-                    >
-                        <Box className="h-4 w-4" />
-                        Open Edit Layout
-                    </button>
-                )}
-            </section>
-        );
-    }
-
-    return (
-        <section className="rounded-2xl border border-emerald-300/25 bg-slate-950 p-4 text-white shadow-[0_20px_70px_rgba(2,6,23,0.18)]" aria-label="Product Location">
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-emerald-200">Product Location</p>
-                    <h2 className="mt-2 truncate text-lg font-black text-white">{productName}</h2>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-2">
-                    <span className="rounded-full border border-emerald-300/30 bg-emerald-400/12 px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-100">Mapped</span>
-                    <span className={cx('rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em]', stockStatus.className)}>{stockStatus.label}</span>
-                </div>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Part No.</p>
-                    <p className="mt-1 truncate font-mono text-xs font-black text-slate-100">{sku}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Stock</p>
-                    <p className="mt-1 text-xs font-black text-slate-100">{stock} in stock</p>
-                </div>
-            </div>
-            <div className="mt-3 flex items-start gap-2 rounded-xl border border-emerald-300/25 bg-emerald-400/10 p-3 text-sm font-black text-emerald-50">
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{formatLocatorTextLocation(location)}</span>
-            </div>
-            <div className="mt-4 grid gap-2">
-                <button
-                    aria-label="Animate Path from Counter"
-                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-xs font-black text-slate-950 shadow-sm transition hover:bg-emerald-400"
-                    onClick={onAnimatePath}
-                    type="button"
-                >
-                    <Route className="h-4 w-4" />
-                    Animate Path from Counter
-                </button>
-                <Link
-                    className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-xs font-black text-slate-200 transition hover:border-sky-300/40 hover:bg-white/[0.09]"
-                    to={product.id ? `/inventory?productId=${product.id}` : '/inventory'}
-                >
-                    <ExternalLink className="h-4 w-4" />
-                    View Full Details
-                </Link>
-            </div>
-        </section>
-    );
-}
-
-function NumberField({ label, onChange, step = '0.1', value }) {
-    return (
-        <label className="block">
-            <span className="mb-1.5 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</span>
-            <input
-                aria-label={label}
-                className="h-10 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm font-bold text-white outline-none transition placeholder:text-slate-500 focus:border-sky-300/50 focus:bg-white/[0.09]"
-                onChange={(event) => onChange(event.target.value)}
-                step={step}
-                type="number"
-                value={value}
-            />
-        </label>
-    );
-}
-
-function ShelfEditor({ object }) {
-    const updateShelfProperties = useLocator3DStore((state) => state.updateShelfProperties);
-
-    return (
-        <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-            <h3 className="text-sm font-black text-white">Shelf Details</h3>
-            <div className="mt-4 space-y-3">
-                <label className="block">
-                    <span className="mb-1.5 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Aisle name</span>
-                    <input
-                        aria-label="Aisle name"
-                        className="h-10 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm font-bold text-white outline-none transition focus:border-sky-300/50"
-                        onChange={(event) => updateShelfProperties(object.id, { aisle: event.target.value })}
-                        value={object.aisle}
-                    />
-                </label>
-                <NumberField
-                    label="Shelf Number"
-                    onChange={(value) => updateShelfProperties(object.id, { shelfNumber: value })}
-                    step="1"
-                    value={object.shelfNumber}
-                />
-                <div>
-                    <div className="mb-2 flex items-center justify-between">
-                        <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400" htmlFor="locator-bin-count">Number of Bins</label>
-                        <span className="rounded-full border border-sky-300/25 bg-sky-400/12 px-2 py-1 text-xs font-black text-sky-100 shadow-sm">{object.binCount}</span>
-                    </div>
-                    <input
-                        aria-label="Number of Bins"
-                        className="w-full accent-accent-primary"
-                        id="locator-bin-count"
-                        max={SHELF_BIN_RANGE.MAX}
-                        min={SHELF_BIN_RANGE.MIN}
-                        onChange={(event) => updateShelfProperties(object.id, { binCount: event.target.value })}
-                        type="range"
-                        value={object.binCount}
-                    />
-                </div>
-            </div>
-        </section>
-    );
-}
-
-function ProductAssignmentModal({ isOpen, onClose, shelf }) {
-    const { success, error: showError } = useToast();
-    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
-    const upsertProductLocation = useLocator3DStore((state) => state.upsertProductLocation);
-    const selectedProductForLocation = useLocator3DStore((state) => state.selectedProductForLocation);
-    const [products, setProducts] = useState([]);
-    const [isLoadingProducts, setIsLoadingProducts] = useState(false);
-    const [isSavingLocation, setIsSavingLocation] = useState(false);
-    const [selectedProductId, setSelectedProductId] = useState('');
-    const [selectedShelfId, setSelectedShelfId] = useState(shelf?.id || '');
-    const [binNumber, setBinNumber] = useState(1);
-    const availableShelves = useMemo(() => sceneObjects.filter(isShelfObject), [sceneObjects]);
-    const selectedShelf = availableShelves.find((object) => object.id === selectedShelfId) ?? shelf ?? null;
-    const binOptions = Array.from({ length: selectedShelf?.binCount || 0 }, (_, index) => index + 1);
-
-    useEffect(() => {
-        if (!isOpen) {
-            return undefined;
-        }
-
-        let active = true;
-        setIsLoadingProducts(true);
-
-        void getFullProductCatalog()
-            .then((catalogProducts) => {
-                if (!active) {
-                    return;
-                }
-
-                setProducts(catalogProducts);
-                setSelectedProductId(selectedProductForLocation?.id || catalogProducts[0]?.id || '');
-                setSelectedShelfId(shelf?.id || availableShelves[0]?.id || '');
-                setBinNumber(1);
-            })
-            .catch((loadError) => {
-                if (active) {
-                    showError(loadError.message || 'Unable to load products for assignment.');
-                }
-            })
-            .finally(() => {
-                if (active) {
-                    setIsLoadingProducts(false);
-                }
-            });
-
-        return () => {
-            active = false;
-        };
-    }, [availableShelves, isOpen, selectedProductForLocation?.id, shelf?.id, showError]);
-
-    const selectedProduct = useMemo(() => (
-        products.find((product) => product.id === selectedProductId) ?? null
-    ), [products, selectedProductId]);
-
-    const handleSubmit = async (event) => {
-        event.preventDefault();
-
-        if (!selectedShelf || !selectedProduct) {
-            return;
-        }
-
-        setIsSavingLocation(true);
-        try {
-            const savedLocation = await assignProductLocation({
-                aisle: selectedShelf.aisle,
-                binNumber,
-                floor: selectedShelf.floor,
-                productId: selectedProduct.id,
-                productName: selectedProduct.name,
-                shelfNumber: selectedShelf.shelfNumber,
-                shelfObjectId: selectedShelf.id,
-                sku: selectedProduct.sku,
-            });
-
-            upsertProductLocation(savedLocation);
-            success(`${selectedProduct.name} assigned to Aisle ${savedLocation.aisle}, Shelf ${savedLocation.shelfNumber}, Bin ${savedLocation.binNumber}.`);
-            onClose();
-        } catch (saveError) {
-            showError(saveError.message || 'Unable to save product location.');
-        } finally {
-            setIsSavingLocation(false);
-        }
-    };
-
-    return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Assign Product to Shelf">
-            <form className="space-y-4" onSubmit={handleSubmit}>
-                <label className="block">
-                    <span className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-primary-500">Product</span>
-                    <select
-                        aria-label="Product"
-                        className="min-h-11 w-full rounded-xl border border-primary-200 bg-white px-3 text-sm font-bold text-primary-950"
-                        disabled={isLoadingProducts}
-                        onChange={(event) => setSelectedProductId(event.target.value)}
-                        value={selectedProductId}
-                    >
-                        {products.map((product) => (
-                            <option key={product.id} value={product.id}>
-                                {[product.sku, product.name].filter(Boolean).join(' / ')}
-                            </option>
-                        ))}
-                    </select>
-                </label>
-                <label className="block">
-                    <span className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-primary-500">Shelf object</span>
-                    <select
-                        aria-label="Shelf object"
-                        className="min-h-11 w-full rounded-xl border border-primary-200 bg-white px-3 text-sm font-bold text-primary-950"
-                        onChange={(event) => {
-                            setSelectedShelfId(event.target.value);
-                            setBinNumber(1);
-                        }}
-                        value={selectedShelfId}
-                    >
-                        {availableShelves.map((shelfObject) => (
-                            <option key={shelfObject.id} value={shelfObject.id}>
-                                {shelfObject.name} / Floor {shelfObject.floor || 1} / Aisle {normalizeAisle(shelfObject.aisle)} Shelf {shelfObject.shelfNumber}
-                            </option>
-                        ))}
-                    </select>
-                </label>
-                <label className="block">
-                    <span className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-primary-500">Bin</span>
-                    <select
-                        aria-label="Bin Number"
-                        className="min-h-11 w-full rounded-xl border border-primary-200 bg-white px-3 text-sm font-bold text-primary-950"
-                        disabled={!selectedShelf}
-                        onChange={(event) => setBinNumber(Number(event.target.value))}
-                        value={binNumber}
-                    >
-                        {binOptions.map((bin) => (
-                            <option key={bin} value={bin}>Bin {bin}</option>
-                        ))}
-                    </select>
-                </label>
-                <div className="flex justify-end gap-3">
-                    <button className="min-h-11 rounded-xl border border-primary-200 bg-white px-4 text-sm font-black text-primary-700" onClick={onClose} type="button">
-                        Cancel
-                    </button>
-                    <button
-                        aria-label="Save Product Location"
-                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary-950 px-4 text-sm font-black text-white disabled:cursor-wait disabled:opacity-60"
-                        disabled={!selectedProduct || !selectedShelf || isSavingLocation}
-                        type="submit"
-                    >
-                        <CheckCircle2 className="h-4 w-4" />
-                        {isSavingLocation ? 'Saving...' : 'Save Product Location'}
-                    </button>
-                </div>
-            </form>
-        </Modal>
-    );
-}
-
-function PropertiesPanel() {
-    const centerCameraOnSelected = useLocator3DStore((state) => state.centerCameraOnSelected);
-    const deleteSelectedObject = useLocator3DStore((state) => state.deleteSelectedObject);
-    const productLocations = useLocator3DStore((state) => state.productLocations);
-    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
-    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
-    const toggleObjectLock = useLocator3DStore((state) => state.toggleObjectLock);
-    const updateObjectDimensions = useLocator3DStore((state) => state.updateObjectDimensions);
-    const updateObjectTransform = useLocator3DStore((state) => state.updateObjectTransform);
-    const [isAssigningProduct, setIsAssigningProduct] = useState(false);
-    const selectedObject = getLocatorObjectById(selectedObjectId, sceneObjects);
-    const selectedIsShelf = isShelfObject(selectedObject);
-    const shelfAssignments = useMemo(() => (
-        selectedIsShelf
-            ? productLocations.filter((location) => location.shelfObjectId === selectedObject.id)
-            : []
-    ), [productLocations, selectedIsShelf, selectedObject]);
-
-    if (!selectedObject) {
-        return null;
-    }
-
-    const updateDimension = (key, value) => {
-        updateObjectDimensions(selectedObject.id, { [key]: value });
-    };
-    const updatePosition = (index, value) => {
-        const position = [...selectedObject.position];
-        position[index] = Number(value);
-        updateObjectTransform(selectedObject.id, { position, rotation: selectedObject.rotation });
-    };
-    const updateRotation = (index, value) => {
-        const rotation = [...(selectedObject.rotation || [0, 0, 0])];
-        rotation[index] = toRadians(value);
-        updateObjectTransform(selectedObject.id, { position: selectedObject.position, rotation });
-    };
-
-    return (
-        <aside
-            aria-label="Properties"
-            className="max-h-[76vh] min-w-0 overflow-auto rounded-2xl border border-white/10 bg-slate-950 p-4 text-white shadow-[0_20px_70px_rgba(2,6,23,0.18)]"
-            role="complementary"
-        >
-            <div className="flex items-start justify-between gap-3">
-                <div>
-                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-sky-200">Properties</p>
-                    <h2 className="mt-1 text-xl font-black text-white">{selectedObject.name}</h2>
-                    <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{selectedObject.type}</p>
-                </div>
-                <span className={cx('rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em]', selectedObject.isLocked ? 'border-amber-300/30 bg-amber-400/12 text-amber-100' : 'border-emerald-300/30 bg-emerald-400/12 text-emerald-100')}>
-                    {selectedObject.isLocked ? 'Locked' : 'Editable'}
-                </span>
-            </div>
-
-            <div className="mt-5 grid grid-cols-3 gap-2">
-                <NumberField label="Width" onChange={(value) => updateDimension('width', value)} value={selectedObject.dimensions.width} />
-                <NumberField label="Height" onChange={(value) => updateDimension('height', value)} value={selectedObject.dimensions.height} />
-                <NumberField label="Depth" onChange={(value) => updateDimension('depth', value)} value={selectedObject.dimensions.depth} />
-            </div>
-
-            <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                <h3 className="text-sm font-black text-white">Position</h3>
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                    <NumberField label="Position X" onChange={(value) => updatePosition(0, value)} value={formatNumber(selectedObject.position[0])} />
-                    <NumberField label="Position Y" onChange={(value) => updatePosition(1, value)} value={formatNumber(selectedObject.position[1])} />
-                    <NumberField label="Position Z" onChange={(value) => updatePosition(2, value)} value={formatNumber(selectedObject.position[2])} />
-                </div>
-            </div>
-
-            <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                <h3 className="text-sm font-black text-white">Rotation</h3>
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                    <NumberField label="Rotation X" onChange={(value) => updateRotation(0, value)} step="1" value={toDegrees(selectedObject.rotation?.[0])} />
-                    <NumberField label="Rotation Y" onChange={(value) => updateRotation(1, value)} step="1" value={toDegrees(selectedObject.rotation?.[1])} />
-                    <NumberField label="Rotation Z" onChange={(value) => updateRotation(2, value)} step="1" value={toDegrees(selectedObject.rotation?.[2])} />
-                </div>
-            </div>
-
-            {selectedIsShelf && (
-                <div className="mt-4">
-                    <ShelfEditor object={selectedObject} />
-                </div>
-            )}
-
-            {selectedIsShelf && (
-                <section className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-sm font-black text-white">Assigned Products</h3>
-                        <button
-                            aria-label="Assign Product to Shelf"
-                            className="rounded-xl border border-emerald-300/30 bg-emerald-400/12 px-3 py-2 text-xs font-black text-emerald-100 transition hover:bg-emerald-400/18"
-                            onClick={() => setIsAssigningProduct(true)}
-                            type="button"
-                        >
-                            Assign
-                        </button>
-                    </div>
-                    {shelfAssignments.length > 0 ? (
-                        <div className="mt-3 space-y-2">
-                            {shelfAssignments.map((location) => (
-                                <div key={location.productId} className="rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-bold text-slate-300 shadow-sm">
-                                    {location.sku || location.productName} / Bin {location.binNumber}
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="mt-3 text-xs font-semibold text-slate-400">No products assigned to this shelf yet.</p>
-                    )}
-                </section>
-            )}
-
-            <div className="mt-5 grid grid-cols-2 gap-2">
-                <button
-                    aria-label="Center Camera on Selected Object"
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-3 text-xs font-black text-slate-200 shadow-sm transition hover:border-sky-300/40 hover:bg-white/[0.09]"
-                    onClick={centerCameraOnSelected}
-                    type="button"
-                >
-                    <Camera className="h-4 w-4" />
-                    Center
-                </button>
-                <button
-                    aria-label="Toggle selected object lock"
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-300/30 bg-amber-400/12 px-3 text-xs font-black text-amber-100 transition hover:bg-amber-400/18"
-                    onClick={() => toggleObjectLock(selectedObject.id)}
-                    type="button"
-                >
-                    {selectedObject.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                    {selectedObject.isLocked ? 'Unlock' : 'Lock'}
-                </button>
-                <button
-                    aria-label="Delete selected object"
-                    className="col-span-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-rose-300/30 bg-rose-400/12 px-3 text-xs font-black text-rose-100 transition hover:bg-rose-400/18 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={selectedObject.isLocked}
-                    onClick={deleteSelectedObject}
-                    type="button"
-                >
-                    <Trash2 className="h-4 w-4" />
-                    Delete
-                </button>
-            </div>
-            <ProductAssignmentModal
-                isOpen={isAssigningProduct}
-                onClose={() => setIsAssigningProduct(false)}
-                shelf={selectedIsShelf ? selectedObject : null}
-            />
-        </aside>
-    );
-}
-
-function SceneStats() {
-    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
-    const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
-    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
-    const layoutIssues = useLocator3DStore((state) => state.layoutIssues);
-    const selectedObjectIds = useLocator3DStore((state) => state.selectedObjectIds);
-    const summary = getLocatorObjectSummary(sceneObjects);
-
-    return (
-        <div className="pointer-events-none absolute right-4 bottom-4 z-10 flex flex-wrap justify-end gap-2">
-            <span className="rounded-full border border-white/10 bg-slate-950/75 px-3 py-1 text-xs font-black text-slate-300 backdrop-blur">{summary.floors} floors</span>
-            <span className="rounded-full border border-white/10 bg-slate-950/75 px-3 py-1 text-xs font-black text-slate-300 backdrop-blur">{summary.objects} objects</span>
-            <span className="rounded-full border border-white/10 bg-slate-950/75 px-3 py-1 text-xs font-black text-slate-300 backdrop-blur">{summary.shelves} shelves</span>
-            {selectedObjectIds?.length > 1 && <span className="rounded-full border border-violet-400/30 bg-violet-400/15 px-3 py-1 text-xs font-black text-violet-100 backdrop-blur">{selectedObjectIds.length} selected</span>}
-            {isDesignMode && <span className="rounded-full border border-sky-400/30 bg-sky-400/15 px-3 py-1 text-xs font-black text-sky-100 backdrop-blur">0.25 snap grid</span>}
-            {isDesignMode && layoutIssues.length > 0 && <span className="rounded-full border border-amber-400/30 bg-amber-400/15 px-3 py-1 text-xs font-black text-amber-100 backdrop-blur">{layoutIssues.length} layout issue{layoutIssues.length === 1 ? '' : 's'}</span>}
-            {locatedProduct && <span className="rounded-full border border-emerald-400/30 bg-emerald-400/15 px-3 py-1 text-xs font-black text-emerald-100 backdrop-blur">Locate mode</span>}
-        </div>
-    );
-}
-
-function RecentlyReceivedPanel({ onFocusProduct, products }) {
-    const navigate = useNavigate();
-    const recentlyReceivedStock = useLocator3DStore((state) => state.recentlyReceivedStock);
-    const clearRecentlyReceivedStock = useLocator3DStore((state) => state.clearRecentlyReceivedStock);
-    const items = recentlyReceivedStock.items || [];
-    const totalQuantity = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-    const productsById = useMemo(() => new Map((products || []).map((product) => [product.id, product])), [products]);
-
-    if (items.length === 0) {
-        return null;
-    }
-
-    return (
-        <Motion.section
-            animate={{ opacity: 1, y: 0 }}
-            aria-label="Newly received stock assignment"
-            className="rounded-2xl border border-emerald-300/25 bg-emerald-400/10 p-4 text-white shadow-[0_18px_60px_rgba(2,6,23,0.18)]"
-            initial={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-        >
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="min-w-0">
-                    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-emerald-200">Newly Received Stock</p>
-                    <h2 className="mt-1 text-lg font-black text-white">Assign these invoice items to shelf bins</h2>
-                    <p className="mt-1 text-sm font-bold text-emerald-50/80">
-                        {items.length} item{items.length === 1 ? '' : 's'} / {formatNumber(totalQuantity)} units
-                    </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <button
-                        aria-label="Back to Inventory"
-                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-xs font-black text-slate-100 transition hover:bg-white/[0.1]"
-                        onClick={() => navigate('/inventory')}
-                        type="button"
-                    >
-                        <ArrowLeft className="h-4 w-4" />
-                        Back to Inventory
-                    </button>
-                    <button
-                        aria-label="Clear received stock context"
-                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300/25 bg-emerald-400/12 px-3 text-xs font-black text-emerald-50 transition hover:bg-emerald-400/18"
-                        onClick={clearRecentlyReceivedStock}
-                        type="button"
-                    >
-                        <CheckCircle2 className="h-4 w-4" />
-                        Done assigning
-                    </button>
-                </div>
-            </div>
-            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                {items.map((item) => {
-                    const product = productsById.get(item.productId) ?? {
-                        id: item.productId,
-                        name: item.description || item.partNumber,
-                        sku: item.partNumber,
-                        stock: item.quantity,
-                    };
-
-                    return (
-                        <button
-                            aria-label={`Assign ${product.name || item.partNumber} from recent receipt`}
-                            className="min-w-0 rounded-xl border border-emerald-300/20 bg-slate-950/58 p-3 text-left shadow-sm transition hover:border-emerald-200/50 hover:bg-slate-950/74 focus:outline-none focus:ring-2 focus:ring-emerald-200/45"
-                            key={`${item.productId || item.partNumber}-${item.quantity}`}
-                            onClick={() => onFocusProduct(product)}
-                            type="button"
-                        >
-                            <span className="flex items-start justify-between gap-2">
-                                <span className="min-w-0">
-                                    <span className="block truncate text-sm font-black text-white">{product.name || item.description || item.partNumber}</span>
-                                    <span className="mt-1 block truncate font-mono text-xs font-bold text-emerald-100/70">{item.partNumber || product.sku}</span>
-                                </span>
-                                <span className="rounded-full bg-emerald-300 px-2 py-1 text-[10px] font-black text-slate-950">+{formatNumber(item.quantity)}</span>
-                            </span>
-                        </button>
-                    );
-                })}
-            </div>
-        </Motion.section>
-    );
-}
-
-function SceneControlButton({ children, className = '', ...props }) {
-    return (
-        <button
-            className={cx(
-                'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-950/78 px-3 text-xs font-black text-slate-200 shadow-sm backdrop-blur-xl transition hover:border-sky-300/40 hover:bg-slate-900/90 disabled:cursor-not-allowed disabled:opacity-50',
-                className,
-            )}
-            type="button"
-            {...props}
-        >
-            {children}
-        </button>
-    );
-}
-
-function SceneToggleButton({ active, children, option }) {
-    const toggleSceneOption = useLocator3DStore((state) => state.toggleSceneOption);
-
-    return (
-        <button
-            aria-label={children}
-            aria-pressed={active}
-            className={cx(
-                'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-black transition',
-                active
-                    ? 'border-emerald-300/35 bg-emerald-400/15 text-emerald-50'
-                    : 'border-white/10 bg-slate-950/70 text-slate-400 hover:border-sky-300/35 hover:text-slate-100',
-            )}
-            onClick={() => toggleSceneOption(option)}
-            type="button"
-        >
-            <span className={cx('h-2 w-2 rounded-full', active ? 'bg-emerald-300' : 'bg-slate-600')} />
-            {children}
-        </button>
-    );
-}
-
-function SceneControlsDock({ canvasShellRef }) {
-    const duplicateSelectedObject = useLocator3DStore((state) => state.duplicateSelectedObject);
-    const history = useLocator3DStore((state) => state.history);
-    const qualityPreference = useLocator3DStore((state) => state.qualityPreference);
-    const requestCameraPreset = useLocator3DStore((state) => state.requestCameraPreset);
-    const resetCamera = useLocator3DStore((state) => state.resetCamera);
-    const redo = useLocator3DStore((state) => state.redo);
-    const setQualityPreference = useLocator3DStore((state) => state.setQualityPreference);
-    const showGrid = useLocator3DStore((state) => state.showGrid);
-    const showLabels = useLocator3DStore((state) => state.showLabels);
-    const showPaths = useLocator3DStore((state) => state.showPaths);
-    const undo = useLocator3DStore((state) => state.undo);
-    const xrayMode = useLocator3DStore((state) => state.xrayMode);
-    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
-    const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
-    const [isFullscreen, setIsFullscreen] = useState(false);
-
-    useEffect(() => {
-        const handleFullscreenChange = () => {
-            setIsFullscreen(Boolean(document.fullscreenElement));
-        };
-
-        document.addEventListener('fullscreenchange', handleFullscreenChange);
-
-        return () => {
-            document.removeEventListener('fullscreenchange', handleFullscreenChange);
-        };
-    }, []);
-
-    const handleFullscreenToggle = () => {
-        const target = canvasShellRef.current;
-
-        if (!target || typeof document === 'undefined') {
-            return;
-        }
-
-        if (document.fullscreenElement) {
-            void document.exitFullscreen?.();
-            return;
-        }
-
-        void target.requestFullscreen?.();
-    };
-
-    return (
-        <section
-            aria-label="Camera and scene controls"
-            className="pointer-events-auto absolute inset-x-4 bottom-4 z-20 rounded-2xl border border-white/10 bg-slate-950/72 p-3 text-white shadow-[0_22px_70px_rgba(2,6,23,0.35)] backdrop-blur-xl lg:inset-x-auto lg:right-4 lg:max-w-[620px]"
-            role="region"
-        >
-            <div className="flex flex-col gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white/[0.05] px-3 text-xs font-black uppercase tracking-[0.18em] text-slate-400">
-                        <Camera className="h-4 w-4" />
-                        Camera
-                    </span>
-                    <SceneControlButton aria-label="Overview camera" onClick={() => requestCameraPreset('overview')}>
-                        <Monitor className="h-4 w-4" />
-                        Overview
-                    </SceneControlButton>
-                    <SceneControlButton aria-label="Counter View camera" onClick={() => requestCameraPreset('counter')}>
-                        <Navigation className="h-4 w-4" />
-                        Counter View
-                    </SceneControlButton>
-                    <SceneControlButton aria-label="Top-down camera" onClick={() => requestCameraPreset('topDown')}>
-                        <Grid3X3 className="h-4 w-4" />
-                        Top-down
-                    </SceneControlButton>
-                    <SceneControlButton
-                        aria-label="Focus on Selected camera"
-                        disabled={!selectedObjectId && !locatedProduct}
-                        onClick={() => requestCameraPreset('selected')}
-                    >
-                        <MapPin className="h-4 w-4" />
-                        Focus on Selected
-                    </SceneControlButton>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white/[0.05] px-3 text-xs font-black uppercase tracking-[0.18em] text-slate-400">
-                        <SlidersHorizontal className="h-4 w-4" />
-                        View
-                    </span>
-                    <SceneToggleButton active={showLabels} option="showLabels">Show Labels</SceneToggleButton>
-                    <SceneToggleButton active={showPaths} option="showPaths">Show Paths</SceneToggleButton>
-                    <SceneToggleButton active={showGrid} option="showGrid">Show Grid</SceneToggleButton>
-                    <SceneToggleButton active={xrayMode} option="xrayMode">X-ray Mode</SceneToggleButton>
-                    <label className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-xs font-black text-slate-300">
-                        Quality
-                        <select
-                            aria-label="3D rendering quality"
-                            className="bg-transparent text-xs font-black text-sky-100 outline-none"
-                            onChange={(event) => setQualityPreference(event.target.value)}
-                            value={qualityPreference}
-                        >
-                            <option value="auto">Auto</option>
-                            <option value="high">High</option>
-                            <option value="medium">Medium</option>
-                            <option value="low">Low</option>
-                        </select>
-                    </label>
-                    <SceneControlButton aria-label="Reset Camera" onClick={resetCamera}>
-                        <RefreshCw className="h-4 w-4" />
-                        Reset Camera
-                    </SceneControlButton>
-                    <SceneControlButton aria-label="Undo layout change" disabled={!history?.past?.length} onClick={undo}>
-                        Undo
-                    </SceneControlButton>
-                    <SceneControlButton aria-label="Redo layout change" disabled={!history?.future?.length} onClick={redo}>
-                        Redo
-                    </SceneControlButton>
-                    <SceneControlButton aria-label="Duplicate selected object" disabled={!selectedObjectId} onClick={duplicateSelectedObject}>
-                        Duplicate
-                    </SceneControlButton>
-                    <SceneControlButton aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'} onClick={handleFullscreenToggle}>
-                        {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                        {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-                    </SceneControlButton>
-                </div>
-                <p className="rounded-xl border border-sky-300/15 bg-sky-400/5 px-3 py-2 text-[11px] font-semibold leading-5 text-sky-100 sm:hidden">
-                    Touch controls: drag to orbit, pinch to zoom, and use two fingers to pan. Tap an object to select it.
-                </p>
-            </div>
-        </section>
-    );
-}
-
-function CanvasLoadingOverlay({ isLoading }) {
-    if (!isLoading) {
-        return null;
-    }
-
-    return (
-        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-slate-950/68 backdrop-blur-sm">
-            <div className="w-[min(420px,calc(100%-2rem))] rounded-2xl border border-white/10 bg-slate-950/90 p-5 text-white shadow-[0_22px_70px_rgba(2,6,23,0.35)]">
-                <div className="flex items-center gap-3">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-400/15 text-sky-200">
-                        <Grid3X3 className="h-5 w-5 animate-pulse" />
-                    </span>
-                    <div>
-                        <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Loading workspace</p>
-                        <h2 className="mt-1 text-base font-black text-white">Loading stockroom workspace...</h2>
-                    </div>
-                </div>
-                <div className="mt-5 grid gap-3">
-                    <div className="h-3 w-3/4 animate-pulse rounded bg-white/10" />
-                    <div className="h-3 w-1/2 animate-pulse rounded bg-white/10" />
-                    <div className="h-24 animate-pulse rounded-xl bg-white/[0.06]" />
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function EditModeContextCard() {
-    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
-
-    return (
-        <section className="rounded-2xl border border-sky-300/25 bg-slate-950 p-4 text-white shadow-[0_20px_70px_rgba(2,6,23,0.18)]">
-            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-sky-200">Edit Layout mode</p>
-            <h2 className="mt-2 text-lg font-black text-white">
-                {selectedObjectId ? 'Object controls active' : 'Select an object to edit'}
-            </h2>
-            <p className="mt-3 text-sm font-semibold leading-6 text-slate-400">
-                Use the object library on the canvas, then adjust dimensions, shelf bins, locks, and assignments here.
-            </p>
-        </section>
-    );
-}
-
-function LocatorContextPanel({ canEditLayout, onAnimatePath, onOpenEditLayout, productLocationState }) {
-    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
-
-    return (
-        <AnimatePresence initial={false}>
-            <Motion.div
-                animate={{ opacity: 1, x: 0 }}
-                className="min-w-0 space-y-3"
-                exit={{ opacity: 0, x: 16 }}
-                initial={{ opacity: 0, x: 16 }}
-                key={isDesignMode ? 'edit-context' : 'locate-context'}
-                transition={{ duration: 0.2, ease: 'easeOut' }}
+            <Button
+                className={activeTool === 'move' || activeTool === 'select' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : ''}
+                onClick={() => setActiveTool('move')}
             >
-                {isDesignMode ? (
-                    <>
-                        <EditModeContextCard />
-                        <PropertiesPanel />
-                    </>
-                ) : (
-                    <ProductLocationCard
-                        canEditLayout={canEditLayout}
-                        onAnimatePath={onAnimatePath}
-                        onOpenEditLayout={onOpenEditLayout}
-                        state={productLocationState}
-                    />
+                <MousePointer2 className="h-4 w-4" />
+                Select
+            </Button>
+            <Button
+                className={activeTool === 'draw-wall' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : ''}
+                onClick={() => setActiveTool('draw-wall')}
+            >
+                <BrickWall className="h-4 w-4" />
+                Draw Wall
+            </Button>
+            {selected && (
+                <>
+                    <span className="hidden h-6 w-px bg-slate-200 lg:block" />
+                    <span className="max-w-36 truncate px-1 text-xs font-bold text-slate-700">Selected: {selected.name}</span>
+                    <Button aria-label="Rotate selected object" onClick={() => rotateSelectedObject(-15)}>
+                        <RotateCcw className="h-4 w-4" />
+                        Rotate
+                    </Button>
+                    <Button aria-label="Rotate selected object 90 degrees" onClick={() => rotateSelectedObject(90)}>90°</Button>
+                    <Button aria-label="Duplicate selected object" onClick={duplicateSelectedObject}>
+                        <Copy className="h-4 w-4" />
+                        Duplicate
+                    </Button>
+                    {isShelfObject(selected) && (
+                        <Button onClick={() => onOpenAssignment(selected)}>
+                            <Package className="h-4 w-4" />
+                            Assign Part
+                        </Button>
+                    )}
+                    <Button aria-label="Focus selected object" className="hidden xl:inline-flex" onClick={centerCameraOnSelected}>
+                        <Camera className="h-4 w-4" />
+                        Focus
+                    </Button>
+                    <IconButton label={selected.isLocked ? 'Unlock selected object' : 'Lock selected object'} onClick={() => toggleObjectLock(selected.id)}>
+                        {selected.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                    </IconButton>
+                    <IconButton
+                        className="border-rose-200 text-rose-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+                        label="Delete selected object"
+                        onClick={() => isShelfObject(selected) ? onRequestDelete(selected) : deleteSelectedObject()}
+                    >
+                        <Trash2 className="h-4 w-4" />
+                    </IconButton>
+                </>
+            )}
+            <span className="hidden h-6 w-px bg-slate-200 sm:block" />
+            <IconButton disabled={!history?.past?.length} label="Undo" onClick={undo}><Undo2 className="h-4 w-4" /></IconButton>
+            <IconButton disabled={!history?.future?.length} label="Redo" onClick={redo}><Redo2 className="h-4 w-4" /></IconButton>
+            <Button
+                className={snapEnabled ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : ''}
+                onClick={() => toggleSceneOption('snapEnabled')}
+            >
+                Snap {snapEnabled ? '✓' : 'Off'}
+            </Button>
+            <div className="relative ml-auto">
+                <Button onClick={() => setIsMoreOpen((value) => !value)}>
+                    More
+                    <ChevronDown className="h-3.5 w-3.5" />
+                </Button>
+                {isMoreOpen && (
+                    <div className="absolute right-0 top-12 z-40 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
+                        <button className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={resetCamera} type="button">Reset Camera</button>
+                        <button className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-amber-700 hover:bg-amber-50" onClick={onDiscardChanges} type="button">Discard Unsaved Changes</button>
+                        <button className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-amber-700 hover:bg-amber-50" onClick={onRequestResetFloor} type="button">Reset Current Floor</button>
+                        <button className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-rose-700 hover:bg-rose-50" onClick={onRequestResetStockroom} type="button">Reset Entire Stockroom</button>
+                    </div>
                 )}
-            </Motion.div>
-        </AnimatePresence>
+            </div>
+            <Button onClick={onSave} tone="primary">
+                <Save className="h-4 w-4" />
+                Save
+            </Button>
+        </div>
     );
 }
 
-function useLocatorKeyboardShortcuts(onSaveLayout) {
-    const activeTool = useLocator3DStore((state) => state.activeTool);
-    const cancelWallDrawing = useLocator3DStore((state) => state.cancelWallDrawing);
-    const clearSelection = useLocator3DStore((state) => state.clearSelection);
-    const deleteSelectedObject = useLocator3DStore((state) => state.deleteSelectedObject);
-    const duplicateSelectedObject = useLocator3DStore((state) => state.duplicateSelectedObject);
-    const redo = useLocator3DStore((state) => state.redo);
-    const nudgeSelectedObjects = useLocator3DStore((state) => state.nudgeSelectedObjects);
-    const undo = useLocator3DStore((state) => state.undo);
-
-    useEffect(() => {
-        const handleKeyDown = (event) => {
-            const targetTag = event.target?.tagName?.toLowerCase();
-            const isEditingInput = targetTag === 'input' || targetTag === 'textarea' || targetTag === 'select';
-
-            if (event.key === 'Escape') {
-                if (activeTool === 'draw-wall') {
-                    cancelWallDrawing();
-                    return;
-                }
-                clearSelection();
-                return;
-            }
-
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-                event.preventDefault();
-                onSaveLayout?.();
-                return;
-            }
-
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
-                event.preventDefault();
-                undo();
-                return;
-            }
-
-            if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === 'y' || (event.key.toLowerCase() === 'z' && event.shiftKey))) {
-                event.preventDefault();
-                redo();
-                return;
-            }
-
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd' && !isEditingInput) {
-                event.preventDefault();
-                duplicateSelectedObject();
-                return;
-            }
-
-            if ((event.key === 'Delete' || event.key === 'Backspace') && !isEditingInput) {
-                deleteSelectedObject();
-                return;
-            }
-
-            if (event.key.startsWith('Arrow') && !isEditingInput) {
-                event.preventDefault();
-                nudgeSelectedObjects(event.key, event.shiftKey ? 4 : 1);
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [activeTool, cancelWallDrawing, clearSelection, deleteSelectedObject, duplicateSelectedObject, nudgeSelectedObjects, onSaveLayout, redo, undo]);
-}
-
-function LocatorSummaryCards() {
+function SummaryCards() {
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
     const summary = getLocatorObjectSummary(sceneObjects);
     const cards = [
-        { icon: Boxes, label: 'Shelves', value: summary.shelves, detail: 'Total storage bays', tone: 'from-rose-500 to-fuchsia-500' },
-        { icon: Monitor, label: 'Counters', value: sceneObjects.filter((object) => object.type === 'counter-computer').length, detail: 'Checkout points', tone: 'from-fuchsia-500 to-indigo-500' },
-        { icon: DoorOpen, label: 'Entrances', value: sceneObjects.filter((object) => object.type === 'entrance-door').length, detail: 'Customer access', tone: 'from-amber-400 to-rose-500' },
-        { icon: LayoutDashboard, label: 'Floors', value: summary.floors, detail: 'Mapped levels', tone: 'from-indigo-500 to-sky-500' },
+        { icon: Boxes, label: 'Shelves', value: summary.shelves },
+        { icon: Monitor, label: 'Counters', value: sceneObjects.filter((object) => object.type === 'counter-computer').length },
+        { icon: DoorOpen, label: 'Entrances', value: sceneObjects.filter((object) => object.type === 'entrance-door').length },
+        { icon: LayoutDashboard, label: 'Floors', value: summary.floors },
     ];
 
     return (
         <section aria-label="Stockroom summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {cards.map((card) => (
-                <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#111a2d] p-3 shadow-[0_16px_45px_rgba(2,6,23,0.18)]" key={card.label}>
-                    <span className={cx('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-lg', card.tone)}>
-                        <card.icon className="h-5 w-5" />
-                    </span>
-                    <span className="min-w-0">
-                        <span className="block text-sm font-black text-slate-100">{card.value} {card.label}</span>
-                        <span className="block text-xs font-semibold text-slate-500">{card.detail}</span>
-                    </span>
-                </div>
-            ))}
+            {cards.map((card) => {
+                const Icon = card.icon;
+                return (
+                    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_22px_rgba(15,23,42,0.04)]" key={card.label}>
+                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                            <Icon className="h-5 w-5" />
+                        </span>
+                        <span>
+                            <span className="block text-xl font-black leading-none text-slate-950">{card.value}</span>
+                            <span className="mt-1 block text-xs font-semibold text-slate-500">{card.label}</span>
+                        </span>
+                    </div>
+                );
+            })}
         </section>
-    );
-}
-
-function LocatorMinimap() {
-    const activeFloor = useLocator3DStore((state) => state.activeFloor);
-    const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
-    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
-    const selectedObjectIds = useLocator3DStore((state) => state.selectedObjectIds);
-    const selectObject = useLocator3DStore((state) => state.selectObject);
-    const objects = sceneObjects.filter((object) => {
-        if (Array.isArray(object.floors)) {
-            return object.floors.includes(activeFloor);
-        }
-        return Number(object.floor || 1) === activeFloor;
-    });
-
-    const focusObject = (object) => {
-        if (object.isLocked) {
-            return;
-        }
-        selectObject(object.id);
-    };
-
-    return (
-        <div aria-label={`Floor ${activeFloor} minimap`} className="pointer-events-auto absolute left-4 top-4 z-10 hidden w-52 rounded-2xl border border-white/10 bg-slate-950/78 p-2 text-white shadow-xl backdrop-blur-xl sm:block" role="region">
-            <div className="flex items-center justify-between px-1 pb-1">
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Floor {activeFloor} map</span>
-                <span className="text-[10px] font-bold text-slate-500">click shelf</span>
-            </div>
-            <svg aria-label={`Floor ${activeFloor} stockroom floor plan`} className="h-36 w-full rounded-xl border border-white/10 bg-slate-900" role="img" viewBox="-9 -7 18 14">
-                <rect fill="#172033" height="14" rx="0.2" stroke="#475569" strokeWidth="0.08" width="18" x="-9" y="-7" />
-                <path d="M -8,0 H 8 M 0,-6 V 6" fill="none" opacity="0.32" stroke="#64748b" strokeDasharray="0.2 0.2" strokeWidth="0.06" />
-                {objects.filter((object) => object.type !== 'floor' && object.type !== 'walls').map((object) => {
-                    const footprint = getObjectFootprint(object);
-                    const x = Number(object.position?.[0] || 0);
-                    const z = Number(object.position?.[2] || 0);
-                    const selected = selectedObjectIds?.includes(object.id);
-                    const located = locatedProduct?.shelfObjectId === object.id;
-                    const fill = located ? '#fde047' : selected ? '#38bdf8' : object.type?.startsWith('shelf') ? '#2563eb' : '#64748b';
-                    return (
-                        <rect
-                            aria-label={object.name || object.id}
-                            className={object.isLocked ? 'cursor-not-allowed' : 'cursor-pointer'}
-                            fill={fill}
-                            height={Math.max(0.25, footprint.depth * 2)}
-                            key={object.id}
-                            onClick={() => focusObject(object)}
-                            onKeyDown={(event) => {
-                                if (event.key === 'Enter' || event.key === ' ') {
-                                    event.preventDefault();
-                                    focusObject(object);
-                                }
-                            }}
-                            opacity={object.isLocked ? 0.45 : 0.9}
-                            role="button"
-                            rx="0.12"
-                            tabIndex={object.isLocked ? -1 : 0}
-                            width={Math.max(0.25, footprint.width * 2)}
-                            x={x - footprint.width}
-                            y={-z - footprint.depth}
-                        />
-                    );
-                })}
-            </svg>
-        </div>
     );
 }
 
@@ -1685,84 +728,253 @@ function AutosaveRecoveryBanner({ onDiscard, onRecover, snapshot }) {
     }
 
     return (
-        <section aria-label="Unsaved layout recovery" className="rounded-2xl border border-amber-300/30 bg-amber-400/10 p-4 text-white shadow-[0_18px_60px_rgba(2,6,23,0.18)]">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-amber-200">Unsaved layout recovery</p>
-                    <p className="mt-1 text-sm font-bold text-amber-50/85">A local layout snapshot from {snapshot.createdAt ? new Date(snapshot.createdAt).toLocaleString() : 'an earlier session'} is available.</p>
-                </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
-                    <button className="inline-flex min-h-10 items-center justify-center rounded-xl border border-amber-200/30 bg-amber-300/15 px-3 text-xs font-black text-amber-50 transition hover:bg-amber-300/25" onClick={onRecover} type="button">Recover snapshot</button>
-                    <button className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] px-3 text-xs font-black text-slate-200 transition hover:bg-white/[0.12]" onClick={onDiscard} type="button">Discard</button>
-                </div>
+        <section className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-medium text-amber-800">An unsaved local layout snapshot is available from {snapshot.createdAt ? new Date(snapshot.createdAt).toLocaleString() : 'an earlier session'}.</p>
+            <div className="flex shrink-0 gap-2">
+                <Button onClick={onRecover} tone="success">Recover</Button>
+                <Button onClick={onDiscard}>Discard</Button>
             </div>
         </section>
     );
 }
 
+function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }) {
+    const [query, setQuery] = useState('');
+    const [selectedProduct, setSelectedProduct] = useState(null);
+    const [binNumber, setBinNumber] = useState(1);
+    const [isSaving, setIsSaving] = useState(false);
+    const { error, success } = useToast();
+
+    useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+        const selected = useLocator3DStore.getState().selectedProductForLocation;
+        setQuery(selected?.name || selected?.sku || '');
+        setSelectedProduct(selected || null);
+        setBinNumber(1);
+    }, [isOpen, shelf?.id]);
+
+    const results = useMemo(() => {
+        const normalized = query.trim().toLowerCase();
+        if (!normalized) {
+            return [];
+        }
+        return products.filter((product) => [
+            product.name,
+            product.sku,
+            product.barcode,
+            product.materialCode,
+            product.material_code,
+        ].filter(Boolean).join(' ').toLowerCase().includes(normalized)).slice(0, 6);
+    }, [products, query]);
+
+    const saveAssignment = async () => {
+        if (!shelf || !selectedProduct) {
+            return;
+        }
+        setIsSaving(true);
+        try {
+            const location = await assignProductLocation({
+                aisle: shelf.aisle || 'A',
+                binNumber,
+                floor: shelf.floor || 1,
+                productId: selectedProduct.id,
+                productName: selectedProduct.name || '',
+                shelfNumber: shelf.shelfNumber || 1,
+                shelfObjectId: shelf.id,
+                sku: selectedProduct.sku || '',
+            });
+            useLocator3DStore.getState().upsertProductLocation(location);
+            onAssigned?.(location);
+            success('Product location saved.');
+            onClose();
+        } catch (saveError) {
+            error(saveError.message || 'Unable to save product location.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} size="md" title={shelf ? 'Assign product to ' + shelf.name : 'Assign product'}>
+            <div className="space-y-4">
+                <p className="text-sm leading-6 text-slate-600">This assignment remains connected to this shelf’s stable layout object ID, even when you move or rotate it.</p>
+                <div>
+                    <label className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500" htmlFor="assignment-product">Product</label>
+                    <input
+                        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-indigo-400 focus:bg-white"
+                        id="assignment-product"
+                        onChange={(event) => {
+                            setQuery(event.target.value);
+                            setSelectedProduct(null);
+                        }}
+                        placeholder="Search name, SKU, or material code"
+                        value={query}
+                    />
+                    {results.length > 0 && !selectedProduct && (
+                        <div className="mt-2 overflow-hidden rounded-xl border border-slate-200">
+                            {results.map((product) => (
+                                <button
+                                    className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2.5 text-left text-sm transition last:border-b-0 hover:bg-indigo-50"
+                                    key={product.id}
+                                    onClick={() => {
+                                        setSelectedProduct(product);
+                                        setQuery(product.name || product.sku || '');
+                                    }}
+                                    type="button"
+                                >
+                                    <span className="min-w-0 truncate font-semibold text-slate-800">{product.name || 'Unnamed product'}</span>
+                                    <span className="shrink-0 font-mono text-xs text-slate-500">{product.sku || 'No SKU'}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <div>
+                    <label className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500" htmlFor="assignment-bin">Bin</label>
+                    <select
+                        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-indigo-400 focus:bg-white"
+                        id="assignment-bin"
+                        onChange={(event) => setBinNumber(Number(event.target.value))}
+                        value={binNumber}
+                    >
+                        {Array.from({ length: Math.max(1, Math.min(shelf?.binCount || 1, SHELF_BIN_RANGE.MAX)) }, (_, index) => index + 1).map((bin) => (
+                            <option key={bin} value={bin}>Bin {bin}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                    <Button onClick={onClose}>Cancel</Button>
+                    <Button disabled={!selectedProduct || isSaving} onClick={() => void saveAssignment()} tone="primary">
+                        <Save className="h-4 w-4" />
+                        {isSaving ? 'Saving…' : 'Save location'}
+                    </Button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+function useLocatorKeyboardShortcuts(onSaveLayout) {
+    const activeTool = useLocator3DStore((state) => state.activeTool);
+    const cancelWallDrawing = useLocator3DStore((state) => state.cancelWallDrawing);
+    const clearSelection = useLocator3DStore((state) => state.clearSelection);
+    const deleteSelectedObject = useLocator3DStore((state) => state.deleteSelectedObject);
+    const duplicateSelectedObject = useLocator3DStore((state) => state.duplicateSelectedObject);
+    const nudgeSelectedObjects = useLocator3DStore((state) => state.nudgeSelectedObjects);
+    const redo = useLocator3DStore((state) => state.redo);
+    const undo = useLocator3DStore((state) => state.undo);
+
+    useEffect(() => {
+        const onKeyDown = (event) => {
+            const tag = event.target?.tagName?.toLowerCase();
+            const isEditing = tag === 'input' || tag === 'textarea' || tag === 'select';
+
+            if (event.key === 'Escape') {
+                if (activeTool === 'draw-wall') {
+                    cancelWallDrawing();
+                } else {
+                    clearSelection();
+                }
+                return;
+            }
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+                event.preventDefault();
+                onSaveLayout?.();
+                return;
+            }
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
+                event.preventDefault();
+                undo();
+                return;
+            }
+            if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === 'y' || (event.key.toLowerCase() === 'z' && event.shiftKey))) {
+                event.preventDefault();
+                redo();
+                return;
+            }
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd' && !isEditing) {
+                event.preventDefault();
+                duplicateSelectedObject();
+                return;
+            }
+            if ((event.key === 'Delete' || event.key === 'Backspace') && !isEditing) {
+                deleteSelectedObject();
+                return;
+            }
+            if (event.key.startsWith('Arrow') && !isEditing) {
+                event.preventDefault();
+                nudgeSelectedObjects(event.key, event.shiftKey ? 4 : 1);
+            }
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [activeTool, cancelWallDrawing, clearSelection, deleteSelectedObject, duplicateSelectedObject, nudgeSelectedObjects, onSaveLayout, redo, undo]);
+}
+
 export default function Locator3DAdmin() {
-    const { success, error: showError, info, warning } = useToast();
+    const { error: showError, info, success, warning } = useToast();
     const authContext = useContext(AuthContext);
     const routeLocation = useLocation();
     const [searchParams] = useSearchParams();
-    const routeStateProduct = routeLocation.state?.product ?? null;
-    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
-    const hasUnsavedChanges = useLocator3DStore((state) => state.hasUnsavedChanges);
-    const markLayoutSaved = useLocator3DStore((state) => state.markLayoutSaved);
-    const recoverAutosave = useLocator3DStore((state) => state.recoverAutosave);
+    const productFromRoute = routeLocation.state?.product ?? null;
+    const productId = searchParams.get('productId') || routeLocation.state?.productId || productFromRoute?.id || '';
+    const productName = searchParams.get('name') || productFromRoute?.name || '';
+    const productSku = searchParams.get('sku') || productFromRoute?.sku || '';
+
+    const activeFloor = useLocator3DStore((state) => state.activeFloor);
+    const defaultLayoutObjects = useLocator3DStore((state) => state.defaultLayoutObjects);
     const discardAutosave = useLocator3DStore((state) => state.discardAutosave);
-    const animatePathFromCounter = useLocator3DStore((state) => state.animatePathFromCounter);
+    const discardUnsavedChanges = useLocator3DStore((state) => state.discardUnsavedChanges);
+    const hasUnsavedChanges = useLocator3DStore((state) => state.hasUnsavedChanges);
     const loadLayoutData = useLocator3DStore((state) => state.loadLayoutData);
     const locateProduct = useLocator3DStore((state) => state.locateProduct);
+    const markLayoutSaved = useLocator3DStore((state) => state.markLayoutSaved);
     const productLocations = useLocator3DStore((state) => state.productLocations);
-    const resetToDefaultLayout = useLocator3DStore((state) => state.resetToDefaultLayout);
+    const recoverAutosave = useLocator3DStore((state) => state.recoverAutosave);
     const resetCurrentFloor = useLocator3DStore((state) => state.resetCurrentFloor);
-    const discardUnsavedChanges = useLocator3DStore((state) => state.discardUnsavedChanges);
-    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
+    const resetToDefaultLayout = useLocator3DStore((state) => state.resetToDefaultLayout);
+    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
     const setDesignMode = useLocator3DStore((state) => state.setDesignMode);
     const setProductLocations = useLocator3DStore((state) => state.setProductLocations);
     const setSelectedProductForLocation = useLocator3DStore((state) => state.setSelectedProductForLocation);
-    const [isSavingLayout, setIsSavingLayout] = useState(false);
-    const [isLoadingLayout, setIsLoadingLayout] = useState(false);
-    const [layoutName, setLayoutName] = useState(LOCATOR_LAYOUT_NAME);
-    const [selectedLayoutName, setSelectedLayoutName] = useState(LOCATOR_LAYOUT_NAME);
-    const [layoutOptions, setLayoutOptions] = useState([LOCATOR_LAYOUT_NAME]);
-    const [products, setProducts] = useState([]);
-    const [isLoadingProducts, setIsLoadingProducts] = useState(false);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-    const [productLocationState, setProductLocationState] = useState(PRODUCT_LOCATION_INITIAL_STATE);
+
     const [autosaveSnapshot, setAutosaveSnapshot] = useState(null);
-    const [pendingLayoutAction, setPendingLayoutAction] = useState(null);
+    const [assignmentShelf, setAssignmentShelf] = useState(null);
+    const [isLoadingLayout, setIsLoadingLayout] = useState(false);
+    const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+    const [isSavingLayout, setIsSavingLayout] = useState(false);
+    const [layoutName, setLayoutName] = useState(LOCATOR_LAYOUT_NAME);
+    const [layoutOptions, setLayoutOptions] = useState([LOCATOR_LAYOUT_NAME]);
+    const [locationNotice, setLocationNotice] = useState(EMPTY_LOCATION_NOTICE);
+    const [pendingAction, setPendingAction] = useState(null);
+    const [products, setProducts] = useState([]);
     const canvasShellRef = useRef(null);
-    const productId = searchParams.get('productId') || routeLocation.state?.productId || routeStateProduct?.id || '';
-    const productName = searchParams.get('name') || routeStateProduct?.name || '';
-    const productSku = searchParams.get('sku') || routeStateProduct?.sku || '';
     const canEditLayout = Boolean(authContext?.isAdmin);
-    const isWorkspaceLoading = isLoadingLayout || productLocationState.status === 'loading';
 
     useEffect(() => {
         setAutosaveSnapshot(getLocatorAutosave());
     }, []);
 
     useEffect(() => {
-        const handleBeforeUnload = (event) => {
+        const onBeforeUnload = (event) => {
             if (!hasUnsavedChanges) {
                 return;
             }
-
             event.preventDefault();
             event.returnValue = '';
         };
-
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+        window.addEventListener('beforeunload', onBeforeUnload);
+        return () => window.removeEventListener('beforeunload', onBeforeUnload);
     }, [hasUnsavedChanges]);
 
-    const loadLayoutOptions = useCallback(async () => {
+    const refreshLayoutOptions = useCallback(async () => {
         try {
             const layouts = await listStoreLayouts();
             const names = layouts.map((layout) => layout.layoutName).filter(Boolean);
-            setLayoutOptions([...new Set([LOCATOR_LAYOUT_NAME, layoutName, ...names])]);
+            setLayoutOptions((current) => [...new Set([LOCATOR_LAYOUT_NAME, layoutName, ...current, ...names])]);
         } catch {
             setLayoutOptions((current) => [...new Set([LOCATOR_LAYOUT_NAME, layoutName, ...current])]);
         }
@@ -1776,187 +988,20 @@ export default function Locator3DAdmin() {
             markLayoutSaved();
             setAutosaveSnapshot(null);
             setLayoutName(safeName);
-            setSelectedLayoutName(safeName);
             setLayoutOptions((current) => [...new Set([safeName, ...current])]);
-            success('3D layout saved.');
+            success('Layout saved.');
             return true;
         } catch (saveError) {
-            showError(saveError.message || 'Unable to save 3D layout.');
+            showError(saveError.message || 'Could not save layout. Your changes remain open in this session.');
             return false;
         } finally {
             setIsSavingLayout(false);
         }
     }, [layoutName, markLayoutSaved, sceneObjects, showError, success]);
 
-    const handleLoadLayout = useCallback(async ({ silent = false, locateProductId = '', layout = selectedLayoutName } = {}) => {
-        setIsLoadingLayout(true);
-        const fallbackProduct = locateProductId
-            ? resolveProductDetails({
-                fallbackProduct: routeStateProduct,
-                productId: locateProductId,
-                productName,
-                productSku,
-            })
-            : null;
-
-        if (locateProductId) {
-            setProductLocationState({
-                location: null,
-                message: '',
-                product: fallbackProduct,
-                status: 'loading',
-            });
-            setSelectedProductForLocation(fallbackProduct);
-        }
-
-        try {
-            const [savedLayout, locations] = await Promise.all([
-                loadStoreLayout(layout),
-                getProductLocations(),
-            ]);
-
-            if (savedLayout?.layoutData) {
-                loadLayoutData(savedLayout.layoutData);
-                markLayoutSaved();
-                setAutosaveSnapshot(null);
-                setLayoutName(savedLayout.layoutName || layout);
-                setSelectedLayoutName(savedLayout.layoutName || layout);
-            } else {
-                resetToDefaultLayout();
-                if (!silent) {
-                    info('No saved layout found. Default layout loaded.');
-                }
-            }
-
-            setProductLocations(locations);
-
-            if (locateProductId) {
-                const [location, catalogProducts] = await Promise.all([
-                    getProductLocation(locateProductId),
-                    getFullProductCatalog(),
-                ]);
-                const safeCatalogProducts = Array.isArray(catalogProducts) ? catalogProducts : [];
-                const product = resolveProductDetails({
-                    catalogProducts: safeCatalogProducts,
-                    fallbackProduct,
-                    location,
-                    productId: locateProductId,
-                    productName,
-                    productSku,
-                });
-
-                setProducts(safeCatalogProducts);
-                setSelectedProductForLocation(product);
-
-                if (!location) {
-                    locateProduct(null);
-                    setProductLocationState({
-                        location: null,
-                        message: 'Assign this item to a shelf and bin before using 3D locate mode.',
-                        product,
-                        status: 'empty',
-                    });
-                    warning('This product does not have a saved 3D bin location yet.');
-                    return;
-                }
-
-                const activeSceneObjects = useLocator3DStore.getState().sceneObjects;
-                const targetShelf = getShelfObjectByLocation(location, activeSceneObjects);
-
-                if (!targetShelf) {
-                    locateProduct(null);
-                    setProductLocationState({
-                        location,
-                        message: 'A saved location exists, but its shelf is not in the current layout.',
-                        product,
-                        status: 'empty',
-                    });
-                    warning('This product location is not mapped to the current 3D layout.');
-                    return;
-                }
-
-                const mappedLocation = {
-                    ...location,
-                    floor: Number(location.floor || targetShelf.floor || 1),
-                    productName: product.name || location.productName,
-                    shelfObjectId: targetShelf.id || location.shelfObjectId,
-                    sku: product.sku || location.sku,
-                };
-
-                locateProduct(mappedLocation);
-                setProductLocationState({
-                    location: mappedLocation,
-                    message: '',
-                    product,
-                    status: 'located',
-                });
-                success('Product located in the 3D store.');
-            } else if (!silent) {
-                success('3D layout loaded.');
-            }
-        } catch (loadError) {
-            if (locateProductId) {
-                setProductLocationState({
-                    location: null,
-                    message: loadError.message || 'Unable to load product location.',
-                    product: fallbackProduct,
-                    status: 'error',
-                });
-            }
-            showError(loadError.message || 'Unable to load 3D layout.');
-        } finally {
-            setIsLoadingLayout(false);
-        }
-    }, [info, loadLayoutData, locateProduct, markLayoutSaved, productName, productSku, resetToDefaultLayout, routeStateProduct, selectedLayoutName, setProductLocations, setSelectedProductForLocation, showError, success, warning]);
-
-    const handleResetLayout = useCallback(() => {
-        resetToDefaultLayout();
-        setProductLocationState(PRODUCT_LOCATION_INITIAL_STATE);
-        setSelectedProductForLocation(null);
-        success('Default two-floor 3D layout restored locally. Save when you are ready.');
-    }, [resetToDefaultLayout, setSelectedProductForLocation, success]);
-
-    const handleResetCurrentFloor = useCallback(() => {
-        resetCurrentFloor();
-        setProductLocationState(PRODUCT_LOCATION_INITIAL_STATE);
-        setSelectedProductForLocation(null);
-        success('Current floor reset locally. Save when you are ready.');
-    }, [resetCurrentFloor, setSelectedProductForLocation, success]);
-
-    const handleDiscardChanges = useCallback(() => {
-        discardUnsavedChanges();
-        setAutosaveSnapshot(null);
-        success('Unsaved layout changes discarded.');
-    }, [discardUnsavedChanges, success]);
-
-    const handleDesignModeChange = useCallback((nextDesignMode) => {
-        if (nextDesignMode || !hasUnsavedChanges) {
-            setDesignMode(nextDesignMode);
-            return;
-        }
-        setPendingLayoutAction('exit');
-    }, [hasUnsavedChanges, setDesignMode]);
-
-    const confirmLayoutAction = useCallback(async () => {
-        const action = pendingLayoutAction;
-        setPendingLayoutAction(null);
-        if (action === 'reset-floor') {
-            handleResetCurrentFloor();
-        } else if (action === 'reset-all') {
-            handleResetLayout();
-        } else if (action === 'exit-discard') {
-            handleDiscardChanges();
-            setDesignMode(false);
-        } else if (action === 'exit-save') {
-            if (await handleSaveLayout(layoutName)) {
-                setDesignMode(false);
-            }
-        }
-    }, [handleDiscardChanges, handleResetCurrentFloor, handleResetLayout, handleSaveLayout, layoutName, pendingLayoutAction, setDesignMode]);
-
-    const handleLocateProductFromSearch = useCallback((product) => {
-        const location = productLocations.find((item) => item.productId === product.id);
-        const productDetails = resolveProductDetails({
+    const locateFromProduct = useCallback((product, locations = productLocations) => {
+        const location = locations.find((item) => String(item.productId) === String(product.id)) ?? null;
+        const details = resolveProductDetails({
             catalogProducts: products,
             fallbackProduct: product,
             location,
@@ -1964,30 +1009,24 @@ export default function Locator3DAdmin() {
             productName: product.name,
             productSku: product.sku,
         });
-
-        setSelectedProductForLocation(productDetails);
+        setSelectedProductForLocation(details);
 
         if (!location) {
             locateProduct(null);
-            setProductLocationState({
-                location: null,
-                message: 'Assign this item to a shelf and bin before using 3D locate mode.',
-                product: productDetails,
-                status: 'empty',
+            setLocationNotice({
+                message: 'This product has no saved shelf and bin location yet.',
+                tone: 'warning',
             });
             warning('This product does not have a saved 3D bin location yet.');
             return;
         }
 
-        const targetShelf = getShelfObjectByLocation(location, useLocator3DStore.getState().sceneObjects);
-
-        if (!targetShelf) {
+        const shelf = getShelfObjectByLocation(location, useLocator3DStore.getState().sceneObjects);
+        if (!shelf) {
             locateProduct(null);
-            setProductLocationState({
-                location,
-                message: 'A saved location exists, but its shelf is not in the current layout.',
-                product: productDetails,
-                status: 'empty',
+            setLocationNotice({
+                message: 'The saved location belongs to a shelf that is not in this layout.',
+                tone: 'warning',
             });
             warning('This product location is not mapped to the current 3D layout.');
             return;
@@ -1995,61 +1034,140 @@ export default function Locator3DAdmin() {
 
         const mappedLocation = {
             ...location,
-            floor: Number(location.floor || targetShelf.floor || 1),
-            productName: productDetails.name || location.productName,
-            shelfObjectId: targetShelf.id || location.shelfObjectId,
-            sku: productDetails.sku || location.sku,
+            floor: Number(location.floor || shelf.floor || 1),
+            productName: details.name || location.productName,
+            shelfObjectId: shelf.id || location.shelfObjectId,
+            sku: details.sku || location.sku,
         };
-
         locateProduct(mappedLocation);
-        setProductLocationState({
-            location: mappedLocation,
-            message: '',
-            product: productDetails,
-            status: 'located',
+        setLocationNotice({
+            message: 'Located ' + details.name + ' · ' + formatLocation(mappedLocation),
+            tone: 'success',
         });
-        success('Product located in the 3D store.');
+        success('Product located in the 3D stockroom.');
     }, [locateProduct, productLocations, products, setSelectedProductForLocation, success, warning]);
 
-    const handleAnimatePathFromCounter = useCallback(() => {
-        animatePathFromCounter();
-        info('Path animation restarted from the counter.');
-    }, [animatePathFromCounter, info]);
+    const handleLoadLayout = useCallback(async (name = layoutName) => {
+        const safeName = String(name || LOCATOR_LAYOUT_NAME).trim() || LOCATOR_LAYOUT_NAME;
+        setIsLoadingLayout(true);
+        try {
+            const [savedLayout, locations] = await Promise.all([
+                loadStoreLayout(safeName),
+                getProductLocations(),
+            ]);
+            if (savedLayout?.layoutData) {
+                loadLayoutData(savedLayout.layoutData);
+                markLayoutSaved();
+                setLayoutName(savedLayout.layoutName || safeName);
+            } else {
+                resetToDefaultLayout();
+                markLayoutSaved();
+                info('No saved layout was found. The protected default layout is shown.');
+            }
+            setProductLocations(locations || []);
+            setAutosaveSnapshot(null);
+            setLocationNotice(EMPTY_LOCATION_NOTICE);
+            success('3D layout loaded.');
+        } catch (loadError) {
+            showError(loadError.message || 'Could not load the 3D layout.');
+        } finally {
+            setIsLoadingLayout(false);
+        }
+    }, [info, layoutName, loadLayoutData, markLayoutSaved, resetToDefaultLayout, setProductLocations, showError, success]);
 
-    const handleOpenEditLayout = useCallback(() => {
-        setDesignMode(true);
-        info('Design mode enabled. Select a shelf to assign this product.');
-    }, [info, setDesignMode]);
+    const addedShelfMappings = useMemo(() => {
+        const defaultIds = new Set(defaultLayoutObjects.map((object) => object.id));
+        return productLocations.filter((location) => (
+            location.shelfObjectId
+            && !defaultIds.has(location.shelfObjectId)
+            && (activeFloor ? Number(location.floor || 1) === activeFloor : true)
+        ));
+    }, [activeFloor, defaultLayoutObjects, productLocations]);
 
-    const handleFocusRecentlyReceivedProduct = useCallback((product) => {
-        handleLocateProductFromSearch(product);
-        setDesignMode(true);
-        info('Select a shelf, then use Assign to save this newly received item to a bin.');
-    }, [handleLocateProductFromSearch, info, setDesignMode]);
+    const requestResetFloor = () => {
+        if (addedShelfMappings.length) {
+            setPendingAction({ count: addedShelfMappings.length, type: 'mapping-safety' });
+            return;
+        }
+        setPendingAction({ type: 'reset-floor' });
+    };
+
+    const requestResetStockroom = () => {
+        const defaultIds = new Set(defaultLayoutObjects.map((object) => object.id));
+        const mappings = productLocations.filter((location) => location.shelfObjectId && !defaultIds.has(location.shelfObjectId));
+        if (mappings.length) {
+            setPendingAction({ count: mappings.length, type: 'mapping-safety' });
+            return;
+        }
+        setPendingAction({ type: 'reset-all' });
+    };
+
+    const requestDeleteShelf = (shelf) => {
+        const mappings = productLocations.filter((location) => location.shelfObjectId === shelf.id);
+        if (mappings.length) {
+            setPendingAction({ count: mappings.length, shelf, type: 'delete-mapped-shelf' });
+            return;
+        }
+        useLocator3DStore.getState().deleteSelectedObject();
+    };
+
+    const confirmPendingAction = async () => {
+        const type = pendingAction?.type;
+        setPendingAction(null);
+        if (type === 'reset-floor') {
+            resetCurrentFloor();
+            locateProduct(null);
+            setLocationNotice(EMPTY_LOCATION_NOTICE);
+            success('Current floor restored locally. Save when you are ready.');
+            return;
+        }
+        if (type === 'reset-all') {
+            resetToDefaultLayout();
+            locateProduct(null);
+            setLocationNotice(EMPTY_LOCATION_NOTICE);
+            success('The protected default stockroom is restored locally. Save when you are ready.');
+            return;
+        }
+        if (type === 'exit-save') {
+            if (await handleSaveLayout()) {
+                setDesignMode(false);
+            }
+            return;
+        }
+        if (type === 'exit-discard') {
+            discardUnsavedChanges();
+            setAutosaveSnapshot(null);
+            setDesignMode(false);
+            success('Unsaved layout changes discarded.');
+        }
+    };
+
+    const exitDesignMode = () => {
+        if (!hasUnsavedChanges) {
+            setDesignMode(false);
+            return;
+        }
+        setPendingAction({ type: 'exit' });
+    };
 
     useEffect(() => {
-        void loadLayoutOptions();
-    }, [loadLayoutOptions]);
+        void refreshLayoutOptions();
+    }, [refreshLayoutOptions]);
 
     useEffect(() => {
         let active = true;
         setIsLoadingProducts(true);
-
-        void Promise.all([
-            getFullProductCatalog(),
-            getProductLocations(),
-        ])
+        void Promise.all([getFullProductCatalog(), getProductLocations()])
             .then(([catalogProducts, locations]) => {
                 if (!active) {
                     return;
                 }
-
-                setProducts(catalogProducts || []);
-                setProductLocations(locations || []);
+                setProducts(Array.isArray(catalogProducts) ? catalogProducts : []);
+                setProductLocations(Array.isArray(locations) ? locations : []);
             })
             .catch((loadError) => {
                 if (active) {
-                    showError(loadError.message || 'Unable to load locator search data.');
+                    showError(loadError.message || 'Could not load product search data.');
                 }
             })
             .finally(() => {
@@ -2057,7 +1175,6 @@ export default function Locator3DAdmin() {
                     setIsLoadingProducts(false);
                 }
             });
-
         return () => {
             active = false;
         };
@@ -2067,28 +1184,81 @@ export default function Locator3DAdmin() {
         if (!productId) {
             return;
         }
+        let active = true;
+        void Promise.all([loadStoreLayout(layoutName), getProductLocations(), getFullProductCatalog()])
+            .then(([savedLayout, locations, catalogProducts]) => {
+                if (!active) {
+                    return;
+                }
+                if (savedLayout?.layoutData) {
+                    loadLayoutData(savedLayout.layoutData);
+                    markLayoutSaved();
+                }
+                setProductLocations(locations || []);
+                setProducts(catalogProducts || []);
+                const product = resolveProductDetails({
+                    catalogProducts: catalogProducts || [],
+                    fallbackProduct: productFromRoute,
+                    location: (locations || []).find((item) => String(item.productId) === String(productId)),
+                    productId,
+                    productName,
+                    productSku,
+                });
+                const location = (locations || []).find((item) => String(item.productId) === String(product.id)) ?? null;
+                const shelf = location ? getShelfObjectByLocation(location, useLocator3DStore.getState().sceneObjects) : null;
+                if (location && shelf) {
+                    locateProduct({ ...location, productName: product.name, shelfObjectId: shelf.id, sku: product.sku || location.sku });
+                    setLocationNotice({ message: 'Located ' + product.name + ' · ' + formatLocation(location), tone: 'success' });
+                } else {
+                    locateProduct(null);
+                    setSelectedProductForLocation(product);
+                    setLocationNotice({
+                        message: product.name + ' has no saved shelf and bin location yet.',
+                        tone: 'warning',
+                    });
+                }
+            })
+            .catch((loadError) => {
+                if (active) {
+                    showError(loadError.message || 'Could not load the selected product location.');
+                }
+            });
+        return () => {
+            active = false;
+        };
+    }, [layoutName, loadLayoutData, locateProduct, markLayoutSaved, productFromRoute, productId, productName, productSku, setProductLocations, setSelectedProductForLocation, showError]);
 
-        void handleLoadLayout({ silent: true, locateProductId: productId });
-    }, [handleLoadLayout, productId]);
+    useLocatorKeyboardShortcuts(() => void handleSaveLayout());
 
-    useLocatorKeyboardShortcuts(() => handleSaveLayout(layoutName));
+    const pendingTitle = pendingAction?.type === 'exit'
+        ? 'Save layout changes?'
+        : pendingAction?.type === 'reset-floor'
+            ? 'Reset Floor ' + activeFloor + '?'
+            : pendingAction?.type === 'reset-all'
+                ? 'Reset entire stockroom?'
+                : pendingAction?.type === 'delete-mapped-shelf'
+                    ? 'Delete ' + (pendingAction?.shelf?.name || 'shelf') + '?'
+                    : 'Product locations need attention';
 
     return (
-        <div className="space-y-5 rounded-[24px] bg-[#080d1b] p-3 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:p-4">
-            <TopBar
-                isSidebarOpen={isSidebarOpen}
-                isLoadingLayout={isLoadingLayout}
-                isSavingLayout={isSavingLayout}
+        <div className="min-w-0 space-y-5 bg-[#f6f8fc] p-3 text-slate-950 sm:p-5 lg:p-7">
+            <StockroomHeader
+                canEditLayout={canEditLayout}
+                hasUnsavedChanges={hasUnsavedChanges}
+                isLoadingProducts={isLoadingProducts}
+                isSaving={isSavingLayout}
                 layoutName={layoutName}
                 layoutOptions={layoutOptions}
-                onConfirmSaveLayout={() => void handleSaveLayout(layoutName)}
-                onLoadLayout={() => void handleLoadLayout()}
-                onResetLayout={() => setPendingLayoutAction('reset-all')}
-                onSaveNameChange={setLayoutName}
-                onSelectLayout={setSelectedLayoutName}
-                onToggleSidebar={() => setIsSidebarOpen((value) => !value)}
-                onToggleDesignMode={handleDesignModeChange}
-                selectedLayoutName={selectedLayoutName}
+                locationNotice={locationNotice}
+                onChangeLayoutName={setLayoutName}
+                onExitDesignMode={exitDesignMode}
+                onLoadLayout={(name) => void handleLoadLayout(name)}
+                onLocateProduct={locateFromProduct}
+                onSaveLayout={(name) => void handleSaveLayout(name)}
+                onSelectLayout={setLayoutName}
+                productLocations={productLocations}
+                products={products}
+                sceneObjects={sceneObjects}
             />
 
             <AutosaveRecoveryBanner
@@ -2105,88 +1275,97 @@ export default function Locator3DAdmin() {
                 snapshot={autosaveSnapshot}
             />
 
-            <RecentlyReceivedPanel
-                onFocusProduct={handleFocusRecentlyReceivedProduct}
+            <main
+                aria-label="3D stockroom canvas"
+                className="relative h-[min(72vh,800px)] min-h-[520px] overflow-hidden rounded-[20px] border border-slate-200 bg-slate-950 shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
+                ref={canvasShellRef}
+            >
+                <Locator3DScene />
+                <LocatedProductNote notice={locationNotice} />
+                <FloorInfo />
+                <ViewportControls canvasShellRef={canvasShellRef} />
+                <DesignToolbar
+                    onDiscardChanges={() => {
+                        discardUnsavedChanges();
+                        setAutosaveSnapshot(null);
+                        success('Unsaved layout changes discarded.');
+                    }}
+                    onOpenAssignment={setAssignmentShelf}
+                    onRequestDelete={requestDeleteShelf}
+                    onRequestResetFloor={requestResetFloor}
+                    onRequestResetStockroom={requestResetStockroom}
+                    onSave={() => void handleSaveLayout()}
+                />
+                {isLoadingLayout && (
+                    <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-slate-950/35 backdrop-blur-sm">
+                        <div className="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-lg">Loading stockroom…</div>
+                    </div>
+                )}
+                <div className="pointer-events-none absolute bottom-4 right-4 z-10 hidden rounded-lg bg-slate-950/55 px-3 py-2 text-[11px] font-medium text-white/80 backdrop-blur sm:block">Drag to rotate · Scroll to zoom</div>
+            </main>
+
+            <SummaryCards />
+
+            <ProductAssignmentModal
+                isOpen={Boolean(assignmentShelf)}
+                onAssigned={(location) => {
+                    setLocationNotice({ message: 'Mapped ' + (location.productName || 'product') + ' · ' + formatLocation(location), tone: 'success' });
+                }}
+                onClose={() => setAssignmentShelf(null)}
                 products={products}
+                shelf={assignmentShelf}
             />
 
-            <div
-                className={cx(
-                    'grid items-start gap-4',
-                    isDesignMode
-                        ? 'xl:grid-cols-[minmax(0,1fr)]'
-                        : isSidebarOpen
-                        ? 'xl:grid-cols-[320px_minmax(0,1fr)_340px]'
-                        : 'xl:grid-cols-[minmax(0,1fr)_340px]',
-                )}
-            >
-                {!isDesignMode && (
-                    <ProductLocatorSidebar
-                        isLoadingLayout={isLoadingLayout}
-                        isLoadingProducts={isLoadingProducts}
-                        isOpen={isSidebarOpen}
-                        onCollapse={() => setIsSidebarOpen(false)}
-                        onLocateProduct={handleLocateProductFromSearch}
-                        productLocations={productLocations}
-                        products={products}
-                        sceneObjects={sceneObjects}
-                    />
-                )}
-
-                <main
-                    aria-label="3D stockroom canvas"
-                    className="relative h-[72vh] max-h-[780px] min-h-[540px] overflow-hidden rounded-2xl border border-white/10 bg-slate-950 shadow-[0_20px_70px_rgba(2,6,23,0.25)]"
-                    ref={canvasShellRef}
-                >
-                    <Locator3DScene />
-                    {!isDesignMode && <LocatorMinimap />}
-                    <DesignToolbar
-                        onDiscardChanges={handleDiscardChanges}
-                        onResetCurrentFloor={() => setPendingLayoutAction('reset-floor')}
-                        onResetEntireStockroom={() => setPendingLayoutAction('reset-all')}
-                        onSave={() => void handleSaveLayout(layoutName)}
-                    />
-                    {!isDesignMode && <SceneControlsDock canvasShellRef={canvasShellRef} />}
-                    <CanvasLoadingOverlay isLoading={isWorkspaceLoading} />
-                    <SceneStats />
-                    <div className="pointer-events-none absolute bottom-4 left-4 z-10 hidden rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-[11px] font-bold text-slate-300 backdrop-blur sm:block">
-                        <span className="text-slate-500">Navigation</span><br />Drag to rotate · Scroll to zoom
-                    </div>
-                    <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-slate-950/50 to-transparent" />
-                </main>
-
-                {!isDesignMode && (
-                    <LocatorContextPanel
-                        canEditLayout={canEditLayout}
-                        onAnimatePath={handleAnimatePathFromCounter}
-                        onOpenEditLayout={handleOpenEditLayout}
-                        productLocationState={productLocationState}
-                    />
-                )}
-            </div>
-            <LocatorSummaryCards />
             <Modal
-                closeOnBackdrop={pendingLayoutAction !== 'exit'}
-                isOpen={Boolean(pendingLayoutAction)}
-                onClose={() => setPendingLayoutAction(null)}
-                title={pendingLayoutAction === 'exit' ? 'Unsaved layout changes' : pendingLayoutAction === 'reset-floor' ? 'Reset current floor?' : 'Reset entire stockroom layout?'}
-                footer={pendingLayoutAction === 'exit' ? (
+                closeOnBackdrop={pendingAction?.type !== 'exit'}
+                isOpen={Boolean(pendingAction)}
+                onClose={() => setPendingAction(null)}
+                title={pendingTitle}
+                footer={pendingAction?.type === 'exit' ? (
                     <div className="flex flex-wrap justify-end gap-2">
-                        <TopButton onClick={() => setPendingLayoutAction(null)}>Keep Editing</TopButton>
-                        <TopButton className="border-amber-300/35 bg-amber-400/15 text-amber-50" onClick={() => setPendingLayoutAction('exit-discard')}>Discard Changes</TopButton>
-                        <TopButton className="border-sky-300/35 bg-sky-400/20 text-sky-50" onClick={() => setPendingLayoutAction('exit-save')}>Save and Exit</TopButton>
+                        <Button onClick={() => setPendingAction(null)}>Cancel</Button>
+                        <Button onClick={() => setPendingAction({ type: 'exit-discard' })} tone="danger">Discard</Button>
+                        <Button onClick={() => setPendingAction({ type: 'exit-save' })} tone="primary">Save & Exit</Button>
+                    </div>
+                ) : pendingAction?.type === 'mapping-safety' || pendingAction?.type === 'delete-mapped-shelf' ? (
+                    <div className="flex justify-end gap-2">
+                        <Button onClick={() => setPendingAction(null)}>Cancel</Button>
+                        <Button onClick={() => {
+                            setPendingAction(null);
+                            warning('Move the listed product mappings to a different shelf before changing this structure.');
+                        }}
+                        tone="primary"
+                        >
+                            Move Products First
+                        </Button>
                     </div>
                 ) : (
                     <div className="flex justify-end gap-2">
-                        <TopButton onClick={() => setPendingLayoutAction(null)}>Cancel</TopButton>
-                        <TopButton className="border-rose-300/35 bg-rose-400/15 text-rose-50" onClick={() => void confirmLayoutAction}>Reset Layout</TopButton>
+                        <Button onClick={() => setPendingAction(null)}>Cancel</Button>
+                        <Button onClick={() => void confirmPendingAction()} tone="danger">
+                            {pendingAction?.type === 'reset-floor' ? 'Reset Floor' : 'Reset Stockroom'}
+                        </Button>
                     </div>
                 )}
             >
-                {pendingLayoutAction === 'exit' ? (
-                    <p className="text-sm leading-6 text-slate-300">Save your layout before leaving Design Mode, or discard only the unsaved layout edits. Product, inventory, and business records are unaffected.</p>
+                {pendingAction?.type === 'exit' ? (
+                    <p className="text-sm leading-6 text-slate-600">Your current layout edits are local and unsaved. Product, inventory, and business records will not be affected.</p>
+                ) : pendingAction?.type === 'mapping-safety' ? (
+                    <div className="flex gap-3 text-sm leading-6 text-slate-600">
+                        <AlertTriangle className="mt-1 h-5 w-5 shrink-0 text-amber-600" />
+                        <p>{pendingAction.count} product mapping{pendingAction.count === 1 ? '' : 's'} belong to shelves added outside the protected default layout. Reassign those products before reset so no saved location becomes orphaned.</p>
+                    </div>
+                ) : pendingAction?.type === 'delete-mapped-shelf' ? (
+                    <div className="flex gap-3 text-sm leading-6 text-slate-600">
+                        <AlertTriangle className="mt-1 h-5 w-5 shrink-0 text-amber-600" />
+                        <p>This shelf contains {pendingAction.count} mapped product{pendingAction.count === 1 ? '' : 's'}. Reassign them first; the editor will not silently delete any product-location mapping.</p>
+                    </div>
                 ) : (
-                    <p className="text-sm leading-6 text-slate-300">This restores the default {pendingLayoutAction === 'reset-floor' ? 'objects on the active floor' : 'two-floor scene'} in your working layout. It does not delete inventory, products, or saved business records. Save afterwards to keep the reset.</p>
+                    <p className="text-sm leading-6 text-slate-600">
+                        {pendingAction?.type === 'reset-floor'
+                            ? 'This restores only the active floor to the protected default layout. Other floors and all business data remain unchanged.'
+                            : 'This restores all 3D layout objects to the protected default. Products, inventory, users, sales, and all other business data remain unchanged.'}
+                    </p>
                 )}
             </Modal>
         </div>

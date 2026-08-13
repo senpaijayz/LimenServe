@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../components/ui/Toast';
+import AuthContext from '../context/auth-context';
 import { resetLocator3DStore, useLocator3DStore } from '../modules/locator3d/store/useLocator3DStore';
 
 vi.mock('../modules/locator3d/components/Locator3DScene', () => ({
@@ -10,22 +11,28 @@ vi.mock('../modules/locator3d/components/Locator3DScene', () => ({
 
 import Locator3DAdmin from '../modules/locator3d/pages/Locator3DAdmin';
 
-describe('3D Locator Phase 2 admin controls', () => {
-    it('exposes design mode, lock, delete, floor navigation, and shelf editing controls', () => {
-        resetLocator3DStore();
-
-        useLocator3DStore.getState().forceSelectObject('shelf-4-a');
-
-        render(
-            <MemoryRouter>
+function renderLocator() {
+    return render(
+        <MemoryRouter>
+            <AuthContext.Provider value={{ isAdmin: true }}>
                 <ToastProvider>
                     <Locator3DAdmin />
                 </ToastProvider>
-            </MemoryRouter>,
-        );
+            </AuthContext.Provider>
+        </MemoryRouter>,
+    );
+}
 
-        fireEvent.click(screen.getByRole('switch', { name: 'Design Mode' }));
+describe('3D Locator design controls', () => {
+    it('exposes direct manipulation controls without a permanent property panel', () => {
+        resetLocator3DStore();
+        useLocator3DStore.getState().forceSelectObject('shelf-4-a');
+        renderLocator();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
         expect(useLocator3DStore.getState().isDesignMode).toBe(true);
+        expect(screen.getByLabelText('Design toolbar')).toBeTruthy();
+        expect(screen.queryByText('Properties')).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Lock selected object' }));
         expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-4-a').isLocked).toBe(true);
@@ -33,23 +40,10 @@ describe('3D Locator Phase 2 admin controls', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Unlock selected object' }));
         expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-4-a').isLocked).toBe(false);
 
-        fireEvent.click(screen.getByRole('button', { name: 'More layout actions' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Advanced...' }));
-        fireEvent.change(screen.getByLabelText('Aisle name'), { target: { value: 'Electronics' } });
-        fireEvent.change(screen.getByLabelText('Shelf Number'), { target: { value: '9' } });
-        fireEvent.change(screen.getByLabelText('Number of Bins'), { target: { value: '10' } });
-
-        const updatedShelf = useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-4-a');
-
-        expect(updatedShelf.aisle).toBe('Electronics');
-        expect(updatedShelf.shelfNumber).toBe(9);
-        expect(updatedShelf.binCount).toBe(10);
-        fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
-
-        fireEvent.click(screen.getByRole('button', { name: 'Go to Floor 2' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Floor 2' }));
         expect(useLocator3DStore.getState().activeFloor).toBe(2);
 
-        fireEvent.click(screen.getAllByRole('button', { name: 'Delete selected object' })[0]);
+        fireEvent.click(screen.getByRole('button', { name: 'Delete selected object' }));
         expect(useLocator3DStore.getState().sceneObjects.some((object) => object.id === 'shelf-4-a')).toBe(false);
     });
 });
