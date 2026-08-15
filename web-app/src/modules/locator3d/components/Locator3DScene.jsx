@@ -145,7 +145,7 @@ function objectVisibleOnFloor(object, activeFloor) {
     const floor = Number(activeFloor) === 2 ? 2 : 1;
 
     if (object.type === 'stairs') {
-        return floor === 1;
+        return true;
     }
 
     if (SHARED_FLOOR_TYPES.has(object.type)) {
@@ -242,6 +242,7 @@ function TransformableObject({ children, object, onTransformingChange }) {
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
+    const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const selectObject = useLocator3DStore((state) => state.selectObject);
     const goToFloor = useLocator3DStore((state) => state.goToFloor);
     const beginObjectTransform = useLocator3DStore((state) => state.beginObjectTransform);
@@ -282,7 +283,7 @@ function TransformableObject({ children, object, onTransformingChange }) {
         selectObject(object.id, { additive: Boolean(event.shiftKey) });
 
         if (object.type === 'stairs') {
-            goToFloor(2);
+            goToFloor(activeFloor === 2 ? 1 : 2);
         }
     };
 
@@ -377,6 +378,7 @@ function TransformableObject({ children, object, onTransformingChange }) {
 
 function FloorObject({ object, onTransformingChange }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
+    const stairsObject = useLocator3DStore((state) => state.sceneObjects.find((candidate) => candidate.type === 'stairs'));
     const floorHeight = useSceneFloorHeight();
     const width = Number(object.dimensions?.width || 18);
     const depth = Number(object.dimensions?.depth || 14);
@@ -384,16 +386,52 @@ function FloorObject({ object, onTransformingChange }) {
     const entranceZ = (depth / 2) - 0.72;
     const laneLength = Math.max(1.2, depth * 0.36);
     const laneXs = [-0.3, -0.1, 0.1, 0.3].map((ratio) => width * ratio);
+    const floorPanels = useMemo(() => {
+        const stairWidth = Number(stairsObject?.dimensions?.width || 2.6) + 0.48;
+        const stairDepth = Number(stairsObject?.dimensions?.depth || 4.8) + 0.48;
+        const stairX = Number(stairsObject?.position?.[0] || 0);
+        const stairZ = Number(stairsObject?.position?.[2] || 0);
+        const halfOpeningWidth = Math.min(Math.max(0.5, stairWidth / 2), Math.max(0.5, (width / 2) - 0.12));
+        const halfOpeningDepth = Math.min(Math.max(0.5, stairDepth / 2), Math.max(0.5, (depth / 2) - 0.12));
+        const openingMinX = Math.max(-width / 2 + 0.08, stairX - halfOpeningWidth);
+        const openingMaxX = Math.min(width / 2 - 0.08, stairX + halfOpeningWidth);
+        const openingMinZ = Math.max(-depth / 2 + 0.08, stairZ - halfOpeningDepth);
+        const openingMaxZ = Math.min(depth / 2 - 0.08, stairZ + halfOpeningDepth);
+
+        if (activeFloor !== 2 || !stairsObject) {
+            return [{ depth, width, x: 0, z: 0 }];
+        }
+
+        const panels = [
+            { depth, width: openingMinX + (width / 2), x: (-width / 2) + ((openingMinX + (width / 2)) / 2), z: 0 },
+            { depth, width: (width / 2) - openingMaxX, x: openingMaxX + (((width / 2) - openingMaxX) / 2), z: 0 },
+            { depth: openingMinZ + (depth / 2), width: openingMaxX - openingMinX, x: (openingMinX + openingMaxX) / 2, z: (-depth / 2) + ((openingMinZ + (depth / 2)) / 2) },
+            { depth: (depth / 2) - openingMaxZ, width: openingMaxX - openingMinX, x: (openingMinX + openingMaxX) / 2, z: openingMaxZ + (((depth / 2) - openingMaxZ) / 2) },
+        ];
+
+        return panels.filter((panel) => panel.width > 0.1 && panel.depth > 0.1);
+    }, [activeFloor, depth, stairsObject, width]);
 
     return (
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
             {({ located, locked, selected }) => (
                 <>
-                    <Block args={[width, 0.18, depth]} color="#1f1f1f" located={located} locked={locked} position={[0, floorY - 0.09, 0]} selected={selected} />
-                    <mesh position={[0, floorY + 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-                        <planeGeometry args={[Math.max(1, width - 0.55), Math.max(1, depth - 0.55)]} />
-                        <meshStandardMaterial color="#263246" roughness={0.82} metalness={0.08} />
-                    </mesh>
+                    {floorPanels.map((panel, index) => (
+                        <group key={`floor-panel-${index}`}>
+                            <Block
+                                args={[panel.width, 0.18, panel.depth]}
+                                color="#1f1f1f"
+                                located={located}
+                                locked={locked}
+                                position={[panel.x, floorY - 0.09, panel.z]}
+                                selected={selected}
+                            />
+                            <mesh position={[panel.x, floorY + 0.012, panel.z]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+                                <planeGeometry args={[Math.max(0.1, panel.width - 0.55), Math.max(0.1, panel.depth - 0.55)]} />
+                                <meshStandardMaterial color="#263246" roughness={0.82} metalness={0.08} />
+                            </mesh>
+                        </group>
+                    ))}
                     <mesh position={[0, floorY + 0.026, entranceZ]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
                         <planeGeometry args={[Math.min(width * 0.36, 5.2), Math.min(depth * 0.16, 1.4)]} />
                         <meshStandardMaterial color="#243b53" roughness={0.72} />
@@ -412,6 +450,7 @@ function FloorObject({ object, onTransformingChange }) {
                         </>
                     )}
                     <Label position={[-width / 2 + 1.55, floorY + 0.14, -depth / 2 + 0.55]} tone="floor">{`FLOOR ${activeFloor}`}</Label>
+                    {activeFloor === 2 && stairsObject && <Label position={[stairsObject.position[0], floorY + 0.16, stairsObject.position[2]]} tone="floor">STAIR OPENING · FLOOR 1</Label>}
                 </>
             )}
         </TransformableObject>
@@ -767,9 +806,12 @@ function PartsCabinetObject({ object, onTransformingChange }) {
 }
 
 function StairsObject({ object, onTransformingChange }) {
+    const activeFloor = useLocator3DStore((state) => state.activeFloor);
+    const floorHeight = useSceneFloorHeight();
     const width = Number(object.dimensions?.width || 2.3);
     const depth = Number(object.dimensions?.depth || 5.4);
     const height = Number(object.dimensions?.height || FLOOR_HEIGHT);
+    const stairBaseY = activeFloor === 2 ? floorHeight - height : 0;
     const stepsPerRun = 6;
     const runDepth = Math.max(0.8, depth * 0.46);
     const treadDepth = runDepth / stepsPerRun;
@@ -786,7 +828,7 @@ function StairsObject({ object, onTransformingChange }) {
     return (
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
             {({ located, locked, selected }) => (
-                <>
+                <group position={[0, stairBaseY, 0]}>
                     {[...firstRun, ...secondRun].map((step, index) => (
                         <Block
                             key={index}
@@ -801,8 +843,8 @@ function StairsObject({ object, onTransformingChange }) {
                     <Block args={[width, 0.14, width]} color="#78350f" located={located} locked={locked} position={[0, (stepHeight * stepsPerRun) + 0.07, 0]} selected={selected} />
                     <Block args={[0.1, height * 0.62, runDepth]} color="#78350f" located={located} locked={locked} position={[-width / 2 - 0.1, height * 0.35, -depth / 4]} selected={selected} />
                     <Block args={[0.1, height * 0.62, runDepth]} color="#78350f" located={located} locked={locked} position={[width / 2 + 0.1, height * 0.35, -depth / 4]} selected={selected} />
-                    <Label position={[0, height + 0.18, -depth / 2]}>L-SHAPED STAIRS · FLOOR 2</Label>
-                </>
+                    <Label position={[0, height + 0.18, -depth / 2]}>{`L-SHAPED STAIRS · ${activeFloor === 1 ? 'UP TO FLOOR 2' : 'DOWN TO FLOOR 1'}`}</Label>
+                </group>
             )}
         </TransformableObject>
     );

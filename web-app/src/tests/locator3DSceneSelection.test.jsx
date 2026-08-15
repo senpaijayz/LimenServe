@@ -69,7 +69,7 @@ describe('Locator3DScene selection', () => {
         expect(useLocator3DStore.getState().selectedObjectId).toBeNull();
     });
 
-    it('clicking stairs changes the active floor camera target', () => {
+    it('clicking stairs navigates up and back down through the stair opening', () => {
         resetLocator3DStore();
 
         render(<Locator3DScene />);
@@ -77,6 +77,10 @@ describe('Locator3DScene selection', () => {
         fireEvent.click(screen.getByTestId('locator-object-stairs-a'));
 
         expect(useLocator3DStore.getState().activeFloor).toBe(2);
+
+        fireEvent.click(screen.getByTestId('locator-object-stairs-a'));
+
+        expect(useLocator3DStore.getState().activeFloor).toBe(1);
     });
 
     it('shows selected shelf info in locate mode when an object is clicked', () => {
@@ -104,6 +108,7 @@ describe('Locator3DScene selection', () => {
 
         expect(screen.getByTestId('locator-object-floor-main')).toBeTruthy();
         expect(screen.getByTestId('locator-object-shelf-4-b')).toBeTruthy();
+        expect(screen.getByTestId('locator-object-stairs-a')).toBeTruthy();
         expect(screen.queryByTestId('locator-object-shelf-4-a')).toBeNull();
     });
 
