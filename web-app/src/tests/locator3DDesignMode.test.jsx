@@ -87,4 +87,19 @@ describe('3D Design Mode layout safety', () => {
         expect(movedWall.wallStart).toEqual([2, 0, 3]);
         expect(movedWall.wallEnd).toEqual([2, 0, 1]);
     });
+
+    it('keeps the two floor footprints aligned when the shared floor is resized', () => {
+        resetLocator3DStore();
+        const store = useLocator3DStore.getState();
+
+        store.updateObjectDimensions('floor-main', { width: 28, depth: 19, height: 6 });
+
+        const floor = useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'floor-main');
+        const upperShelf = useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-4-b');
+        const stairs = useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'stairs-a');
+
+        expect(floor.dimensions).toEqual({ width: 28, depth: 19, height: 6 });
+        expect(upperShelf.position[1]).toBe(6);
+        expect(stairs.dimensions.height).toBe(6);
+    });
 });

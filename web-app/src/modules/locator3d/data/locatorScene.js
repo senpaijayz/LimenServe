@@ -24,14 +24,6 @@ export const LOCATOR_OBJECT_LIBRARY = [
         description: 'Store perimeter walls',
     },
     {
-        type: 'wall',
-        label: 'Wall',
-        category: 'Structure',
-        icon: 'BrickWall',
-        color: '#64748b',
-        description: 'Draw a room divider or boundary',
-    },
-    {
         type: 'shelf-2-layer',
         label: '2-Layer Shelf',
         category: 'Storage',

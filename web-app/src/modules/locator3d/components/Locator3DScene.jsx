@@ -19,7 +19,7 @@ const SELECTED_EMISSIVE = '#38bdf8';
 const LOCKED_EDGE = '#f59e0b';
 const LOCATED_EDGE = '#facc15';
 const LOCATED_EMISSIVE = '#fde047';
-const SHARED_FLOOR_TYPES = new Set(['floor', 'walls', 'stairs']);
+const SHARED_FLOOR_TYPES = new Set(['floor', 'walls']);
 const LocatorQualityContext = createContext(getLocatorQualityProfile('high'));
 
 const CAMERA_TARGETS = {
@@ -33,22 +33,24 @@ const CAMERA_TARGETS = {
     },
 };
 
-function buildFloorCameraTarget(activeFloor) {
+function buildFloorCameraTarget(activeFloor, floorHeight = FLOOR_HEIGHT) {
     const floorTarget = CAMERA_TARGETS[activeFloor] ?? CAMERA_TARGETS[1];
+    const verticalOffset = activeFloor === 2 ? floorHeight - FLOOR_HEIGHT : 0;
 
     return {
-        lookAt: new THREE.Vector3(...floorTarget.lookAt),
-        position: new THREE.Vector3(...floorTarget.position),
+        lookAt: new THREE.Vector3(floorTarget.lookAt[0], floorTarget.lookAt[1] + verticalOffset, floorTarget.lookAt[2]),
+        position: new THREE.Vector3(floorTarget.position[0], floorTarget.position[1] + verticalOffset, floorTarget.position[2]),
     };
 }
 
-function buildTopDownCameraTarget(activeFloor) {
+function buildTopDownCameraTarget(activeFloor, floorHeight = FLOOR_HEIGHT) {
     const floorTarget = CAMERA_TARGETS[activeFloor] ?? CAMERA_TARGETS[1];
     const [x, y, z] = floorTarget.lookAt;
+    const verticalOffset = activeFloor === 2 ? floorHeight - FLOOR_HEIGHT : 0;
 
     return {
-        lookAt: new THREE.Vector3(x, y, z),
-        position: new THREE.Vector3(x, y + 18.5, z + 0.01),
+        lookAt: new THREE.Vector3(x, y + verticalOffset, z),
+        position: new THREE.Vector3(x, y + verticalOffset + 18.5, z + 0.01),
     };
 }
 
@@ -142,15 +144,31 @@ function LockBadge({ position }) {
 function objectVisibleOnFloor(object, activeFloor) {
     const floor = Number(activeFloor) === 2 ? 2 : 1;
 
-    if (Array.isArray(object.floors)) {
-        return object.floors.map(Number).includes(floor);
+    if (object.type === 'stairs') {
+        return floor === 1;
     }
 
     if (SHARED_FLOOR_TYPES.has(object.type)) {
         return true;
     }
 
+    if (object.type === 'wall') {
+        return Number(object.floor || 1) === floor;
+    }
+
+    if (Array.isArray(object.floors)) {
+        return object.floors.map(Number).includes(floor);
+    }
+
     return Number(object.floor || 1) === floor;
+}
+
+function useSceneFloorHeight() {
+    return useLocator3DStore((state) => {
+        const floor = state.sceneObjects.find((object) => object.type === 'floor');
+        const height = Number(floor?.dimensions?.height);
+        return Number.isFinite(height) && height > 0 ? height : FLOOR_HEIGHT;
+    });
 }
 
 function HighlightHalo({ object }) {
@@ -225,7 +243,7 @@ function TransformableObject({ children, object, onTransformingChange }) {
     const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const selectObject = useLocator3DStore((state) => state.selectObject);
-    const toggleFloorFocus = useLocator3DStore((state) => state.toggleFloorFocus);
+    const goToFloor = useLocator3DStore((state) => state.goToFloor);
     const beginObjectTransform = useLocator3DStore((state) => state.beginObjectTransform);
     const commitObjectTransform = useLocator3DStore((state) => state.commitObjectTransform);
     const previewObjectTransform = useLocator3DStore((state) => state.previewObjectTransform);
@@ -264,7 +282,7 @@ function TransformableObject({ children, object, onTransformingChange }) {
         selectObject(object.id, { additive: Boolean(event.shiftKey) });
 
         if (object.type === 'stairs') {
-            toggleFloorFocus();
+            goToFloor(2);
         }
     };
 
@@ -358,44 +376,42 @@ function TransformableObject({ children, object, onTransformingChange }) {
 }
 
 function FloorObject({ object, onTransformingChange }) {
+    const activeFloor = useLocator3DStore((state) => state.activeFloor);
+    const floorHeight = useSceneFloorHeight();
     const width = Number(object.dimensions?.width || 18);
     const depth = Number(object.dimensions?.depth || 14);
-    const upperWidth = Math.min(width * 0.58, 10);
-    const upperDepth = Math.min(depth * 0.52, 7);
+    const floorY = activeFloor === 2 ? floorHeight : 0;
+    const entranceZ = (depth / 2) - 0.72;
+    const laneLength = Math.max(1.2, depth * 0.36);
+    const laneXs = [-0.3, -0.1, 0.1, 0.3].map((ratio) => width * ratio);
 
     return (
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
             {({ located, locked, selected }) => (
                 <>
-                    <Block args={[width, 0.18, depth]} color="#1f1f1f" located={located} locked={locked} position={[0, -0.09, 0]} selected={selected} />
-                    <mesh position={[0, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+                    <Block args={[width, 0.18, depth]} color="#1f1f1f" located={located} locked={locked} position={[0, floorY - 0.09, 0]} selected={selected} />
+                    <mesh position={[0, floorY + 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
                         <planeGeometry args={[Math.max(1, width - 0.55), Math.max(1, depth - 0.55)]} />
                         <meshStandardMaterial color="#263246" roughness={0.82} metalness={0.08} />
                     </mesh>
-                    <mesh position={[0, 0.026, 5.65]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-                        <planeGeometry args={[5.2, 1.4]} />
+                    <mesh position={[0, floorY + 0.026, entranceZ]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+                        <planeGeometry args={[Math.min(width * 0.36, 5.2), Math.min(depth * 0.16, 1.4)]} />
                         <meshStandardMaterial color="#243b53" roughness={0.72} />
                     </mesh>
-                    {[[-7.2, 3.2], [-2.8, 3.2], [2.2, 3.2], [6.9, 3.2]].map(([x, z]) => (
-                        <mesh key={`lane-${x}`} position={[x, 0.028, z]} rotation={[-Math.PI / 2, 0, 0]}>
-                            <planeGeometry args={[0.075, 5.1]} />
+                    {laneXs.map((x) => (
+                        <mesh key={`lane-${x}`} position={[x, floorY + 0.028, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                            <planeGeometry args={[0.075, laneLength]} />
                             <meshBasicMaterial color="#f8c76a" transparent opacity={0.62} />
                         </mesh>
                     ))}
-                    <Label position={[-9.6, 0.1, 5.65]} tone="floor">ENTRANCE</Label>
-                    <Label position={[-6.4, 0.18, 4.62]} tone="floor">CHECKOUT</Label>
-                    <Label position={[0, 0.12, 5.55]} tone="floor">CUSTOMER WALKWAY</Label>
-                    <Block args={[upperWidth, 0.2, upperDepth]} color="#2c2c2c" located={located} locked={locked} opacity={0.92} position={[3.7, FLOOR_HEIGHT, -3.1]} selected={selected} />
-                    {[
-                        [0.4, FLOOR_HEIGHT / 2, -6.1],
-                        [7.1, FLOOR_HEIGHT / 2, -6.1],
-                        [0.4, FLOOR_HEIGHT / 2, -0.35],
-                        [7.1, FLOOR_HEIGHT / 2, -0.35],
-                    ].map((position) => (
-                        <Block key={position.join('-')} args={[0.28, FLOOR_HEIGHT, 0.28]} color="#4b5563" located={located} locked={locked} position={position} selected={selected} />
-                    ))}
-                    <Label position={[-5.7, 0.05, 5.4]} tone="floor">FLOOR 1</Label>
-                    <Label position={[3.7, FLOOR_HEIGHT + 0.18, -5.9]} tone="floor">FLOOR 2</Label>
+                    {activeFloor === 1 && (
+                        <>
+                            <Label position={[-Math.max(1, width / 2 - 1.3), floorY + 0.1, entranceZ]} tone="floor">ENTRANCE</Label>
+                            <Label position={[-Math.max(1, width / 2 - 3.6), floorY + 0.18, entranceZ - 1.02]} tone="floor">CHECKOUT</Label>
+                            <Label position={[0, floorY + 0.12, entranceZ - 0.1]} tone="floor">CUSTOMER WALKWAY</Label>
+                        </>
+                    )}
+                    <Label position={[-width / 2 + 1.55, floorY + 0.14, -depth / 2 + 0.55]} tone="floor">{`FLOOR ${activeFloor}`}</Label>
                 </>
             )}
         </TransformableObject>
@@ -403,9 +419,12 @@ function FloorObject({ object, onTransformingChange }) {
 }
 
 function WallsObject({ object, onTransformingChange }) {
+    const activeFloor = useLocator3DStore((state) => state.activeFloor);
+    const floorHeight = useSceneFloorHeight();
     const width = Number(object.dimensions?.width || 18);
     const depth = Number(object.dimensions?.depth || 14);
-    const height = Math.max(1, Math.min(Number(object.dimensions?.height || FLOOR_HEIGHT), FLOOR_HEIGHT));
+    const height = Math.max(0.5, Math.min(Number(object.dimensions?.height || FLOOR_HEIGHT), 8));
+    const floorY = activeFloor === 2 ? floorHeight : 0;
     const halfWidth = width / 2;
     const halfDepth = depth / 2;
 
@@ -413,14 +432,11 @@ function WallsObject({ object, onTransformingChange }) {
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
             {({ located, locked, selected }) => (
                 <>
-                    <Block args={[width + 0.2, height, 0.24]} color="#cbd5e1" located={located} locked={locked} opacity={0.72} position={[0, height / 2, -halfDepth - 0.1]} selected={selected} />
-                    <Block args={[0.24, height, depth + 0.2]} color="#cbd5e1" located={located} locked={locked} opacity={0.72} position={[-halfWidth - 0.1, height / 2, 0]} selected={selected} />
-                    <Block args={[0.24, height, depth + 0.2]} color="#cbd5e1" located={located} locked={locked} opacity={0.72} position={[halfWidth + 0.1, height / 2, 0]} selected={selected} />
-                    <Block args={[width * 0.38, height, 0.24]} color="#cbd5e1" located={located} locked={locked} opacity={0.72} position={[-width * 0.32, height / 2, halfDepth + 0.1]} selected={selected} />
-                    <Block args={[width * 0.38, height, 0.24]} color="#cbd5e1" located={located} locked={locked} opacity={0.72} position={[width * 0.32, height / 2, halfDepth + 0.1]} selected={selected} />
-                    <Block args={[10, 1.15, 0.18]} color="#d1d5db" located={located} locked={locked} opacity={0.54} position={[3.7, FLOOR_HEIGHT + 0.72, 0.45]} selected={selected} />
-                    <Block args={[0.18, 1.15, 7]} color="#d1d5db" located={located} locked={locked} opacity={0.54} position={[-1.35, FLOOR_HEIGHT + 0.72, -3.1]} selected={selected} />
-                    <Block args={[0.18, 1.15, 7]} color="#d1d5db" located={located} locked={locked} opacity={0.54} position={[8.75, FLOOR_HEIGHT + 0.72, -3.1]} selected={selected} />
+                    <Block args={[width + 0.2, height, 0.24]} color="#cbd5e1" located={located} locked={locked} position={[0, floorY + height / 2, -halfDepth - 0.1]} selected={selected} />
+                    <Block args={[0.24, height, depth + 0.2]} color="#cbd5e1" located={located} locked={locked} position={[-halfWidth - 0.1, floorY + height / 2, 0]} selected={selected} />
+                    <Block args={[0.24, height, depth + 0.2]} color="#cbd5e1" located={located} locked={locked} position={[halfWidth + 0.1, floorY + height / 2, 0]} selected={selected} />
+                    <Block args={[width * 0.38, height, 0.24]} color="#cbd5e1" located={located} locked={locked} position={[-width * 0.32, floorY + height / 2, halfDepth + 0.1]} selected={selected} />
+                    <Block args={[width * 0.38, height, 0.24]} color="#cbd5e1" located={located} locked={locked} position={[width * 0.32, floorY + height / 2, halfDepth + 0.1]} selected={selected} />
                 </>
             )}
         </TransformableObject>
@@ -470,6 +486,8 @@ function WallEndpoint({ endpoint, object }) {
 }
 
 function ResizeHandle({ object, signX, signZ }) {
+    const activeFloor = useLocator3DStore((state) => state.activeFloor);
+    const floorHeight = useSceneFloorHeight();
     const dragRef = useRef(null);
     const beginObjectTransform = useLocator3DStore((state) => state.beginObjectTransform);
     const commitObjectTransform = useLocator3DStore((state) => state.commitObjectTransform);
@@ -498,7 +516,9 @@ function ResizeHandle({ object, signX, signZ }) {
             onPointerDown={(event) => {
                 event.stopPropagation();
                 event.target?.setPointerCapture?.(event.pointerId);
-                const floorY = Number(object.floor) === 2 ? FLOOR_HEIGHT : 0;
+                const floorY = object.type === 'floor' || object.type === 'walls'
+                    ? (activeFloor === 2 ? floorHeight : 0)
+                    : (Number(object.floor) === 2 ? FLOOR_HEIGHT : 0);
                 dragRef.current = { floor: new THREE.Plane(new THREE.Vector3(0, 1, 0), -floorY) };
                 beginObjectTransform(object.id);
             }}
@@ -514,7 +534,7 @@ function ResizeHandle({ object, signX, signZ }) {
                 dragRef.current = null;
                 commitObjectTransform(object.id);
             }}
-            position={[signX * width / 2, 0.14, signZ * depth / 2]}
+            position={[signX * width / 2, (object.type === 'floor' || object.type === 'walls') && activeFloor === 2 ? floorHeight + 0.14 : 0.14, signZ * depth / 2]}
         >
             <sphereGeometry args={[0.13, 16, 16]} />
             <meshStandardMaterial color="#f8fafc" emissive="#22d3ee" emissiveIntensity={0.92} roughness={0.24} />
@@ -527,7 +547,7 @@ function ResizeHandles({ object }) {
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
 
-    if (!isDesignMode || selectedObjectId !== object.id || object.isLocked || activeTool === 'rotate' || ['floor', 'walls', 'wall', 'stairs'].includes(object.type)) {
+    if (!isDesignMode || selectedObjectId !== object.id || object.isLocked || activeTool === 'rotate' || object.type === 'wall' || object.type === 'stairs') {
         return null;
     }
 
@@ -750,22 +770,27 @@ function StairsObject({ object, onTransformingChange }) {
     const width = Number(object.dimensions?.width || 2.3);
     const depth = Number(object.dimensions?.depth || 5.4);
     const height = Number(object.dimensions?.height || FLOOR_HEIGHT);
-    const stepCount = 11;
-    const steps = Array.from({ length: stepCount }, (_, index) => ({
-        depth: depth / stepCount,
-        height: 0.18 + index * (height / stepCount),
-        position: [0, 0.09 + index * (height / (stepCount * 2)), depth / 2 - index * (depth / stepCount)],
-        width,
+    const stepsPerRun = 6;
+    const runDepth = Math.max(0.8, depth * 0.46);
+    const treadDepth = runDepth / stepsPerRun;
+    const stepHeight = height / (stepsPerRun * 2);
+    const firstRun = Array.from({ length: stepsPerRun }, (_, index) => ({
+        args: [width, stepHeight * (index + 1), treadDepth],
+        position: [0, (stepHeight * (index + 1)) / 2, -depth / 2 + (treadDepth * index) + (treadDepth / 2)],
+    }));
+    const secondRun = Array.from({ length: stepsPerRun }, (_, index) => ({
+        args: [treadDepth, stepHeight * (stepsPerRun + index + 1), width],
+        position: [width / 2 - (treadDepth * index) - (treadDepth / 2), (stepHeight * (stepsPerRun + index + 1)) / 2, 0],
     }));
 
     return (
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
             {({ located, locked, selected }) => (
                 <>
-                    {steps.map((step, index) => (
+                    {[...firstRun, ...secondRun].map((step, index) => (
                         <Block
                             key={index}
-                            args={[step.width, step.height, step.depth]}
+                            args={step.args}
                             color="#b45309"
                             located={located}
                             locked={locked}
@@ -773,9 +798,10 @@ function StairsObject({ object, onTransformingChange }) {
                             selected={selected}
                         />
                     ))}
-                    <Block args={[0.1, height * 0.62, depth]} color="#78350f" located={located} locked={locked} position={[-width / 2 - 0.1, height * 0.35, 0.12]} selected={selected} />
-                    <Block args={[0.1, height * 0.62, depth]} color="#78350f" located={located} locked={locked} position={[width / 2 + 0.1, height * 0.35, 0.12]} selected={selected} />
-                    <Label position={[0, height + 0.18, -depth / 2]}>STAIRS</Label>
+                    <Block args={[width, 0.14, width]} color="#78350f" located={located} locked={locked} position={[0, (stepHeight * stepsPerRun) + 0.07, 0]} selected={selected} />
+                    <Block args={[0.1, height * 0.62, runDepth]} color="#78350f" located={located} locked={locked} position={[-width / 2 - 0.1, height * 0.35, -depth / 4]} selected={selected} />
+                    <Block args={[0.1, height * 0.62, runDepth]} color="#78350f" located={located} locked={locked} position={[width / 2 + 0.1, height * 0.35, -depth / 4]} selected={selected} />
+                    <Label position={[0, height + 0.18, -depth / 2]}>L-SHAPED STAIRS · FLOOR 2</Label>
                 </>
             )}
         </TransformableObject>
@@ -954,6 +980,7 @@ function LocatorPath() {
 
 function CameraRig({ controlsRef, isTransforming }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
+    const floorHeight = useSceneFloorHeight();
     const cameraFocusRequest = useLocator3DStore((state) => state.cameraFocusRequest);
     const cameraPresetRequest = useLocator3DStore((state) => state.cameraPresetRequest);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
@@ -965,11 +992,11 @@ function CameraRig({ controlsRef, isTransforming }) {
     const targetTriggerRef = useRef('');
     const target = useMemo(() => {
         if (cameraPresetRequest?.preset === 'overview') {
-            return buildFloorCameraTarget(activeFloor);
+            return buildFloorCameraTarget(activeFloor, floorHeight);
         }
 
         if (cameraPresetRequest?.preset === 'topDown') {
-            return buildTopDownCameraTarget(activeFloor);
+            return buildTopDownCameraTarget(activeFloor, floorHeight);
         }
 
         if (cameraPresetRequest?.preset === 'counter') {
@@ -1014,8 +1041,8 @@ function CameraRig({ controlsRef, isTransforming }) {
             return focusedTarget;
         }
 
-        return buildFloorCameraTarget(activeFloor);
-    }, [activeFloor, cameraFocusRequest, cameraPresetRequest, locatedProduct, sceneObjects, selectedObjectId]);
+        return buildFloorCameraTarget(activeFloor, floorHeight);
+    }, [activeFloor, cameraFocusRequest, cameraPresetRequest, floorHeight, locatedProduct, sceneObjects, selectedObjectId]);
 
     const targetTrigger = [
         activeFloor,
@@ -1155,74 +1182,12 @@ class CanvasErrorBoundary extends Component {
     }
 }
 
-function WallDrawTool() {
-    const activeFloor = useLocator3DStore((state) => state.activeFloor);
-    const activeTool = useLocator3DStore((state) => state.activeTool);
-    const beginWallDrawing = useLocator3DStore((state) => state.beginWallDrawing);
-    const completeWallDrawing = useLocator3DStore((state) => state.completeWallDrawing);
-    const previewWallDrawing = useLocator3DStore((state) => state.previewWallDrawing);
-    const wallDraft = useLocator3DStore((state) => state.wallDraft);
-    const floorY = activeFloor === 2 ? FLOOR_HEIGHT : 0;
-    const preview = wallDraft?.start && wallDraft?.end
-        ? (() => {
-            const start = wallDraft.start;
-            const end = wallDraft.end;
-            const deltaX = end[0] - start[0];
-            const deltaZ = end[2] - start[2];
-            return {
-                length: Math.hypot(deltaX, deltaZ),
-                position: [(start[0] + end[0]) / 2, floorY + 1.35, (start[2] + end[2]) / 2],
-                rotation: [0, Math.atan2(-deltaZ, deltaX), 0],
-            };
-        })()
-        : null;
-
-    if (activeTool !== 'draw-wall') {
-        return null;
-    }
-
-    const getPoint = (event) => [event.point.x, floorY, event.point.z];
-
-    return (
-        <>
-            <mesh
-                onClick={(event) => {
-                    event.stopPropagation();
-                    if (wallDraft?.start) completeWallDrawing(getPoint(event));
-                    else beginWallDrawing(getPoint(event));
-                }}
-                onPointerMove={(event) => {
-                    event.stopPropagation();
-                    if (wallDraft?.start) previewWallDrawing(getPoint(event));
-                }}
-                position={[0, floorY + 0.035, 0]}
-                rotation={[-Math.PI / 2, 0, 0]}
-            >
-                <planeGeometry args={[24, 16]} />
-                <meshBasicMaterial color="#38bdf8" opacity={0.025} transparent />
-            </mesh>
-            {preview && preview.length >= 0.01 && (
-                <mesh position={preview.position} rotation={preview.rotation}>
-                    <boxGeometry args={[preview.length, 2.7, 0.18]} />
-                    <meshStandardMaterial color="#38bdf8" emissive="#38bdf8" emissiveIntensity={0.55} opacity={0.48} transparent />
-                </mesh>
-            )}
-            {wallDraft?.start && (
-                <mesh position={[wallDraft.start[0], floorY + 0.12, wallDraft.start[2]]}>
-                    <sphereGeometry args={[0.14, 16, 16]} />
-                    <meshBasicMaterial color="#f8fafc" />
-                </mesh>
-            )}
-        </>
-    );
-}
-
 function SceneContents({ quality, onContextLost }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
+    const floorHeight = useSceneFloorHeight();
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
-    const activeTool = useLocator3DStore((state) => state.activeTool);
     const showGrid = useLocator3DStore((state) => state.showGrid);
     const controlsRef = useRef();
     const [isTransforming, setIsTransforming] = useState(false);
@@ -1230,7 +1195,7 @@ function SceneContents({ quality, onContextLost }) {
         () => sceneObjects.filter((object) => objectVisibleOnFloor(object, activeFloor)),
         [activeFloor, sceneObjects],
     );
-    const activeGridY = activeFloor === 2 ? FLOOR_HEIGHT + 0.012 : 0.012;
+    const activeGridY = activeFloor === 2 ? floorHeight + 0.012 : 0.012;
 
     return (
         <LocatorQualityContext.Provider value={quality}>
@@ -1242,8 +1207,8 @@ function SceneContents({ quality, onContextLost }) {
             <directionalLight castShadow={quality.shadows} intensity={1.45} position={[7, 11, 6]} shadow-mapSize={[quality.shadowMapSize, quality.shadowMapSize]} />
             <spotLight angle={0.42} color="#e0f2fe" intensity={quality.tier === 'low' ? 0.7 : 1.35} penumbra={0.55} position={[-7, 9, 7]} />
             <pointLight color="#38bdf8" intensity={0.42} position={[-4, 4, 3]} />
-            <pointLight color="#facc15" intensity={locatedProduct ? 0.58 : 0.24} position={[5.6, activeFloor === 2 ? FLOOR_HEIGHT + 4 : 4, -5.6]} />
-            <pointLight color="#22c55e" intensity={locatedProduct ? 0.42 : 0.16} position={[-6, activeFloor === 2 ? FLOOR_HEIGHT + 3 : 3, 5.2]} />
+            <pointLight color="#facc15" intensity={locatedProduct ? 0.58 : 0.24} position={[5.6, activeFloor === 2 ? floorHeight + 4 : 4, -5.6]} />
+            <pointLight color="#22c55e" intensity={locatedProduct ? 0.42 : 0.16} position={[-6, activeFloor === 2 ? floorHeight + 3 : 3, 5.2]} />
             {showGrid && (
                 <Grid
                     cellColor="#334155"
@@ -1259,46 +1224,31 @@ function SceneContents({ quality, onContextLost }) {
                 />
             )}
             {showGrid && isDesignMode && (
-                <>
-                    <Grid
-                        cellColor="#38bdf8"
-                        cellSize={0.25}
-                        cellThickness={0.7}
-                        fadeDistance={20}
-                        fadeStrength={1.4}
-                        infiniteGrid
-                        position={[0, 0.026, 0]}
-                        sectionColor="#0284c7"
-                        sectionSize={2}
-                        sectionThickness={1.2}
-                    />
-                    <Grid
-                        cellColor="#38bdf8"
-                        cellSize={0.25}
-                        cellThickness={0.65}
-                        fadeDistance={16}
-                        fadeStrength={1.2}
-                        infiniteGrid
-                        position={[3.7, FLOOR_HEIGHT + 0.026, -3.1]}
-                        sectionColor="#0284c7"
-                        sectionSize={2}
-                        sectionThickness={1.1}
-                    />
-                </>
+                <Grid
+                    cellColor="#38bdf8"
+                    cellSize={0.25}
+                    cellThickness={0.7}
+                    fadeDistance={20}
+                    fadeStrength={1.4}
+                    infiniteGrid
+                    position={[0, activeGridY + 0.014, 0]}
+                    sectionColor="#0284c7"
+                    sectionSize={2}
+                    sectionThickness={1.2}
+                />
             )}
-            <WallDrawTool />
             {visibleSceneObjects.map((object) => (
                 <LocatorObject key={object.id} object={object} onTransformingChange={setIsTransforming} />
             ))}
             <LocatorPath />
-            {quality.labels && <Html position={[-7.7, activeFloor === 1 ? 3.45 : FLOOR_HEIGHT + 2.25, -6.7]}>
+            {quality.labels && <Html position={[-7.7, activeFloor === 1 ? 3.45 : floorHeight + 2.25, -6.7]}>
                 <div className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] shadow-lg backdrop-blur ${
                     isDesignMode
                         ? 'border-sky-300 bg-sky-100/95 text-sky-900'
                         : 'border-white/10 bg-slate-950/80 text-slate-300'
                 }`}
                 >
-                    {isDesignMode ? `${activeTool === 'draw-wall' ? 'Draw Wall / ' : 'Design Mode / '}${SNAP_STEP} Snap` : 'View Mode'}
+                    {isDesignMode ? `Design Mode / ${SNAP_STEP} Snap` : 'View Mode'}
                 </div>
             </Html>}
             {quality.contactShadows && <ContactShadows blur={2.8} far={16} frames={1} opacity={0.38} position={[0, activeGridY + 0.003, 0]} scale={20} />}

@@ -112,6 +112,7 @@ describe('3D Locator rebuild', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
         expect(screen.getByRole('heading', { name: '3D Stockroom · Design' })).toBeTruthy();
         expect(screen.getByLabelText('Design toolbar')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Draw Wall' })).toBeNull();
         expect(screen.queryByText('Properties')).toBeNull();
 
         const initialCount = useLocator3DStore.getState().sceneObjects.length;

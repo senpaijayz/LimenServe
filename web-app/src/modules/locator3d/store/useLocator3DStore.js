@@ -146,12 +146,18 @@ function clampDimension(value, fallback = 1) {
     return Number(Math.min(40, Math.max(0.1, numberValue)).toFixed(3));
 }
 
+function getLayoutFloorHeight(sceneObjects = []) {
+    const floor = sceneObjects.find((object) => object.type === 'floor');
+    const height = Number(floor?.dimensions?.height);
+    return Number.isFinite(height) && height > 0 ? height : FLOOR_HEIGHT;
+}
+
 function sameObjects(first = [], second = []) {
     return JSON.stringify(first) === JSON.stringify(second);
 }
 
-function normalizeTransformForObject(object, transform, snapEnabled = true) {
-    const floorY = Number(object.floor) === 2 ? FLOOR_HEIGHT : 0;
+function normalizeTransformForObject(object, transform, snapEnabled = true, floorHeight = FLOOR_HEIGHT) {
+    const floorY = Number(object.floor) === 2 ? floorHeight : 0;
     const position = Array.isArray(transform.position)
         ? transform.position.map((value) => (snapEnabled ? snapToGrid(value) : Number(Number(value || 0).toFixed(3))))
         : object.position;
@@ -655,7 +661,7 @@ export const useLocator3DStore = create((set, get) => ({
         set((state) => {
             const sceneObjects = state.sceneObjects.map((object) => (
                 object.id === objectId && !object.isLocked
-                    ? normalizeTransformForObject(object, transform, state.snapEnabled)
+                    ? normalizeTransformForObject(object, transform, state.snapEnabled, getLayoutFloorHeight(state.sceneObjects))
                     : object
             ));
             return {
@@ -699,7 +705,7 @@ export const useLocator3DStore = create((set, get) => ({
                 return object;
             }
 
-            return normalizeTransformForObject(object, transform, get().snapEnabled);
+            return normalizeTransformForObject(object, transform, get().snapEnabled, getLayoutFloorHeight(get().sceneObjects));
         }));
     },
     nudgeSelectedObjects: (direction, multiplier = 1) => {
@@ -720,7 +726,7 @@ export const useLocator3DStore = create((set, get) => ({
                 ? normalizeTransformForObject(object, {
                     position: [object.position[0] + xOffset, object.position[1], object.position[2] + zOffset],
                     rotation: object.rotation,
-                }, get().snapEnabled)
+                }, get().snapEnabled, getLayoutFloorHeight(get().sceneObjects))
                 : object
         )));
     },
@@ -750,20 +756,49 @@ export const useLocator3DStore = create((set, get) => ({
             return;
         }
 
-        withSceneObjects(set, (sceneObjects) => sceneObjects.map((object) => {
-            if (object.id !== objectId || object.isLocked) {
-                return object;
+        withSceneObjects(set, (sceneObjects) => {
+            const target = sceneObjects.find((object) => object.id === objectId);
+            if (!target || target.isLocked) {
+                return sceneObjects;
             }
 
-            return {
-                ...object,
-                dimensions: {
-                    width: dimensions.width === undefined ? object.dimensions.width : clampDimension(dimensions.width, object.dimensions.width),
-                    height: dimensions.height === undefined ? object.dimensions.height : clampDimension(dimensions.height, object.dimensions.height),
-                    depth: dimensions.depth === undefined ? object.dimensions.depth : clampDimension(dimensions.depth, object.dimensions.depth),
-                },
+            const nextDimensions = {
+                width: dimensions.width === undefined ? target.dimensions.width : clampDimension(dimensions.width, target.dimensions.width),
+                height: dimensions.height === undefined ? target.dimensions.height : clampDimension(dimensions.height, target.dimensions.height),
+                depth: dimensions.depth === undefined ? target.dimensions.depth : clampDimension(dimensions.depth, target.dimensions.depth),
             };
-        }));
+            const floorHeightChanged = target.type === 'floor' && nextDimensions.height !== target.dimensions.height;
+
+            return sceneObjects.map((object) => {
+                if (object.id === objectId) {
+                    return { ...object, dimensions: nextDimensions };
+                }
+
+                if (!floorHeightChanged) {
+                    return object;
+                }
+
+                const isUpperFloorObject = Number(object.floor || 1) === 2;
+                if (object.type === 'stairs') {
+                    return { ...object, dimensions: { ...object.dimensions, height: nextDimensions.height } };
+                }
+                if (!isUpperFloorObject) {
+                    return object;
+                }
+
+                const nextPosition = [object.position[0], nextDimensions.height, object.position[2]];
+                if (object.type === 'wall' && Array.isArray(object.wallStart) && Array.isArray(object.wallEnd)) {
+                    return {
+                        ...object,
+                        position: nextPosition,
+                        wallStart: [object.wallStart[0], nextDimensions.height, object.wallStart[2]],
+                        wallEnd: [object.wallEnd[0], nextDimensions.height, object.wallEnd[2]],
+                    };
+                }
+
+                return { ...object, position: nextPosition };
+            });
+        });
     },
     previewObjectDimensions: (objectId, dimensions) => {
         if (!objectId || !dimensions) {
@@ -795,7 +830,7 @@ export const useLocator3DStore = create((set, get) => ({
     },
     beginWallDrawing: (point) => {
         const floor = get().activeFloor;
-        const floorY = floor === 2 ? FLOOR_HEIGHT : 0;
+        const floorY = floor === 2 ? getLayoutFloorHeight(get().sceneObjects) : 0;
         const start = Array.isArray(point)
             ? [snapToGrid(point[0]), floorY, snapToGrid(point[2])]
             : null;
@@ -812,7 +847,7 @@ export const useLocator3DStore = create((set, get) => ({
             if (state.activeTool !== 'draw-wall' || !state.wallDraft?.start) {
                 return {};
             }
-            const floorY = state.wallDraft.floor === 2 ? FLOOR_HEIGHT : 0;
+            const floorY = state.wallDraft.floor === 2 ? getLayoutFloorHeight(state.sceneObjects) : 0;
             return {
                 wallDraft: {
                     ...state.wallDraft,
@@ -826,7 +861,7 @@ export const useLocator3DStore = create((set, get) => ({
         if (state.activeTool !== 'draw-wall' || !state.wallDraft?.start || !Array.isArray(point)) {
             return;
         }
-        const floorY = state.wallDraft.floor === 2 ? FLOOR_HEIGHT : 0;
+        const floorY = state.wallDraft.floor === 2 ? getLayoutFloorHeight(state.sceneObjects) : 0;
         const end = [snapToGrid(point[0]), floorY, snapToGrid(point[2])];
         const length = Math.hypot(end[0] - state.wallDraft.start[0], end[2] - state.wallDraft.start[2]);
         if (length < SNAP_STEP) {
@@ -858,7 +893,7 @@ export const useLocator3DStore = create((set, get) => ({
             if (object.id !== objectId || object.type !== 'wall' || object.isLocked) {
                 return object;
             }
-            const floorY = object.floor === 2 ? FLOOR_HEIGHT : 0;
+            const floorY = object.floor === 2 ? getLayoutFloorHeight(get().sceneObjects) : 0;
             const start = endpoint === 'start'
                 ? [snapToGrid(point[0]), floorY, snapToGrid(point[2])]
                 : object.wallStart;
@@ -881,7 +916,7 @@ export const useLocator3DStore = create((set, get) => ({
                 if (object.id !== objectId || object.type !== 'wall' || object.isLocked) {
                     return object;
                 }
-                const floorY = object.floor === 2 ? FLOOR_HEIGHT : 0;
+                const floorY = object.floor === 2 ? getLayoutFloorHeight(state.sceneObjects) : 0;
                 const start = endpoint === 'start'
                     ? [snapToGrid(point[0]), floorY, snapToGrid(point[2])]
                     : object.wallStart;

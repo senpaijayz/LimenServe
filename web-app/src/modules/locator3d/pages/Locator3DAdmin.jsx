@@ -21,6 +21,7 @@ import {
     MoreHorizontal,
     Package,
     Plus,
+    Ruler,
     Redo2,
     RefreshCw,
     RotateCcw,
@@ -571,9 +572,12 @@ function DesignToolbar({ onDiscardChanges, onOpenAssignment, onRequestDelete, on
     const toggleObjectLock = useLocator3DStore((state) => state.toggleObjectLock);
     const toggleSceneOption = useLocator3DStore((state) => state.toggleSceneOption);
     const undo = useLocator3DStore((state) => state.undo);
+    const updateObjectDimensions = useLocator3DStore((state) => state.updateObjectDimensions);
     const selected = getLocatorObjectById(selectedObjectId, sceneObjects);
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [isMoreOpen, setIsMoreOpen] = useState(false);
+    const [isSizeOpen, setIsSizeOpen] = useState(false);
+    const [sizeDraft, setSizeDraft] = useState({ depth: '', height: '', width: '' });
 
     if (!isDesignMode) {
         return null;
@@ -619,17 +623,61 @@ function DesignToolbar({ onDiscardChanges, onOpenAssignment, onRequestDelete, on
                 <MousePointer2 className="h-4 w-4" />
                 Select
             </Button>
-            <Button
-                className={activeTool === 'draw-wall' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : ''}
-                onClick={() => setActiveTool('draw-wall')}
-            >
-                <BrickWall className="h-4 w-4" />
-                Draw Wall
-            </Button>
             {selected && (
                 <>
                     <span className="hidden h-6 w-px bg-slate-200 lg:block" />
                     <span className="max-w-36 truncate px-1 text-xs font-bold text-slate-700">Selected: {selected.name}</span>
+                    <div className="relative">
+                        <Button
+                            aria-expanded={isSizeOpen}
+                            onClick={() => {
+                                setSizeDraft({
+                                    depth: String(selected.dimensions?.depth ?? ''),
+                                    height: String(selected.dimensions?.height ?? ''),
+                                    width: String(selected.dimensions?.width ?? ''),
+                                });
+                                setIsSizeOpen((value) => !value);
+                            }}
+                        >
+                            <Ruler className="h-4 w-4" />
+                            Size
+                        </Button>
+                        {isSizeOpen && (
+                            <div className="absolute left-0 top-12 z-40 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
+                                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Dimensions · metres</p>
+                                <div className="mt-2 grid grid-cols-3 gap-2">
+                                    {['width', 'height', 'depth'].map((key) => (
+                                        <label className="text-[10px] font-bold uppercase tracking-wide text-slate-500" key={key}>
+                                            {key}
+                                            <input
+                                                aria-label={`${key} dimension`}
+                                                className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-400"
+                                                inputMode="decimal"
+                                                min="0.25"
+                                                onChange={(event) => setSizeDraft((current) => ({ ...current, [key]: event.target.value }))}
+                                                step="0.25"
+                                                type="number"
+                                                value={sizeDraft[key]}
+                                            />
+                                        </label>
+                                    ))}
+                                </div>
+                                <Button
+                                    className="mt-3 w-full justify-center"
+                                    onClick={() => {
+                                        const dimensions = Object.fromEntries(Object.entries(sizeDraft).map(([key, value]) => [key, Number(value)]));
+                                        if (Object.values(dimensions).every((value) => Number.isFinite(value) && value > 0)) {
+                                            updateObjectDimensions(selected.id, dimensions);
+                                            setIsSizeOpen(false);
+                                        }
+                                    }}
+                                    tone="primary"
+                                >
+                                    Apply size
+                                </Button>
+                            </div>
+                        )}
+                    </div>
                     <Button aria-label="Rotate selected object" onClick={() => rotateSelectedObject(-15)}>
                         <RotateCcw className="h-4 w-4" />
                         Rotate
