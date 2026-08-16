@@ -63,6 +63,7 @@ const ProductPackageSuggestions = ({
   onAddBundle = null,
   selectedProductIds = [],
   selectedServiceIds = [],
+  selectedBundleKeys = [],
   title = 'Smart Mitsubishi Bundles',
   subtitle = 'Data-driven upsell packages of matched parts and services for the selected Mitsubishi part.',
   compact = false,
@@ -227,8 +228,12 @@ const ProductPackageSuggestions = ({
 
   if (smartQuote) {
     const activeTier = smartQuoteModel.activeTier;
-    const activeTierAdded = activeTier ? isTierAdded(activeTier, selectedProductIds, selectedServiceIds) : false;
-    const bundleCtaLabel = activeTierAdded ? 'Bundle Added' : activeTier ? `Add ${activeTier.badgeLabel} Bundle` : 'Add Bundle';
+    const activeBundleKey = activeTier && smartQuoteModel.bestPackage
+      ? `${smartQuoteModel.bestPackage.packageKey}:${activeTier.tierKey}`
+      : '';
+    const activeTierAdded = Boolean(activeBundleKey && selectedBundleKeys.includes(activeBundleKey))
+      || (activeTier ? isTierAdded(activeTier, selectedProductIds, selectedServiceIds) : false);
+    const bundleCtaLabel = activeTierAdded ? 'Package added' : activeTier ? `Add ${activeTier.badgeLabel} Bundle` : 'Add Bundle';
 
     return (
       <div className="overflow-hidden rounded-[28px] border border-primary-200 bg-white shadow-[0_18px_54px_rgba(15,23,42,0.10)]">
@@ -534,8 +539,10 @@ const ProductPackageSuggestions = ({
               ? `${pkg.minAnchorQuantity}x selected part required`
               : 'Bundle-ready';
             const isQuantityEligible = Number(anchorQuantity ?? 1) >= Number(pkg.minAnchorQuantity ?? 1);
-            const added = isTierAdded(activeTier, selectedProductIds, selectedServiceIds);
-            const ctaLabel = bundleMode === 'catalog' ? 'Build This Bundle' : added ? 'Bundle Added' : 'Add Bundle';
+            const bundleKey = activeTier ? `${pkg.packageKey}:${activeTier.tierKey}` : '';
+            const added = Boolean(bundleKey && selectedBundleKeys.includes(bundleKey))
+              || isTierAdded(activeTier, selectedProductIds, selectedServiceIds);
+            const ctaLabel = bundleMode === 'catalog' ? 'Build This Bundle' : added ? 'Package added' : 'Add Bundle';
             const linkTarget = typeof buildBundleHref === 'function' ? buildBundleHref(pkg, activeTier) : '#';
             const activeParts = renderItemList(activeTier?.items || [], 'product', compact ? 2 : 4);
             const activeServices = renderItemList(activeTier?.items || [], 'service', compact ? 2 : 4);

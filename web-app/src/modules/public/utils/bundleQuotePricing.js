@@ -95,3 +95,36 @@ export function getAppliedBundleSummaries(lines = []) {
 
   return Array.from(bundleMap.values());
 }
+
+// Display metadata is intentionally separate from persisted pricing metadata.
+// Vehicle packages can use synthetic recommendation IDs; they may be shown to
+// the customer, but their discount metadata must still be omitted from payloads.
+export function getAppliedBundleDisplaySummaries(lines = []) {
+  const bundleMap = new Map();
+
+  lines.forEach((line) => {
+    const display = line?.displayBundleMeta;
+    const bundleKey = display?.bundleKey || line?.bundleKey;
+    if (!bundleKey) {
+      return;
+    }
+
+    const quantity = Math.max(Number(line.quantity ?? 1), 1);
+    const lineTotal = roundCurrency(toNumber(line.price, 0) * quantity);
+    if (!bundleMap.has(bundleKey)) {
+      bundleMap.set(bundleKey, {
+        bundleKey,
+        bundleName: display?.bundleName || line.bundleName || 'Smart bundle',
+        bundleTierLabel: display?.bundleTierLabel || line.bundleTierLabel || 'Bundle',
+        lineCount: 0,
+        total: 0,
+      });
+    }
+
+    const bundle = bundleMap.get(bundleKey);
+    bundle.lineCount += 1;
+    bundle.total = roundCurrency(bundle.total + lineTotal);
+  });
+
+  return Array.from(bundleMap.values());
+}

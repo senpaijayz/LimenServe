@@ -16,7 +16,7 @@ import PublicQuoteLookupCard from '../components/PublicQuoteLookupCard';
 import PublicVehicleSelector from '../components/PublicVehicleSelector';
 import VehiclePackageShowcase from '../components/VehiclePackageShowcase';
 import { buildSmartQuoteModel } from '../utils/quoteRecommendationModel';
-import { buildBundleLineItems, getAppliedBundleSummaries, roundCurrency } from '../utils/bundleQuotePricing';
+import { buildBundleLineItems, getAppliedBundleDisplaySummaries, getAppliedBundleSummaries, roundCurrency } from '../utils/bundleQuotePricing';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 
 const SORT_OPTIONS = [
@@ -321,6 +321,7 @@ const PublicEstimate = () => {
     const [searchParams] = useSearchParams();
     const incomingPartSearch = getIncomingPartSearch(searchParams);
     const packageShelfRef = useRef(null);
+    const addedBundleKeysRef = useRef(new Set());
     const [workflowStage, setWorkflowStage] = useState(() => (incomingPartSearch ? 'active' : 'choice'));
     const [mode, setMode] = useState('estimate');
     const [estimatePhase, setEstimatePhase] = useState(() => (incomingPartSearch ? 'catalog' : 'details'));
@@ -590,6 +591,13 @@ const PublicEstimate = () => {
             catalogPrice,
             bundleMeta: recommendation.bundleMeta,
         });
+        const displayBundleMeta = recommendation.bundleMeta?.bundleKey
+            ? {
+                bundleKey: recommendation.bundleMeta.bundleKey,
+                bundleName: recommendation.bundleMeta.bundleName || 'Smart bundle',
+                bundleTierLabel: recommendation.bundleMeta.bundleTierLabel || 'Bundle',
+            }
+            : null;
 
         setSelectedParts((parts) => {
             const existing = parts.find((part) => part.id === productId);
@@ -601,6 +609,7 @@ const PublicEstimate = () => {
                     recommendationRuleId: approvedPricing.recommendationRuleId || part.recommendationRuleId || null,
                     catalogPrice: approvedPricing.catalogPrice,
                     ...approvedPricing.bundleMeta,
+                    ...(displayBundleMeta ? { displayBundleMeta } : {}),
                     price: approvedPricing.recommendationRuleId
                         ? Math.min(Number(part.price ?? approvedPricing.price), approvedPricing.price)
                         : approvedPricing.price,
@@ -619,6 +628,7 @@ const PublicEstimate = () => {
                 recommendationRuleId: approvedPricing.recommendationRuleId,
                 catalogPrice: approvedPricing.catalogPrice,
                 ...approvedPricing.bundleMeta,
+                ...(displayBundleMeta ? { displayBundleMeta } : {}),
             }];
         });
     };
@@ -641,6 +651,13 @@ const PublicEstimate = () => {
             catalogPrice,
             bundleMeta: recommendation.bundleMeta,
         });
+        const displayBundleMeta = recommendation.bundleMeta?.bundleKey
+            ? {
+                bundleKey: recommendation.bundleMeta.bundleKey,
+                bundleName: recommendation.bundleMeta.bundleName || 'Smart bundle',
+                bundleTierLabel: recommendation.bundleMeta.bundleTierLabel || 'Bundle',
+            }
+            : null;
         const service = {
             id: serviceId,
             name: recommendation.recommendedServiceName || recommendedService?.name || 'Recommended service',
@@ -650,6 +667,7 @@ const PublicEstimate = () => {
             recommendationRuleId: approvedPricing.recommendationRuleId,
             catalogPrice: approvedPricing.catalogPrice,
             ...approvedPricing.bundleMeta,
+            ...(displayBundleMeta ? { displayBundleMeta } : {}),
         };
 
         setSelectedServices((services) => {
@@ -667,11 +685,24 @@ const PublicEstimate = () => {
     };
 
     const addBundleToEstimate = (pkg, tier) => {
-        if (!tier?.items?.length) {
+        const lineItems = buildBundleLineItems(pkg, tier);
+        const bundleKey = lineItems[0]?.bundleMeta?.bundleKey;
+        if (!bundleKey || addedBundleKeysRef.current.has(bundleKey)) {
             return;
         }
 
-        buildBundleLineItems(pkg, tier).forEach((lineItem) => {
+        const selectedBundleKeys = new Set(
+            [...selectedParts, ...selectedServices]
+                .map((line) => line.displayBundleMeta?.bundleKey || line.bundleKey)
+                .filter(Boolean),
+        );
+        if (selectedBundleKeys.has(bundleKey)) {
+            addedBundleKeysRef.current.add(bundleKey);
+            return;
+        }
+
+        addedBundleKeysRef.current.add(bundleKey);
+        lineItems.forEach((lineItem) => {
             const recommendation = {
                 ...lineItem.raw,
                 resolvedPrice: lineItem.price,
@@ -688,6 +719,20 @@ const PublicEstimate = () => {
         });
     };
 
+    useEffect(() => {
+        const activeBundleKeys = new Set(
+            [...selectedParts, ...selectedServices]
+                .map((line) => line.displayBundleMeta?.bundleKey || line.bundleKey)
+                .filter(Boolean),
+        );
+
+        addedBundleKeysRef.current.forEach((bundleKey) => {
+            if (!activeBundleKeys.has(bundleKey)) {
+                addedBundleKeysRef.current.delete(bundleKey);
+            }
+        });
+    }, [selectedParts, selectedServices]);
+
     const hasItems = selectedParts.length > 0 || selectedServices.length > 0;
     const focusedPartSelection = selectedParts.find((part) => part.id === focusedProduct?.id);
     const totalItemCount = selectedParts.reduce((sum, part) => sum + part.quantity, 0) + selectedServices.length;
@@ -702,6 +747,7 @@ const PublicEstimate = () => {
         selectedServices,
     }), [summaryFocusProduct, selectedParts, selectedServices]);
     const appliedBundles = useMemo(() => getAppliedBundleSummaries([...selectedParts, ...selectedServices]), [selectedParts, selectedServices]);
+    const appliedBundleDisplays = useMemo(() => getAppliedBundleDisplaySummaries([...selectedParts, ...selectedServices]), [selectedParts, selectedServices]);
     const bundleDiscountTotal = useMemo(() => roundCurrency(appliedBundles.reduce((sum, bundle) => sum + Number(bundle.savings ?? 0), 0)), [appliedBundles]);
     const partsTotal = quoteFinancialModel.totals.partsSubtotal;
     const servicesTotal = quoteFinancialModel.totals.servicesSubtotal;
@@ -835,6 +881,7 @@ const PublicEstimate = () => {
         setEstimatePhase('details');
         setSavedDraftQuote(null);
         setSaveError('');
+        addedBundleKeysRef.current.clear();
     };
 
     const resetPriceListView = () => {
@@ -980,9 +1027,9 @@ const PublicEstimate = () => {
                                                 <div className="min-w-0">
                                                     <p className="truncate text-sm font-semibold text-primary-950">{part.name}</p>
                                                     <p className="mt-1 text-xs text-primary-500">{getProductPartNumber(part) || 'Pricelist item'}</p>
-                                                    {part.bundleKey && (
-                                                        <p className="mt-2 inline-flex rounded-full bg-accent-success/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-accent-success">
-                                                            {part.bundleTierLabel} bundle
+                                                    {(part.displayBundleMeta?.bundleKey || part.bundleKey) && (
+                                                        <p className="mt-2 inline-flex max-w-full rounded-full bg-accent-blue/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-accent-blue">
+                                                            {part.displayBundleMeta?.bundleName || part.bundleName} · {part.displayBundleMeta?.bundleTierLabel || part.bundleTierLabel} package
                                                         </p>
                                                     )}
                                                 </div>
@@ -1027,7 +1074,7 @@ const PublicEstimate = () => {
                                         <div key={service.id} className="flex min-h-[64px] items-center justify-between gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 p-3">
                                             <div className="min-w-0">
                                                 <p className="truncate text-sm font-semibold text-primary-950">{service.name}</p>
-                                                <p className="mt-1 text-xs text-primary-500">{service.bundleKey ? `${service.bundleName} bundle labor` : 'Service / labor line'}</p>
+                                                <p className="mt-1 text-xs text-primary-500">{service.displayBundleMeta?.bundleKey || service.bundleKey ? `${service.displayBundleMeta?.bundleName || service.bundleName} / ${service.displayBundleMeta?.bundleTierLabel || service.bundleTierLabel} package labor` : 'Service / labor line'}</p>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-sm font-bold text-accent-blue">{formatCurrency(service.price)}</span>
@@ -1048,17 +1095,23 @@ const PublicEstimate = () => {
                     </div>
                 )}
 
-                {appliedBundles.length > 0 && (
-                    <div className="rounded-[24px] border border-accent-success/25 bg-accent-success/10 p-4">
-                        <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-accent-success">Bundle pricing applied</p>
+                {appliedBundleDisplays.length > 0 && (
+                    <div className="rounded-[24px] border border-accent-blue/25 bg-accent-blue/5 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-accent-blue">Packages in this quote</p>
+                                <p className="mt-1 text-sm text-primary-500">Your selected package stays visible even when its parts and labor are listed separately below.</p>
+                            </div>
+                            <Package className="hidden h-5 w-5 shrink-0 text-accent-blue sm:block" />
+                        </div>
                         <div className="mt-3 space-y-2">
-                            {appliedBundles.map((bundle) => (
-                                <div key={bundle.bundleKey} className="flex items-start justify-between gap-3 text-sm">
+                            {appliedBundleDisplays.map((bundle) => (
+                                <div key={bundle.bundleKey} className="flex items-start justify-between gap-3 rounded-2xl border border-accent-blue/15 bg-white/80 px-3 py-3 text-sm">
                                     <div>
                                         <p className="font-semibold text-primary-950">{bundle.bundleName}</p>
-                                        <p className="text-xs text-primary-500">{bundle.bundleTierLabel} package total {formatCurrency(bundle.smartTotal)}</p>
+                                        <p className="mt-1 text-xs text-primary-500">{bundle.bundleTierLabel} · {bundle.lineCount} included line{bundle.lineCount === 1 ? '' : 's'}</p>
                                     </div>
-                                    {bundle.savings > 0 && <p className="font-bold text-accent-success">Save {formatCurrency(bundle.savings)}</p>}
+                                    <p className="shrink-0 font-bold text-accent-blue">{formatCurrency(bundle.total)}</p>
                                 </div>
                             ))}
                         </div>
@@ -1234,9 +1287,9 @@ const PublicEstimate = () => {
                                 <div className="min-w-0">
                                     <p className="font-semibold text-primary-950">{part.name}</p>
                                     <p className="mt-1 text-xs text-primary-500">{getProductPartNumber(part) || 'Pricelist item'} - Qty {part.quantity}</p>
-                                    {part.bundleKey && (
-                                        <p className="mt-2 inline-flex rounded-full bg-accent-success/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-accent-success">
-                                            {part.bundleName} / {part.bundleTierLabel}
+                                    {(part.displayBundleMeta?.bundleKey || part.bundleKey) && (
+                                        <p className="mt-2 inline-flex max-w-full rounded-full bg-accent-blue/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-accent-blue">
+                                            {part.displayBundleMeta?.bundleName || part.bundleName} / {part.displayBundleMeta?.bundleTierLabel || part.bundleTierLabel} package
                                         </p>
                                     )}
                                 </div>
@@ -1247,7 +1300,7 @@ const PublicEstimate = () => {
                             <div key={service.id} className="grid gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                                 <div className="min-w-0">
                                     <p className="font-semibold text-primary-950">{service.name}</p>
-                                    <p className="mt-1 text-xs text-primary-500">{service.bundleKey ? `${service.bundleName} / ${service.bundleTierLabel}` : 'Service / labor line'}</p>
+                                    <p className="mt-1 text-xs text-primary-500">{service.displayBundleMeta?.bundleKey || service.bundleKey ? `${service.displayBundleMeta?.bundleName || service.bundleName} / ${service.displayBundleMeta?.bundleTierLabel || service.bundleTierLabel} package labor` : 'Service / labor line'}</p>
                                 </div>
                                 <p className="font-bold text-accent-blue">{formatCurrency(service.price)}</p>
                             </div>
@@ -1269,6 +1322,7 @@ const PublicEstimate = () => {
                     onRemoveService={removeService}
                     selectedProductIds={selectedProductIds}
                     selectedServiceIds={selectedServiceIds}
+                    selectedBundleKeys={appliedBundleDisplays.map((bundle) => bundle.bundleKey)}
                     title={hasVehicle ? 'Recommended bundle before finishing' : 'Part-based bundle before finishing'}
                     subtitle={hasVehicle
                         ? 'Add any remaining matched parts or labor before generating the quote number.'
@@ -1538,6 +1592,7 @@ const PublicEstimate = () => {
                                             onAddBundle={addBundleToEstimate}
                                             selectedProductIds={selectedProductIds}
                                             selectedServiceIds={selectedServiceIds}
+                                            selectedBundleKeys={appliedBundleDisplays.map((bundle) => bundle.bundleKey)}
                                             title="Vehicle-first service bundles"
                                             subtitle="Visual package cards for the vehicle you selected, complete with included parts, included labor, normal total, package total, and savings."
                                             emptyLabel={`No featured packages are ready for ${vehicle.displayLabel} yet.`}
@@ -1729,6 +1784,7 @@ const PublicEstimate = () => {
                                             onRemoveService={removeService}
                                             selectedProductIds={selectedProductIds}
                                             selectedServiceIds={selectedServiceIds}
+                                            selectedBundleKeys={appliedBundleDisplays.map((bundle) => bundle.bundleKey)}
                                             title={hasVehicle ? 'Good / Better / Best smart bundles' : 'Part-based Good / Better / Best bundles'}
                                             subtitle={hasVehicle
                                                 ? 'Vehicle-aware smart upsell bundles of matched Mitsubishi parts and labor for the selected anchor part.'

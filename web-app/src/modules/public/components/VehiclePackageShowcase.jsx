@@ -53,6 +53,7 @@ export default function VehiclePackageShowcase({
   buildBundleHref = null,
   selectedProductIds = [],
   selectedServiceIds = [],
+  selectedBundleKeys = [],
   title = 'Recommended service bundles',
   subtitle = 'Visual Mitsubishi service-led bundles tuned to the vehicle you selected.',
   emptyLabel = 'Choose a vehicle to unlock recommended packages.',
@@ -130,8 +131,10 @@ export default function VehiclePackageShowcase({
             const highlightedTierKey = getDefaultHighlightedTier(tiers);
             const activeTierKey = activeTierByPackage[pkg.packageKey] || highlightedTierKey;
             const activeTier = tiers.find((tier) => tier.tierKey === activeTierKey) || tiers[0];
-            const activeTierSelected = isTierSelected(activeTier, selectedProductIds, selectedServiceIds);
-            const ctaLabel = mode === 'estimate' ? (activeTierSelected ? 'Bundle Added' : 'Add Bundle') : 'Build This Bundle';
+            const bundleKey = activeTier ? `${pkg.packageKey}:${activeTier.tierKey}` : '';
+            const activeTierSelected = Boolean(bundleKey && selectedBundleKeys.includes(bundleKey))
+              || isTierSelected(activeTier, selectedProductIds, selectedServiceIds);
+            const ctaLabel = mode === 'estimate' ? (activeTierSelected ? 'Package added' : 'Add Bundle') : 'Build This Bundle';
             const linkTarget = typeof buildBundleHref === 'function' ? buildBundleHref(pkg, activeTier) : '#';
 
             return (

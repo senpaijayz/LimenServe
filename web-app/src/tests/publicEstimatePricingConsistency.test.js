@@ -5,7 +5,7 @@ import {
   normalizePublicRecommendationPricing,
 } from '../modules/public/pages/PublicEstimate';
 import { buildSmartQuoteModel } from '../modules/public/utils/quoteRecommendationModel';
-import { getAppliedBundleSummaries } from '../modules/public/utils/bundleQuotePricing';
+import { getAppliedBundleDisplaySummaries, getAppliedBundleSummaries } from '../modules/public/utils/bundleQuotePricing';
 
 const PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -69,5 +69,31 @@ describe('public estimate pricing consistency', () => {
       recommendation_rule_id: null,
       bundle_key: null,
     });
+  });
+
+  it('keeps an unverifiable package visible without sending unsafe discount metadata', () => {
+    const selectedPart = {
+      id: PRODUCT_ID,
+      name: 'Oil Filter',
+      quantity: 1,
+      price: 100,
+      catalogPrice: 100,
+      displayBundleMeta: {
+        bundleKey: 'vehicle-maintenance:better',
+        bundleName: 'Maintenance bundle',
+        bundleTierLabel: 'Better',
+      },
+    };
+
+    expect(getAppliedBundleDisplaySummaries([selectedPart])).toEqual([
+      {
+        bundleKey: 'vehicle-maintenance:better',
+        bundleName: 'Maintenance bundle',
+        bundleTierLabel: 'Better',
+        lineCount: 1,
+        total: 100,
+      },
+    ]);
+    expect(getAppliedBundleSummaries([selectedPart])).toEqual([]);
   });
 });
