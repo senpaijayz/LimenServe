@@ -1287,7 +1287,9 @@ const PublicEstimate = () => {
             <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-accent-blue/10 rounded-full blur-[150px] mix-blend-multiply pointer-events-none -z-10 opacity-60 print:hidden" />
             <div className="absolute top-[30%] right-[-10%] w-[40vw] h-[40vw] bg-accent-danger/5 rounded-full blur-[120px] mix-blend-multiply pointer-events-none -z-10 opacity-50 print:hidden" />
 
-            <section className="relative pt-32 pb-16 px-4 md:px-8 xl:px-12 z-10 max-w-[1600px] mx-auto layout-container border-b border-primary-200 mb-12 print:hidden">
+            <section className={`relative px-4 md:px-8 xl:px-12 z-10 max-w-[1600px] mx-auto layout-container print:hidden ${workflowStage === 'choice'
+                ? 'pt-24 pb-10 md:pt-28 md:pb-12'
+                : 'pt-32 pb-16 border-b border-primary-200 mb-12'}`}>
                 <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-12">
                     <div className="max-w-3xl">
                         <div className="flex items-center gap-3 mb-6">
@@ -1317,46 +1319,91 @@ const PublicEstimate = () => {
             </section>
 
             <section className={`relative z-10 max-w-[1600px] mx-auto px-4 md:px-8 xl:px-12 py-2 transition-[padding] duration-300 print:hidden ${contentShiftClass}`}>
-                <div className="surface mb-8 p-4 md:p-5">
+                <div className={`mb-8 ${workflowStage === 'choice' ? '' : 'surface p-4 md:p-5'}`}>
+                    {workflowStage === 'choice' ? (
+                        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+                            <div className="rounded-[2rem] border border-primary-200 bg-white/95 p-5 shadow-[0_24px_60px_rgba(15,23,42,0.08)] md:p-8">
+                                <div className="flex flex-col gap-3 border-b border-primary-100 pb-6 sm:flex-row sm:items-end sm:justify-between">
+                                    <div>
+                                        <p className="text-xs font-bold uppercase tracking-[0.28em] text-accent-primary">Start in seconds</p>
+                                        <h2 className="mt-2 text-2xl font-display font-semibold text-primary-950 md:text-3xl">What would you like to do?</h2>
+                                        <p className="mt-2 max-w-xl text-sm leading-6 text-primary-500">Choose a path and we’ll keep the next step focused. You can build a new quote or safely reopen one you already received.</p>
+                                    </div>
+                                    <span className="hidden rounded-full bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-500 sm:inline-flex sm:items-center sm:gap-2">
+                                        <Sparkles className="h-3.5 w-3.5 text-accent-danger" />
+                                        No account needed
+                                    </span>
+                                </div>
+
+                                <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                                    {MODE_OPTIONS.map((option) => {
+                                        const Icon = option.icon;
+                                        const isBuild = option.id === 'estimate';
+                                        return (
+                                            <button
+                                                key={option.id}
+                                                type="button"
+                                                onClick={() => handleModeSelect(option.id)}
+                                                aria-label={option.label}
+                                                className="group relative flex min-h-[190px] flex-col justify-between overflow-hidden rounded-[1.5rem] border border-primary-200 bg-primary-50/60 p-5 text-left transition duration-200 hover:-translate-y-1 hover:border-accent-primary/50 hover:bg-white hover:shadow-[0_20px_45px_rgba(15,23,42,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:ring-offset-2 md:p-6"
+                                            >
+                                                <span className={`flex h-12 w-12 items-center justify-center rounded-2xl ${isBuild ? 'bg-primary-950 text-white' : 'bg-accent-danger/10 text-accent-danger'}`}>
+                                                    <Icon className="h-5 w-5" />
+                                                </span>
+                                                <span>
+                                                    <span className="mt-6 block text-lg font-semibold text-primary-950">{option.label}</span>
+                                                    <span className="mt-2 block max-w-[28rem] text-sm leading-6 text-primary-500">{option.description}</span>
+                                                    <span className="mt-5 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-accent-primary">
+                                                        {isBuild ? 'Start a new quote' : 'Open saved quote'}
+                                                        <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                                                    </span>
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <aside className="rounded-[2rem] border border-primary-200 bg-primary-950 p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.14)] md:p-7">
+                                <div className="flex items-center gap-3">
+                                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 text-accent-danger"><Wrench className="h-5 w-5" /></span>
+                                    <div>
+                                        <p className="text-xs font-bold uppercase tracking-[0.24em] text-white/50">Build flow</p>
+                                        <h3 className="mt-1 text-lg font-semibold">A clear path to your quote</h3>
+                                    </div>
+                                </div>
+                                <div className="mt-7 space-y-5">
+                                    {ESTIMATE_PHASES.map((phase, index) => (
+                                        <div key={phase.id} className="flex gap-3">
+                                            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${index === 0 ? 'bg-accent-danger text-white' : 'bg-white/10 text-white/60'}`}>{index + 1}</span>
+                                            <div>
+                                                <p className="text-sm font-semibold text-white">{phase.label}</p>
+                                                <p className="mt-1 text-xs leading-5 text-white/55">{phase.description}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-7 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs leading-5 text-white/60">
+                                    Your quote is based on the current catalogue and can be retrieved later with its quote number and verified phone.
+                                </div>
+                            </aside>
+                        </div>
+                    ) : (
                     <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                         <div className="max-w-2xl">
-                            <p className="text-xs font-bold tracking-[0.28em] uppercase text-primary-400">{workflowStage === 'choice' ? 'Phase 1' : mode === 'retrieve' ? 'Phase 2' : 'Estimate flow'}</p>
+                            <p className="text-xs font-bold tracking-[0.28em] uppercase text-primary-400">{mode === 'retrieve' ? 'Phase 2' : 'Estimate flow'}</p>
                             <h2 className="mt-2 text-2xl font-display font-semibold text-primary-950">
-                                {workflowStage === 'choice'
-                                    ? 'Choose the flow you need right now'
-                                    : mode === 'retrieve'
-                                        ? 'Retrieve and print a saved quote'
-                                        : ESTIMATE_PHASES.find((phase) => phase.id === estimatePhase)?.label || 'Estimate flow'}
+                                {mode === 'retrieve'
+                                    ? 'Retrieve and print a saved quote'
+                                    : ESTIMATE_PHASES.find((phase) => phase.id === estimatePhase)?.label || 'Estimate flow'}
                             </h2>
                             <p className="mt-2 text-sm text-primary-500">
-                                {workflowStage === 'choice'
-                                    ? 'Choose the exact customer task first so the quotation workspace stays focused.'
-                                    : mode === 'retrieve'
-                                        ? 'Quote retrieval is separate from quote creation to keep this screen simple.'
-                                        : ESTIMATE_PHASES.find((phase) => phase.id === estimatePhase)?.description}
+                                {mode === 'retrieve'
+                                    ? 'Quote retrieval is separate from quote creation to keep this screen simple.'
+                                    : ESTIMATE_PHASES.find((phase) => phase.id === estimatePhase)?.description}
                             </p>
                         </div>
-                        {workflowStage === 'choice' ? (
-                            <div className="grid w-full gap-2 rounded-[26px] border border-primary-200 bg-white/80 p-2 shadow-sm sm:max-w-[520px] sm:grid-cols-2">
-                                {MODE_OPTIONS.map((option) => {
-                                    const Icon = option.icon;
-                                    return (
-                                        <button
-                                            key={option.id}
-                                            type="button"
-                                            onClick={() => handleModeSelect(option.id)}
-                                            className="rounded-[20px] px-4 py-4 text-left text-primary-600 transition-all duration-200 hover:bg-primary-50 hover:text-primary-950"
-                                        >
-                                            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 text-accent-primary">
-                                                <Icon className="h-5 w-5" />
-                                            </span>
-                                            <span className="mt-4 block text-sm font-semibold">{option.label}</span>
-                                            <span className="mt-1 block text-xs text-primary-500">{option.description}</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        ) : mode === 'estimate' ? (
+                        {mode === 'estimate' ? (
                             <div className="grid w-full gap-2 rounded-[26px] border border-primary-200 bg-white/80 p-2 shadow-sm lg:max-w-[760px] lg:grid-cols-3">
                                 {ESTIMATE_PHASES.map((phase, index) => {
                                     const isActive = estimatePhase === phase.id;
@@ -1386,6 +1433,7 @@ const PublicEstimate = () => {
                             </div>
                         )}
                     </div>
+                    )}
                 </div>
 
                 {workflowStage === 'active' && (mode === 'retrieve' ? (
