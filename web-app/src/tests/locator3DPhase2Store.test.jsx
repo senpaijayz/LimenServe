@@ -49,6 +49,7 @@ describe('3D Locator Phase 2 store behavior', () => {
                 aisle: 'Electronics',
                 shelfNumber: 7,
                 binCount: 18,
+                layerCount: 16,
             });
         });
 
@@ -57,6 +58,7 @@ describe('3D Locator Phase 2 store behavior', () => {
         expect(shelf.aisle).toBe('Electronics');
         expect(shelf.shelfNumber).toBe(7);
         expect(shelf.binCount).toBe(12);
+        expect(shelf.layerCount).toBe(12);
         expect(shelf.name).toBe('Aisle Electronics Shelf 7');
     });
 

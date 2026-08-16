@@ -3,7 +3,7 @@ import { getObjectFootprint } from './layoutValidation';
 
 const GRID_STEP = 0.5;
 const BOUNDS = { maxX: 11.5, maxZ: 7.5, minX: -11.5, minZ: -7.5 };
-const OBSTACLE_TYPES = new Set(['counter-computer', 'entrance-door', 'parts-cabinet', 'shelf-2-layer', 'shelf-4-layer']);
+const OBSTACLE_TYPES = new Set(['counter-computer', 'entrance-door', 'parts-cabinet', 'shelf', 'shelf-2-layer', 'shelf-4-layer']);
 
 function key(x, z) {
     return `${x}:${z}`;

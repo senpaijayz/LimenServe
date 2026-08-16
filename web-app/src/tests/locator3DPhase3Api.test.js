@@ -87,6 +87,17 @@ describe('3D Locator Supabase API', () => {
         expect(layout.layoutData.objects[0].id).toBe('floor-main');
     });
 
+    it('persists priority metadata without changing the layout schema', async () => {
+        await saveStoreLayout([{ id: 'shelf-1' }], 'front-counter', { priority: true });
+        expect(chains[0].upsert).toHaveBeenCalledWith(
+            expect.objectContaining({
+                layout_name: 'front-counter',
+                layout_data: expect.objectContaining({ priority: true }),
+            }),
+            { onConflict: 'layout_name' },
+        );
+    });
+
     it('loads the latest saved layout', async () => {
         const layout = await loadStoreLayout();
         const chain = chains[0];

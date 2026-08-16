@@ -117,7 +117,7 @@ describe('3D Locator rebuild', () => {
 
         const initialCount = useLocator3DStore.getState().sceneObjects.length;
         fireEvent.click(screen.getByRole('button', { name: 'Add Object' }));
-        fireEvent.click(screen.getByRole('button', { name: '2-Layer Shelf' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Shelf' }));
         expect(useLocator3DStore.getState().sceneObjects).toHaveLength(initialCount + 1);
 
         act(() => {

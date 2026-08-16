@@ -17,6 +17,7 @@ function mapLayoutRow(row) {
 
     return {
         id: row.id,
+        isPriority: Boolean(row.layout_data?.priority),
         layoutData: row.layout_data,
         layoutName: row.layout_name,
         updatedAt: row.updated_at,
@@ -41,10 +42,11 @@ export function mapProductLocationRow(row) {
     };
 }
 
-export async function saveStoreLayout(sceneObjects, layoutName = LOCATOR_LAYOUT_NAME) {
+export async function saveStoreLayout(sceneObjects, layoutName = LOCATOR_LAYOUT_NAME, { priority = false } = {}) {
     const payload = {
         layout_data: {
             objects: sceneObjects,
+            priority: Boolean(priority),
             savedAt: new Date().toISOString(),
             version: 1,
         },
@@ -89,6 +91,25 @@ export async function listStoreLayouts() {
     assertSupabaseResult(result, 'Unable to load saved 3D layouts.');
 
     return (result.data || []).map(mapLayoutRow);
+}
+
+export async function setStoreLayoutPriority(layoutName) {
+    const layouts = await listStoreLayouts();
+    const target = String(layoutName || '').trim();
+    if (!target) {
+        return;
+    }
+
+    await Promise.all(layouts.map(async (layout) => {
+        if (!layout.id) {
+            return;
+        }
+        const result = await supabase
+            .from('store_layouts')
+            .update({ layout_data: { ...(layout.layoutData || {}), priority: layout.layoutName === target } })
+            .eq('id', layout.id);
+        assertSupabaseResult(result, 'Unable to update the priority layout.');
+    }));
 }
 
 export async function assignProductLocation(location) {

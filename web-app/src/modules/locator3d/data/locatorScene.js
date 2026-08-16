@@ -24,20 +24,12 @@ export const LOCATOR_OBJECT_LIBRARY = [
         description: 'Store perimeter walls',
     },
     {
-        type: 'shelf-2-layer',
-        label: '2-Layer Shelf',
-        category: 'Storage',
-        icon: 'Package',
-        color: '#0f766e',
-        description: 'Low product rack',
-    },
-    {
-        type: 'shelf-4-layer',
-        label: '4-Layer Shelf',
+        type: 'shelf',
+        label: 'Shelf',
         category: 'Storage',
         icon: 'Boxes',
         color: '#1d4ed8',
-        description: 'Tall product rack',
+        description: 'Editable product rack (1–12 layers)',
     },
     {
         type: 'stairs',
@@ -255,7 +247,7 @@ export function getLocatorObjectById(id, objects = LOCATOR_SCENE_OBJECTS) {
 }
 
 export function isShelfObject(object) {
-    return object?.type === 'shelf-2-layer' || object?.type === 'shelf-4-layer' || object?.type === 'parts-cabinet';
+    return object?.type === 'shelf' || object?.type === 'shelf-2-layer' || object?.type === 'shelf-4-layer' || object?.type === 'parts-cabinet';
 }
 
 export function normalizeAisle(value) {
@@ -317,7 +309,7 @@ export function buildWallObjectFromEndpoints({
 }
 
 function getDefaultObjectName(object, count) {
-    if (object.type === 'shelf-2-layer' || object.type === 'shelf-4-layer' || object.type === 'parts-cabinet') {
+    if (isShelfObject(object)) {
         const shelfNumber = count + 1;
         return `Aisle ${object.aisle || 'A'} Shelf ${shelfNumber}`;
     }
@@ -370,14 +362,20 @@ export function createLocatorSceneObject(type, { activeFloor = 1, count = 0 } = 
         });
     }
 
-    const source = LOCATOR_SCENE_OBJECTS.find((object) => object.type === type) ?? LOCATOR_SCENE_OBJECTS[0];
-    const object = cloneSceneObject(source);
+    // New shelves use the proven 4-layer dimensions as a starting point, while
+    // retaining the generic type so the layer count can be edited in Design Mode.
+    const source = type === 'shelf'
+        ? LOCATOR_SCENE_OBJECTS.find((object) => object.type === 'shelf-4-layer')
+        : LOCATOR_SCENE_OBJECTS.find((object) => object.type === type);
+    const resolvedSource = source ?? LOCATOR_SCENE_OBJECTS[0];
+    const object = cloneSceneObject(resolvedSource);
     const floor = Number(activeFloor) === 2 ? 2 : 1;
     const id = `${type}-${Date.now().toString(36)}-${count + 1}`;
 
     return {
         ...object,
         id,
+        type: type === 'shelf' ? 'shelf' : object.type,
         floor: object.type === 'stairs' ? 1 : floor,
         floors: object.type === 'floor' || object.type === 'walls' ? [1, 2] : object.floors,
         isLocked: false,

@@ -12,6 +12,7 @@ import {
     DoorOpen,
     Grid3X3,
     LayoutDashboard,
+    LoaderCircle,
     Lock,
     MapPin,
     Maximize2,
@@ -27,6 +28,7 @@ import {
     RotateCcw,
     Save,
     Search,
+    Star,
     Trash2,
     Undo2,
     Unlock,
@@ -52,6 +54,7 @@ import {
     listStoreLayouts,
     loadStoreLayout,
     saveStoreLayout,
+    setStoreLayoutPriority,
 } from '../services/locator3DApi';
 import { getLocatorAutosave, useLocator3DStore } from '../store/useLocator3DStore';
 
@@ -295,7 +298,9 @@ function HeaderActions({
     onExitDesignMode,
     onLoadLayout,
     onSaveLayout,
+    onSetPriority,
     onSelectLayout,
+    priorityLayoutName,
 }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const goToFloor = useLocator3DStore((state) => state.goToFloor);
@@ -303,6 +308,7 @@ function HeaderActions({
     const requestCameraPreset = useLocator3DStore((state) => state.requestCameraPreset);
     const [isMoreOpen, setIsMoreOpen] = useState(false);
     const [saveAsName, setSaveAsName] = useState('');
+    const [saveAsPriority, setSaveAsPriority] = useState(false);
 
     return (
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -357,7 +363,7 @@ function HeaderActions({
                             onChange={(event) => onSelectLayout(event.target.value)}
                             value={layoutName}
                         >
-                            {layoutOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                            {layoutOptions.map((name) => <option key={name} value={name}>{name === priorityLayoutName ? `★ ${name}` : name}</option>)}
                         </select>
                         <Button className="mt-2 w-full" onClick={() => {
                             setIsMoreOpen(false);
@@ -376,13 +382,18 @@ function HeaderActions({
                             placeholder="e.g. Layout Backup"
                             value={saveAsName}
                         />
+                        <label className="mt-2 flex items-center gap-2 px-1 text-[11px] font-semibold text-slate-600">
+                            <input checked={saveAsPriority} onChange={(event) => setSaveAsPriority(event.target.checked)} type="checkbox" />
+                            Use as priority stockroom
+                        </label>
                         <Button
                             className="mt-2 w-full"
                             disabled={!saveAsName.trim() || isSaving}
                             onClick={() => {
                                 onChangeLayoutName(saveAsName.trim());
-                                onSaveLayout(saveAsName.trim());
+                                onSaveLayout(saveAsName.trim(), { priority: saveAsPriority });
                                 setSaveAsName('');
+                                setSaveAsPriority(false);
                                 setIsMoreOpen(false);
                             }}
                             tone="primary"
@@ -390,6 +401,12 @@ function HeaderActions({
                             <Save className="h-4 w-4" />
                             Save As
                         </Button>
+                        {onSetPriority && layoutName !== priorityLayoutName && (
+                            <Button className="mt-2 w-full" onClick={() => onSetPriority(layoutName)}>
+                                <Star className="h-4 w-4" />
+                                Set current as priority
+                            </Button>
+                        )}
                         {hasUnsavedChanges && <p className="px-2 pt-3 text-[11px] font-medium text-amber-700">Unsaved design changes are open in this browser.</p>}
                     </div>
                 )}
@@ -573,11 +590,13 @@ function DesignToolbar({ onDiscardChanges, onOpenAssignment, onRequestDelete, on
     const toggleSceneOption = useLocator3DStore((state) => state.toggleSceneOption);
     const undo = useLocator3DStore((state) => state.undo);
     const updateObjectDimensions = useLocator3DStore((state) => state.updateObjectDimensions);
+    const updateShelfProperties = useLocator3DStore((state) => state.updateShelfProperties);
     const selected = getLocatorObjectById(selectedObjectId, sceneObjects);
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [isMoreOpen, setIsMoreOpen] = useState(false);
     const [isSizeOpen, setIsSizeOpen] = useState(false);
     const [sizeDraft, setSizeDraft] = useState({ depth: '', height: '', width: '' });
+    const [layerDraft, setLayerDraft] = useState('');
 
     if (!isDesignMode) {
         return null;
@@ -636,6 +655,7 @@ function DesignToolbar({ onDiscardChanges, onOpenAssignment, onRequestDelete, on
                                     height: String(selected.dimensions?.height ?? ''),
                                     width: String(selected.dimensions?.width ?? ''),
                                 });
+                                setLayerDraft(String(selected.layerCount ?? (selected.type === 'shelf-4-layer' ? 4 : 2)));
                                 setIsSizeOpen((value) => !value);
                             }}
                         >
@@ -662,12 +682,31 @@ function DesignToolbar({ onDiscardChanges, onOpenAssignment, onRequestDelete, on
                                         </label>
                                     ))}
                                 </div>
+                                {isShelfObject(selected) && selected.type !== 'parts-cabinet' && (
+                                    <label className="mt-2 block text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                                        Layers (1–12)
+                                        <input
+                                            aria-label="shelf layer count"
+                                            className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-400"
+                                            inputMode="numeric"
+                                            max="12"
+                                            min="1"
+                                            onChange={(event) => setLayerDraft(event.target.value)}
+                                            step="1"
+                                            type="number"
+                                            value={layerDraft}
+                                        />
+                                    </label>
+                                )}
                                 <Button
                                     className="mt-3 w-full justify-center"
                                     onClick={() => {
                                         const dimensions = Object.fromEntries(Object.entries(sizeDraft).map(([key, value]) => [key, Number(value)]));
                                         if (Object.values(dimensions).every((value) => Number.isFinite(value) && value > 0)) {
                                             updateObjectDimensions(selected.id, dimensions);
+                                            if (isShelfObject(selected) && selected.type !== 'parts-cabinet') {
+                                                updateShelfProperties(selected.id, { layerCount: Number(layerDraft) });
+                                            }
                                             setIsSizeOpen(false);
                                         }
                                     }}
@@ -996,6 +1035,7 @@ export default function Locator3DAdmin() {
     const [isSavingLayout, setIsSavingLayout] = useState(false);
     const [layoutName, setLayoutName] = useState(LOCATOR_LAYOUT_NAME);
     const [layoutOptions, setLayoutOptions] = useState([LOCATOR_LAYOUT_NAME]);
+    const [priorityLayoutName, setPriorityLayoutName] = useState('');
     const [locationNotice, setLocationNotice] = useState(EMPTY_LOCATION_NOTICE);
     const [pendingAction, setPendingAction] = useState(null);
     const [products, setProducts] = useState([]);
@@ -1022,17 +1062,30 @@ export default function Locator3DAdmin() {
         try {
             const layouts = await listStoreLayouts();
             const names = layouts.map((layout) => layout.layoutName).filter(Boolean);
+            const priority = layouts.find((layout) => layout.isPriority)?.layoutName;
+            if (priority) {
+                setPriorityLayoutName(priority);
+            }
             setLayoutOptions((current) => [...new Set([LOCATOR_LAYOUT_NAME, layoutName, ...current, ...names])]);
         } catch {
             setLayoutOptions((current) => [...new Set([LOCATOR_LAYOUT_NAME, layoutName, ...current])]);
         }
     }, [layoutName]);
 
-    const handleSaveLayout = useCallback(async (name = layoutName) => {
+    const handleSaveLayout = useCallback(async (name = layoutName, options = {}) => {
         const safeName = String(name || LOCATOR_LAYOUT_NAME).trim() || LOCATOR_LAYOUT_NAME;
+        const priority = options.priority === true || (options.priority === undefined && safeName === priorityLayoutName);
         setIsSavingLayout(true);
         try {
-            await saveStoreLayout(sceneObjects, safeName);
+            if (priority) {
+                await saveStoreLayout(sceneObjects, safeName, { priority: true });
+            } else {
+                await saveStoreLayout(sceneObjects, safeName);
+            }
+            if (priority) {
+                await setStoreLayoutPriority(safeName);
+                setPriorityLayoutName(safeName);
+            }
             markLayoutSaved();
             setAutosaveSnapshot(null);
             setLayoutName(safeName);
@@ -1045,7 +1098,24 @@ export default function Locator3DAdmin() {
         } finally {
             setIsSavingLayout(false);
         }
-    }, [layoutName, markLayoutSaved, sceneObjects, showError, success]);
+    }, [layoutName, markLayoutSaved, priorityLayoutName, sceneObjects, showError, success]);
+
+    const handleSetPriority = useCallback(async (name) => {
+        const safeName = String(name || '').trim();
+        if (!safeName) {
+            return;
+        }
+        setIsSavingLayout(true);
+        try {
+            await setStoreLayoutPriority(safeName);
+            setPriorityLayoutName(safeName);
+            success(`“${safeName}” is now the priority stockroom.`);
+        } catch (priorityError) {
+            showError(priorityError.message || 'Could not update the priority stockroom.');
+        } finally {
+            setIsSavingLayout(false);
+        }
+    }, [showError, success]);
 
     const locateFromProduct = useCallback((product, locations = productLocations) => {
         const location = locations.find((item) => String(item.productId) === String(product.id)) ?? null;
@@ -1107,6 +1177,9 @@ export default function Locator3DAdmin() {
                 loadLayoutData(savedLayout.layoutData);
                 markLayoutSaved();
                 setLayoutName(savedLayout.layoutName || safeName);
+                if (savedLayout.isPriority) {
+                    setPriorityLayoutName(savedLayout.layoutName || safeName);
+                }
             } else {
                 resetToDefaultLayout();
                 markLayoutSaved();
@@ -1297,12 +1370,14 @@ export default function Locator3DAdmin() {
                 isSaving={isSavingLayout}
                 layoutName={layoutName}
                 layoutOptions={layoutOptions}
+                priorityLayoutName={priorityLayoutName}
+                onSetPriority={(name) => void handleSetPriority(name)}
                 locationNotice={locationNotice}
                 onChangeLayoutName={setLayoutName}
                 onExitDesignMode={exitDesignMode}
                 onLoadLayout={(name) => void handleLoadLayout(name)}
                 onLocateProduct={locateFromProduct}
-                onSaveLayout={(name) => void handleSaveLayout(name)}
+                onSaveLayout={(name, options) => void handleSaveLayout(name, options)}
                 onSelectLayout={setLayoutName}
                 productLocations={productLocations}
                 products={products}
@@ -1328,7 +1403,7 @@ export default function Locator3DAdmin() {
                 className="relative h-[min(72vh,800px)] min-h-[520px] overflow-hidden rounded-[20px] border border-slate-200 bg-slate-950 shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
                 ref={canvasShellRef}
             >
-                <Locator3DScene />
+                <Locator3DScene onShelfClick={canEditLayout ? setAssignmentShelf : undefined} />
                 <LocatedProductNote notice={locationNotice} />
                 <FloorInfo />
                 <ViewportControls canvasShellRef={canvasShellRef} />
@@ -1345,8 +1420,19 @@ export default function Locator3DAdmin() {
                     onSave={() => void handleSaveLayout()}
                 />
                 {isLoadingLayout && (
-                    <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-slate-950/35 backdrop-blur-sm">
-                        <div className="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-lg">Loading stockroom…</div>
+                    <div aria-live="polite" className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-slate-950/35 backdrop-blur-sm" role="status">
+                        <div className="flex items-center gap-3 rounded-2xl bg-white px-5 py-4 text-sm font-semibold text-slate-700 shadow-xl">
+                            <LoaderCircle className="h-5 w-5 animate-spin text-indigo-600" />
+                            Loading stockroom…
+                        </div>
+                    </div>
+                )}
+                {isSavingLayout && (
+                    <div aria-live="polite" className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-slate-950/35 backdrop-blur-sm" role="status">
+                        <div className="flex items-center gap-3 rounded-2xl bg-white px-5 py-4 text-sm font-semibold text-slate-700 shadow-xl">
+                            <LoaderCircle className="h-5 w-5 animate-spin text-indigo-600" />
+                            Saving stockroom design…
+                        </div>
                     </div>
                 )}
                 <div className="pointer-events-none absolute bottom-4 right-4 z-10 hidden rounded-lg bg-slate-950/55 px-3 py-2 text-[11px] font-medium text-white/80 backdrop-blur sm:block">Drag to rotate · Scroll to zoom</div>

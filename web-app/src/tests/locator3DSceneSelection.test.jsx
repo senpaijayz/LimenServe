@@ -48,13 +48,18 @@ describe('Locator3DScene selection', () => {
         vi.restoreAllMocks();
     });
 
-    it('selects a scene object when its 3D group is clicked', () => {
+    it('keeps scene selection and blue highlighting scoped to design mode', () => {
         resetLocator3DStore();
 
-        render(<Locator3DScene />);
+        const { rerender } = render(<Locator3DScene />);
 
         fireEvent.click(screen.getByTestId('locator-object-shelf-4-a'));
 
+        expect(useLocator3DStore.getState().selectedObjectId).toBeNull();
+
+        useLocator3DStore.getState().setDesignMode(true);
+        rerender(<Locator3DScene />);
+        fireEvent.click(screen.getByTestId('locator-object-shelf-4-a'));
         expect(useLocator3DStore.getState().selectedObjectId).toBe('shelf-4-a');
     });
 
@@ -83,16 +88,16 @@ describe('Locator3DScene selection', () => {
         expect(useLocator3DStore.getState().activeFloor).toBe(1);
     });
 
-    it('shows selected shelf info in locate mode when an object is clicked', () => {
+    it('opens the shelf assignment callback in view mode without selecting the shelf', () => {
         resetLocator3DStore();
+        const onShelfClick = vi.fn();
 
-        render(<Locator3DScene />);
+        render(<Locator3DScene onShelfClick={onShelfClick} />);
 
         fireEvent.click(screen.getByTestId('locator-object-shelf-4-a'));
 
-        expect(useLocator3DStore.getState().selectedObjectId).toBe('shelf-4-a');
-        expect(screen.getByText('Aisle B 4-Layer Shelf')).toBeTruthy();
-        expect(screen.getByText('Shelf 2 / 10 bins')).toBeTruthy();
+        expect(useLocator3DStore.getState().selectedObjectId).toBeNull();
+        expect(onShelfClick).toHaveBeenCalledWith(expect.objectContaining({ id: 'shelf-4-a' }));
     });
 
     it('renders only objects for the active floor while keeping shared structure visible', () => {

@@ -584,6 +584,7 @@ export const useLocator3DStore = create((set, get) => ({
     setDesignMode: (isDesignMode) => set((state) => ({
         activeTool: isDesignMode && state.activeTool === 'select' ? 'move' : isDesignMode ? state.activeTool : 'select',
         isDesignMode,
+        selectedObjectId: isDesignMode ? state.selectedObjectId : null,
         wallDraft: isDesignMode ? state.wallDraft : null,
     })),
     setProductLocations: (productLocations) => set({ productLocations: Array.isArray(productLocations) ? productLocations : [] }),
@@ -966,12 +967,16 @@ export const useLocator3DStore = create((set, get) => ({
             const binCount = updates.binCount === undefined
                 ? object.binCount
                 : clampNumber(updates.binCount, SHELF_BIN_RANGE.MIN, SHELF_BIN_RANGE.MAX);
+            const layerCount = updates.layerCount === undefined
+                ? Math.max(1, Math.round(Number(object.layerCount || (object.type === 'shelf-4-layer' ? 4 : 2))))
+                : clampNumber(updates.layerCount, 1, 12);
             const safeAisle = aisle || object.aisle || 'A';
 
             return {
                 ...object,
                 aisle: safeAisle,
                 binCount,
+                layerCount,
                 name: `Aisle ${safeAisle} Shelf ${shelfNumber}`,
                 shelfNumber,
             };

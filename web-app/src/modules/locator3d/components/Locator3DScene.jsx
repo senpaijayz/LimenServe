@@ -21,6 +21,7 @@ const LOCATED_EDGE = '#facc15';
 const LOCATED_EMISSIVE = '#fde047';
 const SHARED_FLOOR_TYPES = new Set(['floor', 'walls']);
 const LocatorQualityContext = createContext(getLocatorQualityProfile('high'));
+const LocatorInteractionContext = createContext({ onShelfClick: null });
 
 const CAMERA_TARGETS = {
     1: {
@@ -248,7 +249,8 @@ function TransformableObject({ children, object, onTransformingChange }) {
     const beginObjectTransform = useLocator3DStore((state) => state.beginObjectTransform);
     const commitObjectTransform = useLocator3DStore((state) => state.commitObjectTransform);
     const previewObjectTransform = useLocator3DStore((state) => state.previewObjectTransform);
-    const selected = selectedObjectId === object.id;
+    const { onShelfClick } = useContext(LocatorInteractionContext);
+    const selected = isDesignMode && selectedObjectId === object.id;
     const located = locatedProduct?.shelfObjectId === object.id;
     const transformMode = activeTool === 'rotate' ? 'rotate' : 'translate';
     const canTransform = selected && isDesignMode && !object.isLocked;
@@ -277,6 +279,18 @@ function TransformableObject({ children, object, onTransformingChange }) {
         event.stopPropagation?.();
 
         if (object.isLocked) {
+            return;
+        }
+
+        if (!isDesignMode) {
+            if (object.type === 'stairs') {
+                goToFloor(activeFloor === 2 ? 1 : 2);
+                return;
+            }
+
+            if (isShelfObject(object)) {
+                onShelfClick?.(object);
+            }
             return;
         }
 
@@ -667,7 +681,7 @@ function ShelfObject({ object, onTransformingChange }) {
     const productLocations = useLocator3DStore((state) => state.productLocations);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const quality = useContext(LocatorQualityContext);
-    const layers = object.layerCount ?? (object.type === 'shelf-4-layer' ? 4 : 2);
+    const layers = Math.min(12, Math.max(1, Math.round(Number(object.layerCount ?? (object.type === 'shelf-4-layer' ? 4 : 2)))));
     const binCount = object.binCount ?? 6;
     const width = Number(object.dimensions?.width || 3.2);
     const depth = Number(object.dimensions?.depth || 0.9);
@@ -812,8 +826,8 @@ function StairsObject({ object, onTransformingChange }) {
     const depth = Number(object.dimensions?.depth || 5.4);
     const height = Number(object.dimensions?.height || FLOOR_HEIGHT);
     const stairBaseY = activeFloor === 2 ? floorHeight - height : 0;
-    const stepsPerRun = 6;
-    const runDepth = Math.max(0.8, depth * 0.46);
+    const stepsPerRun = 8;
+    const runDepth = Math.max(1, depth * 0.44);
     const treadDepth = runDepth / stepsPerRun;
     const stepHeight = height / (stepsPerRun * 2);
     const firstRun = Array.from({ length: stepsPerRun }, (_, index) => ({
@@ -840,9 +854,10 @@ function StairsObject({ object, onTransformingChange }) {
                             selected={selected}
                         />
                     ))}
-                    <Block args={[width, 0.14, width]} color="#78350f" located={located} locked={locked} position={[0, (stepHeight * stepsPerRun) + 0.07, 0]} selected={selected} />
-                    <Block args={[0.1, height * 0.62, runDepth]} color="#78350f" located={located} locked={locked} position={[-width / 2 - 0.1, height * 0.35, -depth / 4]} selected={selected} />
-                    <Block args={[0.1, height * 0.62, runDepth]} color="#78350f" located={located} locked={locked} position={[width / 2 + 0.1, height * 0.35, -depth / 4]} selected={selected} />
+                    <Block args={[width + 0.28, 0.18, width + 0.28]} color="#78350f" located={located} locked={locked} position={[0, (stepHeight * stepsPerRun) + 0.09, 0]} selected={selected} />
+                    <Block args={[0.12, height * 0.62, runDepth + 0.16]} color="#78350f" located={located} locked={locked} position={[-width / 2 - 0.12, height * 0.35, -depth / 4]} selected={selected} />
+                    <Block args={[0.12, height * 0.62, runDepth + 0.16]} color="#78350f" located={located} locked={locked} position={[width / 2 + 0.12, height * 0.35, -depth / 4]} selected={selected} />
+                    <Block args={[0.12, height * 0.62, width + 0.2]} color="#78350f" located={located} locked={locked} position={[width / 2 - runDepth / 2, height * 0.35, width / 2 + 0.12]} selected={selected} />
                     <Label position={[0, height + 0.18, -depth / 2]}>{`L-SHAPED STAIRS · ${activeFloor === 1 ? 'UP TO FLOOR 2' : 'DOWN TO FLOOR 1'}`}</Label>
                 </group>
             )}
@@ -880,10 +895,15 @@ function EntranceDoorObject({ object, onTransformingChange }) {
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
             {({ located, locked, selected }) => (
                 <>
-                    <Block args={[width, height, depth]} color="#b45309" located={located} locked={locked} position={[0, height / 2, 0]} selected={selected} />
-                    <Block args={[width + 0.3, height + 0.2, depth * 0.7]} color="#78350f" located={located} locked={locked} position={[0, height / 2 + 0.1, -depth * 0.55]} selected={selected} />
-                    <Block args={[width * 0.8, height * 0.86, depth * 0.75]} color="#fef3c7" located={located} locked={locked} opacity={0.38} position={[0, height / 2, depth * 0.12]} selected={selected} />
-                    <Block args={[0.12, 0.12, 0.12]} color="#111827" located={located} locked={locked} position={[width * 0.36, height * 0.5, depth]} selected={selected} />
+                    <Block args={[0.14, height, depth]} color="#334155" located={located} locked={locked} position={[-width / 2, height / 2, 0]} selected={selected} />
+                    <Block args={[0.14, height, depth]} color="#334155" located={located} locked={locked} position={[width / 2, height / 2, 0]} selected={selected} />
+                    <Block args={[width + 0.28, 0.14, depth]} color="#1e293b" located={located} locked={locked} position={[0, height, 0]} selected={selected} />
+                    <Block args={[width + 0.28, 0.12, depth]} color="#475569" located={located} locked={locked} position={[0, 0.06, 0]} selected={selected} />
+                    <mesh position={[0, height / 2, depth * 0.08]} castShadow receiveShadow>
+                        <boxGeometry args={[Math.max(0.2, width - 0.28), Math.max(0.2, height - 0.28), Math.max(0.03, depth * 0.45)]} />
+                        <meshPhysicalMaterial color="#bae6fd" transmission={0.35} thickness={0.04} roughness={0.12} metalness={0.08} opacity={0.38} transparent />
+                    </mesh>
+                    <Block args={[0.09, 0.38, 0.08]} color="#e2e8f0" located={located} locked={locked} position={[width * 0.32, height * 0.5, depth * 0.35]} selected={selected} />
                 </>
             )}
         </TransformableObject>
@@ -903,7 +923,7 @@ function LocatorObject({ object, onTransformingChange }) {
         return <WallSegmentObject object={object} onTransformingChange={onTransformingChange} />;
     }
 
-    if (object.type === 'shelf-2-layer' || object.type === 'shelf-4-layer') {
+    if (isShelfObject(object) && object.type !== 'parts-cabinet') {
         return <ShelfObject object={object} onTransformingChange={onTransformingChange} />;
     }
 
@@ -1178,7 +1198,7 @@ export function Locator2DFallback({ message = 'The interactive 3D map is unavail
     const rows = productLocations
         .filter((location) => Number(location.floor || 1) === activeFloor)
         .slice(0, 50);
-    const shelfCount = sceneObjects.filter((object) => objectVisibleOnFloor(object, activeFloor) && object.type?.startsWith('shelf-')).length;
+    const shelfCount = sceneObjects.filter((object) => objectVisibleOnFloor(object, activeFloor) && isShelfObject(object) && object.type !== 'parts-cabinet').length;
 
     return (
         <section className="h-full overflow-auto bg-slate-950 p-5 text-slate-100" data-testid="locator-2d-fallback">
@@ -1224,7 +1244,7 @@ class CanvasErrorBoundary extends Component {
     }
 }
 
-function SceneContents({ quality, onContextLost }) {
+function SceneContents({ onContextLost, onShelfClick, quality }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const floorHeight = useSceneFloorHeight();
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
@@ -1240,7 +1260,8 @@ function SceneContents({ quality, onContextLost }) {
     const activeGridY = activeFloor === 2 ? floorHeight + 0.012 : 0.012;
 
     return (
-        <LocatorQualityContext.Provider value={quality}>
+        <LocatorInteractionContext.Provider value={{ onShelfClick }}>
+            <LocatorQualityContext.Provider value={quality}>
             <RenderScheduler />
             <WebGLContextLossHandler onContextLost={onContextLost} />
             <color args={['#0b1120']} attach="background" />
@@ -1316,11 +1337,12 @@ function SceneContents({ quality, onContextLost }) {
                 zoomSpeed={0.82}
                 target={CAMERA_TARGETS[activeFloor].lookAt}
             />
-        </LocatorQualityContext.Provider>
+            </LocatorQualityContext.Provider>
+        </LocatorInteractionContext.Provider>
     );
 }
 
-export default function Locator3DScene() {
+export default function Locator3DScene({ onShelfClick = null }) {
     const clearSelection = useLocator3DStore((state) => state.clearSelection);
     const qualityPreference = useLocator3DStore((state) => state.qualityPreference);
     const [webglFailed, setWebglFailed] = useState(false);
@@ -1346,7 +1368,7 @@ export default function Locator3DScene() {
                 style={{ touchAction: 'none' }}
             >
                 <Suspense fallback={null}>
-                    <SceneContents onContextLost={() => setWebglFailed(true)} quality={quality} />
+                    <SceneContents onContextLost={() => setWebglFailed(true)} onShelfClick={onShelfClick} quality={quality} />
                 </Suspense>
             </Canvas>
         </CanvasErrorBoundary>

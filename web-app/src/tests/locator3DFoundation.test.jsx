@@ -44,7 +44,8 @@ describe('3D Locator foundation', () => {
         expect(LOCATOR_OBJECT_LIBRARY.map((object) => object.type)).toEqual([
             'floor',
             'walls',
-            ...REQUIRED_OBJECT_TYPES.slice(2),
+            'shelf',
+            ...REQUIRED_OBJECT_TYPES.slice(4),
         ]);
         expect(LOCATOR_SCENE_OBJECTS.map((object) => object.type)).toEqual(expect.arrayContaining(REQUIRED_OBJECT_TYPES));
     });
