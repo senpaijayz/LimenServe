@@ -48,12 +48,14 @@ function writeVehicleCookie(vehicle) {
   // Keep this cookie limited to non-sensitive fitment preferences. Auth/session
   // tokens and plate numbers must remain outside client-readable cookies.
   const payload = encodeURIComponent(JSON.stringify({ model: vehicle.model, year: vehicle.year }));
-  document.cookie = `${COOKIE_KEY}=${payload}; Max-Age=${COOKIE_MAX_AGE_SECONDS}; Path=/; SameSite=Lax`;
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${COOKIE_KEY}=${payload}; Max-Age=${COOKIE_MAX_AGE_SECONDS}; Path=/; SameSite=Lax${secure}`;
 }
 
 function clearVehicleCookie() {
   if (typeof document !== 'undefined') {
-    document.cookie = `${COOKIE_KEY}=; Max-Age=0; Path=/; SameSite=Lax`;
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${COOKIE_KEY}=; Max-Age=0; Path=/; SameSite=Lax${secure}`;
   }
 }
 
