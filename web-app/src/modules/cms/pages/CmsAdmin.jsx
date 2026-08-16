@@ -229,6 +229,22 @@ function createHomePageDraft() {
       },
       {
         ...createDefaultSection('feature_grid', 1),
+        sectionKey: 'home-how-it-works',
+        title: 'Start Here Steps',
+        status: 'published',
+        content: {
+          eyebrow: 'Start here',
+          title: 'The easiest way to get the right part',
+          subtitle: 'Three simple steps from search to a clear next action.',
+          items: [
+            { title: 'Find your part', description: 'Search by part number, name, or vehicle model in the catalog.', href: '/catalog' },
+            { title: 'Check fitment', description: 'Choose your vehicle to see compatible parts and service packages.', href: '/catalog' },
+            { title: 'Get help or a quote', description: 'Send a quote request or reserve an unavailable part after signing in.', href: '/estimate' },
+          ],
+        },
+      },
+      {
+        ...createDefaultSection('feature_grid', 2),
         sectionKey: 'home-features',
         title: 'Shop Categories',
         status: 'published',
@@ -250,7 +266,7 @@ function createHomePageDraft() {
         },
       },
       {
-        ...createDefaultSection('feature_grid', 2),
+        ...createDefaultSection('feature_grid', 3),
         sectionKey: 'home-best-sellers',
         title: 'Best Sellers',
         status: 'published',
@@ -268,7 +284,7 @@ function createHomePageDraft() {
         },
       },
       {
-        ...createDefaultSection('feature_grid', 3),
+        ...createDefaultSection('feature_grid', 4),
         sectionKey: 'home-trust-signals',
         title: 'Why customers trust Limen',
         status: 'published',
@@ -290,7 +306,7 @@ function createHomePageDraft() {
         },
       },
       {
-        ...createDefaultSection('stats', 4),
+        ...createDefaultSection('stats', 5),
         sectionKey: 'home-stats',
         title: 'Customer Confidence Stats',
         status: 'published',
@@ -304,7 +320,7 @@ function createHomePageDraft() {
         },
       },
       {
-        ...createDefaultSection('cta', 5),
+        ...createDefaultSection('cta', 6),
         sectionKey: 'home-cta',
         title: 'Homepage CTA',
         status: 'published',

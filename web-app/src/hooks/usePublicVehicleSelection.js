@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router';
 import { formatVehicleDisplayLabel } from '../modules/public/utils/smartBundleUtils';
 
 const STORAGE_KEY = 'limen-public-vehicle-context';
+const COOKIE_KEY = 'limen_public_vehicle';
+const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
 function normalizeVehicle(vehicle = {}) {
   const normalized = {
@@ -24,9 +26,34 @@ function readStoredVehicle() {
 
   try {
     const rawValue = window.localStorage.getItem(STORAGE_KEY);
-    return rawValue ? normalizeVehicle(JSON.parse(rawValue)) : normalizeVehicle();
+    if (rawValue) {
+      return normalizeVehicle(JSON.parse(rawValue));
+    }
+
+    const cookie = window.document.cookie
+      .split('; ')
+      .find((entry) => entry.startsWith(`${COOKIE_KEY}=`))
+      ?.slice(COOKIE_KEY.length + 1);
+    return cookie ? normalizeVehicle(JSON.parse(decodeURIComponent(cookie))) : normalizeVehicle();
   } catch {
     return normalizeVehicle();
+  }
+}
+
+function writeVehicleCookie(vehicle) {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  // Keep this cookie limited to non-sensitive fitment preferences. Auth/session
+  // tokens and plate numbers must remain outside client-readable cookies.
+  const payload = encodeURIComponent(JSON.stringify({ model: vehicle.model, year: vehicle.year }));
+  document.cookie = `${COOKIE_KEY}=${payload}; Max-Age=${COOKIE_MAX_AGE_SECONDS}; Path=/; SameSite=Lax`;
+}
+
+function clearVehicleCookie() {
+  if (typeof document !== 'undefined') {
+    document.cookie = `${COOKIE_KEY}=; Max-Age=0; Path=/; SameSite=Lax`;
   }
 }
 
@@ -81,10 +108,12 @@ export default function usePublicVehicleSelection({
 
     if (!persist) {
       window.localStorage.removeItem(STORAGE_KEY);
+      clearVehicleCookie();
       return;
     }
 
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(vehicle));
+    writeVehicleCookie(vehicle);
   }, [persist, vehicle]);
 
   useEffect(() => {
@@ -139,6 +168,7 @@ export default function usePublicVehicleSelection({
 
   const clearVehicle = () => {
     setVehicle(normalizeVehicle());
+    clearVehicleCookie();
   };
 
   return {

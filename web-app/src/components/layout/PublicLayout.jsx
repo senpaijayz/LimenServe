@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
-import { CarFront, Clock, MapPin, Menu, Phone, ShieldCheck, X } from 'lucide-react';
+import { ArrowRight, CarFront, Clock, MapPin, Menu, Phone, ShieldCheck, X } from 'lucide-react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../../context/useAuth';
 import usePublicCmsSite from '../../hooks/usePublicCmsSite';
@@ -136,8 +136,10 @@ const PublicLayout = () => {
                                     <PublicNavLink
                                         key={item.label}
                                         item={item}
-                                        className={`text-sm font-medium transition-colors ${
-                                            isNavItemActive(item.to) ? 'text-accent-primary' : 'text-primary-600 hover:text-primary-950'
+                                        className={`rounded-lg px-2.5 py-2 text-sm font-medium transition-colors ${
+                                            item.to === '/estimate'
+                                                ? 'bg-red-50 text-accent-danger hover:bg-red-100'
+                                                : isNavItemActive(item.to) ? 'text-accent-primary' : 'text-primary-600 hover:text-primary-950'
                                         }`}
                                     >
                                         {item.label}
@@ -145,9 +147,14 @@ const PublicLayout = () => {
                                 ))}
                             </nav>
 
-                            <Link to="/login" className="btn btn-primary px-4 py-2 text-xs">
-                                Staff Portal
-                            </Link>
+                            <div className="flex items-center gap-2">
+                                <Link to="/catalog" className="btn btn-secondary px-3 py-2 text-xs">
+                                    Shop Parts
+                                </Link>
+                                <Link to="/login" className="btn btn-primary px-4 py-2 text-xs">
+                                    Staff Portal
+                                </Link>
+                            </div>
                         </div>
 
                         <button
@@ -174,6 +181,16 @@ const PublicLayout = () => {
                         className="fixed inset-0 z-40 overflow-y-auto bg-white px-4 pb-8 pt-24 shadow-2xl xl:hidden"
                     >
                         <div className="mx-auto max-w-xl space-y-4">
+                            <div className="grid grid-cols-2 gap-3">
+                                <Link to="/catalog" onClick={() => setMobileMenuOpen(false)} className="btn btn-secondary justify-center px-3 py-3 text-xs">
+                                    Shop Parts
+                                    <ArrowRight className="h-3.5 w-3.5" />
+                                </Link>
+                                <Link to="/estimate" onClick={() => setMobileMenuOpen(false)} className="btn btn-primary justify-center px-3 py-3 text-xs">
+                                    Get Estimate
+                                    <ArrowRight className="h-3.5 w-3.5" />
+                                </Link>
+                            </div>
                             <div className="rounded-2xl border border-primary-200 bg-white">
                                 {navItems.map((item) => (
                                     <PublicNavLink

@@ -97,6 +97,12 @@ const quickStats = [
 
 const supportedVehicles = ['Montero Sport', 'Triton', 'Xforce', 'Xpander', 'Mirage', 'L300'];
 
+const startHereSteps = [
+    { title: 'Find your part', description: 'Search by part number, name, or vehicle model in the catalog.', href: '/catalog', icon: Search },
+    { title: 'Check fitment', description: 'Choose your vehicle to see compatible parts and service packages.', href: '/catalog', icon: CarFront },
+    { title: 'Get help or a quote', description: 'Send a quote request or reserve an unavailable part after signing in.', href: '/estimate', icon: PackageCheck },
+];
+
 function getCmsSection(page, sectionType, sectionKey = '') {
     const sections = page?.sections ?? [];
     const section = sectionKey
@@ -199,10 +205,12 @@ const PublicHome = () => {
     const heroCms = getCmsSection(cmsPage, 'hero', 'home-hero');
     const featureCms = getCmsSection(cmsPage, 'feature_grid', 'home-features');
     const bestSellersCms = getCmsSection(cmsPage, 'feature_grid', 'home-best-sellers');
+    const howItWorksCms = getCmsSection(cmsPage, 'feature_grid', 'home-how-it-works');
     const trustCms = getCmsSection(cmsPage, 'feature_grid', 'home-trust-signals');
     const statsCms = getCmsSection(cmsPage, 'stats', 'home-stats');
     const ctaCms = getCmsSection(cmsPage, 'cta', 'home-cta');
     const editableCategoryCards = mergeCmsCards(categoryCards, featureCms.items);
+    const editableStartHereSteps = mergeCmsCards(startHereSteps, howItWorksCms.items);
     const editableFeaturedParts = mergeCmsCards(featuredParts, bestSellersCms.items);
     const editableTrustSignals = mergeCmsCards(trustSignals, trustCms.items);
     const editableQuickStats = mergeCmsStats(quickStats, statsCms.items);
@@ -349,6 +357,39 @@ const PublicHome = () => {
                             </div>
                         </div>
                     </Motion.div>
+                </div>
+            </section>
+
+            <section className="border-b border-primary-200 bg-primary-50/70 px-4 py-10 md:px-8 xl:px-12">
+                <div className="mx-auto max-w-[1600px]">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                        <div className="max-w-2xl">
+                            <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-danger">{howItWorksCms.eyebrow || 'Start here'}</p>
+                            <h2 className="mt-2 text-3xl font-bold text-primary-950">{howItWorksCms.title || 'The easiest way to get the right part'}</h2>
+                            <p className="mt-2 text-sm leading-relaxed text-primary-600">{howItWorksCms.subtitle || 'Three simple steps from search to a clear next action.'}</p>
+                        </div>
+                        <Link to="/catalog" className="inline-flex items-center gap-2 text-sm font-bold text-accent-primary hover:text-accent-blueDark">
+                            Open catalog <ArrowRight className="h-4 w-4" />
+                        </Link>
+                    </div>
+                    <div className="mt-6 grid gap-4 md:grid-cols-3">
+                        {editableStartHereSteps.slice(0, 3).map((step, index) => {
+                            const Icon = step.icon || [Search, CarFront, PackageCheck][index];
+                            return (
+                                <Link key={step.title} to={step.href || (index === 2 ? '/estimate' : '/catalog')} className="group flex items-start gap-4 rounded-2xl border border-primary-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-accent-blue/40 hover:shadow-md">
+                                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-950 text-white">
+                                        <Icon className="h-5 w-5" />
+                                    </span>
+                                    <span>
+                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-accent-primary">Step {index + 1}</span>
+                                        <span className="mt-1 block text-lg font-bold text-primary-950">{step.title}</span>
+                                        <span className="mt-1 block text-sm leading-5 text-primary-600">{step.description}</span>
+                                    </span>
+                                    <ArrowRight className="ml-auto mt-1 h-4 w-4 shrink-0 text-primary-300 transition group-hover:translate-x-1 group-hover:text-accent-primary" />
+                                </Link>
+                            );
+                        })}
+                    </div>
                 </div>
             </section>
 
