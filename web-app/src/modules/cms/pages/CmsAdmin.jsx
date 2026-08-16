@@ -514,7 +514,7 @@ function createServiceOrdersPageDraft() {
 
 function ensureEditablePublicPages(pages = []) {
   const requiredPages = [
-    { slug: 'home', title: 'Homepage', sectionCount: 6 },
+    { slug: 'home', title: 'Homepage', sectionCount: 7 },
     { slug: 'about', title: 'About Limen', sectionCount: 6 },
     { slug: 'service-orders', title: 'Service Orders', sectionCount: 4 },
   ];
