@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Card from '../../../components/ui/Card';
 import { formatCurrency } from '../../../utils/formatters';
@@ -26,16 +26,42 @@ const SalesChart = ({
         revenue: Number(point.revenue ?? 0),
         quantity: Number(point.quantity ?? 0),
     })), [data]);
+    const chartContainerRef = useRef(null);
+    const [chartReady, setChartReady] = useState(false);
+
+    useEffect(() => {
+        const element = chartContainerRef.current;
+        if (!element) {
+            return undefined;
+        }
+
+        const syncSize = () => {
+            setChartReady(element.offsetWidth > 0 && element.offsetHeight > 0);
+        };
+
+        syncSize();
+        if (typeof ResizeObserver === 'undefined') {
+            return undefined;
+        }
+
+        const observer = new ResizeObserver(syncSize);
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, [chartData.length]);
 
     return (
         <Card title={title} subtitle={subtitle}>
-            <div className="mt-4 h-[240px] min-h-[240px] sm:h-[320px] sm:min-h-[320px]">
+            <div ref={chartContainerRef} className="mt-4 h-[240px] min-h-[240px] min-w-0 sm:h-[320px] sm:min-h-[320px]">
                 {chartData.length === 0 ? (
                     <div className="flex h-full items-center justify-center rounded-xl border border-primary-200 bg-primary-50 text-sm text-primary-500">
                         No item sales trend is available for the selected filters yet.
                     </div>
+                ) : !chartReady ? (
+                    <div className="flex h-full items-center justify-center rounded-xl border border-primary-200 bg-primary-50 text-sm text-primary-500" aria-label="Preparing sales chart">
+                        Preparing chart…
+                    </div>
                 ) : (
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={240}>
                         <AreaChart data={chartData} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">

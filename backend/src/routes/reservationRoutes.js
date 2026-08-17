@@ -1,9 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
+import { env } from '../config/env.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireRole } from '../middleware/auth.js';
 import { clearPublicResponseCache } from '../middleware/cache.js';
+import { getDefaultRateLimitKey } from '../middleware/rateLimit.js';
+import {
+  createInMemoryRateLimitStore,
+  createStoreBackedRateLimiter,
+  createSupabaseRateLimitStore,
+} from '../middleware/sharedRateLimit.js';
+import { logger } from '../observability/logger.js';
 import { callRpc } from '../services/supabaseRpc.js';
+import { parsePublicReservationRequest } from '../services/publicReservationRequest.js';
 
 const router = Router();
 const ACTIVE_STATUSES = new Set([
@@ -22,10 +31,37 @@ const ALL_STATUSES = new Set([
 const ADMIN_ACTIONS = new Set(['approve', 'allocate', 'reject', 'cancel', 'complete', 'update']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function parseWholeQuantity(value) {
-  const quantity = Number(value);
-  return Number.isInteger(quantity) && quantity >= 1 && quantity <= 999 ? quantity : null;
-}
+const publicReservationRateLimitStore = env.publicRateLimitStore === 'supabase'
+  ? createSupabaseRateLimitStore({ supabase: supabaseAdmin })
+  : createInMemoryRateLimitStore({ maxEntries: env.globalRateLimitMaxEntries });
+
+const publicReservationRateLimiter = createStoreBackedRateLimiter({
+  store: publicReservationRateLimitStore,
+  scope: 'reservation.create.ip',
+  windowMs: 60_000,
+  limit: 5,
+  keyGenerator: getDefaultRateLimitKey,
+  hashSecret: env.supabaseServiceRoleKey,
+  message: 'Too many reservation requests. Please try again later.',
+  onLimitReached(req, details) {
+    (req.log || logger).warn('rate_limit.exceeded', {
+      requestId: req.requestId,
+      clientIp: req.ip,
+      path: req.path,
+      scope: details.scope,
+      limit: details.limit,
+      resetSeconds: details.resetSeconds,
+    });
+  },
+  onStoreError(req, details) {
+    (req.log || logger).error('rate_limit.store_failed', {
+      requestId: req.requestId,
+      path: req.path,
+      scope: details.scope,
+      error: details.error,
+    });
+  },
+});
 
 function parseLimit(value, fallback = 50, maximum = 200) {
   const parsed = Number.parseInt(value, 10);
@@ -148,18 +184,6 @@ async function enrichReservations(rows = []) {
   return rows.map((row) => normalizeReservation(row, related));
 }
 
-async function getCustomerForUser(userId) {
-  const { data, error } = await supabaseAdmin
-    .schema('operations')
-    .from('customers')
-    .select('id, user_id, name, email, phone')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
-}
-
 async function getReservationRow(reservationId) {
   const { data, error } = await supabaseAdmin
     .schema('operations')
@@ -219,56 +243,25 @@ async function searchRelatedIds({ schema, table, columns, term, limit }) {
   return [...new Set(results.flatMap((result) => (result.data ?? []).map((row) => row.id)))];
 }
 
-router.get('/mine', requireRole('customer'), async (req, res, next) => {
+router.post('/', publicReservationRateLimiter, async (req, res, next) => {
   try {
-    const customer = await getCustomerForUser(req.user.id);
-    if (!customer) {
-      res.json({ reservations: [] });
+    const parsed = parsePublicReservationRequest({
+      ...req.body,
+      requestKey: req.body?.requestKey || randomUUID(),
+    });
+    if (!parsed.ok) {
+      res.status(parsed.statusCode).json({ error: parsed.error });
       return;
     }
 
-    const { data, error } = await supabaseAdmin
-      .schema('operations')
-      .from('part_reservations')
-      .select('*')
-      .eq('customer_id', customer.id)
-      .order('requested_at', { ascending: false })
-      .limit(200);
-
-    if (error) throw error;
-    res.json({ reservations: await enrichReservations(data ?? []) });
-  } catch (error) {
-    next(normalizeReservationError(error));
-  }
-});
-
-router.post('/', requireRole('customer'), async (req, res, next) => {
-  try {
-    const productId = String(req.body?.productId || '').trim();
-    const quantity = parseWholeQuantity(req.body?.quantity);
-    const requestKey = String(req.body?.requestKey || randomUUID()).trim();
-
-    if (!UUID_PATTERN.test(productId)) {
-      res.status(400).json({ error: 'Choose a valid part.' });
-      return;
-    }
-
-    if (quantity === null) {
-      res.status(400).json({ error: 'Quantity must be a whole number from 1 to 999.' });
-      return;
-    }
-
-    if (!UUID_PATTERN.test(requestKey)) {
-      res.status(400).json({ error: 'Invalid reservation request key.' });
-      return;
-    }
-
-    const result = await callRpc('create_part_reservation', {
-      p_actor_user_id: req.user.id,
-      p_product_id: productId,
-      p_requested_quantity: quantity,
-      p_request_key: requestKey,
-      p_customer_note: String(req.body?.note || '').trim().slice(0, 1000) || null,
+    const result = await callRpc('create_guest_part_reservation', {
+      p_product_id: parsed.productId,
+      p_requested_quantity: parsed.quantity,
+      p_request_key: parsed.requestKey,
+      p_customer_name: parsed.customerName,
+      p_customer_phone: parsed.customerPhone,
+      p_customer_email: parsed.customerEmail,
+      p_customer_note: parsed.customerNote,
     });
     const reservationId = result?.reservation?.id;
     const reservation = reservationId
@@ -358,7 +351,7 @@ router.get('/', requireRole('admin'), async (req, res, next) => {
   }
 });
 
-router.get('/:reservationId', requireRole('admin', 'customer'), async (req, res, next) => {
+router.get('/:reservationId', requireRole('admin'), async (req, res, next) => {
   try {
     requireUuidParam(req.params.reservationId);
     const reservation = await getReservationResponse(req.params.reservationId, true);
@@ -367,29 +360,6 @@ router.get('/:reservationId', requireRole('admin', 'customer'), async (req, res,
       return;
     }
 
-    if (req.user.role === 'customer') {
-      const customer = await getCustomerForUser(req.user.id);
-      if (!customer || reservation.customerId !== customer.id) {
-        res.status(403).json({ error: 'You do not have access to this reservation.' });
-        return;
-      }
-    }
-
-    res.json({ reservation });
-  } catch (error) {
-    next(normalizeReservationError(error));
-  }
-});
-
-router.post('/:reservationId/cancel', requireRole('customer'), async (req, res, next) => {
-  try {
-    requireUuidParam(req.params.reservationId);
-    await callRpc('cancel_part_reservation', {
-      p_actor_user_id: req.user.id,
-      p_reservation_id: req.params.reservationId,
-      p_note: String(req.body?.note || '').trim().slice(0, 1000) || null,
-    });
-    const reservation = await getReservationResponse(req.params.reservationId, true);
     res.json({ reservation });
   } catch (error) {
     next(normalizeReservationError(error));

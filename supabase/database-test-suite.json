@@ -7,6 +7,7 @@
     "20260806_phase1_database_security_invariants.sql",
     "20260806_phase1_database_flows.sql",
     "20260810_phase2_rate_limit_and_advisor_invariants.sql",
-    "20260810_phase2_stockroom_convergence_test.sql"
+    "20260810_phase2_stockroom_convergence_test.sql",
+    "20260817_guest_reservation_invariants.sql"
   ]
 }

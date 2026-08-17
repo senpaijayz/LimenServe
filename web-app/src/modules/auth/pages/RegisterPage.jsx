@@ -66,7 +66,7 @@ export default function RegisterPage() {
       return;
     }
 
-    navigate('/my-reservations', { replace: true });
+    navigate('/my-services', { replace: true });
   };
 
   return (
@@ -80,7 +80,7 @@ export default function RegisterPage() {
           <img src="/LogoLimen.jpg" alt="Limen" className="h-16 w-16 rounded-2xl border border-primary-200 object-contain p-1" />
           <p className="mt-6 text-xs font-black uppercase tracking-[0.26em] text-accent-primary">Customer account</p>
           <h1 className="mt-2 text-3xl font-display font-bold text-primary-950">Create your account</h1>
-          <p className="mt-2 text-sm leading-6 text-primary-600">Use this account to pre-order unavailable parts and follow each reservation.</p>
+          <p className="mt-2 text-sm leading-6 text-primary-600">Use this account to view your service orders. Part requests are handled directly by Limen administrators and do not require a customer portal.</p>
 
           {confirmationMessage ? (
             <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900" role="status">

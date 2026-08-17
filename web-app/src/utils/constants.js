@@ -29,7 +29,7 @@ export const ROLE_LABELS = {
 
 export function getDefaultAuthenticatedPath(role) {
     if (role === ROLES.CUSTOMER) {
-        return '/my-reservations';
+        return '/my-services';
     }
 
     if (role === ROLES.CASHIER) {
@@ -113,7 +113,6 @@ export const NAV_ITEMS = {
         { path: '/inventory', label: 'Inventory', icon: 'Package', roles: [ROLES.ADMIN, ROLES.STOCK_CLERK] },
         { path: '/services', label: 'Service Orders', icon: 'Wrench', roles: [ROLES.ADMIN, ROLES.CASHIER] },
         { path: '/my-services', label: 'My Services', icon: 'Wrench', roles: [ROLES.CUSTOMER] },
-        { path: '/my-reservations', label: 'My Reservations', icon: 'ClipboardList', roles: [ROLES.CUSTOMER] },
     ],
     admin: [
         { path: '/products', label: 'Products', icon: 'Boxes', roles: [ROLES.ADMIN] },

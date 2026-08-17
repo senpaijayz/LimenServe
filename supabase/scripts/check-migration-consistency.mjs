@@ -53,7 +53,10 @@ function hashFrozenHistory(fileNames) {
   fileNames.forEach((fileName) => {
     hash.update(fileName);
     hash.update('\0');
-    hash.update(fs.readFileSync(path.join(migrationsDirectory, fileName)));
+    // Git normalizes checked-in SQL to LF, while Windows worktrees may expose
+    // the same file as CRLF. Hash the logical SQL content so the frozen-history
+    // guard is stable across operating systems.
+    hash.update(fs.readFileSync(path.join(migrationsDirectory, fileName), 'utf8').replace(/\r\n?/g, '\n'));
     hash.update('\0');
   });
 

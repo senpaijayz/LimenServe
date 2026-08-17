@@ -120,10 +120,7 @@ const LoginPage = () => {
                     </form>
 
                     <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-center text-sm text-primary-700">
-                        Need to reserve an unavailable part?{' '}
-                        <Link to="/register" className="font-bold text-accent-primary underline-offset-4 hover:underline">
-                            Create a customer account
-                        </Link>
+                        Part requests do not require a customer login. Submit one from the public catalog and an administrator will contact you.
                     </div>
 
                     <div className="mt-6 pt-6 border-t border-primary-200">

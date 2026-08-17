@@ -1,30 +1,12 @@
 import apiClient, { extractApiError } from './apiClient';
 import { invalidateCatalogClientCaches } from './catalogApi';
 
-export async function listMyReservations() {
-  try {
-    const { data } = await apiClient.get('/reservations/mine');
-    return data.reservations ?? [];
-  } catch (error) {
-    extractApiError(error, 'Failed to load your part reservations.');
-  }
-}
-
 export async function createPartReservation(payload) {
   try {
     const { data } = await apiClient.post('/reservations', payload);
     return data.reservation;
   } catch (error) {
     extractApiError(error, 'Failed to create the part reservation.');
-  }
-}
-
-export async function cancelMyReservation(reservationId, note = '') {
-  try {
-    const { data } = await apiClient.post(`/reservations/${reservationId}/cancel`, { note });
-    return data.reservation;
-  } catch (error) {
-    extractApiError(error, 'Failed to cancel the reservation.');
   }
 }
 

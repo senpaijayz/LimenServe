@@ -26,7 +26,7 @@ Production record counts were unchanged after migration: 3 user profiles, 1 mech
 2. Run `npm ci`, all frontend/backend tests, ESLint, the production build, and npm audits.
 3. Confirm `git diff --check` and review the exact file list; exclude local `outputs/` and root `package.json`.
 4. Push the branch and open a pull request to `main`.
-5. Verify the Vercel preview uses only staging hosts, then check home, catalog, product detail, reservation sign-in path, responsive navigation, cache headers, console errors, and protected-route redirects.
+5. Verify the Vercel preview uses only staging hosts, then check home, catalog, product detail, guest part-request form, responsive navigation, cache headers, console errors, and protected-route redirects.
 6. Review the PR checks and merge only when green.
 7. Confirm Render automatically deploys the merge commit and reaches `live`.
 8. Confirm Vercel production reaches `READY` on the same merge commit.
@@ -39,7 +39,7 @@ For this security follow-up, `20260806101020_move_rls_helpers_to_private_schema.
 
 - `GET https://limen-backend.onrender.com/api/health` returns success.
 - `https://limen-serve.vercel.app` and `/catalog` render on desktop and mobile without console errors.
-- `https://limen-serve.vercel.app/my-reservations` redirects an unauthenticated user to login.
+- The public catalogue can submit a guest part request without login; `/reservations` remains admin-only and no customer reservation portal is exposed.
 - Product catalog responses are publicly cacheable with the documented short TTL; authenticated/private endpoints return `Cache-Control: no-store`.
 - Direct Render requests allow `https://limen-serve.vercel.app` and reject unrelated origins.
 - Vercel and Render report the same Git commit.

@@ -38,7 +38,6 @@ const mobilePaths = new Set([
     '/reports',
     '/users',
     '/reservations',
-    '/my-reservations',
 ]);
 
 export default function MobileBottomNav() {

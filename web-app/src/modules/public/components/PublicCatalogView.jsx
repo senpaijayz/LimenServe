@@ -30,9 +30,8 @@ import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import { getPublicFeaturedCatalogItems } from '../../cms/api/cmsCatalogApi';
 import Button from '../../../components/ui/Button';
 import { useToast } from '../../../components/ui/Toast';
-import { useAuth } from '../../../context/useAuth';
 import { createPartReservation } from '../../../services/reservationsApi';
-import { ROLES } from '../../../utils/constants';
+import { normalizePhilippinePhoneNumber } from '../../../utils/phone';
 
 const PAGE_SIZE = 12;
 
@@ -90,7 +89,6 @@ const FeaturedCatalogProductCard = ({ item, onSelect }) => (
 );
 
 const PublicCatalogView = () => {
-  const { isAuthenticated, user } = useAuth();
   const { success, error: showError } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
@@ -103,6 +101,9 @@ const PublicCatalogView = () => {
   const [viewMode, setViewMode] = useState('grid');
   const [preorderProduct, setPreorderProduct] = useState(null);
   const [preorderQuantity, setPreorderQuantity] = useState(1);
+  const [preorderName, setPreorderName] = useState('');
+  const [preorderPhone, setPreorderPhone] = useState('');
+  const [preorderEmail, setPreorderEmail] = useState('');
   const [preorderNote, setPreorderNote] = useState('');
   const [preorderRequestKey, setPreorderRequestKey] = useState('');
   const [preorderSubmitting, setPreorderSubmitting] = useState(false);
@@ -307,6 +308,9 @@ const PublicCatalogView = () => {
   const openPreorder = (product) => {
     setPreorderProduct(product);
     setPreorderQuantity(Math.min(Math.max(Number(product.availableStock || 0) + 1, 1), 999));
+    setPreorderName('');
+    setPreorderPhone('');
+    setPreorderEmail('');
     setPreorderNote('');
     setPreorderError('');
     setPreorderRequestKey(window.crypto.randomUUID());
@@ -326,16 +330,30 @@ const PublicCatalogView = () => {
       return;
     }
 
+    const phone = normalizePhilippinePhoneNumber(preorderPhone);
+    if (preorderName.trim().length < 2 || !phone) {
+      setPreorderError('Enter your name and a valid Philippine phone number so the admin can contact you.');
+      return;
+    }
+
+    if (preorderEmail.trim() && !/^\S+@\S+\.\S+$/.test(preorderEmail.trim())) {
+      setPreorderError('Enter a valid email address or leave it blank.');
+      return;
+    }
+
     setPreorderSubmitting(true);
     setPreorderError('');
     try {
       const reservation = await createPartReservation({
         productId: preorderProduct.id,
         quantity,
+        customerName: preorderName.trim(),
+        customerPhone: phone,
+        customerEmail: preorderEmail.trim().toLowerCase(),
         note: preorderNote.trim(),
         requestKey: preorderRequestKey,
       });
-      success(`${reservation.reservationNumber} was submitted. Track it in My Reservations.`);
+      success(`${reservation.reservationNumber} was submitted. The admin will contact you when it is reviewed.`);
       setPreorderProduct(null);
       setSelectedProduct(null);
     } catch (error) {
@@ -771,7 +789,7 @@ const PublicCatalogView = () => {
                     <div className={`mb-3 rounded-xl border px-4 py-3 text-sm ${selectedProduct.inStock ? 'border-blue-100 bg-blue-50 text-blue-900' : 'border-red-200 bg-red-50 text-red-900'}`}>
                       <strong>{selectedProduct.availableStock} unit{selectedProduct.availableStock === 1 ? '' : 's'} available</strong>
                       {selectedProduct.reservedStock > 0 && <span> · {selectedProduct.reservedStock} reserved</span>}
-                      <p className="mt-1 text-xs opacity-80">Reserve only when your requested quantity is greater than current availability.</p>
+                       <p className="mt-1 text-xs opacity-80">Submit a request when you need more than current availability. No customer account is required.</p>
                     </div>
 
                     <div className="mb-2">
@@ -814,19 +832,9 @@ const PublicCatalogView = () => {
                         <Link to={buildEstimateHref()} className="btn btn-primary w-full sm:w-auto px-8" onClick={() => setSelectedProduct(null)}>
                           <ShoppingCart className="w-5 h-5" /> Calculate Quote
                         </Link>
-                        {isAuthenticated && user?.role === ROLES.CUSTOMER ? (
-                          <Button variant={selectedProduct.inStock ? 'warning' : 'approve'} onClick={() => openPreorder(selectedProduct)} leftIcon={<PackagePlus className="h-5 w-5" />}>
-                            {selectedProduct.inStock ? 'Reserve extra quantity' : 'Pre-Order'}
-                          </Button>
-                        ) : !isAuthenticated ? (
-                          <Link to="/login" className="btn btn-secondary w-full sm:w-auto">
-                            Sign in to reserve
-                          </Link>
-                        ) : (
-                          <Button variant="secondary" disabled title="Reservations require a customer account.">
-                            Customer account required
-                          </Button>
-                        )}
+                        <Button variant={selectedProduct.inStock ? 'warning' : 'approve'} onClick={() => openPreorder(selectedProduct)} leftIcon={<PackagePlus className="h-5 w-5" />}>
+                          {selectedProduct.inStock ? 'Request extra quantity' : 'Request this part'}
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -860,8 +868,8 @@ const PublicCatalogView = () => {
             >
               <div className="modal-header">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent-primary">Part reservation</p>
-                  <h2 id="preorder-title" className="modal-title mt-1">{preorderProduct.inStock ? 'Reserve extra quantity' : 'Pre-order unavailable part'}</h2>
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent-primary">Request a part</p>
+                  <h2 id="preorder-title" className="modal-title mt-1">{preorderProduct.inStock ? 'Request extra quantity' : 'Request an unavailable part'}</h2>
                 </div>
                 <button type="button" className="btn btn-ghost btn-icon" onClick={() => setPreorderProduct(null)} disabled={preorderSubmitting} aria-label="Close reservation form"><X className="h-5 w-5" /></button>
               </div>
@@ -876,8 +884,23 @@ const PublicCatalogView = () => {
 
                   {preorderError && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">{preorderError}</div>}
 
-                  <label className="block text-sm font-semibold text-primary-700">
-                    Requested quantity
+                    <label className="block text-sm font-semibold text-primary-700">
+                      Your name
+                      <input type="text" required maxLength="120" autoComplete="name" className="input mt-2" value={preorderName} onChange={(event) => { setPreorderName(event.target.value); setPreorderError(''); }} placeholder="Full name" />
+                    </label>
+
+                    <label className="block text-sm font-semibold text-primary-700">
+                      Phone number
+                      <input type="tel" required inputMode="tel" autoComplete="tel" maxLength="32" className="input mt-2" value={preorderPhone} onChange={(event) => { setPreorderPhone(event.target.value); setPreorderError(''); }} placeholder="09XX XXX XXXX" />
+                    </label>
+
+                    <label className="block text-sm font-semibold text-primary-700">
+                      Email (optional)
+                      <input type="email" maxLength="160" autoComplete="email" className="input mt-2" value={preorderEmail} onChange={(event) => { setPreorderEmail(event.target.value); setPreorderError(''); }} placeholder="you@example.com" />
+                    </label>
+
+                    <label className="block text-sm font-semibold text-primary-700">
+                      Requested quantity
                     <input
                       type="number"
                       min="1"
@@ -897,13 +920,13 @@ const PublicCatalogView = () => {
                   </label>
 
                   <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
-                    This is a reservation request, not a confirmed sale. An administrator must approve it before stock is allocated.
+                    This is a request, not a confirmed sale. No customer account is created and only Limen administrators can review, approve, allocate, reject, or complete it.
                   </p>
                 </div>
 
                 <div className="modal-footer">
                   <Button variant="cancel" onClick={() => setPreorderProduct(null)} disabled={preorderSubmitting}>Cancel</Button>
-                  <Button type="submit" variant="confirm" isLoading={preorderSubmitting} loadingLabel="Submitting request" leftIcon={<PackagePlus className="h-4 w-4" />}>Submit reservation</Button>
+                  <Button type="submit" variant="confirm" isLoading={preorderSubmitting} loadingLabel="Submitting request" leftIcon={<PackagePlus className="h-4 w-4" />}>Send request</Button>
                 </div>
               </form>
             </Motion.div>
