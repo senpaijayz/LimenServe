@@ -16,6 +16,8 @@ services:
         value: "1"
       - key: PUBLIC_RATE_LIMIT_STORE
         value: supabase
+      - key: OCR_EXTERNAL_FALLBACK_ENABLED
+        value: "false"
       - key: FRONTEND_URLS
         value: https://limen-serve.vercel.app
       - key: SUPABASE_URL

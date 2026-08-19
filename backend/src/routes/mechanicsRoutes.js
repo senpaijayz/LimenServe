@@ -115,26 +115,6 @@ function getPhotoExtension(mimeType) {
   return 'jpg';
 }
 
-function isMissingBucketError(error) {
-  const message = String(error?.message || '').toLowerCase();
-  return error?.statusCode === '404'
-    || error?.status === 404
-    || message.includes('bucket not found')
-    || message.includes('not found');
-}
-
-async function ensureMechanicPhotoBucket() {
-  const { error } = await supabaseAdmin.storage.createBucket(PHOTO_BUCKET, {
-    public: true,
-    fileSizeLimit: 2 * 1024 * 1024,
-    allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
-  });
-
-  if (error && !String(error.message || '').toLowerCase().includes('already exists')) {
-    throw error;
-  }
-}
-
 async function uploadMechanicPhotoObject(path, parsed) {
   return supabaseAdmin.storage
     .from(PHOTO_BUCKET)
@@ -153,26 +133,14 @@ async function uploadMechanicPhoto(payload = {}) {
   const extension = getPhotoExtension(parsed.mimeType);
   const mechanicId = payload.id || 'new';
   const path = `${mechanicId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
-  let { error } = await uploadMechanicPhotoObject(path, parsed);
-
-  if (error && isMissingBucketError(error)) {
-    try {
-      await ensureMechanicPhotoBucket();
-      ({ error } = await uploadMechanicPhotoObject(path, parsed));
-    } catch (bucketError) {
-      error = bucketError;
-    }
-  }
+  const { error } = await uploadMechanicPhotoObject(path, parsed);
 
   if (error) {
-    console.warn('Supabase Storage photo upload failed; storing mechanic photo as data URL fallback:', error.message);
-    return {
-      ...payload,
-      photoUrl: payload.photoDataUrl || payload.photo_data_url,
-      photo_url: payload.photoDataUrl || payload.photo_data_url,
-      photoDataUrl: undefined,
-      photo_data_url: undefined,
-    };
+    const uploadError = new Error('Mechanic photo upload failed.');
+    uploadError.statusCode = 503;
+    uploadError.publicMessage = 'Mechanic photo upload is temporarily unavailable. No changes were saved; please try again.';
+    uploadError.cause = error;
+    throw uploadError;
   }
 
   const { data } = supabaseAdmin.storage.from(PHOTO_BUCKET).getPublicUrl(path);

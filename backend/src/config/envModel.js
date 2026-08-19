@@ -23,6 +23,24 @@ function readInteger(source, name, fallback, { minimum = 0, maximum = Number.MAX
   return value;
 }
 
+function readBoolean(source, name, fallback) {
+  const rawValue = String(source[name] ?? '').trim().toLowerCase();
+
+  if (!rawValue) {
+    return fallback;
+  }
+
+  if (rawValue === 'true') {
+    return true;
+  }
+
+  if (rawValue === 'false') {
+    return false;
+  }
+
+  throw new Error(`${name} must be either true or false.`);
+}
+
 function normalizeApplicationEnvironment(source) {
   const value = String(source.APP_ENV || source.NODE_ENV || 'development').trim().toLowerCase();
 
@@ -176,6 +194,7 @@ export function buildEnv(source = process.env) {
       maximum: 1_000_000,
     }),
     publicRateLimitStore: parsePublicRateLimitStore(source, applicationEnvironment),
+    externalOcrFallbackEnabled: readBoolean(source, 'OCR_EXTERNAL_FALLBACK_ENABLED', false),
     supabaseUrl: requireValue(source, 'SUPABASE_URL'),
     supabaseAnonKey,
     supabaseServiceRoleKey,

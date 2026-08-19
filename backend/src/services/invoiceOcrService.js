@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { env } from '../config/env.js';
 import { supabaseAdmin } from '../config/supabase.js';
+import { logger } from '../observability/logger.js';
 
 let paddleServicePromise = null;
 
@@ -282,6 +284,12 @@ async function recognizeImage(filePath) {
 }
 
 async function recognizeImageWithOcrSpace(file) {
+  if (!env.externalOcrFallbackEnabled) {
+    const error = new Error('External OCR fallback is disabled.');
+    error.code = 'OCR_EXTERNAL_FALLBACK_DISABLED';
+    throw error;
+  }
+
   const apiKey = process.env.OCR_SPACE_API_KEY;
   if (!apiKey) {
     throw new Error('OCR.space fallback is not configured. Set OCR_SPACE_API_KEY on the server.');
@@ -326,11 +334,11 @@ async function recognizeImageWithOcrSpace(file) {
   }
 }
 
-async function recognizeInvoiceText(file) {
+async function recognizeInvoiceText(file, { requestId } = {}) {
   let paddleError = null;
 
   try {
-    const paddleText = await withTempImage(file, recognizeImage);
+    const paddleText = await withTempImage(file, recognizeImage, { requestId });
 
     if (paddleText.trim()) {
       return {
@@ -340,7 +348,10 @@ async function recognizeInvoiceText(file) {
     }
   } catch (error) {
     paddleError = error;
-    console.warn('Paddle invoice OCR failed, falling back to OCR.space:', getErrorMessage(error));
+    logger.warn('invoice_ocr.local_failed', {
+      requestId,
+      error,
+    });
   }
 
   try {
@@ -363,7 +374,7 @@ async function recognizeInvoiceText(file) {
   throw error;
 }
 
-async function withTempImage(file, callback) {
+async function withTempImage(file, callback, { requestId } = {}) {
   const uploadDir = path.join(os.tmpdir(), 'limenserve-invoice-ocr');
   await mkdir(uploadDir, { recursive: true });
   const extension = path.extname(file.originalname || '') || '.jpg';
@@ -373,7 +384,14 @@ async function withTempImage(file, callback) {
     await writeFile(filePath, file.buffer);
     return await callback(filePath);
   } finally {
-    await unlink(filePath).catch(() => {});
+    try {
+      await unlink(filePath);
+    } catch (error) {
+      logger.warn('invoice_ocr.temp_cleanup_failed', {
+        requestId,
+        error,
+      });
+    }
   }
 }
 
@@ -435,7 +453,7 @@ async function classifyDetectedProducts(detectedItems) {
   };
 }
 
-export async function analyzeSupplierInvoiceImage(file) {
+export async function analyzeSupplierInvoiceImage(file, { requestId } = {}) {
   if (!file?.buffer?.length) {
     const error = new Error('Invoice image is required.');
     error.statusCode = 400;
@@ -445,9 +463,12 @@ export async function analyzeSupplierInvoiceImage(file) {
   let recognition = null;
 
   try {
-    recognition = await recognizeInvoiceText(file);
+    recognition = await recognizeInvoiceText(file, { requestId });
   } catch (cause) {
-    console.error('Supplier invoice OCR failed:', cause);
+    logger.error('invoice_ocr.failed', {
+      requestId,
+      error: cause,
+    });
     const error = new Error('The invoice OCR service could not read this invoice right now. Please try again, or enter the stock numbers and quantities manually.');
     error.statusCode = 503;
     error.cause = cause;

@@ -109,3 +109,12 @@ test('validates bounded numeric security settings', () => {
     /GLOBAL_RATE_LIMIT_MAX must be an integer/,
   );
 });
+
+test('keeps external OCR disabled unless explicitly approved', () => {
+  assert.equal(buildEnv(baseEnvironment()).externalOcrFallbackEnabled, false);
+  assert.equal(buildEnv(baseEnvironment({ OCR_EXTERNAL_FALLBACK_ENABLED: 'true' })).externalOcrFallbackEnabled, true);
+  assert.throws(
+    () => buildEnv(baseEnvironment({ OCR_EXTERNAL_FALLBACK_ENABLED: 'enabled' })),
+    /OCR_EXTERNAL_FALLBACK_ENABLED must be either true or false/,
+  );
+});

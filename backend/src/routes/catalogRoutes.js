@@ -50,8 +50,6 @@ function handlePriceListUpload(req, res, next) {
 }
 const PRODUCT_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const CATALOG_SUMMARY_CACHE_TTL_MS = 30 * 1000;
-const FULL_CATALOG_PAGE_SIZE = 250;
-const FULL_CATALOG_PAGE_BATCH_SIZE = 3;
 const VEHICLE_PRICELIST_CANDIDATE_LIMIT = 8000;
 const PRICE_LIST_DB_BATCH_SIZE = 1000;
 const PRICE_LIST_LOOKUP_BATCH_SIZE = 250;
@@ -2960,24 +2958,6 @@ async function fetchPricelistCatalogPage({ page, pageSize, searchQuery = '', sel
   };
 }
 
-async function fetchRemainingCatalogPagesInBatches(totalPages) {
-  const allRows = [];
-
-  for (let page = 2; page <= totalPages; page += FULL_CATALOG_PAGE_BATCH_SIZE) {
-    const pageRequests = Array.from(
-      { length: Math.min(FULL_CATALOG_PAGE_BATCH_SIZE, totalPages - page + 1) },
-      (_, index) => fetchProductCatalogPage({
-        page: page + index,
-        pageSize: FULL_CATALOG_PAGE_SIZE,
-      })
-    );
-    const pageResults = await Promise.all(pageRequests);
-    allRows.push(...pageResults.flat());
-  }
-
-  return allRows;
-}
-
 async function getCachedProductCatalog() {
   const now = Date.now();
   if (productCatalogCache.data && (now - productCatalogCache.fetchedAt) < PRODUCT_CATALOG_CACHE_TTL_MS) {
@@ -2990,22 +2970,8 @@ async function getCachedProductCatalog() {
 
   productCatalogCachePromise = (async () => {
     try {
-      const firstPageRows = await fetchProductCatalogPage({
-        page: 1,
-        pageSize: FULL_CATALOG_PAGE_SIZE,
-      });
-
-      const totalCount = Number(firstPageRows?.[0]?.total_count ?? 0);
-      const totalPages = Math.max(1, Math.ceil(totalCount / FULL_CATALOG_PAGE_SIZE));
-
-      let allRows = firstPageRows ?? [];
-
-      if (totalPages > 1) {
-        const remainingRows = await fetchRemainingCatalogPagesInBatches(totalPages);
-        allRows = allRows.concat(remainingRows);
-      }
-
-      const products = await filterActiveCatalogProducts(allRows.map(mapCatalogRow));
+      const rows = await callRpc('get_full_product_catalog');
+      const products = (rows ?? []).map(mapCatalogRow);
       productCatalogCache = {
         data: products,
         fetchedAt: Date.now(),
@@ -3729,7 +3695,7 @@ router.post('/stock/receive-invoice', requireRole('admin', 'stock_clerk'), async
 
 router.post('/stock/invoice-ocr', requireRole('admin', 'stock_clerk'), invoiceUpload.single('invoice'), async (req, res, next) => {
   try {
-    const result = await analyzeSupplierInvoiceImage(req.file);
+    const result = await analyzeSupplierInvoiceImage(req.file, { requestId: req.requestId });
 
     res.json(result);
   } catch (error) {

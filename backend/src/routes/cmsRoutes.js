@@ -76,34 +76,6 @@ function normalizeFileName(value) {
     || 'cms-image';
 }
 
-async function ensureCmsAssetBucket() {
-  const createResult = await supabaseAdmin.storage.createBucket(CMS_ASSET_BUCKET, {
-    public: true,
-    fileSizeLimit: CMS_ASSET_MAX_BYTES,
-    allowedMimeTypes: [...CMS_ALLOWED_IMAGE_TYPES],
-  });
-
-  const createMessage = String(createResult.error?.message || '').toLowerCase();
-  const bucketAlreadyExists = createResult.error?.status === 409
-    || createMessage.includes('already exists')
-    || createMessage.includes('resource already exists')
-    || createMessage.includes('duplicate');
-
-  if (createResult.error && !bucketAlreadyExists) {
-    throw createResult.error;
-  }
-
-  try {
-    await supabaseAdmin.storage.updateBucket(CMS_ASSET_BUCKET, {
-      public: true,
-      fileSizeLimit: CMS_ASSET_MAX_BYTES,
-      allowedMimeTypes: [...CMS_ALLOWED_IMAGE_TYPES],
-    });
-  } catch (error) {
-    console.warn('Unable to update CMS asset bucket settings:', error?.message || error);
-  }
-}
-
 async function uploadCmsAsset({ dataUrl, fileName, folder }) {
   const parsed = parseCmsAssetDataUrl(dataUrl);
   const safeFolder = normalizeStorageFolder(folder);
@@ -111,9 +83,7 @@ async function uploadCmsAsset({ dataUrl, fileName, folder }) {
   const extension = getAssetExtension(parsed.mimeType, fileName);
   const path = `cms/${safeFolder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeFileName}.${extension}`;
 
-  await ensureCmsAssetBucket();
-
-  let { error } = await supabaseAdmin.storage
+  const { error } = await supabaseAdmin.storage
     .from(CMS_ASSET_BUCKET)
     .upload(path, parsed.buffer, {
       contentType: parsed.mimeType,
@@ -121,19 +91,12 @@ async function uploadCmsAsset({ dataUrl, fileName, folder }) {
       cacheControl: '31536000',
     });
 
-  if (error && String(error.message || '').toLowerCase().includes('bucket')) {
-    await ensureCmsAssetBucket();
-    ({ error } = await supabaseAdmin.storage
-      .from(CMS_ASSET_BUCKET)
-      .upload(path, parsed.buffer, {
-        contentType: parsed.mimeType,
-        upsert: false,
-        cacheControl: '31536000',
-      }));
-  }
-
   if (error) {
-    throw error;
+    const uploadError = new Error('CMS media upload failed.');
+    uploadError.statusCode = 503;
+    uploadError.publicMessage = 'CMS media upload is temporarily unavailable. Nothing was saved; please try again.';
+    uploadError.cause = error;
+    throw uploadError;
   }
 
   const { data } = supabaseAdmin.storage.from(CMS_ASSET_BUCKET).getPublicUrl(path);
