@@ -288,8 +288,18 @@ router.get('/customers', requireRole('admin'), async (req, res, next) => {
       .limit(limit);
 
     if (search) {
-      const pattern = `%${search.replace(/[%_,]/g, '')}%`;
-      query = query.or(`name.ilike.${pattern},email.ilike.${pattern},phone.ilike.${pattern}`);
+      const customerIds = await searchRelatedIds({
+        schema: 'operations',
+        table: 'customers',
+        columns: ['name', 'email', 'phone'],
+        term: search,
+        limit,
+      });
+      if (customerIds.length === 0) {
+        res.json({ customers: [] });
+        return;
+      }
+      query = query.in('id', customerIds);
     }
 
     const { data, error } = await query;
