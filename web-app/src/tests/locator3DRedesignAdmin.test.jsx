@@ -53,20 +53,24 @@ function renderLocator(route = '/locator-3d') {
 describe('3D Locator rebuild', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        act(() => {
+            resetLocator3DStore();
+        });
     });
 
     it('uses a search-first interface with no permanent finder or location panels', async () => {
-        resetLocator3DStore();
-        useLocator3DStore.getState().setProductLocations([{
-            aisle: 'B',
-            binNumber: 4,
-            floor: 1,
-            productId: 'product-1',
-            productName: 'Oil Filter',
-            shelfNumber: 2,
-            shelfObjectId: 'shelf-4-a',
-            sku: 'OF-1',
-        }]);
+        act(() => {
+            useLocator3DStore.getState().setProductLocations([{
+                aisle: 'B',
+                binNumber: 4,
+                floor: 1,
+                productId: 'product-1',
+                productName: 'Oil Filter',
+                shelfNumber: 2,
+                shelfObjectId: 'shelf-4-a',
+                sku: 'OF-1',
+            }]);
+        });
         renderLocator();
 
         expect(screen.getByRole('heading', { name: '3D Stockroom' })).toBeTruthy();
@@ -87,7 +91,6 @@ describe('3D Locator rebuild', () => {
     });
 
     it('deep-links to a mapped product and shows a compact location marker', async () => {
-        resetLocator3DStore();
         renderLocator('/locator-3d?productId=product-1');
 
         await waitFor(() => expect(useLocator3DStore.getState().locatedProduct?.productId).toBe('product-1'));
@@ -97,7 +100,6 @@ describe('3D Locator rebuild', () => {
     });
 
     it('keeps an unmapped deep-linked product safe and explains what is missing', async () => {
-        resetLocator3DStore();
         renderLocator('/locator-3d?productId=product-2&sku=BP-2&name=Brake+Pad');
 
         await screen.findByText(/Brake Pad has no saved shelf and bin location yet/i);
@@ -106,7 +108,6 @@ describe('3D Locator rebuild', () => {
     });
 
     it('keeps design mode canvas-first while supporting add, direct transforms, and save', async () => {
-        resetLocator3DStore();
         renderLocator();
 
         fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
@@ -136,13 +137,14 @@ describe('3D Locator rebuild', () => {
     });
 
     it('protects mapped shelves from accidental deletion', async () => {
-        resetLocator3DStore();
-        useLocator3DStore.getState().setProductLocations([{
-            floor: 1,
-            productId: 'product-1',
-            shelfObjectId: 'shelf-4-a',
-        }]);
-        useLocator3DStore.getState().forceSelectObject('shelf-4-a');
+        act(() => {
+            useLocator3DStore.getState().setProductLocations([{
+                floor: 1,
+                productId: 'product-1',
+                shelfObjectId: 'shelf-4-a',
+            }]);
+            useLocator3DStore.getState().forceSelectObject('shelf-4-a');
+        });
         renderLocator();
 
         fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));

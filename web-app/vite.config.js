@@ -1,72 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    VitePWA({
-      // Prevent stale cached builds from trapping users on old deployments.
-      // This keeps the manifest but removes the service worker and its caches on visit.
-      selfDestroying: true,
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
-      manifest: {
-        name: 'Limen Auto Parts Center',
-        short_name: 'Limen',
-        description: 'Limen Auto Parts Center - Cost Estimation and Quotation System',
-        theme_color: '#ffffff',
-        background_color: '#ffffff',
-        display: 'standalone',
-        icons: [
-          {
-            src: '/vite.svg',
-            sizes: '192x192',
-            type: 'image/svg+xml'
-          },
-          {
-            src: '/vite.svg',
-            sizes: '512x512',
-            type: 'image/svg+xml'
-          }
-        ]
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-cache',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'gstatic-fonts-cache',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          }
-        ]
-      }
-    })
-  ],
+  // LIMEN ships as a normal website: no install prompt, offline cache, or
+  // service-worker lifecycle to leave users on stale operational data.
+  plugins: [react()],
   build: {
     // Keep a machine-readable graph in every production build. The budget
     // verifier consumes this instead of inferring load behavior from manual

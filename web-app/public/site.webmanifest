@@ -1,0 +1,22 @@
+{
+  "name": "Limen Auto Parts Center",
+  "short_name": "Limen",
+  "description": "Limen Auto Parts Center - Genuine Mitsubishi Parts and Automotive Solutions",
+  "theme_color": "#183d91",
+  "background_color": "#ffffff",
+  "display": "browser",
+  "icons": [
+    {
+      "src": "/limen-app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/limen-app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
