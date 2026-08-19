@@ -1,8 +1,8 @@
--- Keep expired quotations out of the staff saved-quotation list. Public
--- retrieval already rejects expired rows; this makes the admin list enforce
--- the same lifecycle rule at the database boundary.
+-- Keep expired quotations out of the staff saved-quotation list. Production
+-- stores estimates in operations (the historical app function is absent), so
+-- replace the public service-role list wrapper with the live schema directly.
 
-create or replace function app.list_estimates_internal(
+create or replace function public.list_estimates(
   p_search text default null,
   p_limit_count integer default 20
 )
@@ -20,7 +20,7 @@ returns table (
 )
 language sql
 security definer
-set search_path = app, public
+set search_path = public, operations
 as $$
   select
     e.id,
@@ -33,12 +33,12 @@ as $$
     e.valid_until,
     coalesce(rev.revision_count, 0) as revision_count,
     e.updated_at
-  from app.estimates e
-  left join app.customers c on c.id = e.customer_id
-  left join app.vehicles v on v.id = e.vehicle_id
+  from operations.estimates e
+  left join operations.customers c on c.id = e.customer_id
+  left join operations.vehicles v on v.id = e.vehicle_id
   left join (
     select estimate_id, count(*) as revision_count
-    from app.estimate_revisions
+    from operations.estimate_revisions
     group by estimate_id
   ) rev on rev.estimate_id = e.id
   where (e.valid_until is null or e.valid_until >= current_date)
