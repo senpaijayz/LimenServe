@@ -9,6 +9,7 @@
     "20260810_phase2_rate_limit_and_advisor_invariants.sql",
     "20260810_phase2_stockroom_convergence_test.sql",
     "20260817_guest_reservation_invariants.sql",
-    "20260820_admin_reservation_invariants.sql"
+    "20260820_admin_reservation_invariants.sql",
+    "20260820_estimate_validity_invariants.sql"
   ]
 }

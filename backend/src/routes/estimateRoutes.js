@@ -18,6 +18,7 @@ import {
 import { createPublicEstimateLookupHandler } from '../services/publicEstimateLookup.js';
 import { createPublicEstimatePricingResolver } from '../services/publicEstimatePricing.js';
 import { callRpc } from '../services/supabaseRpc.js';
+import { filterActiveEstimates } from '../services/estimateValidity.js';
 
 const router = Router();
 
@@ -331,7 +332,10 @@ router.get('/', requireRole('admin'), async (req, res, next) => {
     });
 
     const limit = Number(req.query.limit || 20);
-    res.json({ estimates: (estimates ?? []).filter((estimate) => !isDemoEstimate(estimate)).slice(0, limit) });
+    const visibleEstimates = filterActiveEstimates(
+      (estimates ?? []).filter((estimate) => !isDemoEstimate(estimate)),
+    );
+    res.json({ estimates: visibleEstimates.slice(0, limit) });
   } catch (error) {
     next(error);
   }
