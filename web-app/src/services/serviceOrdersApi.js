@@ -9,15 +9,6 @@ export async function listServiceOrders(params = {}) {
   }
 }
 
-export async function listMyServiceOrders() {
-  try {
-    const { data } = await apiClient.get('/service-orders/customer/mine');
-    return data.orders ?? [];
-  } catch (error) {
-    extractApiError(error, 'Failed to load your service orders.');
-  }
-}
-
 export async function getServiceOrder(orderId) {
   try {
     const { data } = await apiClient.get(`/service-orders/${orderId}`);

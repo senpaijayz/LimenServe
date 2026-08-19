@@ -206,42 +206,6 @@ export function AuthProvider({ children }) {
         resetAuthState();
     }, [resetAuthState]);
 
-    const registerCustomer = useCallback(async ({ fullName, email, password }) => {
-        setIsLoadingAuth(true);
-        setError(null);
-        setProfileWarning(null);
-
-        try {
-            const { data, error: signUpError } = await supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: {
-                        full_name: fullName,
-                    },
-                },
-            });
-
-            if (signUpError) throw signUpError;
-
-            if (data?.session) {
-                applySession(data.session, { force: true });
-            }
-
-            return {
-                success: true,
-                requiresEmailConfirmation: !data?.session,
-                user: data?.user ?? null,
-            };
-        } catch (registrationError) {
-            const message = registrationError.message || 'Unable to create your customer account.';
-            setError(message);
-            return { success: false, error: message };
-        } finally {
-            setIsLoadingAuth(false);
-        }
-    }, [applySession]);
-
     const hasRole = useCallback((roles) => {
         if (!user) return false;
         if (typeof roles === 'string') {
@@ -261,10 +225,9 @@ export function AuthProvider({ children }) {
         isAuthenticated: !!user,
         isAdmin: user?.role === ROLES.ADMIN,
         login,
-        registerCustomer,
         logout,
         hasRole,
-    }), [user, isLoadingAuth, isProfileReady, error, profileWarning, login, registerCustomer, logout, hasRole]);
+    }), [user, isLoadingAuth, isProfileReady, error, profileWarning, login, logout, hasRole]);
 
     return (
         <AuthContext.Provider value={value}>

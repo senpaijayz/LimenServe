@@ -4,7 +4,7 @@ import { ArrowRight, CarFront, Clock, MapPin, Menu, Phone, ShieldCheck, X } from
 import { Link, Navigate, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../../context/useAuth';
 import usePublicCmsSite from '../../hooks/usePublicCmsSite';
-import { getDefaultAuthenticatedPath } from '../../utils/constants';
+import { getDefaultAuthenticatedPath, ROLES } from '../../utils/constants';
 
 const primaryNav = [
     { label: 'Home', to: '/' },
@@ -55,7 +55,7 @@ const PublicLayout = () => {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    if (isAuthenticated) {
+    if (isAuthenticated && user?.role !== ROLES.CUSTOMER) {
         return <Navigate to={getDefaultAuthenticatedPath(user?.role)} replace />;
     }
 

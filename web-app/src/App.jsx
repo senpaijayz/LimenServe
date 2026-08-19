@@ -12,7 +12,6 @@ import { queryClient } from './lib/queryClient';
 import { recordRouteLoad } from './observability/performance';
 
 const LoginPage = lazy(() => import('./modules/auth/pages/LoginPage'));
-const RegisterPage = lazy(() => import('./modules/auth/pages/RegisterPage'));
 const AdminDashboard = lazy(() => import('./modules/dashboard/pages/AdminDashboard'));
 const InventoryList = lazy(() => import('./modules/inventory/pages/InventoryList'));
 const InventoryLogs = lazy(() => import('./modules/inventory/pages/InventoryLogs'));
@@ -27,7 +26,6 @@ const UserManagement = lazy(() => import('./modules/users/pages/UserManagement')
 const CmsAdmin = lazy(() => import('./modules/cms/pages/CmsAdmin'));
 const Locator3DAdmin = lazy(() => import('./modules/locator3d/pages/Locator3DAdmin'));
 const AdminReservations = lazy(() => import('./modules/reservations/pages/AdminReservations'));
-const CustomerServiceOrders = lazy(() => import('./modules/services/pages/CustomerServiceOrders'));
 
 const PublicHome = lazy(() => import('./modules/public/pages/PublicHome'));
 const PublicCatalog = lazy(() => import('./modules/public/pages/PublicCatalog'));
@@ -99,7 +97,6 @@ function App() {
                   </Route>
 
                 <Route path="/login" element={renderRoute(LoginPage, <PageLoader />)} />
-                <Route path="/register" element={renderRoute(RegisterPage, <PageLoader />)} />
 
                 <Route element={<MainLayout />}>
                   <Route path="/dashboard" element={renderRoute(AdminDashboard, <WorkspaceRouteFallback title="Loading dashboard" />)} />
@@ -117,7 +114,6 @@ function App() {
                   <Route path="/cms" element={renderRoute(CmsAdmin, <WorkspaceRouteFallback title="Loading CMS workspace" />)} />
                   <Route path="/locator-3d" element={renderRoute(Locator3DAdmin, <WorkspaceRouteFallback title="Loading 3D locator" />)} />
                   <Route path="/reservations" element={renderRoute(AdminReservations, <WorkspaceRouteFallback title="Loading part reservations" />)} />
-                  <Route path="/my-services" element={renderRoute(CustomerServiceOrders, <WorkspaceRouteFallback title="Loading your service orders" />)} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />

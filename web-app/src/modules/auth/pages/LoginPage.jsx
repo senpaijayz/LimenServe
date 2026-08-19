@@ -119,10 +119,6 @@ const LoginPage = () => {
                         </Button>
                     </form>
 
-                    <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-center text-sm text-primary-700">
-                        Part requests do not require a customer login. Submit one from the public catalog and an administrator will contact you.
-                    </div>
-
                     <div className="mt-6 pt-6 border-t border-primary-200">
                         <p className="text-xs font-bold text-primary-500 text-center mb-3 uppercase tracking-widest">
                             Contact Admin
