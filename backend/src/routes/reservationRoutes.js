@@ -12,6 +12,7 @@ import {
 } from '../middleware/sharedRateLimit.js';
 import { logger } from '../observability/logger.js';
 import { callRpc } from '../services/supabaseRpc.js';
+import { parseAdminReservationRequest } from '../services/adminReservationRequest.js';
 import { parsePublicReservationRequest } from '../services/publicReservationRequest.js';
 
 const router = Router();
@@ -101,6 +102,7 @@ function normalizeReservationError(error) {
     || message.includes('Unsupported')
     || message.includes('not eligible')
     || message.includes('not available for reservation')
+    || message.includes('Customer was not found')
     || message.includes('normal purchase')
   ) {
     error.statusCode = 400;
@@ -242,6 +244,62 @@ async function searchRelatedIds({ schema, table, columns, term, limit }) {
 
   return [...new Set(results.flatMap((result) => (result.data ?? []).map((row) => row.id)))];
 }
+
+router.post('/admin', requireRole('admin'), async (req, res, next) => {
+  try {
+    const parsed = parseAdminReservationRequest(req.body);
+    if (!parsed.ok) {
+      res.status(parsed.statusCode).json({ error: parsed.error });
+      return;
+    }
+
+    const result = await callRpc('create_admin_part_reservation', {
+      p_actor_user_id: req.user.id,
+      p_customer_id: parsed.customerId,
+      p_product_id: parsed.productId,
+      p_requested_quantity: parsed.quantity,
+      p_request_key: parsed.requestKey,
+      p_customer_note: parsed.customerNote,
+    });
+    const reservationId = result?.reservation?.id;
+    const reservation = reservationId
+      ? await getReservationResponse(reservationId, true)
+      : result?.reservation;
+
+    clearPublicResponseCache(['catalog-products', 'recommendations']);
+    res.status(result?.idempotentReplay ? 200 : 201).json({
+      reservation,
+      idempotentReplay: Boolean(result?.idempotentReplay),
+    });
+  } catch (error) {
+    next(normalizeReservationError(error));
+  }
+});
+
+router.get('/customers', requireRole('admin'), async (req, res, next) => {
+  try {
+    const search = String(req.query.search || '').trim().slice(0, 120);
+    const limit = parseLimit(req.query.limit, 30, 100);
+    let query = supabaseAdmin
+      .schema('operations')
+      .from('customers')
+      .select('id, name, email, phone')
+      .order('name', { ascending: true })
+      .limit(limit);
+
+    if (search) {
+      const pattern = `%${search.replace(/[%_,]/g, '')}%`;
+      query = query.or(`name.ilike.${pattern},email.ilike.${pattern},phone.ilike.${pattern}`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    res.json({ customers: data ?? [] });
+  } catch (error) {
+    next(normalizeReservationError(error));
+  }
+});
 
 router.post('/', publicReservationRateLimiter, async (req, res, next) => {
   try {

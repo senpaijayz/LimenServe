@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Clock3, Eye, Filter, PackageCheck, RefreshCw, X, XCircle } from 'lucide-react';
+import { Check, Clock3, Eye, Filter, PackageCheck, Plus, RefreshCw, X, XCircle } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import { useToast } from '../../../components/ui/Toast';
-import { getReservation, listReservations, processReservation } from '../../../services/reservationsApi';
+import { getProductCatalog } from '../../../services/catalogApi';
+import {
+  createAdminReservation,
+  getReservation,
+  listReservations,
+  processReservation,
+  searchReservationCustomers,
+} from '../../../services/reservationsApi';
 import { formatDateTime } from '../../../utils/formatters';
 
 const STATUS_LABELS = {
@@ -26,6 +33,65 @@ export default function AdminReservations() {
   const [availabilityDates, setAvailabilityDates] = useState({});
   const [activity, setActivity] = useState(null);
   const [confirmation, setConfirmation] = useState(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({ customerId: '', productId: '', quantity: 1, note: '' });
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [productSearch, setProductSearch] = useState('');
+  const [customerOptions, setCustomerOptions] = useState([]);
+  const [productOptions, setProductOptions] = useState([]);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState('');
+
+  useEffect(() => {
+    if (!createOpen) return undefined;
+    const timer = setTimeout(async () => {
+      try {
+        const [customers, catalog] = await Promise.all([
+          searchReservationCustomers(customerSearch),
+          getProductCatalog({ q: productSearch, page: 1, pageSize: 50, includeCategories: false }),
+        ]);
+        setCustomerOptions(customers ?? []);
+        setProductOptions(catalog?.products ?? []);
+        setCreateError('');
+      } catch (error) {
+        setCreateError(error.message || 'Unable to load customers and parts.');
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [createOpen, customerSearch, productSearch]);
+
+  const closeCreate = () => {
+    setCreateOpen(false);
+    setCreateError('');
+    setCreateForm({ customerId: '', productId: '', quantity: 1, note: '' });
+    setCustomerSearch('');
+    setProductSearch('');
+  };
+
+  const submitCreate = async (event) => {
+    event.preventDefault();
+    if (!createForm.customerId || !createForm.productId) {
+      setCreateError('Choose both an existing customer and a part.');
+      return;
+    }
+
+    setCreateLoading(true);
+    setCreateError('');
+    try {
+      const result = await createAdminReservation(createForm);
+      const reservation = result?.reservation;
+      await loadQueue();
+      success(result?.idempotentReplay
+        ? `${reservation?.reservationNumber || 'Reservation'} was already created.`
+        : `${reservation?.reservationNumber || 'Reservation'} created for the customer.`);
+      setCreateLoading(false);
+      closeCreate();
+    } catch (error) {
+      setCreateError(error.message || 'Unable to create the reservation.');
+    } finally {
+      setCreateLoading(false);
+    }
+  };
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
@@ -115,7 +181,10 @@ export default function AdminReservations() {
           <h1 className="mt-2 text-3xl font-display font-bold text-primary-950">Part Reservations</h1>
           <p className="mt-2 text-sm text-primary-600">Approve requests, allocate stock in approval order, and retain a complete activity trail.</p>
         </div>
-        <Button variant="secondary" onClick={loadQueue} isLoading={loading} leftIcon={<RefreshCw className="h-4 w-4" />}>Refresh queue</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" onClick={() => setCreateOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>Reserve for customer</Button>
+          <Button variant="secondary" onClick={loadQueue} isLoading={loading} leftIcon={<RefreshCw className="h-4 w-4" />}>Refresh queue</Button>
+        </div>
       </header>
 
       <form
@@ -184,6 +253,30 @@ export default function AdminReservations() {
             </div>
             <div className="modal-footer"><Button variant="secondary" onClick={() => setActivity(null)}>Close</Button></div>
           </div>
+        </div>
+      )}
+
+      {createOpen && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="create-reservation-title" onClick={closeCreate}>
+          <form className="modal max-w-2xl" onSubmit={submitCreate} onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div><p className="text-xs font-bold uppercase tracking-wider text-accent-primary">Staff action</p><h2 id="create-reservation-title" className="modal-title">Reserve a part for a customer</h2></div>
+              <button type="button" className="btn btn-ghost btn-icon" onClick={closeCreate} aria-label="Close reservation form"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="modal-body space-y-5">
+              <p className="rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">Choose an existing customer and active catalogue part. The reservation starts pending and can be approved from the queue.</p>
+              {createError && <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">{createError}</div>}
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="text-sm font-semibold text-primary-700">Find customer<input className="input mt-2" value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Name, email, or phone" /></label>
+                <label className="text-sm font-semibold text-primary-700">Find part<input className="input mt-2" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Part name or number" /></label>
+                <label className="text-sm font-semibold text-primary-700">Customer<select required className="input mt-2" value={createForm.customerId} onChange={(event) => setCreateForm((current) => ({ ...current, customerId: event.target.value }))}><option value="">Select customer</option>{customerOptions.map((customer) => <option key={customer.id} value={customer.id}>{customer.name || 'Unnamed customer'}{customer.phone ? ` · ${customer.phone}` : customer.email ? ` · ${customer.email}` : ''}</option>)}</select></label>
+                <label className="text-sm font-semibold text-primary-700">Part<select required className="input mt-2" value={createForm.productId} onChange={(event) => setCreateForm((current) => ({ ...current, productId: event.target.value }))}><option value="">Select part</option>{productOptions.map((product) => <option key={product.id} value={product.id}>{product.name || 'Unnamed part'}{product.sku ? ` · ${product.sku}` : ''}</option>)}</select></label>
+                <label className="text-sm font-semibold text-primary-700">Quantity<input required min="1" max="999" step="1" type="number" className="input mt-2" value={createForm.quantity} onChange={(event) => setCreateForm((current) => ({ ...current, quantity: event.target.value }))} /></label>
+                <label className="text-sm font-semibold text-primary-700 md:col-span-2">Internal note<span className="ml-1 font-normal text-primary-500">(optional)</span><textarea className="input mt-2 min-h-24" maxLength="1000" value={createForm.note} onChange={(event) => setCreateForm((current) => ({ ...current, note: event.target.value }))} placeholder="Why is this part being held?" /></label>
+              </div>
+            </div>
+            <div className="modal-footer"><Button type="button" variant="secondary" onClick={closeCreate}>Cancel</Button><Button type="submit" isLoading={createLoading} leftIcon={<Plus className="h-4 w-4" />}>Create reservation</Button></div>
+          </form>
         </div>
       )}
 

@@ -10,6 +10,26 @@ export async function createPartReservation(payload) {
   }
 }
 
+export async function createAdminReservation(payload) {
+  try {
+    const { data } = await apiClient.post('/reservations/admin', payload);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Failed to create the reservation.');
+  }
+}
+
+export async function searchReservationCustomers(search = '') {
+  try {
+    const { data } = await apiClient.get('/reservations/customers', {
+      params: { search, limit: 50 },
+    });
+    return data.customers ?? [];
+  } catch (error) {
+    extractApiError(error, 'Failed to load customers.');
+  }
+}
+
 export async function listReservations(params = {}) {
   try {
     const { data } = await apiClient.get('/reservations', { params });
