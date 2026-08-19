@@ -138,6 +138,7 @@ function normalizeReservation(row = {}, { customers = new Map(), products = new 
     allocatedQuantity,
     remainingQuantity: Math.max(requestedQuantity - allocatedQuantity, 0),
     status: row.status,
+    paymentStatus: row.payment_status || 'unpaid',
     customerNote: row.customer_note,
     adminNote: row.admin_note,
     estimatedAvailableOn: row.estimated_available_on,
@@ -255,11 +256,14 @@ router.post('/admin', requireRole('admin'), async (req, res, next) => {
 
     const result = await callRpc('create_admin_part_reservation', {
       p_actor_user_id: req.user.id,
-      p_customer_id: parsed.customerId,
       p_product_id: parsed.productId,
       p_requested_quantity: parsed.quantity,
       p_request_key: parsed.requestKey,
+      p_customer_name: parsed.customerName,
+      p_customer_phone: parsed.customerPhone,
+      p_customer_email: parsed.customerEmail,
       p_customer_note: parsed.customerNote,
+      p_payment_status: parsed.paymentStatus,
     });
     const reservationId = result?.reservation?.id;
     const reservation = reservationId

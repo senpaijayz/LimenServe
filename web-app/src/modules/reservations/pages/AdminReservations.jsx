@@ -9,7 +9,6 @@ import {
   getReservation,
   listReservations,
   processReservation,
-  searchReservationCustomers,
 } from '../../../services/reservationsApi';
 import { formatDateTime } from '../../../utils/formatters';
 
@@ -34,10 +33,8 @@ export default function AdminReservations() {
   const [activity, setActivity] = useState(null);
   const [confirmation, setConfirmation] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({ customerId: '', productId: '', quantity: 1, note: '' });
-  const [customerSearch, setCustomerSearch] = useState('');
+  const [createForm, setCreateForm] = useState({ customerName: '', customerPhone: '', customerEmail: '', productId: '', quantity: 1, note: '', paymentStatus: 'unpaid' });
   const [productSearch, setProductSearch] = useState('');
-  const [customerOptions, setCustomerOptions] = useState([]);
   const [productOptions, setProductOptions] = useState([]);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
@@ -46,11 +43,7 @@ export default function AdminReservations() {
     if (!createOpen) return undefined;
     const timer = setTimeout(async () => {
       try {
-        const [customers, catalog] = await Promise.all([
-          searchReservationCustomers(customerSearch),
-          getProductCatalog({ q: productSearch, page: 1, pageSize: 50, includeCategories: false }),
-        ]);
-        setCustomerOptions(customers ?? []);
+        const catalog = await getProductCatalog({ q: productSearch, page: 1, pageSize: 50, includeCategories: false });
         setProductOptions(catalog?.products ?? []);
         setCreateError('');
       } catch (error) {
@@ -58,20 +51,19 @@ export default function AdminReservations() {
       }
     }, 250);
     return () => clearTimeout(timer);
-  }, [createOpen, customerSearch, productSearch]);
+  }, [createOpen, productSearch]);
 
   const closeCreate = () => {
     setCreateOpen(false);
     setCreateError('');
-    setCreateForm({ customerId: '', productId: '', quantity: 1, note: '' });
-    setCustomerSearch('');
+    setCreateForm({ customerName: '', customerPhone: '', customerEmail: '', productId: '', quantity: 1, note: '', paymentStatus: 'unpaid' });
     setProductSearch('');
   };
 
   const submitCreate = async (event) => {
     event.preventDefault();
-    if (!createForm.customerId || !createForm.productId) {
-      setCreateError('Choose both an existing customer and a part.');
+    if (!createForm.customerName || !createForm.customerPhone || !createForm.productId) {
+      setCreateError('Enter the customer contact details and choose a part.');
       return;
     }
 
@@ -212,7 +204,7 @@ export default function AdminReservations() {
             <article key={reservation.id} className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
               <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr_1fr] xl:items-start">
                 <div>
-                  <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-bold text-primary-500">{reservation.reservationNumber}</span><span className="rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-bold">{STATUS_LABELS[reservation.status]}</span></div>
+                  <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-bold text-primary-500">{reservation.reservationNumber}</span><span className="rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-bold">{STATUS_LABELS[reservation.status]}</span><span className={`rounded-full border px-3 py-1 text-xs font-bold ${reservation.paymentStatus === 'paid' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>{reservation.paymentStatus === 'paid' ? 'Paid' : reservation.paymentStatus === 'partial' ? 'Partially paid' : 'Unpaid'}</span></div>
                   <h2 className="mt-3 text-lg font-bold text-primary-950">{reservation.product?.name}</h2>
                   <p className="font-mono text-sm text-primary-500">{reservation.product?.sku}</p>
                   <p className="mt-3 text-sm text-primary-700"><strong>{reservation.customer?.name}</strong> · {reservation.customer?.email || reservation.customer?.phone || 'No contact recorded'}</p>
@@ -267,10 +259,11 @@ export default function AdminReservations() {
               <p className="rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">Choose an existing customer and active catalogue part. The reservation starts pending and can be approved from the queue.</p>
               {createError && <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">{createError}</div>}
               <div className="grid gap-4 md:grid-cols-2">
-                <label className="text-sm font-semibold text-primary-700">Find customer<input className="input mt-2" value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Name, email, or phone" /></label>
-                <label className="text-sm font-semibold text-primary-700">Find part<input className="input mt-2" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Part name or number" /></label>
-                <label className="text-sm font-semibold text-primary-700">Customer<select required className="input mt-2" value={createForm.customerId} onChange={(event) => setCreateForm((current) => ({ ...current, customerId: event.target.value }))}><option value="">Select customer</option>{customerOptions.map((customer) => <option key={customer.id} value={customer.id}>{customer.name || 'Unnamed customer'}{customer.phone ? ` · ${customer.phone}` : customer.email ? ` · ${customer.email}` : ''}</option>)}</select></label>
-                <label className="text-sm font-semibold text-primary-700">Part<select required className="input mt-2" value={createForm.productId} onChange={(event) => setCreateForm((current) => ({ ...current, productId: event.target.value }))}><option value="">Select part</option>{productOptions.map((product) => <option key={product.id} value={product.id}>{product.name || 'Unnamed part'}{product.sku ? ` · ${product.sku}` : ''}</option>)}</select></label>
+                <label className="text-sm font-semibold text-primary-700">Customer name<input required className="input mt-2" value={createForm.customerName} onChange={(event) => setCreateForm((current) => ({ ...current, customerName: event.target.value }))} placeholder="Full name" /></label>
+                <label className="text-sm font-semibold text-primary-700">Phone<input required type="tel" className="input mt-2" value={createForm.customerPhone} onChange={(event) => setCreateForm((current) => ({ ...current, customerPhone: event.target.value }))} placeholder="09XX XXX XXXX" /></label>
+                <label className="text-sm font-semibold text-primary-700">Email<span className="ml-1 font-normal text-primary-500">(optional)</span><input type="email" className="input mt-2" value={createForm.customerEmail} onChange={(event) => setCreateForm((current) => ({ ...current, customerEmail: event.target.value }))} placeholder="customer@example.com" /></label>
+                <label className="text-sm font-semibold text-primary-700">Payment status<select className="input mt-2" value={createForm.paymentStatus} onChange={(event) => setCreateForm((current) => ({ ...current, paymentStatus: event.target.value }))}><option value="unpaid">Unpaid</option><option value="partial">Partially paid</option><option value="paid">Paid</option></select></label>
+                <div className="text-sm font-semibold text-primary-700 md:col-span-2"><label htmlFor="reservation-part-search">Search part</label><input id="reservation-part-search" className="input mt-2" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Type a part name or number" />{productOptions.length > 0 && <div className="mt-2 space-y-1" role="listbox" aria-label="Matching parts">{productOptions.slice(0, 8).map((product) => <button key={product.id} type="button" role="option" aria-selected={createForm.productId === product.id} className={`block w-full rounded-lg border px-3 py-2 text-left text-sm transition ${createForm.productId === product.id ? 'border-accent-blue bg-accent-blue/10 text-primary-950' : 'border-primary-200 bg-white text-primary-700 hover:border-accent-blue'}`} onClick={() => setCreateForm((current) => ({ ...current, productId: product.id }))}>{product.name || 'Unnamed part'}{product.sku ? <span className="ml-2 font-mono text-xs text-primary-500">{product.sku}</span> : null}</button>)}</div>}{createForm.productId && <p className="mt-2 text-xs font-normal text-emerald-700">Part selected.</p>}</div>
                 <label className="text-sm font-semibold text-primary-700">Quantity<input required min="1" max="999" step="1" type="number" className="input mt-2" value={createForm.quantity} onChange={(event) => setCreateForm((current) => ({ ...current, quantity: event.target.value }))} /></label>
                 <label className="text-sm font-semibold text-primary-700 md:col-span-2">Internal note<span className="ml-1 font-normal text-primary-500">(optional)</span><textarea className="input mt-2 min-h-24" maxLength="1000" value={createForm.note} onChange={(event) => setCreateForm((current) => ({ ...current, note: event.target.value }))} placeholder="Why is this part being held?" /></label>
               </div>
