@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cloneLocatorSceneObjects } from '../modules/locator3d/data/locatorScene';
+import { cloneLocatorSceneObjects, getStairLayoutMetrics } from '../modules/locator3d/data/locatorScene';
 import { buildObstacleAwarePath, findWalkablePath } from '../modules/locator3d/utils/locatorPathfinding';
 
 describe('locator obstacle-aware pathfinding', () => {
@@ -22,10 +22,22 @@ describe('locator obstacle-aware pathfinding', () => {
             shelfNumber: 3,
             targetPosition: [2.1, 5.4, -5.15],
         });
+        const stairs = objects.find((object) => object.id === 'stairs-a');
+        const metrics = getStairLayoutMetrics(stairs);
+        const landingPoint = [
+            stairs.position[0] + metrics.landingX,
+            2.7,
+            stairs.position[2] + metrics.landingZ,
+        ];
+        const topPoint = [
+            stairs.position[0] + metrics.landingX,
+            5.45,
+            stairs.position[2] + (metrics.overallDepth / 2) - 0.25,
+        ];
 
         expect(path.length).toBeGreaterThan(3);
-        expect(path.some((point) => point[1] === 4.5)).toBe(true);
-        expect(path.some((point) => point[2] === 0.5)).toBe(true);
+        expect(path).toContainEqual(landingPoint);
+        expect(path).toContainEqual(topPoint);
         expect(path.at(-1)).toEqual([2.1, 5.4, -5.15]);
     });
 });

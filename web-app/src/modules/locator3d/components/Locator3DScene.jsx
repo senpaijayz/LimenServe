@@ -7,6 +7,7 @@ import {
     FLOOR_HEIGHT,
     SNAP_STEP,
     getCounterObject,
+    getStairLayoutMetrics,
     isShelfObject,
     normalizeAisle,
 } from '../data/locatorScene';
@@ -397,11 +398,12 @@ function FloorObject({ object, onTransformingChange }) {
     const entranceZ = (depth / 2) - 0.72;
     const laneLength = Math.max(1.2, depth * 0.36);
     const laneXs = [-0.3, -0.1, 0.1, 0.3].map((ratio) => width * ratio);
+    const stairMetrics = useMemo(() => getStairLayoutMetrics(stairsObject), [stairsObject]);
     const floorPanels = useMemo(() => {
-        // Stairs run left-to-right along world X, matching the saved width.
-        const stairWidth = Number(stairsObject?.dimensions?.width || 6.2) + 0.48;
-        const stairDepth = Number(stairsObject?.dimensions?.depth || 2.8) + 0.48;
-        const stairX = Number(stairsObject?.position?.[0] || 0);
+        // Only the landing and upper flight need an opening on Floor 2.
+        const stairWidth = stairMetrics.flightWidth + 0.48;
+        const stairDepth = stairMetrics.overallDepth + 0.48;
+        const stairX = Number(stairsObject?.position?.[0] || 0) + stairMetrics.landingX;
         const stairZ = Number(stairsObject?.position?.[2] || 0);
         const halfOpeningWidth = Math.min(Math.max(0.5, stairWidth / 2), Math.max(0.5, (width / 2) - 0.12));
         const halfOpeningDepth = Math.min(Math.max(0.5, stairDepth / 2), Math.max(0.5, (depth / 2) - 0.12));
@@ -422,7 +424,7 @@ function FloorObject({ object, onTransformingChange }) {
         ];
 
         return panels.filter((panel) => panel.width > 0.1 && panel.depth > 0.1);
-    }, [activeFloor, depth, stairsObject, width]);
+    }, [activeFloor, depth, stairMetrics, stairsObject, width]);
 
     return (
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
@@ -462,7 +464,7 @@ function FloorObject({ object, onTransformingChange }) {
                         </>
                     )}
                     <Label position={[-width / 2 + 1.55, floorY + 0.14, -depth / 2 + 0.55]} tone="floor">{`FLOOR ${activeFloor}`}</Label>
-                    {activeFloor === 2 && stairsObject && <Label position={[stairsObject.position[0], floorY + 0.16, stairsObject.position[2]]} tone="floor">STAIR OPENING · FLOOR 1</Label>}
+                    {activeFloor === 2 && stairsObject && <Label position={[stairsObject.position[0] + stairMetrics.landingX, floorY + 0.16, stairsObject.position[2]]} tone="floor">L-STAIR OPENING · FLOOR 1</Label>}
                 </>
             )}
         </TransformableObject>
@@ -820,59 +822,113 @@ function PartsCabinetObject({ object, onTransformingChange }) {
 function StairsObject({ object, onTransformingChange }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const floorHeight = useSceneFloorHeight();
-    const runLength = Number(object.dimensions?.width || 6.2);
-    const stairWidth = Number(object.dimensions?.depth || 2.8);
+    const {
+        firstRun,
+        flightWidth,
+        landingX,
+        landingZ,
+        overallDepth,
+        overallWidth,
+        secondRun,
+        secondStartZ,
+    } = getStairLayoutMetrics(object);
     const height = Number(object.dimensions?.height || FLOOR_HEIGHT);
     const stairBaseY = activeFloor === 2 ? floorHeight - height : 0;
-    const stepCount = Math.max(10, Math.min(20, Math.round(runLength * 2.4)));
-    const treadDepth = runLength / stepCount;
-    const stepHeight = height / stepCount;
-    const treadThickness = Math.min(0.22, Math.max(0.14, stepHeight * 0.42));
+    const landingHeight = height / 2;
+    const firstStepCount = Math.max(6, Math.min(11, Math.round(firstRun * 2.1)));
+    const secondStepCount = Math.max(6, Math.min(11, Math.round(secondRun * 2.1)));
+    const firstTread = firstRun / firstStepCount;
+    const secondTread = secondRun / secondStepCount;
+    const firstRise = landingHeight / firstStepCount;
+    const secondRise = (height - landingHeight) / secondStepCount;
+    const treadThickness = Math.min(0.2, Math.max(0.13, Math.min(firstRise, secondRise) * 0.42));
     const stepColor = '#a8b8cb';
     const riserColor = '#7d91a8';
     const sideColor = '#52677f';
-    const railLength = Math.hypot(runLength, height);
-    const railAngle = Math.atan2(height, runLength);
+    const firstRailLength = Math.hypot(firstRun, landingHeight);
+    const firstRailAngle = Math.atan2(landingHeight, firstRun);
+    const secondRailLength = Math.hypot(secondRun, height - landingHeight);
+    const secondRailAngle = -Math.atan2(height - landingHeight, secondRun);
 
     return (
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
             {({ located, locked, selected }) => (
                 <group position={[0, stairBaseY, 0]}>
-                    {Array.from({ length: stepCount }, (_, index) => (
-                        <group key={`stair-step-${index}`}>
+                    {Array.from({ length: firstStepCount }, (_, index) => (
+                        <group key={`lower-stair-step-${index}`}>
                             <Block
-                                args={[treadDepth + 0.08, treadThickness, stairWidth + 0.08]}
+                                args={[firstTread + 0.08, treadThickness, flightWidth + 0.08]}
                                 color={stepColor}
                                 located={located}
                                 locked={locked}
-                                position={[-runLength / 2 + (treadDepth * index) + (treadDepth / 2), (stepHeight * (index + 1)) - (treadThickness / 2), 0]}
+                                position={[-overallWidth / 2 + (firstTread * index) + (firstTread / 2), (firstRise * (index + 1)) - (treadThickness / 2), landingZ]}
                                 selected={selected}
                             />
                             <Block
-                                args={[0.12, stepHeight, stairWidth + 0.08]}
+                                args={[0.12, firstRise, flightWidth + 0.08]}
                                 color={riserColor}
                                 located={located}
                                 locked={locked}
-                                position={[-runLength / 2 + (treadDepth * (index + 1)) - 0.06, (stepHeight * (index + 1)) - (stepHeight / 2), 0]}
+                                position={[-overallWidth / 2 + (firstTread * (index + 1)) - 0.06, (firstRise * (index + 1)) - (firstRise / 2), landingZ]}
                                 selected={selected}
                             />
                         </group>
                     ))}
-                    <Block args={[treadDepth + 0.3, 0.18, stairWidth + 0.28]} color={riserColor} located={located} locked={locked} position={[-runLength / 2 - 0.12, 0.09, 0]} selected={selected} />
-                    <Block args={[treadDepth + 0.3, 0.18, stairWidth + 0.28]} color={riserColor} located={located} locked={locked} position={[runLength / 2 + 0.12, height + 0.09, 0]} selected={selected} />
+                    <Block
+                        args={[flightWidth + 0.12, treadThickness + 0.04, flightWidth + 0.12]}
+                        color={stepColor}
+                        located={located}
+                        locked={locked}
+                        position={[landingX, landingHeight - (treadThickness / 2), landingZ]}
+                        selected={selected}
+                    />
+                    {Array.from({ length: secondStepCount }, (_, index) => (
+                        <group key={`upper-stair-step-${index}`}>
+                            <Block
+                                args={[flightWidth + 0.08, treadThickness, secondTread + 0.08]}
+                                color={stepColor}
+                                located={located}
+                                locked={locked}
+                                position={[landingX, landingHeight + (secondRise * (index + 1)) - (treadThickness / 2), secondStartZ + (secondTread * index) + (secondTread / 2)]}
+                                selected={selected}
+                            />
+                            <Block
+                                args={[flightWidth + 0.08, secondRise, 0.12]}
+                                color={riserColor}
+                                located={located}
+                                locked={locked}
+                                position={[landingX, landingHeight + (secondRise * (index + 1)) - (secondRise / 2), secondStartZ + (secondTread * (index + 1)) - 0.06]}
+                                selected={selected}
+                            />
+                        </group>
+                    ))}
+                    <Block args={[firstTread + 0.3, 0.18, flightWidth + 0.28]} color={riserColor} located={located} locked={locked} position={[-overallWidth / 2 - 0.12, 0.09, landingZ]} selected={selected} />
+                    <Block args={[flightWidth + 0.28, 0.18, secondTread + 0.3]} color={riserColor} located={located} locked={locked} position={[landingX, height + 0.09, overallDepth / 2 + 0.12]} selected={selected} />
                     {[-1, 1].map((side) => (
                         <Block
-                            args={[railLength, 0.18, 0.16]}
+                            args={[firstRailLength, 0.18, 0.16]}
                             color={sideColor}
-                            key={`stair-stringer-${side}`}
+                            key={`lower-stair-stringer-${side}`}
                             located={located}
                             locked={locked}
-                            position={[0, height / 2, side * (stairWidth / 2 + 0.14)]}
-                            rotation={[0, 0, railAngle]}
+                            position={[-overallWidth / 2 + (firstRun / 2), landingHeight / 2, landingZ + (side * (flightWidth / 2 + 0.14))]}
+                            rotation={[0, 0, firstRailAngle]}
                             selected={selected}
                         />
                     ))}
-                    <Label position={[-runLength / 2 - 0.24, height + 0.32, 0]}>{`LEFT-TO-RIGHT STAIRS · ${activeFloor === 1 ? 'UP TO FLOOR 2' : 'DOWN TO FLOOR 1'}`}</Label>
+                    {[-1, 1].map((side) => (
+                        <Block
+                            args={[0.16, 0.18, secondRailLength]}
+                            color={sideColor}
+                            key={`upper-stair-stringer-${side}`}
+                            located={located}
+                            locked={locked}
+                            position={[landingX + (side * (flightWidth / 2 + 0.14)), landingHeight + ((height - landingHeight) / 2), secondStartZ + (secondRun / 2)]}
+                            rotation={[secondRailAngle, 0, 0]}
+                            selected={selected}
+                        />
+                    ))}
+                    <Label position={[landingX, height + 0.32, overallDepth / 2 + 0.24]}>{`L-TURN STAIRS · ${activeFloor === 1 ? 'UP TO FLOOR 2' : 'DOWN TO FLOOR 1'}`}</Label>
                 </group>
             )}
         </TransformableObject>

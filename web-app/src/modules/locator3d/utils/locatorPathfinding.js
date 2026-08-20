@@ -1,4 +1,4 @@
-import { FLOOR_HEIGHT } from '../data/locatorScene';
+import { FLOOR_HEIGHT, getStairLayoutMetrics } from '../data/locatorScene';
 import { getObjectFootprint } from './layoutValidation';
 
 const GRID_STEP = 0.5;
@@ -148,13 +148,24 @@ export function buildObstacleAwarePath(sceneObjects = [], locatedProduct = null)
         return findWalkablePath(start, target, sceneObjects, { floor: 1, ignoreObjectIds: ignoreTarget });
     }
 
-    // The stair run is left-to-right along world X and is stored as width.
-    const stairRun = Number(stairs.dimensions?.width || 6.2);
-    const stairHalfRun = Math.max(1, stairRun / 2 - 0.25);
-    const bottomStair = [stairs.position[0] - stairHalfRun, 1.05, stairs.position[2]];
-    const topStair = [stairs.position[0] + stairHalfRun, FLOOR_HEIGHT + 0.95, stairs.position[2]];
+    const stairMetrics = getStairLayoutMetrics(stairs);
+    const bottomStair = [
+        stairs.position[0] - (stairMetrics.overallWidth / 2) + 0.25,
+        1.05,
+        stairs.position[2] + stairMetrics.landingZ,
+    ];
+    const landingStair = [
+        stairs.position[0] + stairMetrics.landingX,
+        (FLOOR_HEIGHT / 2) + 0.45,
+        stairs.position[2] + stairMetrics.landingZ,
+    ];
+    const topStair = [
+        stairs.position[0] + stairMetrics.landingX,
+        FLOOR_HEIGHT + 0.95,
+        stairs.position[2] + (stairMetrics.overallDepth / 2) - 0.25,
+    ];
     const first = findWalkablePath(start, bottomStair, sceneObjects, { floor: 1, ignoreObjectIds: [stairs.id] });
     const second = findWalkablePath(topStair, target, sceneObjects, { floor: 2, ignoreObjectIds: ignoreTarget });
-    if (!first.length || !second.length) return [start, bottomStair, topStair, target];
-    return [...first, topStair, ...second.slice(1)];
+    if (!first.length || !second.length) return [start, bottomStair, landingStair, topStair, target];
+    return [...first, landingStair, topStair, ...second.slice(1)];
 }

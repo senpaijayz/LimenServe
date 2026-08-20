@@ -1,6 +1,7 @@
 export const FLOOR_HEIGHT = 4.5;
 export const LOCATOR_LAYOUT_NAME = 'main-store';
 export const SNAP_STEP = 0.25;
+export const STAIR_LAYOUT_ORIENTATION = 'l-turn-right';
 export const SHELF_BIN_RANGE = {
     MIN: 2,
     MAX: 12,
@@ -37,7 +38,7 @@ export const LOCATOR_OBJECT_LIBRARY = [
         category: 'Access',
         icon: 'Waypoints',
         color: '#a16207',
-        description: 'Floor connector',
+        description: 'L-shaped floor connector with a turning landing',
     },
     {
         type: 'counter-computer',
@@ -146,13 +147,13 @@ export const LOCATOR_SCENE_OBJECTS = [
         id: 'stairs-a',
         type: 'stairs',
         name: 'Upper Floor Stairs',
-        description: 'Left-to-right straight-flight access between Floor 1 and Floor 2',
+        description: 'L-shaped access with a left-to-right lower flight and 90° landing',
         floor: 1,
         isLocked: false,
-        layoutOrientation: 'left-to-right',
+        layoutOrientation: STAIR_LAYOUT_ORIENTATION,
         position: [9.1, 0, 0.5],
         rotation: [0, 0, 0],
-        dimensions: { width: 6.2, depth: 2.8, height: FLOOR_HEIGHT },
+        dimensions: { width: 5.6, depth: 5.6, height: FLOOR_HEIGHT },
     },
     {
         id: 'shelf-4-b',
@@ -406,18 +407,16 @@ export function normalizeLayoutObjects(objects) {
 
         const normalized = cloneSceneObject(object);
 
-        // Layouts saved before the left-to-right stair redesign used depth as
-        // the run axis. Migrate those objects once so old autosaves and
-        // backend layouts render with the new world-axis dimensions.
-        if (normalized.type === 'stairs' && normalized.layoutOrientation !== 'left-to-right') {
-            const width = normalized.dimensions?.width;
-            const depth = normalized.dimensions?.depth;
+        // Earlier layouts stored a single straight flight. Migrate them once
+        // to a square footprint that can contain both L-shaped flights and
+        // their turning landing.
+        if (normalized.type === 'stairs' && normalized.layoutOrientation !== STAIR_LAYOUT_ORIENTATION) {
             normalized.dimensions = {
                 ...normalized.dimensions,
-                width: depth ?? width ?? 6.2,
-                depth: width ?? depth ?? 2.8,
+                width: 5.6,
+                depth: 5.6,
             };
-            normalized.layoutOrientation = 'left-to-right';
+            normalized.layoutOrientation = STAIR_LAYOUT_ORIENTATION;
         }
 
         return normalized;
@@ -469,6 +468,27 @@ export function getCounterObject(objects = LOCATOR_SCENE_OBJECTS) {
 
 export function getStairsObject(objects = LOCATOR_SCENE_OBJECTS) {
     return objects.find((object) => object.type === 'stairs') ?? null;
+}
+
+export function getStairLayoutMetrics(object) {
+    const overallWidth = Math.max(5.6, Number(object?.dimensions?.width || 5.6));
+    const overallDepth = Math.max(5.6, Number(object?.dimensions?.depth || 5.6));
+    const flightWidth = Math.min(2.4, Math.max(1.8, Math.min(overallWidth, overallDepth) * 0.38));
+    const firstRun = overallWidth - flightWidth;
+    const secondRun = overallDepth - flightWidth;
+    const landingX = (overallWidth / 2) - (flightWidth / 2);
+    const landingZ = (-overallDepth / 2) + (flightWidth / 2);
+
+    return {
+        firstRun,
+        flightWidth,
+        landingX,
+        landingZ,
+        overallDepth,
+        overallWidth,
+        secondRun,
+        secondStartZ: (-overallDepth / 2) + flightWidth,
+    };
 }
 
 function roundPoint(value) {

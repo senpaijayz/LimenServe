@@ -83,9 +83,11 @@ describe('Locator3DScene selection', () => {
 
         render(<Locator3DScene />);
 
+        expect(screen.queryByText('LOCKED')).toBeNull();
         fireEvent.click(screen.getByTestId('locator-object-stairs-a'));
         expect(useLocator3DStore.getState().selectedObjectId).toBe('stairs-a');
         expect(useLocator3DStore.getState().activeFloor).toBe(1);
+        expect(screen.getByText('LOCKED')).toBeTruthy();
 
         useLocator3DStore.getState().toggleObjectLock('stairs-a');
         expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'stairs-a').isLocked).toBe(false);
@@ -99,7 +101,7 @@ describe('Locator3DScene selection', () => {
         fireEvent.click(screen.getByTestId('locator-object-stairs-a'));
 
         expect(useLocator3DStore.getState().activeFloor).toBe(2);
-        expect(screen.getByText(/LEFT-TO-RIGHT STAIRS/)).toBeTruthy();
+        expect(screen.getByText(/L-TURN STAIRS/)).toBeTruthy();
 
         fireEvent.click(screen.getByTestId('locator-object-stairs-a'));
 
