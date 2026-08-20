@@ -46,16 +46,21 @@ const PublicProductSummary = ({ product }) => {
   const statusLabel = product.inStock ? `${product.availableStock} Available` : 'Out of Stock';
 
   return (
-    <div className="flex min-h-[300px] flex-col justify-between rounded-2xl border border-primary-200 bg-gradient-to-br from-white via-primary-50/70 to-white p-5">
+    <div className="flex min-h-[270px] flex-col justify-between rounded-2xl border border-primary-100 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.45)]">
       <div>
-        <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-accent-blue">Product</p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-accent-blue">Genuine part</p>
+          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${product.inStock ? 'bg-emerald-50 text-emerald-700' : 'bg-primary-100 text-primary-500'}`}>
+            {product.inStock ? 'In stock' : 'Unavailable'}
+          </span>
+        </div>
         <h3 className="mt-3 line-clamp-3 text-xl font-display font-bold leading-tight text-primary-950">{product.name}</h3>
+        <p className="mt-2 truncate font-mono text-xs font-semibold text-primary-400">{product.sku}</p>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-        <p><span className="text-primary-500">Part Number</span><br /><span className="font-mono font-semibold text-primary-950">{product.sku}</span></p>
-        <p><span className="text-primary-500">Category</span><br /><span className="font-semibold text-primary-950">{product.category}</span></p>
+        <p><span className="text-primary-500">Category</span><br /><span className="truncate font-semibold text-primary-950">{product.category}</span></p>
         <p className="text-right"><span className="text-primary-500">Price</span><br /><span className="font-semibold text-accent-blue">{formatCurrency(product.price)}</span></p>
-        <p className="text-right"><span className="text-primary-500">Status</span><br /><span className={`font-semibold ${product.inStock ? 'text-accent-success' : 'text-primary-500'}`}>{statusLabel}</span></p>
+        <p className="col-span-2 border-t border-primary-100 pt-3"><span className="text-primary-500">Availability</span><br /><span className={`font-semibold ${product.inStock ? 'text-accent-success' : 'text-primary-500'}`}>{statusLabel}</span></p>
       </div>
     </div>
   );
@@ -244,6 +249,8 @@ const PublicCatalogView = () => {
   const rangeEnd = totalCount === 0 ? 0 : Math.min(pagination.page * pagination.pageSize, totalCount);
   const canGoPrev = pagination.page > 1;
   const canGoNext = pagination.page < totalPages;
+  const hasActiveFilters = Boolean(searchQuery.trim()) || selectedCategory !== 'all' || hasVehicle;
+  const quickCategories = categories.filter((category) => category.value !== 'all').slice(0, 6);
 
   const resetFilters = () => {
     setSearchQuery('');
@@ -371,15 +378,15 @@ const PublicCatalogView = () => {
       <div className="absolute top-[-20%] right-[-10%] w-[70vw] h-[70vw] bg-accent-blue/10 rounded-full blur-[150px] mix-blend-multiply -z-10 pointer-events-none opacity-60" />
       <div className="absolute top-[20%] left-[-10%] w-[40vw] h-[40vw] bg-accent-danger/5 rounded-full blur-[120px] mix-blend-multiply -z-10 pointer-events-none opacity-50" />
 
-      <section className="relative z-20 px-4 pb-6 pt-24 md:px-8 md:pt-28 xl:px-12">
+      <section className="relative z-20 px-4 pb-7 pt-24 md:px-8 md:pt-28 xl:px-12">
         <div className="max-w-[1600px] mx-auto">
-          <div className="relative mb-6 flex flex-col justify-between gap-6 border-b border-primary-200 pb-6 lg:flex-row lg:items-end">
-            <div className="absolute bottom-0 left-0 w-1/3 h-[2px] bg-gradient-to-r from-accent-blue to-transparent" />
-
-            <div className="max-w-3xl">
+          <div className="relative mb-6 overflow-hidden rounded-[28px] border border-primary-200 bg-white px-5 py-6 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.45)] sm:px-7 sm:py-8 lg:px-10">
+            <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-accent-blue/10 blur-3xl" />
+            <div className="relative grid gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)] lg:items-end">
+              <div className="max-w-3xl">
               <Motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="mb-4 flex items-center gap-3">
                 <span className="w-8 h-1 bg-accent-blue" />
-                <span className="text-xs font-bold uppercase tracking-[0.3em] text-primary-600 font-sans">Parts Catalog</span>
+                <span className="text-xs font-bold uppercase tracking-[0.3em] text-accent-blue font-sans">Parts Catalog</span>
               </Motion.div>
               <Motion.h1 initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="text-3xl font-display font-extrabold leading-[1.08] tracking-tighter text-primary-950 sm:text-4xl md:text-5xl">
                 {hasVehicle ? `Parts for your ${vehicle.displayLabel}` : 'Trusted auto parts for Mitsubishi and more'}
@@ -389,19 +396,26 @@ const PublicCatalogView = () => {
                   ? 'Compatible parts, service packages, and bundle suggestions are now tuned to your selected vehicle.'
                   : 'Search by part name, part number, or vehicle details to browse a cleaner, customer-ready parts catalog.'}
               </p>
-            </div>
+              <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-primary-500">
+                <span className="rounded-full bg-primary-50 px-3 py-1.5">1. Search a part</span>
+                <span className="rounded-full bg-primary-50 px-3 py-1.5">2. Check fitment</span>
+                <span className="rounded-full bg-primary-50 px-3 py-1.5">3. Request a quote</span>
+              </div>
+              </div>
 
-            <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="w-full shrink-0 md:w-[420px]">
+            <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="w-full shrink-0">
+              <label htmlFor="public-catalog-search" className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-primary-500">What are you looking for?</label>
               <div className="relative group">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-accent-blue to-accent-danger rounded-xl blur opacity-20 group-hover:opacity-40 transition duration-500" />
-                <div className="relative flex items-center bg-white border border-primary-200 p-1.5 rounded-xl shadow-sm">
-                  <Search className="w-5 h-5 text-primary-400 ml-3" />
+                <div className="absolute -inset-0.5 rounded-2xl bg-gradient-to-r from-accent-blue/30 to-accent-primary/20 opacity-50 blur transition duration-500 group-hover:opacity-80" />
+                <div className="relative flex items-center rounded-2xl border border-primary-200 bg-white p-1.5 shadow-lg shadow-primary-950/5">
+                  <Search className="ml-3 h-5 w-5 shrink-0 text-accent-blue" />
                   <input
+                    id="public-catalog-search"
                     type="text"
                     placeholder={hasVehicle ? `Search parts for ${vehicle.model}...` : 'Search by part name, part number, or vehicle...'}
                     value={searchQuery}
                     onChange={(event) => handleSearchChange(event.target.value)}
-                    className="w-full bg-transparent border-none text-primary-900 focus:ring-0 placeholder-primary-400 px-3 py-3 outline-none"
+                    className="w-full bg-transparent border-none px-3 py-3.5 text-primary-900 outline-none placeholder-primary-400 focus:ring-0"
                   />
                   {searchQuery && (
                     <button onClick={() => handleSearchChange('')} className="p-2 hover:bg-primary-50 text-primary-500 hover:text-primary-900 rounded-lg transition-colors">
@@ -410,7 +424,9 @@ const PublicCatalogView = () => {
                   )}
                 </div>
               </div>
+              <p className="mt-2 text-xs text-primary-500">Try a part name, material code, or Mitsubishi model.</p>
             </Motion.div>
+            </div>
           </div>
 
           <PublicVehicleSelector
@@ -448,7 +464,7 @@ const PublicCatalogView = () => {
             transition={{ delay: 0.1 }}
             className="mt-5 rounded-2xl border border-primary-200 bg-white/90 p-3 shadow-sm"
           >
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
               <label htmlFor="catalog-category-filter" className="min-w-0">
                 <span className="mb-2 block text-xs font-bold uppercase tracking-[0.24em] text-primary-500">Category</span>
                 <div className="relative">
@@ -479,6 +495,19 @@ const PublicCatalogView = () => {
                 </p>
               </div>
             </div>
+            {quickCategories.length > 0 && (
+              <div className="mt-4 border-t border-primary-100 pt-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-1 text-xs font-bold uppercase tracking-[0.18em] text-primary-400">Quick filters</span>
+                  <button type="button" onClick={() => handleCategoryChange('all')} className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${selectedCategory === 'all' ? 'bg-primary-950 text-white shadow-sm' : 'border border-primary-200 bg-white text-primary-600 hover:border-accent-blue hover:text-accent-blue'}`}>All parts</button>
+                  {quickCategories.map((category) => (
+                    <button key={category.value} type="button" onClick={() => handleCategoryChange(category.value)} className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${selectedCategory === category.value ? 'bg-accent-blue text-white shadow-sm' : 'border border-primary-200 bg-white text-primary-600 hover:border-accent-blue hover:text-accent-blue'}`}>
+                      {category.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </Motion.div>
 
           {featuredProducts.length > 0 && (
@@ -523,7 +552,7 @@ const PublicCatalogView = () => {
             />
           )}
 
-          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-primary-200 bg-white/90 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-primary-600">
               <span>
                 Showing <strong className="text-primary-950">{rangeStart}-{rangeEnd}</strong> of{' '}
@@ -535,6 +564,7 @@ const PublicCatalogView = () => {
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              {hasActiveFilters && <button type="button" onClick={resetFilters} className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary-200 px-3 py-2 text-sm font-semibold text-primary-600 transition hover:border-accent-blue hover:bg-primary-50 hover:text-accent-blue"><X className="h-4 w-4" /> Clear filters</button>}
               <label className="text-xs font-bold uppercase tracking-[0.22em] text-primary-500">Sort by</label>
               <div className="relative min-w-[220px]">
                 <ArrowUpDown className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
