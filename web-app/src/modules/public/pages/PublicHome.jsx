@@ -276,10 +276,10 @@ const PublicHome = () => {
                             ))}
                         </div>
 
-                        <div className="mt-8 rounded-2xl border border-primary-200 bg-white p-3 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
+                        <div className="mt-8 rounded-2xl border border-primary-200 bg-white p-2.5 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
                             <div className="flex flex-col gap-3 lg:flex-row">
-                                <div className="flex flex-1 items-center rounded-xl border border-primary-300 bg-primary-100 px-4">
-                                    <Search className="h-5 w-5 text-primary-500" />
+                                <div className="flex min-w-0 flex-1 items-center rounded-xl border border-primary-200 bg-primary-50/60 px-4 transition-colors focus-within:border-accent-primary focus-within:ring-2 focus-within:ring-accent-primary/10">
+                                    <Search className="h-5 w-5 shrink-0 text-primary-500" />
                                     <input
                                         type="text"
                                         value={searchQuery}
@@ -290,10 +290,10 @@ const PublicHome = () => {
                                             }
                                         }}
                                         placeholder={heroCms.searchPlaceholder || 'Search by part name, vehicle make/model/year, or part number'}
-                                        className="w-full bg-transparent px-3 py-4 text-sm text-primary-900 outline-none placeholder:text-primary-500"
+                                        className="min-w-0 flex-1 border-0 bg-transparent px-3 py-3.5 text-sm text-primary-900 outline-none ring-0 placeholder:text-primary-500 focus:border-0 focus:outline-none focus:ring-0"
                                     />
                                 </div>
-                                <button type="button" onClick={handleSearch} className="btn btn-primary min-w-[170px]">
+                                <button type="button" onClick={handleSearch} className="btn btn-primary min-h-[52px] min-w-[170px]">
                                     {heroCms.searchButtonLabel || 'Search Parts'}
                                     <ArrowRight className="h-4 w-4" />
                                 </button>

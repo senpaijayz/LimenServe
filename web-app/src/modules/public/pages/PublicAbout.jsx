@@ -157,7 +157,7 @@ const PublicAbout = () => {
                         <span className="w-8 h-1 bg-accent-primary rounded-full" />
                     </div>
                     <h1 className="text-5xl md:text-7xl font-display font-bold text-primary-950 tracking-tight leading-tight mb-6">
-                        {heroCms.title || <>Limen Auto Parts <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent-primary to-accent-danger">Center</span></>}
+                        {heroCms.title || 'Limen Auto Parts Center'}
                     </h1>
                     <p className="text-lg text-primary-700 leading-relaxed font-light">
                         {heroCms.subtitle || 'A family-owned auto parts business in Pasay City that has been serving customers for 13 years with genuine Mitsubishi parts, dependable service, and a more modern way to manage inventory and quotations through LimenServe.'}
