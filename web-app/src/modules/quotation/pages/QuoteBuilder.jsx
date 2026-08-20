@@ -37,6 +37,17 @@ const defaultMeta = {
     source: 'internal',
 };
 
+const estimateStatusFilters = [
+    { value: '', label: 'All statuses' },
+    { value: 'draft', label: 'Draft' },
+    { value: 'sent', label: 'Sent' },
+    { value: 'approved', label: 'Approved' },
+    { value: 'converted_sale', label: 'Converted to sale' },
+    { value: 'converted_service', label: 'Converted to service' },
+    { value: 'expired', label: 'Expired' },
+    { value: 'rejected', label: 'Rejected' },
+];
+
 const formatCreatedDate = (value) => {
     if (!value) return 'Date unavailable';
     const date = new Date(value);
@@ -310,6 +321,7 @@ const QuoteBuilder = () => {
     const [notes, setNotes] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [quoteSearch, setQuoteSearch] = useState('');
+    const [quoteStatusFilter, setQuoteStatusFilter] = useState('');
     const [savedQuotes, setSavedQuotes] = useState([]);
     const [quotesLoading, setQuotesLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -360,7 +372,7 @@ const QuoteBuilder = () => {
         const loadQuotes = async () => {
             setQuotesLoading(true);
             try {
-                const records = await listEstimates(quoteSearch, 8);
+                const records = await listEstimates(quoteSearch, 8, quoteStatusFilter);
                 if (active) {
                     setSavedQuotes(records);
                 }
@@ -380,7 +392,7 @@ const QuoteBuilder = () => {
         return () => {
             active = false;
         };
-    }, [quoteSearch]);
+    }, [quoteSearch, quoteStatusFilter]);
 
     const addPart = (product, extra = {}) => {
         setFocusedProduct(product);
@@ -578,7 +590,7 @@ const QuoteBuilder = () => {
                 setRevisions(revisionHistory);
             }
 
-            const refreshedQuotes = await listEstimates(quoteSearch, 8);
+            const refreshedQuotes = await listEstimates(quoteSearch, 8, quoteStatusFilter);
             setSavedQuotes(refreshedQuotes);
         } catch (saveError) {
             showError(saveError.message || 'Unable to save the quotation.');
@@ -678,6 +690,16 @@ const QuoteBuilder = () => {
                                         className="w-full pl-10 pr-4 py-2.5 bg-white border border-primary-200 rounded-lg text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue shadow-sm"
                                     />
                                 </div>
+                                <label className="mb-4 block text-xs font-semibold uppercase tracking-[0.16em] text-primary-500">
+                                    Status filter
+                                    <select
+                                        value={quoteStatusFilter}
+                                        onChange={(event) => setQuoteStatusFilter(event.target.value)}
+                                        className="mt-2 w-full rounded-lg border border-primary-200 bg-white px-3 py-2.5 text-sm font-normal normal-case tracking-normal text-primary-950 shadow-sm focus:border-accent-blue focus:outline-none focus:ring-1 focus:ring-accent-blue"
+                                    >
+                                        {estimateStatusFilters.map((option) => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}
+                                    </select>
+                                </label>
                                 <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
                                     {quotesLoading ? (
                                         <div className="rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-500">Loading saved quotations...</div>

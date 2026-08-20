@@ -12,10 +12,10 @@ export async function createEstimate(payload) {
   }
 }
 
-export async function listEstimates(search = '', limit = 20) {
+export async function listEstimates(search = '', limit = 20, status = '') {
   try {
     const { data } = await apiClient.get('/estimates', {
-      params: { search, limit },
+      params: { search, limit, ...(status ? { status } : {}) },
     });
     return data.estimates ?? [];
   } catch (error) {

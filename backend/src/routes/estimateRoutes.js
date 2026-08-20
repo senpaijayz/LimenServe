@@ -21,6 +21,7 @@ import { callRpc } from '../services/supabaseRpc.js';
 import { filterActiveEstimates } from '../services/estimateValidity.js';
 
 const router = Router();
+const ESTIMATE_STATUS_FILTERS = new Set(['draft', 'sent', 'approved', 'converted_sale', 'converted_service', 'expired', 'rejected']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const publicEstimateRateLimitStore = env.publicRateLimitStore === 'supabase'
@@ -327,6 +328,12 @@ async function createQuotationNotification(estimate = {}) {
 
 router.get('/', requireRole('admin'), async (req, res, next) => {
   try {
+    const status = String(req.query.status || '').trim().toLowerCase();
+    if (status && !ESTIMATE_STATUS_FILTERS.has(status)) {
+      res.status(400).json({ error: 'Invalid estimate status filter.' });
+      return;
+    }
+
     const estimates = await callRpc('list_estimates', {
       p_search: req.query.search || null,
       p_limit_count: Math.max(Number(req.query.limit || 20) * 3, 20),
@@ -336,7 +343,10 @@ router.get('/', requireRole('admin'), async (req, res, next) => {
     const visibleEstimates = filterActiveEstimates(
       (estimates ?? []).filter((estimate) => !isDemoEstimate(estimate)),
     );
-    res.json({ estimates: visibleEstimates.slice(0, limit) });
+    const filteredEstimates = status
+      ? visibleEstimates.filter((estimate) => String(estimate.status || '').toLowerCase() === status)
+      : visibleEstimates;
+    res.json({ estimates: filteredEstimates.slice(0, limit) });
   } catch (error) {
     next(error);
   }
