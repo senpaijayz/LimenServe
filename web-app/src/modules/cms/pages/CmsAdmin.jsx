@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -13,6 +13,7 @@ import {
   Navigation,
   PackageSearch,
   Plus,
+  RefreshCw,
   Save,
   Settings,
   Trash2,
@@ -1174,7 +1175,7 @@ function formatOverviewEstimateStatus(value) {
   return String(value || 'unknown').replace(/_/g, ' ');
 }
 
-function CmsOverview({ pageCount, catalogSummary, estimates, notifications }) {
+function CmsOverview({ pageCount, catalogSummary, estimates, notifications, onRefresh, refreshing }) {
   const estimateRows = Array.isArray(estimates) ? estimates : [];
   const activeEstimateRows = estimateRows.filter((estimate) => !['completed', 'cancelled', 'declined'].includes(String(estimate.status || '').toLowerCase()));
   const summary = catalogSummary && typeof catalogSummary === 'object' ? catalogSummary : null;
@@ -1182,7 +1183,7 @@ function CmsOverview({ pageCount, catalogSummary, estimates, notifications }) {
     {
       label: 'Catalog products',
       value: summary ? Number(summary.totalProducts ?? summary.uniqueProducts ?? 0).toLocaleString() : '—',
-      detail: summary ? `${Number(summary.currentPrices ?? 0).toLocaleString()} with current prices` : 'Catalog summary unavailable',
+      detail: summary ? `${Number(summary.inStockProducts ?? 0).toLocaleString()} in stock · ${Number(summary.currentPrices ?? 0).toLocaleString()} priced` : 'Catalog summary unavailable',
       icon: Boxes,
       href: '/products',
     },
@@ -1212,11 +1213,24 @@ function CmsOverview({ pageCount, catalogSummary, estimates, notifications }) {
   return (
     <div className="space-y-6 p-5 lg:p-6">
       <section className="rounded-3xl border border-primary-200 bg-primary-950 p-6 text-white shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-300">CMS workspace</p>
-        <h2 className="mt-3 text-2xl font-display font-bold">Manage the parts of LIMEN that change often.</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-primary-200">
-          Use the focused editors below for website content, catalog highlights, site settings, and navigation. Operational modules remain connected through the existing staff workspace.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-300">CMS workspace</p>
+            <h2 className="mt-3 text-2xl font-display font-bold">Manage the parts of LIMEN that change often.</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-primary-200">
+              Use the focused editors below for website content, catalog highlights, site settings, and navigation. Operational modules remain connected through the existing staff workspace.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={refreshing}
+            className="inline-flex items-center gap-2 rounded-2xl border border-primary-700 bg-primary-900/70 px-4 py-2.5 text-sm font-semibold text-white transition hover:border-primary-400 hover:bg-primary-800 disabled:cursor-wait disabled:opacity-70"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing…' : 'Refresh workspace'}
+          </button>
+        </div>
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -1328,8 +1342,10 @@ const tabs = [
 export default function CmsAdmin() {
   const { success, error: showError } = useToast();
   const skipNextPageLoadSlugRef = useRef('');
+  const mountedRef = useRef(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingMessage, setSavingMessage] = useState('');
   const [pageLoading, setPageLoading] = useState(false);
@@ -1381,53 +1397,58 @@ export default function CmsAdmin() {
   }, [activeSectionKey, pageDraft.sections]);
   const activeSection = activeSectionIndex >= 0 ? pageDraft.sections[activeSectionIndex] : null;
 
-  useEffect(() => {
-    let active = true;
-
-    async function loadCms() {
+  const loadCms = useCallback(async ({ isRefresh = false } = {}) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
       setLoading(true);
-      try {
-        const [pageRows, site, summary, estimates, notificationResult] = await Promise.all([
-          listCmsPages(),
-          getPublicCmsSite().catch(() => ({ settings: {}, navigation: [] })),
-          getCatalogSummary().catch(() => null),
-          listEstimates('', 20).catch(() => null),
-          getAdminNotifications({ limit: 20 }).catch(() => null),
-        ]);
+    }
+    try {
+      const [pageRows, site, summary, estimates, notificationResult] = await Promise.all([
+        listCmsPages(),
+        getPublicCmsSite().catch(() => ({ settings: {}, navigation: [] })),
+        getCatalogSummary().catch(() => null),
+        listEstimates('', 20).catch(() => null),
+        getAdminNotifications({ limit: 20 }).catch(() => null),
+      ]);
 
-        if (!active) {
-          return;
-        }
+      if (!mountedRef.current) {
+        return;
+      }
 
-        const editablePages = ensureEditablePublicPages(pageRows);
-        const normalizedSettings = normalizeSettings(site?.settings ?? {});
-        const normalizedNavigation = normalizeNavigationItems(site?.navigation ?? []);
-        setPages(editablePages);
-        setCatalogSummary(summary);
-        setRecentEstimates(Array.isArray(estimates) ? estimates : null);
-        setRecentNotifications(notificationResult?.notifications ? notificationResult : null);
-        setSettingsDraft(normalizedSettings);
-        setSavedSettingsSnapshot(JSON.stringify(normalizedSettings));
-        setNavigationDraft(normalizedNavigation);
-        setSavedNavigationSnapshot(JSON.stringify(normalizedNavigation));
-        setSelectedSlug(editablePages[0]?.slug || '');
-      } catch (loadError) {
-        if (active) {
-          showError(loadError.message || 'Failed to load CMS content.');
-        }
-      } finally {
-        if (active) {
+      const editablePages = ensureEditablePublicPages(pageRows);
+      const normalizedSettings = normalizeSettings(site?.settings ?? {});
+      const normalizedNavigation = normalizeNavigationItems(site?.navigation ?? []);
+      setPages(editablePages);
+      setCatalogSummary(summary);
+      setRecentEstimates(Array.isArray(estimates) ? estimates : null);
+      setRecentNotifications(notificationResult?.notifications ? notificationResult : null);
+      setSettingsDraft(normalizedSettings);
+      setSavedSettingsSnapshot(JSON.stringify(normalizedSettings));
+      setNavigationDraft(normalizedNavigation);
+      setSavedNavigationSnapshot(JSON.stringify(normalizedNavigation));
+      setSelectedSlug(editablePages[0]?.slug || '');
+    } catch (loadError) {
+      if (mountedRef.current) {
+        showError(loadError.message || 'Failed to load CMS content.');
+      }
+    } finally {
+      if (mountedRef.current) {
+        if (isRefresh) {
+          setRefreshing(false);
+        } else {
           setLoading(false);
         }
       }
     }
-
-    void loadCms();
-
-    return () => {
-      active = false;
-    };
   }, [showError]);
+
+  useEffect(() => {
+    void loadCms();
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [loadCms]);
 
   useEffect(() => {
     let active = true;
@@ -1835,7 +1856,7 @@ export default function CmsAdmin() {
             Loading CMS workspace...
           </div>
         ) : activeTab === 'overview' ? (
-          <CmsOverview pageCount={pages.length} catalogSummary={catalogSummary} estimates={recentEstimates} notifications={recentNotifications} />
+          <CmsOverview pageCount={pages.length} catalogSummary={catalogSummary} estimates={recentEstimates} notifications={recentNotifications} onRefresh={() => loadCms({ isRefresh: true })} refreshing={refreshing} />
         ) : activeTab === 'pages' ? (
           <div className="grid gap-0 lg:grid-cols-[320px_1fr]">
             <aside className="border-b border-primary-200 bg-primary-50 p-4 lg:border-b-0 lg:border-r">
