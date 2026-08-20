@@ -468,6 +468,39 @@ router.delete('/:estimateId', requireRole('admin'), async (req, res, next) => {
   }
 });
 
+router.patch('/:estimateId/archive', requireRole('admin'), async (req, res, next) => {
+  const estimateId = String(req.params.estimateId || '').trim();
+  if (!UUID_PATTERN.test(estimateId)) {
+    res.status(400).json({ error: 'A valid quotation identifier is required.' });
+    return;
+  }
+
+  try {
+    const result = await callRpc('archive_estimate', {
+      p_estimate_id: estimateId,
+    });
+
+    if (result?.reason === 'not_found') {
+      res.status(404).json({ error: 'Quotation not found.' });
+      return;
+    }
+
+    if (result?.reason === 'draft_only_delete') {
+      res.status(409).json({ error: 'Draft quotations should be deleted instead of archived.' });
+      return;
+    }
+
+    if (!result?.archived) {
+      res.status(409).json({ error: 'This quotation could not be archived.' });
+      return;
+    }
+
+    res.json({ archived: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/:estimateId/revisions', requireRole('admin'), async (req, res, next) => {
   try {
     const revisions = await callRpc('get_estimate_revisions', {

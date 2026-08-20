@@ -44,6 +44,18 @@ export async function deleteEstimate(estimateId) {
   }
 }
 
+export async function archiveEstimate(estimateId) {
+  try {
+    const { data } = await apiClient.patch(`/estimates/${encodeURIComponent(estimateId)}/archive`);
+    if (!data?.archived) {
+      throw new Error('The quotation could not be archived.');
+    }
+    return true;
+  } catch (error) {
+    extractApiError(error, 'Failed to archive quotation.');
+  }
+}
+
 export async function updateEstimate(estimateId, payload, changeNote = null) {
   try {
     const { data } = await apiClient.patch(`/estimates/${estimateId}`, {

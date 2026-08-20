@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
+    Archive,
     FileClock,
     FileText,
     Phone,
@@ -25,6 +26,7 @@ import { buildBundleLineItems, getAppliedBundleSummaries, roundCurrency } from '
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 import {
     createEstimate,
+    archiveEstimate,
     deleteEstimate,
     getEstimateDetail,
     getEstimateRevisions,
@@ -350,6 +352,8 @@ const QuoteBuilder = () => {
     const [showSmartBundles, setShowSmartBundles] = useState(true);
     const [quoteToDelete, setQuoteToDelete] = useState(null);
     const [deletingQuoteId, setDeletingQuoteId] = useState(null);
+    const [quoteToArchive, setQuoteToArchive] = useState(null);
+    const [archivingQuoteId, setArchivingQuoteId] = useState(null);
 
     const {
         products: availableProducts,
@@ -569,6 +573,30 @@ const QuoteBuilder = () => {
         }
     };
 
+    const confirmArchiveQuote = async () => {
+        const quote = quoteToArchive;
+        if (!quote?.id) {
+            return;
+        }
+
+        setArchivingQuoteId(quote.id);
+        try {
+            await archiveEstimate(quote.id);
+            setSavedQuotes((quotes) => quotes.filter((savedQuote) => savedQuote.id !== quote.id));
+            if (currentEstimateId === quote.id) {
+                resetQuotationEditor();
+            }
+            setQuoteToArchive(null);
+            success(quote.estimate_number
+                ? `Quotation ${quote.estimate_number} archived.`
+                : 'Quotation archived.');
+        } catch (archiveError) {
+            showError(archiveError.message || 'Unable to archive the quotation.');
+        } finally {
+            setArchivingQuoteId(null);
+        }
+    };
+
     const handleSave = async () => {
         if (!selectedParts.length && !selectedServices.length) {
             showError('Add at least one part or service before saving.');
@@ -765,6 +793,17 @@ const QuoteBuilder = () => {
                                                     <Trash2 className="h-4 w-4" aria-hidden="true" />
                                                 </button>
                                             )}
+                                            {String(quote.status || '').toLowerCase() !== 'draft' && (
+                                                <button
+                                                    type="button"
+                                                    aria-label={`Archive quotation ${quote.estimate_number || ''}`.trim()}
+                                                    title="Archive quotation"
+                                                    onClick={() => setQuoteToArchive(quote)}
+                                                    className="absolute right-3 top-3 rounded-lg border border-primary-200 bg-transparent p-2.5 text-primary-500 shadow-none transition-all duration-150 hover:scale-110 hover:border-accent-blue hover:bg-accent-blue hover:text-white hover:shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/40"
+                                                >
+                                                    <Archive className="h-4 w-4" aria-hidden="true" />
+                                                </button>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -787,6 +826,16 @@ const QuoteBuilder = () => {
                                         >
                                             <Trash2 className="h-4 w-4" aria-hidden="true" />
                                             Delete draft
+                                        </button>
+                                    )}
+                                    {currentEstimateId && currentEstimateStatus !== 'draft' && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setQuoteToArchive({ id: currentEstimateId, estimate_number: currentEstimateNumber, status: currentEstimateStatus })}
+                                            className="inline-flex items-center gap-2 rounded-xl border border-accent-blue/30 bg-white px-3 py-2 text-sm font-semibold text-accent-blue transition hover:border-accent-blue hover:bg-accent-blue hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/40"
+                                        >
+                                            <Archive className="h-4 w-4" aria-hidden="true" />
+                                            Archive quotation
                                         </button>
                                     )}
                                 </div>
@@ -1133,6 +1182,21 @@ const QuoteBuilder = () => {
                 onClose={() => {
                     if (!deletingQuoteId) {
                         setQuoteToDelete(null);
+                    }
+                }}
+            />
+
+            <ConfirmDialog
+                isOpen={Boolean(quoteToArchive)}
+                title="Archive quotation?"
+                message={`This removes ${quoteToArchive?.estimate_number || 'this quotation'} from the active list while keeping its history. Draft quotations should be deleted instead.`}
+                confirmLabel="Archive quotation"
+                confirmVariant="primary"
+                isLoading={archivingQuoteId === quoteToArchive?.id}
+                onConfirm={confirmArchiveQuote}
+                onClose={() => {
+                    if (!archivingQuoteId) {
+                        setQuoteToArchive(null);
                     }
                 }}
             />
