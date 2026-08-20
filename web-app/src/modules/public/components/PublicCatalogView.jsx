@@ -514,10 +514,8 @@ const PublicCatalogView = () => {
             <section className="mt-5 rounded-[28px] border border-accent-blue/15 bg-gradient-to-br from-white via-blue-50/40 to-white p-4 shadow-sm sm:p-5">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-accent-blue">Featured Products</p>
-                  <h2 className="mt-2 text-2xl font-display font-bold text-primary-950">Curated parts from Content CMS</h2>
+                  <h2 className="text-2xl font-display font-bold text-primary-950">Featured products</h2>
                 </div>
-                <p className="text-sm text-primary-500">Managed from CMS and shown only here in Genuine Parts.</p>
               </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {featuredProducts.map((product) => (
