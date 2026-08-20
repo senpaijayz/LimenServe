@@ -717,7 +717,7 @@ const QuoteBuilder = () => {
                                                     aria-label={`Delete draft quotation ${quote.estimate_number || ''}`.trim()}
                                                     title="Delete draft quotation"
                                                     onClick={() => setQuoteToDelete(quote)}
-                                                    className="absolute right-3 top-3 rounded-lg border border-transparent bg-transparent p-2.5 text-primary-300 shadow-none transition-all duration-150 hover:scale-110 hover:border-accent-danger/60 hover:bg-accent-danger hover:text-white hover:shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-danger/40"
+                                                    className="absolute right-3 top-3 rounded-lg border border-primary-200 bg-transparent p-2.5 text-accent-danger shadow-none transition-all duration-150 hover:scale-110 hover:border-accent-danger hover:bg-accent-danger hover:text-white hover:shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-danger/40"
                                                 >
                                                     <Trash2 className="h-4 w-4" aria-hidden="true" />
                                                 </button>
