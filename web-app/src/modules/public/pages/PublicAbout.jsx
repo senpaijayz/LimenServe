@@ -10,56 +10,23 @@ function getCmsSection(page, sectionType, sectionKey = '') {
         ? sections.find((item) => (item.sectionKey || item.section_key) === sectionKey)
         : sections.find((item) => item.sectionType === sectionType || item.section_type === sectionType);
 
-    return section?.content || {};
+    return {
+        ...(section?.content || {}),
+        title: section?.content?.title || section?.title || '',
+    };
 }
 
-function splitBodyParagraphs(value, fallback) {
+function splitBodyParagraphs(value) {
     const paragraphs = String(value || '')
         .split(/\n{2,}/)
         .map((item) => item.trim())
         .filter(Boolean);
 
-    return paragraphs.length > 0 ? paragraphs : fallback;
+    return paragraphs;
 }
 
-const fallbackAboutStats = [
-    { value: '13 Years', label: 'In Service', icon: Package },
-    { value: 'Pasay City', label: 'Metro Manila', icon: MapPin },
-    { value: '2 Floors', label: 'Sales and Stockroom', icon: Building },
-    { value: 'Family-Owned', label: 'Local Business', icon: Wrench },
-];
-
-const fallbackPillars = [
-    {
-        title: 'Genuine Mitsubishi Parts',
-        description: 'The business focuses on supplying genuine Mitsubishi parts so customers can rely on accurate fitment, dependable quality, and trusted replacement components.',
-        icon: Shield,
-    },
-    {
-        title: 'Faster and More Organized Service',
-        description: 'LimenServe is designed to reduce delays in stock checking, quotation preparation, and transaction handling by giving staff a more structured digital workflow.',
-        icon: Zap,
-    },
-    {
-        title: 'Digital Modernization',
-        description: 'The system supports a shift from paper-based records to digital inventory, quotation, service-order, and stockroom management for more accurate business operations.',
-        icon: Settings,
-    },
-];
-
-function mergeCmsIconItems(fallbackItems, cmsItems = []) {
-    if (!Array.isArray(cmsItems) || cmsItems.length === 0) {
-        return fallbackItems;
-    }
-
-    return fallbackItems.map((item, index) => ({
-        ...item,
-        value: cmsItems[index]?.value || item.value,
-        label: cmsItems[index]?.label || item.label,
-        title: cmsItems[index]?.title || item.title,
-        description: cmsItems[index]?.description || item.description,
-    }));
-}
+const statIcons = [Package, MapPin, Building, Wrench];
+const pillarIcons = [Shield, Zap, Settings];
 
 const PublicAbout = () => {
     const [mechanics, setMechanics] = useState([]);
@@ -98,15 +65,7 @@ const PublicAbout = () => {
         };
     }, []);
 
-    const shiftLabel = (mechanic) => mechanic.shift_label
-        || mechanic.shiftLabel
-        || {
-            full_day: 'Full Day (8:00 AM - 5:00 PM)',
-            morning: 'Morning (8:00 AM - 12:00 PM)',
-            afternoon: 'Afternoon (1:00 PM - 5:00 PM)',
-            on_call: 'On Call / By Appointment',
-        }[mechanic.shift_type || mechanic.schedule_type]
-        || 'Schedule to be assigned';
+    const shiftLabel = (mechanic) => mechanic.shift_label || mechanic.shiftLabel || '';
 
     const statusClass = (status) => {
         if (status === 'available') return 'bg-accent-success/10 text-accent-success';
@@ -120,16 +79,16 @@ const PublicAbout = () => {
     const pillarsCms = getCmsSection(cmsPage, 'feature_grid', 'about-pillars');
     const mechanicsCms = getCmsSection(cmsPage, 'rich_text', 'about-mechanics');
     const locationCms = getCmsSection(cmsPage, 'cta', 'about-location');
-    const storyParagraphs = splitBodyParagraphs(storyCms.body, [
-        'Limen Auto Parts Center is an established family-owned auto parts retail shop located along EDSA in Pasay City, Metro Manila. For 13 years, the business has focused on providing genuine Mitsubishi car parts that are widely used and trusted by customers in the Philippines.',
-        'The shop operates in a two-floor commercial space, with the first floor serving as the main sales area and the second floor serving as the stockroom. Daily operations involve sales, customer service, stock management, and quotation preparation for both parts and service-related requests.',
-        'Through LimenServe, the business is transitioning from manual, paper-based processes to a more organized digital workflow that supports stock visibility, faster transaction handling, structured quotations, and improved customer service.',
-    ]);
-    const editableStats = mergeCmsIconItems(fallbackAboutStats, statsCms.items);
-    const editablePillars = mergeCmsIconItems(fallbackPillars, pillarsCms.items);
-    const locationTitle = locationCms.title || 'Visit the Facility';
-    const locationAddress = locationCms.address || '1308, 264 Epifanio de los Santos Ave, Pasay City, 1308 Metro Manila';
-    const locationMapUrl = locationCms.mapUrl || `https://maps.google.com/maps?q=${encodeURIComponent(locationAddress)}&t=&z=16&ie=UTF8&iwloc=&output=embed`;
+    const storyParagraphs = splitBodyParagraphs(storyCms.body);
+    const editableStats = (Array.isArray(statsCms.items) ? statsCms.items : [])
+        .filter((item) => item && (item.value || item.label))
+        .map((item, index) => ({ ...item, icon: statIcons[index % statIcons.length] }));
+    const editablePillars = (Array.isArray(pillarsCms.items) ? pillarsCms.items : [])
+        .filter((item) => item && (item.title || item.description))
+        .map((item, index) => ({ ...item, icon: pillarIcons[index % pillarIcons.length] }));
+    const locationTitle = String(locationCms.title || '').trim();
+    const locationAddress = String(locationCms.address || '').trim();
+    const locationMapUrl = String(locationCms.mapUrl || '').trim();
 
     return (
         <div className="bg-primary-50 min-h-screen relative font-sans text-primary-900 pb-20 overflow-hidden">
@@ -151,17 +110,23 @@ const PublicAbout = () => {
                     transition={{ duration: 0.6 }}
                     className="max-w-3xl mx-auto"
                 >
-                    <div className="flex items-center justify-center gap-2 mb-6">
-                        <span className="w-8 h-1 bg-accent-primary rounded-full" />
-                        <span className="text-sm font-semibold tracking-widest text-primary-500 uppercase">{heroCms.eyebrow || 'About'}</span>
-                        <span className="w-8 h-1 bg-accent-primary rounded-full" />
-                    </div>
-                    <h1 className="text-5xl md:text-7xl font-display font-bold text-primary-950 tracking-tight leading-tight mb-6">
-                        {heroCms.title || 'Limen Auto Parts Center'}
-                    </h1>
-                    <p className="text-lg text-primary-700 leading-relaxed font-light">
-                        {heroCms.subtitle || 'A family-owned auto parts business in Pasay City that has been serving customers for 13 years with genuine Mitsubishi parts, dependable service, and a more modern way to manage inventory and quotations through LimenServe.'}
-                    </p>
+                    {heroCms.eyebrow && (
+                        <div className="flex items-center justify-center gap-2 mb-6">
+                            <span className="w-8 h-1 bg-accent-primary rounded-full" />
+                            <span className="text-sm font-semibold tracking-widest text-primary-500 uppercase">{heroCms.eyebrow}</span>
+                            <span className="w-8 h-1 bg-accent-primary rounded-full" />
+                        </div>
+                    )}
+                    {heroCms.title && (
+                        <h1 className="text-5xl md:text-7xl font-display font-bold text-primary-950 tracking-tight leading-tight mb-6">
+                            {heroCms.title}
+                        </h1>
+                    )}
+                    {heroCms.subtitle && (
+                        <p className="text-lg text-primary-700 leading-relaxed font-light">
+                            {heroCms.subtitle}
+                        </p>
+                    )}
                 </Motion.div>
             </section>
 
@@ -177,8 +142,8 @@ const PublicAbout = () => {
                         transition={{ duration: 0.6 }}
                         className="space-y-6"
                     >
-                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">{storyCms.title || 'Our Story & Operations'}</h2>
-                        <div className="w-16 h-1 bg-accent-primary rounded-full mb-8" />
+                        {storyCms.title && <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">{storyCms.title}</h2>}
+                        {storyCms.title && <div className="w-16 h-1 bg-accent-primary rounded-full mb-8" />}
 
                         {storyParagraphs.map((paragraph) => (
                             <p key={paragraph} className="text-primary-700 leading-relaxed">{paragraph}</p>
@@ -210,8 +175,8 @@ const PublicAbout = () => {
                 {/* Core Pillars */}
                 <div className="mb-16">
                     <div className="text-center mb-12">
-                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">{pillarsCms.title || 'What We Stand For'}</h2>
-                        <p className="text-primary-600 max-w-2xl mx-auto">{pillarsCms.subtitle || 'The values that shape how Limen Auto Parts Center serves customers and manages daily operations.'}</p>
+                        {pillarsCms.title && <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">{pillarsCms.title}</h2>}
+                        {pillarsCms.subtitle && <p className="text-primary-600 max-w-2xl mx-auto">{pillarsCms.subtitle}</p>}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -239,18 +204,18 @@ const PublicAbout = () => {
 
                 <div className="mb-16">
                     <div className="text-center mb-12">
-                        <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">{mechanicsCms.title || 'Meet Our Mechanics'}</h2>
+                        {mechanicsCms.title && <h2 className="text-3xl font-display font-bold text-primary-950 mb-4">{mechanicsCms.title}</h2>}
                         {mechanicsCms.body && <p className="text-primary-600 max-w-2xl mx-auto">{mechanicsCms.body}</p>}
                         </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                         {mechanicsLoading ? (
                             <div className="surface p-8 bg-white border border-primary-200 shadow-sm md:col-span-2 xl:col-span-3">
-                                <p className="text-sm text-primary-500">{mechanicsCms.loadingText || 'Loading mechanics from the database...'}</p>
+                                {mechanicsCms.loadingText && <p className="text-sm text-primary-500">{mechanicsCms.loadingText}</p>}
                             </div>
                         ) : mechanics.length === 0 ? (
                             <div className="surface p-8 bg-white border border-primary-200 shadow-sm md:col-span-2 xl:col-span-3">
-                                <p className="text-sm text-primary-500">{mechanicsCms.emptyText || 'No public mechanic profiles have been published yet.'}</p>
+                                {mechanicsCms.emptyText && <p className="text-sm text-primary-500">{mechanicsCms.emptyText}</p>}
                             </div>
                         ) : mechanics.map((mechanic) => (
                             <div key={mechanic.id} className="surface overflow-hidden bg-white border border-primary-200 shadow-sm">
@@ -276,24 +241,32 @@ const PublicAbout = () => {
                                             <p className="mt-2 text-sm font-medium text-accent-primary">{mechanic.specialization}</p>
                                         </div>
                                     </div>
-                                    <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${statusClass(mechanic.availability_status)}`}>
-                                        {String(mechanic.availability_status || 'available').replace('_', ' ')}
-                                    </span>
+                                    {mechanic.availability_status && (
+                                        <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${statusClass(mechanic.availability_status)}`}>
+                                            {String(mechanic.availability_status).replace('_', ' ')}
+                                        </span>
+                                    )}
                                 </div>
-                                <p className="mt-4 text-sm leading-relaxed text-primary-600">{mechanic.bio || mechanicsCms.fallbackBio || 'Experienced Mitsubishi service technician.'}</p>
+                                {mechanic.bio && <p className="mt-4 text-sm leading-relaxed text-primary-600">{mechanic.bio}</p>}
                                 <div className="mt-5 grid gap-3 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600">
-                                    <p className="flex items-start gap-2">
-                                        <CalendarDays className="mt-0.5 h-4 w-4 text-accent-primary" />
-                                        <span><span className="font-semibold text-primary-950">{mechanicsCms.scheduleLabel || 'Schedule:'}</span> {shiftLabel(mechanic)}</span>
-                                    </p>
-                                    <p className="flex items-start gap-2">
-                                        <CalendarDays className="mt-0.5 h-4 w-4 text-accent-primary" />
-                                        <span><span className="font-semibold text-primary-950">{mechanicsCms.dateLabel || 'Available date:'}</span> {mechanic.available_date || mechanicsCms.dateFallback || 'General availability'}</span>
-                                    </p>
-                                    <p className="flex items-start gap-2">
-                                        <Phone className="mt-0.5 h-4 w-4 text-accent-primary" />
-                                        <span><span className="font-semibold text-primary-950">{mechanicsCms.contactLabel || 'Contact:'}</span> {mechanic.contact_number || mechanicsCms.contactFallback || 'Contact shop for assignment'}</span>
-                                    </p>
+                                    {mechanicsCms.scheduleLabel && shiftLabel(mechanic) && (
+                                        <p className="flex items-start gap-2">
+                                            <CalendarDays className="mt-0.5 h-4 w-4 text-accent-primary" />
+                                            <span><span className="font-semibold text-primary-950">{mechanicsCms.scheduleLabel}</span> {shiftLabel(mechanic)}</span>
+                                        </p>
+                                    )}
+                                    {mechanicsCms.dateLabel && mechanic.available_date && (
+                                        <p className="flex items-start gap-2">
+                                            <CalendarDays className="mt-0.5 h-4 w-4 text-accent-primary" />
+                                            <span><span className="font-semibold text-primary-950">{mechanicsCms.dateLabel}</span> {mechanic.available_date}</span>
+                                        </p>
+                                    )}
+                                    {mechanicsCms.contactLabel && mechanic.contact_number && (
+                                        <p className="flex items-start gap-2">
+                                            <Phone className="mt-0.5 h-4 w-4 text-accent-primary" />
+                                            <span><span className="font-semibold text-primary-950">{mechanicsCms.contactLabel}</span> {mechanic.contact_number}</span>
+                                        </p>
+                                    )}
                                 </div>
                                 </div>
                             </div>
@@ -302,7 +275,7 @@ const PublicAbout = () => {
                 </div>
 
                 {/* Location Banner */}
-                <Motion.div
+                {(locationTitle || locationAddress || locationMapUrl) && <Motion.div
                     initial={{ opacity: 0, scale: 0.98 }}
                     whileInView={{ opacity: 1, scale: 1 }}
                     viewport={{ once: true }}
@@ -311,14 +284,16 @@ const PublicAbout = () => {
                 >
                     <div className="relative z-10 p-8 md:p-12 md:w-1/2 flex flex-col justify-center">
                         <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-r from-white to-transparent pointer-events-none" />
-                        <h3 className="text-2xl font-display font-bold text-primary-950 mb-4 relative z-10">{locationTitle}</h3>
-                        <p className="text-primary-700 flex items-start gap-3 relative z-10 leading-relaxed font-sans mt-0">
-                            <MapPin className="w-5 h-5 mt-1 text-accent-primary shrink-0" />
-                            {locationAddress}
-                        </p>
+                        {locationTitle && <h3 className="text-2xl font-display font-bold text-primary-950 mb-4 relative z-10">{locationTitle}</h3>}
+                        {locationAddress && (
+                            <p className="text-primary-700 flex items-start gap-3 relative z-10 leading-relaxed font-sans mt-0">
+                                <MapPin className="w-5 h-5 mt-1 text-accent-primary shrink-0" />
+                                {locationAddress}
+                            </p>
+                        )}
                     </div>
 
-                    <div className="relative z-10 w-full md:w-1/2 min-h-[300px] md:min-h-[400px]">
+                    {locationMapUrl && <div className="relative z-10 w-full md:w-1/2 min-h-[300px] md:min-h-[400px]">
                         {/* 
                           Normal light Map format
                         */}
@@ -328,10 +303,10 @@ const PublicAbout = () => {
                             allowFullScreen=""
                             loading="lazy"
                             referrerPolicy="no-referrer-when-downgrade"
-                            title="Limen Auto Parts Center Location"
+                            title={locationTitle || locationAddress}
                         />
-                    </div>
-                </Motion.div>
+                    </div>}
+                </Motion.div>}
 
             </section>
         </div >
