@@ -1,4 +1,4 @@
-import { supabase } from '../../../services/supabase';
+import { getFreshAccessToken, supabase } from '../../../services/supabase';
 import { LOCATOR_LAYOUT_NAME } from '../data/locatorScene';
 
 const LAYOUT_SELECT = 'id, layout_name, layout_data, updated_at';
@@ -8,6 +8,27 @@ function assertSupabaseResult({ error }, fallbackMessage) {
     if (error) {
         throw new Error(error.message || fallbackMessage);
     }
+}
+
+function isAuthRefreshableError(error) {
+    const code = String(error?.code || error?.status || '');
+    const message = String(error?.message || '').toLowerCase();
+    return ['401', 'pgrst301', 'pgrst302'].includes(code.toLowerCase())
+        || /expired|invalid jwt|invalid token|authentication required|not authenticated/.test(message);
+}
+
+async function runSupabaseRequest(request) {
+    // Supabase browser requests can race the initial auth hydration or a token
+    // refresh. Ensure the client has loaded the current session before writes,
+    // and retry one time with a forced refresh when PostgREST rejects a stale
+    // access token.
+    await getFreshAccessToken();
+    let result = await request();
+    if (isAuthRefreshableError(result?.error)) {
+        await getFreshAccessToken({ forceRefresh: true });
+        result = await request();
+    }
+    return result;
 }
 
 function mapLayoutRow(row) {
@@ -55,11 +76,11 @@ export async function saveStoreLayout(sceneObjects, layoutName = LOCATOR_LAYOUT_
         layout_name: layoutName,
     };
 
-    const result = await supabase
+    const result = await runSupabaseRequest(() => supabase
         .from('store_layouts')
         .upsert(payload, { onConflict: 'layout_name' })
         .select(LAYOUT_SELECT)
-        .single();
+        .single());
 
     assertSupabaseResult(result, 'Unable to save 3D layout.');
 
@@ -67,13 +88,13 @@ export async function saveStoreLayout(sceneObjects, layoutName = LOCATOR_LAYOUT_
 }
 
 export async function loadStoreLayout(layoutName = LOCATOR_LAYOUT_NAME) {
-    const result = await supabase
+    const result = await runSupabaseRequest(() => supabase
         .from('store_layouts')
         .select(LAYOUT_SELECT)
         .eq('layout_name', layoutName)
         .order('updated_at', { ascending: false })
         .limit(1)
-        .single();
+        .single());
 
     if (result.error?.code === 'PGRST116') {
         return null;
@@ -85,10 +106,10 @@ export async function loadStoreLayout(layoutName = LOCATOR_LAYOUT_NAME) {
 }
 
 export async function listStoreLayouts() {
-    const result = await supabase
+    const result = await runSupabaseRequest(() => supabase
         .from('store_layouts')
         .select(LAYOUT_SELECT)
-        .order('updated_at', { ascending: false });
+        .order('updated_at', { ascending: false }));
 
     assertSupabaseResult(result, 'Unable to load saved 3D layouts.');
 
@@ -106,10 +127,10 @@ export async function setStoreLayoutPriority(layoutName) {
         if (!layout.id) {
             return;
         }
-        const result = await supabase
+        const result = await runSupabaseRequest(() => supabase
             .from('store_layouts')
             .update({ layout_data: { ...(layout.layoutData || {}), priority: layout.layoutName === target } })
-            .eq('id', layout.id);
+            .eq('id', layout.id));
         assertSupabaseResult(result, 'Unable to update the priority layout.');
     }));
 }
@@ -130,11 +151,11 @@ export async function assignProductLocation(location) {
         },
     };
 
-    const result = await supabase
+    const result = await runSupabaseRequest(() => supabase
         .from('product_locations')
         .upsert(payload, { onConflict: 'product_id' })
         .select(PRODUCT_LOCATION_SELECT)
-        .single();
+        .single());
 
     assertSupabaseResult(result, 'Unable to assign product location.');
 
@@ -146,12 +167,12 @@ export async function getProductLocation(productId) {
         return null;
     }
 
-    const result = await supabase
+    const result = await runSupabaseRequest(() => supabase
         .from('product_locations')
         .select(PRODUCT_LOCATION_SELECT)
         .eq('product_id', productId)
         .limit(1)
-        .single();
+        .single());
 
     if (result.error?.code === 'PGRST116') {
         return null;
@@ -163,10 +184,10 @@ export async function getProductLocation(productId) {
 }
 
 export async function getProductLocations() {
-    const result = await supabase
+    const result = await runSupabaseRequest(() => supabase
         .from('product_locations')
         .select(PRODUCT_LOCATION_SELECT)
-        .order('updated_at', { ascending: false });
+        .order('updated_at', { ascending: false }));
 
     assertSupabaseResult(result, 'Unable to load product locations.');
 

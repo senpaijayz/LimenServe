@@ -53,6 +53,7 @@ function createChain(table) {
 }
 
 vi.mock('../services/supabase', () => ({
+    getFreshAccessToken: vi.fn(async () => null),
     supabase: {
         from: vi.fn((table) => createChain(table)),
     },

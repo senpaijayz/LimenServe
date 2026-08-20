@@ -572,7 +572,7 @@ function LocatedProductNote({ notice }) {
     );
 }
 
-function DesignToolbar({ onDiscardChanges, onOpenAssignment, onRequestDelete, onRequestResetFloor, onRequestResetStockroom, onSave }) {
+function DesignToolbar({ isSaving, onDiscardChanges, onOpenAssignment, onRequestDelete, onRequestResetFloor, onRequestResetStockroom, onSave }) {
     const addSceneObject = useLocator3DStore((state) => state.addSceneObject);
     const activeTool = useLocator3DStore((state) => state.activeTool);
     const centerCameraOnSelected = useLocator3DStore((state) => state.centerCameraOnSelected);
@@ -773,9 +773,9 @@ function DesignToolbar({ onDiscardChanges, onOpenAssignment, onRequestDelete, on
                     </div>
                 )}
             </div>
-            <Button onClick={onSave} tone="primary">
+            <Button disabled={isSaving} onClick={onSave} tone="primary">
                 <Save className="h-4 w-4" />
-                Save
+                {isSaving ? 'Saving…' : 'Save'}
             </Button>
         </div>
     );
@@ -1583,6 +1583,7 @@ export default function Locator3DAdmin() {
                 <FloorInfo />
                 <ViewportControls canvasShellRef={canvasShellRef} />
                 <DesignToolbar
+                    isSaving={isSavingLayout}
                     onDiscardChanges={() => {
                         discardUnsavedChanges();
                         setAutosaveSnapshot(null);

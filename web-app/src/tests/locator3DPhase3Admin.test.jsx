@@ -81,4 +81,28 @@ describe('3D Locator admin integration', () => {
         })));
         expect(useLocator3DStore.getState().productLocations[0].productId).toBe('product-1');
     });
+
+    it('disables the design save action while a save is in flight', async () => {
+        resetLocator3DStore();
+        saveStoreLayout.mockClear();
+        let releaseSave;
+        saveStoreLayout.mockImplementationOnce(() => new Promise((resolve) => {
+            releaseSave = resolve;
+        }));
+        renderLocator();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
+        const saveButton = screen.getByRole('button', { name: 'Save' });
+        fireEvent.click(saveButton);
+
+        await waitFor(() => expect(saveStoreLayout).toHaveBeenCalledTimes(1));
+        expect(screen.getByRole('button', { name: 'Saving…' }).disabled).toBe(true);
+        expect(saveButton.disabled).toBe(true);
+
+        fireEvent.click(saveButton);
+        expect(saveStoreLayout).toHaveBeenCalledTimes(1);
+
+        releaseSave({ id: 'layout-1' });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false));
+    });
 });
