@@ -82,9 +82,22 @@ describe('Locator3DScene selection', () => {
         fireEvent.click(screen.getByTestId('locator-object-stairs-a'));
 
         expect(useLocator3DStore.getState().activeFloor).toBe(2);
+        expect(screen.getByText(/STRAIGHT STAIRS/)).toBeTruthy();
 
         fireEvent.click(screen.getByTestId('locator-object-stairs-a'));
 
+        expect(useLocator3DStore.getState().activeFloor).toBe(1);
+    });
+
+    it('selects stairs without changing floors in Design Mode', () => {
+        resetLocator3DStore();
+        useLocator3DStore.getState().setDesignMode(true);
+
+        render(<Locator3DScene />);
+
+        fireEvent.click(screen.getByTestId('locator-object-stairs-a'));
+
+        expect(useLocator3DStore.getState().selectedObjectId).toBe('stairs-a');
         expect(useLocator3DStore.getState().activeFloor).toBe(1);
     });
 

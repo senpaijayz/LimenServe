@@ -2,7 +2,7 @@ import { supabase } from '../../../services/supabase';
 import { LOCATOR_LAYOUT_NAME } from '../data/locatorScene';
 
 const LAYOUT_SELECT = 'id, layout_name, layout_data, updated_at';
-const PRODUCT_LOCATION_SELECT = 'product_id, product_name, sku, aisle, shelf_number, bin_number, floor, shelf_object_id, updated_at';
+const PRODUCT_LOCATION_SELECT = 'product_id, product_name, sku, aisle, shelf_number, bin_number, floor, shelf_object_id, assignment_data, updated_at';
 
 function assertSupabaseResult({ error }, fallbackMessage) {
     if (error) {
@@ -38,6 +38,8 @@ export function mapProductLocationRow(row) {
         shelfNumber: Number(row.shelf_number),
         shelfObjectId: row.shelf_object_id || '',
         sku: row.sku || '',
+        assignmentData: row.assignment_data || {},
+        layerNumber: Number(row.assignment_data?.layerNumber || row.assignment_data?.levelNumber || 1),
         updatedAt: row.updated_at,
     };
 }
@@ -122,6 +124,10 @@ export async function assignProductLocation(location) {
         shelf_number: Number(location.shelfNumber),
         shelf_object_id: location.shelfObjectId || null,
         sku: location.sku || '',
+        assignment_data: {
+            ...(location.assignmentData || {}),
+            layerNumber: Number(location.layerNumber || 1),
+        },
     };
 
     const result = await supabase

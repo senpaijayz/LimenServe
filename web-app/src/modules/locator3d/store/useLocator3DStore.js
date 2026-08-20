@@ -971,13 +971,22 @@ export const useLocator3DStore = create((set, get) => ({
                 ? Math.max(1, Math.round(Number(object.layerCount || (object.type === 'shelf-4-layer' ? 4 : 2))))
                 : clampNumber(updates.layerCount, 1, 12);
             const safeAisle = aisle || object.aisle || 'A';
+            const safeName = updates.name === undefined
+                ? (updates.aisle !== undefined || updates.shelfNumber !== undefined
+                    ? `Aisle ${safeAisle} Shelf ${shelfNumber}`
+                    : object.name)
+                : String(updates.name || '').trim();
+            const safeDescription = updates.description === undefined
+                ? object.description || ''
+                : String(updates.description || '').trim();
 
             return {
                 ...object,
                 aisle: safeAisle,
                 binCount,
+                description: safeDescription,
                 layerCount,
-                name: `Aisle ${safeAisle} Shelf ${shelfNumber}`,
+                name: safeName || `Aisle ${safeAisle} Shelf ${shelfNumber}`,
                 shelfNumber,
             };
         }));

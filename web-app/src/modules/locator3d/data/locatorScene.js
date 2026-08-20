@@ -146,11 +146,12 @@ export const LOCATOR_SCENE_OBJECTS = [
         id: 'stairs-a',
         type: 'stairs',
         name: 'Upper Floor Stairs',
+        description: 'Straight-flight access between Floor 1 and Floor 2',
         floor: 1,
         isLocked: false,
         position: [9.1, 0, 0.5],
         rotation: [0, 0, 0],
-        dimensions: { width: 2.6, depth: 4.8, height: FLOOR_HEIGHT },
+        dimensions: { width: 2.8, depth: 6.2, height: FLOOR_HEIGHT },
     },
     {
         id: 'shelf-4-b',

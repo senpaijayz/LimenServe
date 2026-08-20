@@ -62,6 +62,22 @@ describe('3D Locator Phase 2 store behavior', () => {
         expect(shelf.name).toBe('Aisle Electronics Shelf 7');
     });
 
+    it('persists a custom shelf name and location description', () => {
+        resetLocator3DStore();
+
+        act(() => {
+            useLocator3DStore.getState().updateShelfProperties('shelf-4-a', {
+                description: 'Fast-moving filters beside the receiving lane',
+                name: 'Receiving Filters',
+            });
+        });
+
+        const shelf = useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-4-a');
+
+        expect(shelf.name).toBe('Receiving Filters');
+        expect(shelf.description).toBe('Fast-moving filters beside the receiving lane');
+    });
+
     it('updates object transforms on the 0.25 unit snap grid', () => {
         resetLocator3DStore();
 

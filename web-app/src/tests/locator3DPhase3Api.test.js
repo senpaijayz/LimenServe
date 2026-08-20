@@ -22,6 +22,7 @@ function createChain(table) {
                 bin_number: 4,
                 floor: 2,
                 shelf_object_id: 'shelf-4-b',
+                assignment_data: { layerNumber: 2 },
             },
         delete: vi.fn(() => chain),
         eq: vi.fn((column, value) => {
@@ -116,6 +117,7 @@ describe('3D Locator Supabase API', () => {
             shelfNumber: 3,
             binNumber: 4,
             floor: 2,
+            layerNumber: 2,
             shelfObjectId: 'shelf-4-b',
         });
 
@@ -126,10 +128,12 @@ describe('3D Locator Supabase API', () => {
                 aisle: 'C',
                 shelf_number: 3,
                 bin_number: 4,
+                assignment_data: { layerNumber: 2 },
             }),
             { onConflict: 'product_id' },
         );
         expect(location.shelfNumber).toBe(3);
+        expect(location.layerNumber).toBe(2);
 
         const loaded = await getProductLocation('product-1');
         expect(chains[1].eq).toHaveBeenCalledWith('product_id', 'product-1');

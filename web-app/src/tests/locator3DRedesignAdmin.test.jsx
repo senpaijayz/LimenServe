@@ -136,6 +136,40 @@ describe('3D Locator rebuild', () => {
         await waitFor(() => expect(saveStoreLayout).toHaveBeenCalledWith(expect.any(Array), 'main-store'));
     });
 
+    it('shows editable shelf details and product positions in Design Mode', async () => {
+        act(() => {
+            useLocator3DStore.getState().forceSelectObject('shelf-4-a');
+            useLocator3DStore.getState().setProductLocations([{
+                aisle: 'B',
+                binNumber: 4,
+                floor: 1,
+                layerNumber: 2,
+                productId: 'product-1',
+                productName: 'Oil Filter',
+                shelfNumber: 2,
+                shelfObjectId: 'shelf-4-a',
+                sku: 'OF-1',
+            }]);
+        });
+
+        renderLocator();
+        fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
+
+        expect(screen.getByRole('complementary', { name: 'Shelf inspector' })).toBeTruthy();
+        expect(screen.getByDisplayValue('Aisle B 4-Layer Shelf')).toBeTruthy();
+        expect(screen.getByText('Oil Filter')).toBeTruthy();
+        expect(screen.getByText(/Layer 2 · Bin 4 · Floor 1 · Aisle B/)).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText('Shelf name'), { target: { value: 'Fast Filters' } });
+        fireEvent.change(screen.getByLabelText('Shelf description'), { target: { value: 'Near receiving lane' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save shelf details' }));
+
+        expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-4-a')).toEqual(expect.objectContaining({
+            description: 'Near receiving lane',
+            name: 'Fast Filters',
+        }));
+    });
+
     it('protects mapped shelves from accidental deletion', async () => {
         act(() => {
             useLocator3DStore.getState().setProductLocations([{

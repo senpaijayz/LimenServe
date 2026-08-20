@@ -12,6 +12,7 @@ import {
     DoorOpen,
     Grid3X3,
     LayoutDashboard,
+    Layers3,
     LoaderCircle,
     Lock,
     MapPin,
@@ -21,6 +22,7 @@ import {
     MousePointer2,
     MoreHorizontal,
     Package,
+    PencilLine,
     Plus,
     Ruler,
     Redo2,
@@ -825,12 +827,144 @@ function AutosaveRecoveryBanner({ onDiscard, onRecover, snapshot }) {
     );
 }
 
+function ShelfInspector({ onOpenAssignment, productLocations, products }) {
+    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
+    const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
+    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
+    const shelf = getLocatorObjectById(selectedObjectId, sceneObjects);
+
+    if (!isDesignMode || !shelf || !isShelfObject(shelf)) {
+        return null;
+    }
+
+    return (
+        <ShelfInspectorForm
+            key={shelf.id}
+            onOpenAssignment={onOpenAssignment}
+            productLocations={productLocations}
+            products={products}
+            shelf={shelf}
+        />
+    );
+}
+
+function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shelf }) {
+    const updateShelfProperties = useLocator3DStore((state) => state.updateShelfProperties);
+    const [nameDraft, setNameDraft] = useState(shelf.name || '');
+    const [descriptionDraft, setDescriptionDraft] = useState(shelf.description || '');
+
+    const assignedProducts = useMemo(() => {
+        if (!shelf || !isShelfObject(shelf)) {
+            return [];
+        }
+
+        const layerCount = Math.max(1, Number(shelf.layerCount || 1));
+        return productLocations
+            .filter((location) => (
+                location.shelfObjectId === shelf.id
+                || (normalizeAisle(location.aisle) === normalizeAisle(shelf.aisle)
+                    && Number(location.shelfNumber) === Number(shelf.shelfNumber))
+            ))
+            .map((location, index) => ({
+                ...location,
+                displayLayer: Number(location.layerNumber || ((index % layerCount) + 1)),
+                product: products.find((item) => String(item.id) === String(location.productId)),
+            }));
+    }, [productLocations, products, shelf]);
+
+    const layerCount = Math.max(1, Number(shelf.layerCount || 1));
+    const saveDetails = () => {
+        updateShelfProperties(shelf.id, {
+            description: descriptionDraft,
+            name: nameDraft,
+        });
+    };
+
+    return (
+        <aside aria-label="Shelf inspector" className="pointer-events-auto absolute bottom-4 right-4 z-30 w-[min(360px,calc(100%-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-[0_20px_50px_rgba(15,23,42,0.22)] backdrop-blur">
+            <div className="border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-sky-50 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Shelf inspector</p>
+                        <h2 className="mt-1 text-sm font-black text-slate-950">{shelf.name || 'Selected shelf'}</h2>
+                    </div>
+                    <Layers3 className="h-5 w-5 text-indigo-500" />
+                </div>
+                <div className="mt-3 grid grid-cols-4 gap-1.5 text-center text-[10px] font-bold text-slate-600">
+                    <span className="rounded-lg bg-white/80 px-1.5 py-2">F{shelf.floor || 1}</span>
+                    <span className="rounded-lg bg-white/80 px-1.5 py-2">A{normalizeAisle(shelf.aisle) || '-'}</span>
+                    <span className="rounded-lg bg-white/80 px-1.5 py-2">S{shelf.shelfNumber || '-'}</span>
+                    <span className="rounded-lg bg-white/80 px-1.5 py-2">{layerCount} layers</span>
+                </div>
+            </div>
+            <div className="space-y-3 p-4">
+                <label className="block text-[10px] font-black uppercase tracking-[0.12em] text-slate-500" htmlFor="shelf-inspector-name">
+                    Shelf name
+                    <span className="relative mt-1 block">
+                        <PencilLine className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                        <input
+                            aria-label="Shelf name"
+                            className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-2 text-xs font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-indigo-400 focus:bg-white"
+                            id="shelf-inspector-name"
+                            maxLength={80}
+                            onChange={(event) => setNameDraft(event.target.value)}
+                            value={nameDraft}
+                        />
+                    </span>
+                </label>
+                <label className="block text-[10px] font-black uppercase tracking-[0.12em] text-slate-500" htmlFor="shelf-inspector-description">
+                    Location description
+                    <textarea
+                        aria-label="Shelf description"
+                        className="mt-1 min-h-16 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium normal-case tracking-normal text-slate-700 outline-none focus:border-indigo-400 focus:bg-white"
+                        id="shelf-inspector-description"
+                        maxLength={240}
+                        onChange={(event) => setDescriptionDraft(event.target.value)}
+                        placeholder="Example: Fast-moving filters beside the receiving lane"
+                        value={descriptionDraft}
+                    />
+                </label>
+                <Button className="w-full justify-center" onClick={saveDetails} tone="primary">
+                    Save shelf details
+                </Button>
+
+                <div className="border-t border-slate-100 pt-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Products to put here</p>
+                        <Button className="px-2.5 py-1.5 text-[10px]" onClick={() => onOpenAssignment?.(shelf)}>
+                            <Package className="h-3.5 w-3.5" />
+                            Assign
+                        </Button>
+                    </div>
+                    <div className="mt-2 max-h-36 space-y-1.5 overflow-y-auto">
+                        {assignedProducts.map((location) => (
+                            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2" key={location.productId}>
+                                <p className="truncate text-xs font-bold text-slate-800">{location.productName || location.product?.name || location.sku || 'Unnamed product'}</p>
+                                <p className="mt-1 text-[10px] font-semibold text-slate-500">
+                                    Layer {location.displayLayer} · Bin {location.binNumber || '-'} · Floor {location.floor || shelf.floor || 1} · Aisle {normalizeAisle(location.aisle || shelf.aisle) || '-'}
+                                </p>
+                            </div>
+                        ))}
+                        {!assignedProducts.length && (
+                            <p className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-xs font-medium leading-5 text-slate-500">
+                                No product is mapped yet. Assign one to make its layer and bin easy to find.
+                            </p>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </aside>
+    );
+}
+
 function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }) {
     const [query, setQuery] = useState('');
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [binNumber, setBinNumber] = useState(1);
+    const [layerNumber, setLayerNumber] = useState(1);
     const [isSaving, setIsSaving] = useState(false);
     const { error, success } = useToast();
+    const productLocations = useLocator3DStore((state) => state.productLocations);
 
     useEffect(() => {
         if (!isOpen) {
@@ -840,7 +974,16 @@ function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }
         setQuery(selected?.name || selected?.sku || '');
         setSelectedProduct(selected || null);
         setBinNumber(1);
+        setLayerNumber(1);
     }, [isOpen, shelf?.id]);
+
+    const assignedProducts = useMemo(() => productLocations.filter((location) => (
+        shelf && (
+            location.shelfObjectId === shelf.id
+            || (normalizeAisle(location.aisle) === normalizeAisle(shelf.aisle)
+                && Number(location.shelfNumber) === Number(shelf.shelfNumber))
+        )
+    )), [productLocations, shelf]);
 
     const results = useMemo(() => {
         const normalized = query.trim().toLowerCase();
@@ -866,6 +1009,7 @@ function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }
                 aisle: shelf.aisle || 'A',
                 binNumber,
                 floor: shelf.floor || 1,
+                layerNumber,
                 productId: selectedProduct.id,
                 productName: selectedProduct.name || '',
                 shelfNumber: shelf.shelfNumber || 1,
@@ -886,7 +1030,14 @@ function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }
     return (
         <Modal isOpen={isOpen} onClose={onClose} size="md" title={shelf ? 'Assign product to ' + shelf.name : 'Assign product'}>
             <div className="space-y-4">
-                <p className="text-sm leading-6 text-slate-600">This assignment remains connected to this shelf’s stable layout object ID, even when you move or rotate it.</p>
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3">
+                    <p className="text-xs font-black text-indigo-950">{shelf?.name || 'Shelf'}</p>
+                    <p className="mt-1 text-[11px] font-semibold leading-5 text-indigo-700">
+                        Floor {shelf?.floor || 1} · Aisle {normalizeAisle(shelf?.aisle) || '-'} · Shelf {shelf?.shelfNumber || '-'} · {shelf?.layerCount || 1} layers · {shelf?.binCount || 0} bins
+                    </p>
+                    {shelf?.description && <p className="mt-2 text-[11px] font-medium leading-5 text-slate-600">{shelf.description}</p>}
+                </div>
+                <p className="text-sm leading-6 text-slate-600">Choose the product, layer, and bin. This stays attached to the shelf even when you drag it in Design Mode.</p>
                 <div>
                     <label className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500" htmlFor="assignment-product">Product</label>
                     <input
@@ -919,6 +1070,19 @@ function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }
                     )}
                 </div>
                 <div>
+                    <label className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500" htmlFor="assignment-layer">Layer</label>
+                    <select
+                        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-indigo-400 focus:bg-white"
+                        id="assignment-layer"
+                        onChange={(event) => setLayerNumber(Number(event.target.value))}
+                        value={layerNumber}
+                    >
+                        {Array.from({ length: Math.max(1, Math.min(shelf?.layerCount || 1, 12)) }, (_, index) => index + 1).map((layer) => (
+                            <option key={layer} value={layer}>Layer {layer}</option>
+                        ))}
+                    </select>
+                </div>
+                <div>
                     <label className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500" htmlFor="assignment-bin">Bin</label>
                     <select
                         className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-indigo-400 focus:bg-white"
@@ -930,6 +1094,17 @@ function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }
                             <option key={bin} value={bin}>Bin {bin}</option>
                         ))}
                     </select>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Current shelf map</p>
+                    <div className="mt-2 space-y-1.5">
+                        {assignedProducts.map((location) => (
+                            <p className="text-xs font-semibold text-slate-600" key={location.productId}>
+                                {location.productName || location.sku || 'Unnamed product'} · Layer {location.layerNumber || 1} · Bin {location.binNumber || '-'}
+                            </p>
+                        ))}
+                        {!assignedProducts.length && <p className="text-xs text-slate-400">No products assigned yet.</p>}
+                    </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-1">
                     <Button onClick={onClose}>Cancel</Button>
@@ -1418,6 +1593,11 @@ export default function Locator3DAdmin() {
                     onRequestResetFloor={requestResetFloor}
                     onRequestResetStockroom={requestResetStockroom}
                     onSave={() => void handleSaveLayout()}
+                />
+                <ShelfInspector
+                    onOpenAssignment={setAssignmentShelf}
+                    productLocations={productLocations}
+                    products={products}
                 />
                 {isLoadingLayout && (
                     <div aria-live="polite" className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-slate-950/35 backdrop-blur-sm" role="status">
