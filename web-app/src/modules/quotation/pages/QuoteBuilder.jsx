@@ -48,6 +48,21 @@ const estimateStatusFilters = [
     { value: 'rejected', label: 'Rejected' },
 ];
 
+const estimateStatusLabels = Object.fromEntries(estimateStatusFilters.filter((option) => option.value).map((option) => [option.value, option.label]));
+
+function getEstimateStatusLabel(status) {
+    const normalizedStatus = String(status || '').toLowerCase();
+    return estimateStatusLabels[normalizedStatus] || (normalizedStatus ? normalizedStatus.replace(/_/g, ' ') : 'Unknown');
+}
+
+function getEstimateStatusClass(status) {
+    const normalizedStatus = String(status || '').toLowerCase();
+    if (normalizedStatus === 'approved') return 'bg-accent-success/10 text-accent-success';
+    if (normalizedStatus === 'rejected' || normalizedStatus === 'expired') return 'bg-accent-danger/10 text-accent-danger';
+    if (normalizedStatus === 'draft') return 'bg-primary-100 text-primary-600';
+    return 'bg-accent-blue/10 text-accent-blue';
+}
+
 const formatCreatedDate = (value) => {
     if (!value) return 'Date unavailable';
     const date = new Date(value);
@@ -723,7 +738,7 @@ const QuoteBuilder = () => {
                                                         </span>
                                                         <p className="mt-2 truncate text-lg font-display font-bold tracking-tight text-primary-950">{quote.estimate_number}</p>
                                                     </div>
-                                                    <span className="shrink-0 pt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-400">{quote.status}</span>
+                                                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${getEstimateStatusClass(quote.status)}`}>{getEstimateStatusLabel(quote.status)}</span>
                                                 </div>
                                                 <p className="mt-2 text-sm text-primary-700">{quote.customer_name || 'Walk-in Customer'}</p>
                                                 <p className="text-xs text-primary-500">{quote.customer_phone || 'No phone'}</p>
