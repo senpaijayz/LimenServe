@@ -1184,6 +1184,25 @@ export default function CmsAdmin() {
   const [pageDraft, setPageDraft] = useState(createPageDraft());
   const [settingsDraft, setSettingsDraft] = useState(DEFAULT_SETTINGS);
   const [navigationDraft, setNavigationDraft] = useState([]);
+  const [savedPageSnapshot, setSavedPageSnapshot] = useState('');
+  const [savedSettingsSnapshot, setSavedSettingsSnapshot] = useState(JSON.stringify(DEFAULT_SETTINGS));
+  const [savedNavigationSnapshot, setSavedNavigationSnapshot] = useState('[]');
+
+  const pageSnapshot = useMemo(() => JSON.stringify(normalizePage(pageDraft)), [pageDraft]);
+  const settingsSnapshot = useMemo(() => JSON.stringify(normalizeSettings(settingsDraft)), [settingsDraft]);
+  const navigationSnapshot = useMemo(() => JSON.stringify(normalizeNavigationItems(navigationDraft)), [navigationDraft]);
+  const pageIsDirty = !loading && !pageLoading && (
+    savedPageSnapshot
+      ? pageSnapshot !== savedPageSnapshot
+      : !selectedSlug && Boolean(pageDraft.title || pageDraft.sections?.length)
+  );
+  const hasUnsavedChanges = activeTab === 'pages'
+    ? pageIsDirty
+    : activeTab === 'settings'
+      ? settingsSnapshot !== savedSettingsSnapshot
+      : activeTab === 'navigation'
+        ? navigationSnapshot !== savedNavigationSnapshot
+        : false;
 
   const selectedPage = useMemo(
     () => pages.find((page) => page.slug === selectedSlug),
@@ -1218,9 +1237,13 @@ export default function CmsAdmin() {
         }
 
         const editablePages = ensureEditablePublicPages(pageRows);
+        const normalizedSettings = normalizeSettings(site?.settings ?? {});
+        const normalizedNavigation = normalizeNavigationItems(site?.navigation ?? []);
         setPages(editablePages);
-        setSettingsDraft(normalizeSettings(site?.settings ?? {}));
-        setNavigationDraft(normalizeNavigationItems(site?.navigation ?? []));
+        setSettingsDraft(normalizedSettings);
+        setSavedSettingsSnapshot(JSON.stringify(normalizedSettings));
+        setNavigationDraft(normalizedNavigation);
+        setSavedNavigationSnapshot(JSON.stringify(normalizedNavigation));
         setSelectedSlug(editablePages[0]?.slug || '');
       } catch (loadError) {
         if (active) {
@@ -1260,11 +1283,14 @@ export default function CmsAdmin() {
           return;
         }
 
-        setPageDraft(normalizePage(mergeRequiredSections(page)));
+        const normalizedPage = normalizePage(mergeRequiredSections(page));
+        setPageDraft(normalizedPage);
+        setSavedPageSnapshot(JSON.stringify(normalizedPage));
       } catch (loadError) {
         const fallbackDraft = defaultDraftForSlug(selectedSlug);
         if (active && fallbackDraft) {
           setPageDraft(fallbackDraft);
+          setSavedPageSnapshot('');
           return;
         }
         if (active) {
@@ -1297,6 +1323,42 @@ export default function CmsAdmin() {
     }
   }, [activeSectionKey, pageDraft.sections]);
 
+  useEffect(() => {
+    const handleBeforeUnload = (event) => {
+      if (!hasUnsavedChanges) {
+        return;
+      }
+
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const confirmDiscardChanges = () => (
+    !hasUnsavedChanges
+    || window.confirm('You have unsaved CMS changes. Leave this editor without saving them?')
+  );
+
+  const handleTabChange = (nextTab) => {
+    if (nextTab === activeTab || !confirmDiscardChanges()) {
+      return;
+    }
+
+    setActiveTab(nextTab);
+  };
+
+  const handleSelectPage = (nextSlug) => {
+    if (nextSlug === selectedSlug || !confirmDiscardChanges()) {
+      return;
+    }
+
+    setSavedPageSnapshot('');
+    setSelectedSlug(nextSlug);
+  };
+
   const applySavedPage = (savedPage) => {
     const normalizedPage = normalizePage(mergeRequiredSections(savedPage));
     const savedSummary = buildCmsPageSummary(normalizedPage);
@@ -1316,6 +1378,7 @@ export default function CmsAdmin() {
     });
 
     setPageDraft(normalizedPage);
+    setSavedPageSnapshot(JSON.stringify(normalizedPage));
     skipNextPageLoadSlugRef.current = selectedSlug === savedSummary.slug ? '' : savedSummary.slug;
     setSelectedSlug(savedSummary.slug);
   };
@@ -1416,11 +1479,16 @@ export default function CmsAdmin() {
   };
 
   const handleCreatePage = () => {
+    if (!confirmDiscardChanges()) {
+      return;
+    }
+
     const existingSlugs = new Set(pages.map((page) => page.slug));
     const firstUnusedNavigationSlug = buildPageLinkOptions(navigationDraft)
       .find((option) => !existingSlugs.has(option.value))?.value;
 
     setSelectedSlug('');
+    setSavedPageSnapshot('');
     setPageDraft(createPageDraft({
       slug: firstUnusedNavigationSlug || 'new-page',
       title: 'New Page',
@@ -1452,6 +1520,10 @@ export default function CmsAdmin() {
       return;
     }
 
+    if (page.slug !== selectedSlug && !confirmDiscardChanges()) {
+      return;
+    }
+
     const confirmed = window.confirm(`Delete "${page.title || page.slug}" from CMS pages? This also removes its saved sections and archives matching Navigation links.`);
     if (!confirmed) {
       return;
@@ -1471,6 +1543,9 @@ export default function CmsAdmin() {
         setPageDraft(createPageDraft());
       }
       setNavigationDraft((items) => items.filter((item) => normalizeCmsPageSlugFromHref(item.href) !== page.slug));
+      if (!nextSelectedSlug) {
+        setSavedPageSnapshot('');
+      }
       success(`CMS page deleted: ${page.title || page.slug}`);
     } catch (deleteError) {
       showError(deleteError.message || 'Failed to delete CMS page. Please try again.');
@@ -1484,6 +1559,7 @@ export default function CmsAdmin() {
     setSavingMessage('Saving site settings...');
     try {
       await saveCmsSiteSettings(settingsDraft);
+      setSavedSettingsSnapshot(JSON.stringify(normalizeSettings(settingsDraft)));
       success('Site settings saved successfully.');
     } catch (saveError) {
       showError(saveError.message || 'Failed to save site settings. Please try again.');
@@ -1504,7 +1580,9 @@ export default function CmsAdmin() {
         sortOrder: toInteger(item.sortOrder, (index + 1) * 10),
       }));
       await saveCmsNavigation(navigation);
-      setNavigationDraft(normalizeNavigationItems(navigation));
+      const normalizedNavigation = normalizeNavigationItems(navigation);
+      setNavigationDraft(normalizedNavigation);
+      setSavedNavigationSnapshot(JSON.stringify(normalizedNavigation));
       success('Navigation saved successfully.');
     } catch (saveError) {
       showError(saveError.message || 'Failed to save navigation. Please try again.');
@@ -1534,15 +1612,22 @@ export default function CmsAdmin() {
             <h1 className="mt-4 text-3xl font-display font-bold text-primary-950">Content Management</h1>
           </div>
           {handleSaveActive ? (
-            <button
-              type="button"
-              disabled={saving}
-              onClick={handleSaveActive}
-              className="btn btn-primary min-w-[160px]"
-            >
-              {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {saving ? 'Saving...' : `Save ${activeTab === 'pages' ? 'Page' : activeTab === 'settings' ? 'Settings' : 'Navigation'}`}
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {hasUnsavedChanges && (
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
+                  Unsaved changes
+                </span>
+              )}
+              <button
+                type="button"
+                disabled={saving || !hasUnsavedChanges}
+                onClick={handleSaveActive}
+                className="btn btn-primary min-w-[160px] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {saving ? 'Saving...' : `Save ${activeTab === 'pages' ? 'Page' : activeTab === 'settings' ? 'Settings' : 'Navigation'}`}
+              </button>
+            </div>
           ) : (
             <div className="rounded-2xl border border-primary-200 bg-white px-4 py-3 text-sm font-semibold text-primary-600">
               Save each catalog card after editing.
@@ -1557,7 +1642,7 @@ export default function CmsAdmin() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                 onClick={() => handleTabChange(tab.id)}
                 className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition ${
                   activeTab === tab.id
                     ? 'bg-primary-950 text-white shadow-sm'
@@ -1611,7 +1696,7 @@ export default function CmsAdmin() {
                     >
                       <button
                         type="button"
-                        onClick={() => setSelectedSlug(page.slug)}
+                         onClick={() => handleSelectPage(page.slug)}
                         className="min-w-0 p-4 text-left"
                       >
                         <div className="flex items-center justify-between gap-3">
