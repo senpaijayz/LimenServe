@@ -1552,26 +1552,6 @@ const PublicEstimate = () => {
                                     />
                                 </div>
 
-                                {hasVehicle && (
-                                    <div className="mt-6 rounded-[28px] border border-accent-blue/20 bg-gradient-to-r from-accent-blue/8 via-white to-accent-primary/5 px-5 py-5 shadow-sm">
-                                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                            <div className="flex items-start gap-3">
-                                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-accent-blue/20 bg-white text-accent-blue shadow-sm">
-                                                    <Sparkles className="h-5 w-5" />
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs font-bold uppercase tracking-[0.26em] text-accent-blue/70">Vehicle context active</p>
-                                                    <h2 className="mt-2 text-2xl font-display font-semibold text-primary-950">{`For your ${vehicle.displayLabel}`}</h2>
-                                                    <p className="mt-2 text-sm text-primary-500">Featured service packages, recommended labor, and clicked-part bundles now adapt to the Mitsubishi you selected.</p>
-                                                </div>
-                                            </div>
-                                            <div className="rounded-2xl border border-primary-200 bg-white/90 px-4 py-3 text-sm text-primary-500">
-                                                <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-400">Vehicle summary</p>
-                                                <p className="mt-2 text-base font-semibold text-primary-950">{vehicleInfo || vehicle.displayLabel}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                             )}
 
