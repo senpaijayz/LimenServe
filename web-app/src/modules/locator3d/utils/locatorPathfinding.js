@@ -148,10 +148,11 @@ export function buildObstacleAwarePath(sceneObjects = [], locatedProduct = null)
         return findWalkablePath(start, target, sceneObjects, { floor: 1, ignoreObjectIds: ignoreTarget });
     }
 
-    const stairDepth = Number(stairs.dimensions?.depth || 6.2);
-    const stairHalfDepth = Math.max(1, stairDepth / 2 - 0.25);
-    const bottomStair = [stairs.position[0], 1.05, stairs.position[2] - stairHalfDepth];
-    const topStair = [stairs.position[0], FLOOR_HEIGHT + 0.95, stairs.position[2] + stairHalfDepth];
+    // The stair run is left-to-right along world X and is stored as width.
+    const stairRun = Number(stairs.dimensions?.width || 6.2);
+    const stairHalfRun = Math.max(1, stairRun / 2 - 0.25);
+    const bottomStair = [stairs.position[0] - stairHalfRun, 1.05, stairs.position[2]];
+    const topStair = [stairs.position[0] + stairHalfRun, FLOOR_HEIGHT + 0.95, stairs.position[2]];
     const first = findWalkablePath(start, bottomStair, sceneObjects, { floor: 1, ignoreObjectIds: [stairs.id] });
     const second = findWalkablePath(topStair, target, sceneObjects, { floor: 2, ignoreObjectIds: ignoreTarget });
     if (!first.length || !second.length) return [start, bottomStair, topStair, target];

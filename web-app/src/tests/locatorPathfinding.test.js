@@ -25,6 +25,7 @@ describe('locator obstacle-aware pathfinding', () => {
 
         expect(path.length).toBeGreaterThan(3);
         expect(path.some((point) => point[1] === 4.5)).toBe(true);
+        expect(path.some((point) => point[2] === 0.5)).toBe(true);
         expect(path.at(-1)).toEqual([2.1, 5.4, -5.15]);
     });
 });

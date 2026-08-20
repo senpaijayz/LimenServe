@@ -514,10 +514,10 @@ export const useLocator3DStore = create((set, get) => ({
             selectedObjectId: shelfObjectId || get().selectedObjectId,
         });
     },
-    selectObject: (objectId, { additive = false } = {}) => {
+    selectObject: (objectId, { additive = false, allowLocked = false } = {}) => {
         const object = get().sceneObjects.find((sceneObject) => sceneObject.id === objectId);
 
-        if (!object || object.isLocked) {
+        if (!object || (object.isLocked && !allowLocked)) {
             return;
         }
 

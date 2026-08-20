@@ -63,15 +63,32 @@ describe('Locator3DScene selection', () => {
         expect(useLocator3DStore.getState().selectedObjectId).toBe('shelf-4-a');
     });
 
-    it('ignores locked objects during scene selection', () => {
+    it('selects locked objects in Design Mode so they can be unlocked', () => {
         resetLocator3DStore();
         useLocator3DStore.getState().toggleObjectLock('shelf-4-a');
+        useLocator3DStore.getState().setDesignMode(true);
 
         render(<Locator3DScene />);
 
         fireEvent.click(screen.getByTestId('locator-object-shelf-4-a'));
 
-        expect(useLocator3DStore.getState().selectedObjectId).toBeNull();
+        expect(useLocator3DStore.getState().selectedObjectId).toBe('shelf-4-a');
+        expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-4-a').isLocked).toBe(true);
+    });
+
+    it('lets a locked stair be selected and unlocked without changing floors', () => {
+        resetLocator3DStore();
+        useLocator3DStore.getState().toggleObjectLock('stairs-a');
+        useLocator3DStore.getState().setDesignMode(true);
+
+        render(<Locator3DScene />);
+
+        fireEvent.click(screen.getByTestId('locator-object-stairs-a'));
+        expect(useLocator3DStore.getState().selectedObjectId).toBe('stairs-a');
+        expect(useLocator3DStore.getState().activeFloor).toBe(1);
+
+        useLocator3DStore.getState().toggleObjectLock('stairs-a');
+        expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'stairs-a').isLocked).toBe(false);
     });
 
     it('clicking stairs navigates up and back down through the stair opening', () => {
@@ -82,7 +99,7 @@ describe('Locator3DScene selection', () => {
         fireEvent.click(screen.getByTestId('locator-object-stairs-a'));
 
         expect(useLocator3DStore.getState().activeFloor).toBe(2);
-        expect(screen.getByText(/STRAIGHT STAIRS/)).toBeTruthy();
+        expect(screen.getByText(/LEFT-TO-RIGHT STAIRS/)).toBeTruthy();
 
         fireEvent.click(screen.getByTestId('locator-object-stairs-a'));
 

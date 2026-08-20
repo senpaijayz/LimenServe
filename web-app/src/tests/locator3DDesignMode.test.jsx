@@ -102,4 +102,19 @@ describe('3D Design Mode layout safety', () => {
         expect(upperShelf.position[1]).toBe(6);
         expect(stairs.dimensions.height).toBe(6);
     });
+
+    it('migrates legacy front-to-back stairs to the left-to-right axis', () => {
+        const legacy = cloneLocatorSceneObjects();
+        const stairs = legacy.find((object) => object.id === 'stairs-a');
+        delete stairs.layoutOrientation;
+        stairs.dimensions = { width: 2.8, depth: 6.2, height: 6 };
+
+        resetLocator3DStore();
+        useLocator3DStore.getState().loadLayoutData({ objects: legacy });
+
+        const migrated = useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'stairs-a');
+        expect(migrated.layoutOrientation).toBe('left-to-right');
+        expect(migrated.dimensions.width).toBe(6.2);
+        expect(migrated.dimensions.depth).toBe(2.8);
+    });
 });

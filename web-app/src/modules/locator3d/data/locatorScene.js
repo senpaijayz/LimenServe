@@ -146,12 +146,13 @@ export const LOCATOR_SCENE_OBJECTS = [
         id: 'stairs-a',
         type: 'stairs',
         name: 'Upper Floor Stairs',
-        description: 'Straight-flight access between Floor 1 and Floor 2',
+        description: 'Left-to-right straight-flight access between Floor 1 and Floor 2',
         floor: 1,
         isLocked: false,
+        layoutOrientation: 'left-to-right',
         position: [9.1, 0, 0.5],
         rotation: [0, 0, 0],
-        dimensions: { width: 2.8, depth: 6.2, height: FLOOR_HEIGHT },
+        dimensions: { width: 6.2, depth: 2.8, height: FLOOR_HEIGHT },
     },
     {
         id: 'shelf-4-b',
@@ -403,7 +404,23 @@ export function normalizeLayoutObjects(objects) {
             };
         }
 
-        return cloneSceneObject(object);
+        const normalized = cloneSceneObject(object);
+
+        // Layouts saved before the left-to-right stair redesign used depth as
+        // the run axis. Migrate those objects once so old autosaves and
+        // backend layouts render with the new world-axis dimensions.
+        if (normalized.type === 'stairs' && normalized.layoutOrientation !== 'left-to-right') {
+            const width = normalized.dimensions?.width;
+            const depth = normalized.dimensions?.depth;
+            normalized.dimensions = {
+                ...normalized.dimensions,
+                width: depth ?? width ?? 6.2,
+                depth: width ?? depth ?? 2.8,
+            };
+            normalized.layoutOrientation = 'left-to-right';
+        }
+
+        return normalized;
     });
 }
 

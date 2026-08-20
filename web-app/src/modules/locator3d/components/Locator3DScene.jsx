@@ -135,7 +135,7 @@ function Label({ children, position, rotation = [0, 0, 0], testId, tone = 'defau
 function LockBadge({ position }) {
     return (
         <Html center position={position}>
-            <div className="rounded-full border border-amber-300 bg-amber-100/95 px-2 py-1 text-[10px] font-black tracking-[0.18em] text-amber-800 shadow-lg">
+            <div className="pointer-events-none rounded-full border border-amber-300 bg-amber-100/95 px-2 py-1 text-[10px] font-black tracking-[0.18em] text-amber-800 shadow-lg">
                 LOCKED
             </div>
         </Html>
@@ -278,10 +278,6 @@ function TransformableObject({ children, object, onTransformingChange }) {
     const handleClick = (event) => {
         event.stopPropagation?.();
 
-        if (object.isLocked) {
-            return;
-        }
-
         if (!isDesignMode) {
             if (object.type === 'stairs') {
                 goToFloor(activeFloor === 2 ? 1 : 2);
@@ -294,7 +290,9 @@ function TransformableObject({ children, object, onTransformingChange }) {
             return;
         }
 
-        selectObject(object.id, { additive: Boolean(event.shiftKey) });
+        // Locked objects stay selectable in Design Mode so the toolbar can
+        // unlock them. The lock still blocks transforms and other edits.
+        selectObject(object.id, { additive: Boolean(event.shiftKey), allowLocked: true });
     };
 
     const handlePointerDown = (event) => {
@@ -349,7 +347,9 @@ function TransformableObject({ children, object, onTransformingChange }) {
                 onPointerMove={handlePointerMove}
                 onPointerUp={finishPointerDrag}
                 onPointerOver={(event) => {
-                    if (isDesignMode && !object.isLocked) event.nativeEvent?.target && (event.nativeEvent.target.style.cursor = selected ? 'grab' : 'pointer');
+                    if (isDesignMode && event.nativeEvent?.target) {
+                        event.nativeEvent.target.style.cursor = object.isLocked ? 'not-allowed' : selected ? 'grab' : 'pointer';
+                    }
                 }}
                 position={object.position}
                 ref={groupRef}
@@ -397,8 +397,9 @@ function FloorObject({ object, onTransformingChange }) {
     const laneLength = Math.max(1.2, depth * 0.36);
     const laneXs = [-0.3, -0.1, 0.1, 0.3].map((ratio) => width * ratio);
     const floorPanels = useMemo(() => {
-        const stairWidth = Number(stairsObject?.dimensions?.width || 2.8) + 0.48;
-        const stairDepth = Number(stairsObject?.dimensions?.depth || 6.2) + 0.48;
+        // Stairs run left-to-right along world X, matching the saved width.
+        const stairWidth = Number(stairsObject?.dimensions?.width || 6.2) + 0.48;
+        const stairDepth = Number(stairsObject?.dimensions?.depth || 2.8) + 0.48;
         const stairX = Number(stairsObject?.position?.[0] || 0);
         const stairZ = Number(stairsObject?.position?.[2] || 0);
         const halfOpeningWidth = Math.min(Math.max(0.5, stairWidth / 2), Math.max(0.5, (width / 2) - 0.12));
@@ -818,18 +819,18 @@ function PartsCabinetObject({ object, onTransformingChange }) {
 function StairsObject({ object, onTransformingChange }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const floorHeight = useSceneFloorHeight();
-    const width = Number(object.dimensions?.width || 2.8);
-    const depth = Number(object.dimensions?.depth || 6.2);
+    const runLength = Number(object.dimensions?.width || 6.2);
+    const stairWidth = Number(object.dimensions?.depth || 2.8);
     const height = Number(object.dimensions?.height || FLOOR_HEIGHT);
     const stairBaseY = activeFloor === 2 ? floorHeight - height : 0;
-    const stepCount = Math.max(10, Math.min(20, Math.round(depth * 2.4)));
-    const treadDepth = depth / stepCount;
+    const stepCount = Math.max(10, Math.min(20, Math.round(runLength * 2.4)));
+    const treadDepth = runLength / stepCount;
     const stepHeight = height / stepCount;
     const stepColor = '#a8b8cb';
     const riserColor = '#7d91a8';
     const sideColor = '#52677f';
-    const railLength = Math.hypot(depth, height);
-    const railAngle = -Math.atan2(height, depth);
+    const railLength = Math.hypot(runLength, height);
+    const railAngle = Math.atan2(height, runLength);
 
     return (
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
@@ -837,30 +838,30 @@ function StairsObject({ object, onTransformingChange }) {
                 <group position={[0, stairBaseY, 0]}>
                     {Array.from({ length: stepCount }, (_, index) => (
                         <Block
-                            args={[width, stepHeight * (index + 1), treadDepth + 0.035]}
+                            args={[treadDepth + 0.035, stepHeight * (index + 1), stairWidth]}
                             color={stepColor}
                             located={located}
                             locked={locked}
-                            position={[0, (stepHeight * (index + 1)) / 2, -depth / 2 + (treadDepth * index) + (treadDepth / 2)]}
+                            position={[-runLength / 2 + (treadDepth * index) + (treadDepth / 2), (stepHeight * (index + 1)) / 2, 0]}
                             selected={selected}
                             key={`stair-step-${index}`}
                         />
                     ))}
-                    <Block args={[width + 0.28, 0.18, treadDepth + 0.3]} color={riserColor} located={located} locked={locked} position={[0, 0.09, -depth / 2 - 0.12]} selected={selected} />
-                    <Block args={[width + 0.28, 0.18, treadDepth + 0.3]} color={riserColor} located={located} locked={locked} position={[0, height + 0.09, depth / 2 + 0.12]} selected={selected} />
+                    <Block args={[treadDepth + 0.3, 0.18, stairWidth + 0.28]} color={riserColor} located={located} locked={locked} position={[-runLength / 2 - 0.12, 0.09, 0]} selected={selected} />
+                    <Block args={[treadDepth + 0.3, 0.18, stairWidth + 0.28]} color={riserColor} located={located} locked={locked} position={[runLength / 2 + 0.12, height + 0.09, 0]} selected={selected} />
                     {[-1, 1].map((side) => (
                         <Block
-                            args={[0.16, 0.18, railLength]}
+                            args={[railLength, 0.18, 0.16]}
                             color={sideColor}
                             key={`stair-stringer-${side}`}
                             located={located}
                             locked={locked}
-                            position={[side * (width / 2 + 0.14), height / 2, 0]}
-                            rotation={[railAngle, 0, 0]}
+                            position={[0, height / 2, side * (stairWidth / 2 + 0.14)]}
+                            rotation={[0, 0, railAngle]}
                             selected={selected}
                         />
                     ))}
-                    <Label position={[0, height + 0.32, -depth / 2 - 0.24]}>{`STRAIGHT STAIRS · ${activeFloor === 1 ? 'UP TO FLOOR 2' : 'DOWN TO FLOOR 1'}`}</Label>
+                    <Label position={[-runLength / 2 - 0.24, height + 0.32, 0]}>{`LEFT-TO-RIGHT STAIRS · ${activeFloor === 1 ? 'UP TO FLOOR 2' : 'DOWN TO FLOOR 1'}`}</Label>
                 </group>
             )}
         </TransformableObject>
