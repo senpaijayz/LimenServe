@@ -511,8 +511,16 @@ const QuoteBuilder = () => {
                 const revisionHistory = await getEstimateRevisions(currentEstimateId);
                 setRevisions(revisionHistory);
             } else {
-                const estimateId = await createEstimate(payload);
-                const estimate = await getEstimateDetail(estimateId);
+                // createEstimate returns the complete API result, not the UUID itself.
+                // Passing that object into the detail route stringifies it as
+                // "[object Object]" and causes a database UUID error.
+                const created = await createEstimate(payload);
+                const estimateId = created?.estimateId;
+                if (!estimateId) {
+                    throw new Error('The quotation was saved, but its identifier was not returned.');
+                }
+
+                const estimate = created?.estimate ?? await getEstimateDetail(estimateId);
                 setCurrentEstimateId(estimateId);
                 setCurrentEstimateNumber(estimate?.estimate?.estimate_number || '');
                 success('Quotation saved successfully.');
