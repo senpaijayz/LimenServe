@@ -382,7 +382,7 @@ const PublicCatalogView = () => {
         <div className="max-w-[1600px] mx-auto">
           <div className="relative mb-6 overflow-hidden rounded-[28px] border border-primary-200 bg-white px-5 py-6 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.45)] sm:px-7 sm:py-8 lg:px-10">
             <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-accent-blue/10 blur-3xl" />
-            <div className="relative grid gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)] lg:items-end">
+            <div className="relative">
               <div className="max-w-3xl">
               <Motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="mb-4 flex items-center gap-3">
                 <span className="w-8 h-1 bg-accent-blue" />
@@ -403,7 +403,7 @@ const PublicCatalogView = () => {
               </div>
               </div>
 
-            <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="w-full shrink-0">
+            <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="mt-7 w-full max-w-3xl">
               <label htmlFor="public-catalog-search" className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-primary-500">What are you looking for?</label>
               <div className="relative group">
                 <div className="absolute -inset-0.5 rounded-2xl bg-gradient-to-r from-accent-blue/30 to-accent-primary/20 opacity-50 blur transition duration-500 group-hover:opacity-80" />
