@@ -1418,26 +1418,26 @@ const PublicEstimate = () => {
                                 </div>
                             </div>
 
-                            <aside className="rounded-[2rem] border border-primary-200 bg-primary-950 p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.14)] md:p-7">
+                            <aside className="rounded-[2rem] border border-primary-200 bg-white p-6 text-primary-950 shadow-[0_24px_60px_rgba(15,23,42,0.10)] md:p-7">
                                 <div className="flex items-center gap-3">
-                                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 text-accent-danger"><Wrench className="h-5 w-5" /></span>
+                                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-accent-danger/10 text-accent-danger"><Wrench className="h-5 w-5" /></span>
                                     <div>
-                                        <p className="text-xs font-bold uppercase tracking-[0.24em] text-white/50">Build flow</p>
-                                        <h3 className="mt-1 text-lg font-semibold">A clear path to your quote</h3>
+                                        <p className="text-xs font-bold uppercase tracking-[0.24em] text-accent-blue">Build flow</p>
+                                        <h3 className="mt-1 text-lg font-semibold text-primary-950">A clear path to your quote</h3>
                                     </div>
                                 </div>
                                 <div className="mt-7 space-y-5">
                                     {ESTIMATE_PHASES.map((phase, index) => (
                                         <div key={phase.id} className="flex gap-3">
-                                            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${index === 0 ? 'bg-accent-danger text-white' : 'bg-white/10 text-white/60'}`}>{index + 1}</span>
+                                            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${index === 0 ? 'bg-accent-danger text-white' : 'bg-primary-100 text-primary-600'}`}>{index + 1}</span>
                                             <div>
-                                                <p className="text-sm font-semibold text-white">{phase.label}</p>
-                                                <p className="mt-1 text-xs leading-5 text-white/55">{phase.description}</p>
+                                                <p className="text-sm font-semibold text-primary-950">{phase.label}</p>
+                                                <p className="mt-1 text-xs leading-5 text-primary-500">{phase.description}</p>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
-                                <div className="mt-7 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs leading-5 text-white/60">
+                                <div className="mt-7 rounded-2xl border border-primary-200 bg-primary-50 p-4 text-xs leading-5 text-primary-600">
                                     Your quote is based on the current catalogue and can be retrieved later with its quote number and verified phone.
                                 </div>
                             </aside>
