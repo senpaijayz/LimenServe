@@ -82,7 +82,8 @@ function Block({
     selected,
 }) {
     const xrayMode = useLocator3DStore((state) => state.xrayMode);
-    const edgeColor = located ? LOCATED_EDGE : locked ? LOCKED_EDGE : SELECTED_EDGE;
+    const visibleLock = locked && selected;
+    const edgeColor = located ? LOCATED_EDGE : visibleLock ? LOCKED_EDGE : SELECTED_EDGE;
     const active = selected || located;
 
     return (
@@ -94,11 +95,11 @@ function Block({
                 emissiveIntensity={located ? 1.05 : selected ? 0.34 : 0.02}
                 metalness={located ? 0.18 : 0.1}
                 depthWrite={!xrayMode}
-                opacity={xrayMode && !active ? 0.18 : locked ? Math.min(opacity, 0.68) : opacity}
+                opacity={xrayMode && !active ? 0.18 : visibleLock ? Math.min(opacity, 0.68) : opacity}
                 roughness={located ? 0.38 : 0.56}
-                transparent={xrayMode || opacity < 1 || locked}
+                transparent={xrayMode || opacity < 1 || visibleLock}
             />
-            {(active || locked) && <Edges color={edgeColor} scale={active ? 1.045 : 1.015} threshold={12} />}
+            {(active || visibleLock) && <Edges color={edgeColor} scale={active ? 1.045 : 1.015} threshold={12} />}
         </mesh>
     );
 }
@@ -358,7 +359,7 @@ function TransformableObject({ children, object, onTransformingChange }) {
                 {children({ located, locked: object.isLocked, selected })}
                 <ResizeHandles object={object} />
                 {located && <HighlightHalo object={object} />}
-                {object.isLocked && <LockBadge position={[0, (object.dimensions?.height ?? 1) + 0.45, 0]} />}
+                {object.isLocked && selected && <LockBadge position={[0, (object.dimensions?.height ?? 1) + 0.45, 0]} />}
                 <ObjectInfoBadge object={object} />
             </group>
             {canTransform && activeTool === 'rotate' && (
@@ -826,6 +827,7 @@ function StairsObject({ object, onTransformingChange }) {
     const stepCount = Math.max(10, Math.min(20, Math.round(runLength * 2.4)));
     const treadDepth = runLength / stepCount;
     const stepHeight = height / stepCount;
+    const treadThickness = Math.min(0.22, Math.max(0.14, stepHeight * 0.42));
     const stepColor = '#a8b8cb';
     const riserColor = '#7d91a8';
     const sideColor = '#52677f';
@@ -837,15 +839,24 @@ function StairsObject({ object, onTransformingChange }) {
             {({ located, locked, selected }) => (
                 <group position={[0, stairBaseY, 0]}>
                     {Array.from({ length: stepCount }, (_, index) => (
-                        <Block
-                            args={[treadDepth + 0.035, stepHeight * (index + 1), stairWidth]}
-                            color={stepColor}
-                            located={located}
-                            locked={locked}
-                            position={[-runLength / 2 + (treadDepth * index) + (treadDepth / 2), (stepHeight * (index + 1)) / 2, 0]}
-                            selected={selected}
-                            key={`stair-step-${index}`}
-                        />
+                        <group key={`stair-step-${index}`}>
+                            <Block
+                                args={[treadDepth + 0.08, treadThickness, stairWidth + 0.08]}
+                                color={stepColor}
+                                located={located}
+                                locked={locked}
+                                position={[-runLength / 2 + (treadDepth * index) + (treadDepth / 2), (stepHeight * (index + 1)) - (treadThickness / 2), 0]}
+                                selected={selected}
+                            />
+                            <Block
+                                args={[0.12, stepHeight, stairWidth + 0.08]}
+                                color={riserColor}
+                                located={located}
+                                locked={locked}
+                                position={[-runLength / 2 + (treadDepth * (index + 1)) - 0.06, (stepHeight * (index + 1)) - (stepHeight / 2), 0]}
+                                selected={selected}
+                            />
+                        </group>
                     ))}
                     <Block args={[treadDepth + 0.3, 0.18, stairWidth + 0.28]} color={riserColor} located={located} locked={locked} position={[-runLength / 2 - 0.12, 0.09, 0]} selected={selected} />
                     <Block args={[treadDepth + 0.3, 0.18, stairWidth + 0.28]} color={riserColor} located={located} locked={locked} position={[runLength / 2 + 0.12, height + 0.09, 0]} selected={selected} />
