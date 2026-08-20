@@ -57,8 +57,8 @@ const ESTIMATE_PHASES = [
     {
         id: 'summary',
         phase: 'Phase 3',
-        label: 'Review and Print',
-        description: 'Review the cart totals, recommendations, and printable quotation preview.',
+        label: 'Confirm Quotation',
+        description: 'Confirm the customer details, parts, services, and total before saving the quotation.',
     },
 ];
 
@@ -918,12 +918,12 @@ const PublicEstimate = () => {
 
     const contentShiftClass = '';
     const isCartPanelVisible = false;
-    const cartPanelTitle = estimatePhase === 'catalog' ? 'Active Quote Cart' : 'Review and Print';
+    const cartPanelTitle = estimatePhase === 'catalog' ? 'Active Quote Cart' : 'Confirm Your Quotation';
     const cartPanelDescription = estimatePhase === 'catalog'
         ? 'Added parts and services stay visible while you browse. Adjust quantities or remove items before review.'
-        : savedDraftQuote?.estimate?.estimate_number
-            ? 'Quote finished. Use this quote number and the verified phone number to retrieve it later.'
-            : 'Review the final draft, add last recommendations, then finish to generate a retrievable quote number.';
+            : savedDraftQuote?.estimate?.estimate_number
+                ? 'Quotation saved. Use the quote number and verified phone number to retrieve it later.'
+                : 'Confirm the final draft, or go back to add more parts and compare better package options.';
 
     const summaryPanelClassName = isDesktopDock
         ? 'fixed inset-y-6 right-6 z-50 flex w-[440px] min-h-0 flex-col overflow-hidden rounded-[30px] border border-primary-200 bg-primary-50 shadow-[0_32px_90px_rgba(15,23,42,0.18)] print:hidden'
@@ -936,35 +936,35 @@ const PublicEstimate = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.24, ease: 'easeOut' }}
         >
-            <div className="bg-primary-950 px-5 py-5 text-white sm:px-6">
+            <div className="border-b border-primary-200 bg-white px-5 py-5 text-primary-950 sm:px-6">
                 <div className="flex items-start justify-between gap-4">
                     <div>
-                        <p className="text-[0.68rem] font-bold uppercase tracking-[0.26em] text-white/55">Live quote summary</p>
-                        <h3 className="mt-2 text-2xl font-display font-bold tracking-tight">Your quotation</h3>
-                        <p className="mt-2 text-sm text-white/65">
+                        <p className="text-[0.68rem] font-bold uppercase tracking-[0.26em] text-accent-blue">Live quote summary</p>
+                        <h3 className="mt-2 text-2xl font-display font-bold tracking-tight text-primary-950">Your quotation</h3>
+                        <p className="mt-2 text-sm text-primary-600">
                             {estimatePhase === 'summary'
-                                ? 'Review totals, adjust lines, then finish to generate a retrievable quote number.'
+                                ? 'Confirm the details below, then save your quotation. You can return to parts at any time.'
                                 : 'Your selected parts and services stay visible while you browse.'}
                         </p>
                     </div>
-                    <div className="min-w-[140px] rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-right">
-                        <span className="block text-[0.62rem] font-bold uppercase tracking-[0.22em] text-white/50">Total</span>
-                        <span className="mt-1 block whitespace-nowrap text-lg font-display font-bold tabular-nums text-white">{formatCurrency(total)}</span>
+                    <div className="min-w-[140px] rounded-2xl border border-primary-200 bg-primary-50 px-4 py-2 text-right">
+                        <span className="block text-[0.62rem] font-bold uppercase tracking-[0.22em] text-primary-500">Total</span>
+                        <span className="mt-1 block whitespace-nowrap text-lg font-display font-bold tabular-nums text-primary-950">{formatCurrency(total)}</span>
                     </div>
                 </div>
 
                 <div className="mt-5 grid grid-cols-3 gap-2">
-                    <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
-                        <span className="block text-[0.62rem] font-bold uppercase tracking-[0.2em] text-white/45">Qty</span>
-                        <span className="mt-1 block text-lg font-display font-bold">{totalItemCount}</span>
+                    <div className="rounded-2xl border border-primary-200 bg-primary-50 px-3 py-3">
+                        <span className="block text-[0.62rem] font-bold uppercase tracking-[0.2em] text-primary-500">Qty</span>
+                        <span className="mt-1 block text-lg font-display font-bold text-primary-950">{totalItemCount}</span>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
-                        <span className="block text-[0.62rem] font-bold uppercase tracking-[0.2em] text-white/45">Lines</span>
-                        <span className="mt-1 block text-lg font-display font-bold">{totalLineCount}</span>
+                    <div className="rounded-2xl border border-primary-200 bg-primary-50 px-3 py-3">
+                        <span className="block text-[0.62rem] font-bold uppercase tracking-[0.2em] text-primary-500">Lines</span>
+                        <span className="mt-1 block text-lg font-display font-bold text-primary-950">{totalLineCount}</span>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
-                        <span className="block text-[0.62rem] font-bold uppercase tracking-[0.2em] text-white/45">VAT</span>
-                        <span className="mt-1 block text-lg font-display font-bold">12%</span>
+                    <div className="rounded-2xl border border-primary-200 bg-primary-50 px-3 py-3">
+                        <span className="block text-[0.62rem] font-bold uppercase tracking-[0.2em] text-primary-500">VAT</span>
+                        <span className="mt-1 block text-lg font-display font-bold text-primary-950">12%</span>
                     </div>
                 </div>
             </div>
@@ -1169,7 +1169,7 @@ const PublicEstimate = () => {
                         fullWidth
                         onClick={estimatePhase === 'catalog' ? resetForm : () => setEstimatePhase('catalog')}
                     >
-                        {estimatePhase === 'catalog' ? 'Reset Quote' : 'Add More Parts'}
+                        {estimatePhase === 'catalog' ? 'Reset Quote' : 'Back to Parts & Services'}
                     </Button>
                     {estimatePhase === 'catalog' ? (
                         <Button variant="primary" fullWidth onClick={() => setEstimatePhase('summary')} isDisabled={!hasItems}>
@@ -1271,7 +1271,7 @@ const PublicEstimate = () => {
                         <h4 className="mt-1 text-xl font-display font-semibold text-primary-950">Parts and services to include</h4>
                     </div>
                     <Button variant="secondary" onClick={() => setEstimatePhase('catalog')}>
-                        Add More Parts
+                        Back to Parts & Services
                     </Button>
                 </div>
 
@@ -2092,7 +2092,7 @@ const PublicEstimate = () => {
                                                 fullWidth
                                                 onClick={estimatePhase === 'catalog' ? resetForm : () => setEstimatePhase('catalog')}
                                             >
-                                                {estimatePhase === 'catalog' ? 'Reset' : 'Add More Parts'}
+                                                {estimatePhase === 'catalog' ? 'Reset' : 'Back to Parts & Services'}
                                             </Button>
                                             {estimatePhase === 'catalog' ? (
                                                 <Button variant="primary" fullWidth onClick={() => setEstimatePhase('summary')} isDisabled={!hasItems}>
