@@ -288,6 +288,7 @@ function mapEstimateDetailToState(estimate) {
     const items = estimate?.items ?? [];
 
     return {
+        currentEstimateStatus: String(estimate?.estimate?.status || 'draft').toLowerCase(),
         customerName: estimate?.customer?.name || '',
         customerPhone: estimate?.customer?.phone || '',
         notes: estimate?.estimate?.note || '',
@@ -342,6 +343,7 @@ const QuoteBuilder = () => {
     const [saving, setSaving] = useState(false);
     const [currentEstimateId, setCurrentEstimateId] = useState(null);
     const [currentEstimateNumber, setCurrentEstimateNumber] = useState('');
+    const [currentEstimateStatus, setCurrentEstimateStatus] = useState('draft');
     const [changeNote, setChangeNote] = useState('Customer requested item updates');
     const [, setRevisions] = useState([]);
     const [focusedProduct, setFocusedProduct] = useState(null);
@@ -515,6 +517,7 @@ const QuoteBuilder = () => {
             const nextState = mapEstimateDetailToState(estimate);
             setCurrentEstimateId(estimateId);
             setCurrentEstimateNumber(nextState.currentEstimateNumber);
+            setCurrentEstimateStatus(nextState.currentEstimateStatus);
             setCustomerName(nextState.customerName);
             setCustomerPhone(nextState.customerPhone);
             setNotes(nextState.notes);
@@ -532,6 +535,7 @@ const QuoteBuilder = () => {
     const resetQuotationEditor = () => {
         setCurrentEstimateId(null);
         setCurrentEstimateNumber('');
+        setCurrentEstimateStatus('draft');
         setCustomerName('');
         setCustomerPhone('');
         setNotes('');
@@ -581,6 +585,7 @@ const QuoteBuilder = () => {
                 selectedServices,
                 currentEstimateNumber,
             });
+            payload.estimate.status = currentEstimateId ? currentEstimateStatus : 'draft';
 
             if (currentEstimateId) {
                 await updateEstimate(currentEstimateId, payload, changeNote);
@@ -600,6 +605,7 @@ const QuoteBuilder = () => {
                 const estimate = created?.estimate ?? await getEstimateDetail(estimateId);
                 setCurrentEstimateId(estimateId);
                 setCurrentEstimateNumber(estimate?.estimate?.estimate_number || '');
+                setCurrentEstimateStatus(String(estimate?.estimate?.status || 'draft').toLowerCase());
                 success('Quotation saved successfully.');
                 const revisionHistory = await getEstimateRevisions(estimateId);
                 setRevisions(revisionHistory);
@@ -801,6 +807,18 @@ const QuoteBuilder = () => {
                                         leftIcon={<FileClock className="w-4 h-4" />}
                                     />
                                 </div>
+                                <label className="mt-4 block text-sm font-medium text-primary-700">
+                                    Estimate status
+                                    <select
+                                        value={currentEstimateStatus}
+                                        disabled={!currentEstimateId}
+                                        onChange={(event) => setCurrentEstimateStatus(event.target.value)}
+                                        className="input mt-1 w-full disabled:cursor-not-allowed disabled:bg-primary-50 disabled:text-primary-400"
+                                    >
+                                        {estimateStatusFilters.filter((option) => option.value).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                                    </select>
+                                    {!currentEstimateId && <span className="mt-1 block text-xs font-normal text-primary-500">Save the new quotation first, then set its workflow status.</span>}
+                                </label>
                             </div>
                         </div>
                     </Card>
