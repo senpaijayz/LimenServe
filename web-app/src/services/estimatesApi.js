@@ -32,6 +32,18 @@ export async function getEstimateDetail(estimateId) {
   }
 }
 
+export async function deleteEstimate(estimateId) {
+  try {
+    const { data } = await apiClient.delete(`/estimates/${encodeURIComponent(estimateId)}`);
+    if (!data?.deleted) {
+      throw new Error('The draft quotation could not be deleted.');
+    }
+    return true;
+  } catch (error) {
+    extractApiError(error, 'Failed to delete draft quotation.');
+  }
+}
+
 export async function updateEstimate(estimateId, payload, changeNote = null) {
   try {
     const { data } = await apiClient.patch(`/estimates/${estimateId}`, {

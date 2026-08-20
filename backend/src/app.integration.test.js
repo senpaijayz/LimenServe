@@ -259,3 +259,23 @@ test('analytics reads require an authenticated admin role', async () => {
     assert.equal((await fullCatalogResponse.json()).error, 'Authentication required.');
   });
 });
+
+test('draft quotation deletion requires an authenticated administrator', async () => {
+  const lifecycle = createRuntimeState();
+  lifecycle.markReady();
+  const app = createApp({
+    runtimeEnv: appEnvironment(),
+    applicationLogger: createTestLogger(),
+    lifecycle,
+    readinessCheck: async () => ({ ok: true, status: 'ready' }),
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/estimates/not-a-uuid`, {
+      method: 'DELETE',
+    });
+
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error, 'Authentication required.');
+  });
+});

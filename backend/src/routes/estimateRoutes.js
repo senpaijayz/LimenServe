@@ -21,6 +21,7 @@ import { callRpc } from '../services/supabaseRpc.js';
 import { filterActiveEstimates } from '../services/estimateValidity.js';
 
 const router = Router();
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const publicEstimateRateLimitStore = env.publicRateLimitStore === 'supabase'
   ? createSupabaseRateLimitStore({ supabase: supabaseAdmin })
@@ -419,6 +420,39 @@ router.get('/:estimateId', requireRole('admin'), async (req, res, next) => {
     }
 
     res.json({ estimate });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/:estimateId', requireRole('admin'), async (req, res, next) => {
+  const estimateId = String(req.params.estimateId || '').trim();
+  if (!UUID_PATTERN.test(estimateId)) {
+    res.status(400).json({ error: 'A valid quotation identifier is required.' });
+    return;
+  }
+
+  try {
+    const result = await callRpc('delete_draft_estimate', {
+      p_estimate_id: estimateId,
+    });
+
+    if (result?.reason === 'not_found') {
+      res.status(404).json({ error: 'Quotation not found.' });
+      return;
+    }
+
+    if (result?.reason === 'not_draft') {
+      res.status(409).json({ error: 'Only draft quotations can be deleted.' });
+      return;
+    }
+
+    if (!result?.deleted) {
+      res.status(409).json({ error: 'This quotation could not be deleted.' });
+      return;
+    }
+
+    res.json({ deleted: true });
   } catch (error) {
     next(error);
   }

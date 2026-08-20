@@ -14,6 +14,7 @@ import {
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
 import Card from '../../../components/ui/Card';
+import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import { formatCurrency } from '../../../utils/formatters';
 import { useToast } from '../../../components/ui/Toast';
 import { useCart } from '../../../context/CartContext';
@@ -24,6 +25,7 @@ import { buildBundleLineItems, getAppliedBundleSummaries, roundCurrency } from '
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 import {
     createEstimate,
+    deleteEstimate,
     getEstimateDetail,
     getEstimateRevisions,
     listEstimates,
@@ -307,6 +309,8 @@ const QuoteBuilder = () => {
     const [revisions, setRevisions] = useState([]);
     const [focusedProduct, setFocusedProduct] = useState(null);
     const [showSmartBundles, setShowSmartBundles] = useState(true);
+    const [quoteToDelete, setQuoteToDelete] = useState(null);
+    const [deletingQuoteId, setDeletingQuoteId] = useState(null);
 
     const {
         products: availableProducts,
@@ -488,6 +492,42 @@ const QuoteBuilder = () => {
         }
     };
 
+    const resetQuotationEditor = () => {
+        setCurrentEstimateId(null);
+        setCurrentEstimateNumber('');
+        setCustomerName('');
+        setCustomerPhone('');
+        setNotes('');
+        setSelectedParts([]);
+        setSelectedServices([]);
+        setFocusedProduct(null);
+        setRevisions([]);
+    };
+
+    const confirmDeleteQuote = async () => {
+        const quote = quoteToDelete;
+        if (!quote?.id) {
+            return;
+        }
+
+        setDeletingQuoteId(quote.id);
+        try {
+            await deleteEstimate(quote.id);
+            setSavedQuotes((quotes) => quotes.filter((savedQuote) => savedQuote.id !== quote.id));
+            if (currentEstimateId === quote.id) {
+                resetQuotationEditor();
+            }
+            setQuoteToDelete(null);
+            success(quote.estimate_number
+                ? `Draft quotation ${quote.estimate_number} deleted.`
+                : 'Draft quotation deleted.');
+        } catch (deleteError) {
+            showError(deleteError.message || 'Unable to delete the draft quotation.');
+        } finally {
+            setDeletingQuoteId(null);
+        }
+    };
+
     const handleSave = async () => {
         if (!selectedParts.length && !selectedServices.length) {
             showError('Add at least one part or service before saving.');
@@ -634,20 +674,35 @@ const QuoteBuilder = () => {
                                     ) : savedQuotes.length === 0 ? (
                                         <div className="rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-500">No saved quotations matched your search.</div>
                                     ) : savedQuotes.map((quote) => (
-                                        <button
+                                        <div
                                             key={quote.id}
-                                            type="button"
-                                            onClick={() => loadQuote(quote.id)}
-                                            className={`w-full rounded-xl border p-4 text-left transition-all ${currentEstimateId === quote.id ? 'border-accent-blue bg-accent-blue/5 shadow-sm' : 'border-primary-200 bg-white hover:border-primary-300 hover:shadow-sm'}`}
+                                            className="relative"
                                         >
-                                            <div className="flex items-center justify-between gap-3">
-                                                <span className="font-semibold text-primary-950">{quote.estimate_number}</span>
-                                                <span className="text-xs uppercase tracking-[0.18em] text-primary-400">{quote.status}</span>
-                                            </div>
-                                            <p className="mt-2 text-sm text-primary-700">{quote.customer_name || 'Walk-in Customer'}</p>
-                                            <p className="text-xs text-primary-500">{quote.customer_phone || 'No phone'} � Valid until {quote.valid_until || 'N/A'}</p>
-                                            <p className="mt-2 text-sm font-semibold text-accent-blue">{formatCurrency(quote.grand_total || 0)}</p>
-                                        </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => loadQuote(quote.id)}
+                                                className={`w-full rounded-xl border p-4 pr-12 text-left transition-all ${currentEstimateId === quote.id ? 'border-accent-blue bg-accent-blue/5 shadow-sm' : 'border-primary-200 bg-white hover:border-primary-300 hover:shadow-sm'}`}
+                                            >
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span className="font-semibold text-primary-950">{quote.estimate_number}</span>
+                                                    <span className="text-xs uppercase tracking-[0.18em] text-primary-400">{quote.status}</span>
+                                                </div>
+                                                <p className="mt-2 text-sm text-primary-700">{quote.customer_name || 'Walk-in Customer'}</p>
+                                                <p className="text-xs text-primary-500">{quote.customer_phone || 'No phone'} � Valid until {quote.valid_until || 'N/A'}</p>
+                                                <p className="mt-2 text-sm font-semibold text-accent-blue">{formatCurrency(quote.grand_total || 0)}</p>
+                                            </button>
+                                            {String(quote.status || '').toLowerCase() === 'draft' && (
+                                                <button
+                                                    type="button"
+                                                    aria-label={`Delete draft quotation ${quote.estimate_number || ''}`.trim()}
+                                                    title="Delete draft quotation"
+                                                    onClick={() => setQuoteToDelete(quote)}
+                                                    className="absolute right-3 top-3 rounded-lg p-2 text-primary-400 transition-colors hover:bg-accent-danger/10 hover:text-accent-danger"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                        </div>
                                     ))}
                                 </div>
                             </div>
@@ -997,6 +1052,21 @@ const QuoteBuilder = () => {
                     </div>
                 </div>
             </div>
+
+            <ConfirmDialog
+                isOpen={Boolean(quoteToDelete)}
+                title="Delete draft quotation?"
+                message={`This permanently removes ${quoteToDelete?.estimate_number || 'this draft'} and its saved line items. Sent or approved quotations cannot be deleted.`}
+                confirmLabel="Delete draft"
+                confirmVariant="delete"
+                isLoading={deletingQuoteId === quoteToDelete?.id}
+                onConfirm={confirmDeleteQuote}
+                onClose={() => {
+                    if (!deletingQuoteId) {
+                        setQuoteToDelete(null);
+                    }
+                }}
+            />
 
         </div>
     );
