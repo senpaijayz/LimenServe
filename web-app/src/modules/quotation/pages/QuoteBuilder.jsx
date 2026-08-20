@@ -779,6 +779,16 @@ const QuoteBuilder = () => {
                                             Save revisions without creating a brand new quotation. Customers can retrieve the same quotation for 30 days using the quote number and phone.
                                         </p>
                                     </div>
+                                    {currentEstimateId && currentEstimateStatus === 'draft' && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setQuoteToDelete({ id: currentEstimateId, estimate_number: currentEstimateNumber, status: currentEstimateStatus })}
+                                            className="inline-flex items-center gap-2 rounded-xl border border-accent-danger/30 bg-white px-3 py-2 text-sm font-semibold text-accent-danger transition hover:border-accent-danger hover:bg-accent-danger hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-danger/40"
+                                        >
+                                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                                            Delete draft
+                                        </button>
+                                    )}
                                 </div>
 
                                 <div className="mt-5 grid gap-4 lg:grid-cols-2">
@@ -807,18 +817,6 @@ const QuoteBuilder = () => {
                                         leftIcon={<FileClock className="w-4 h-4" />}
                                     />
                                 </div>
-                                <label className="mt-4 block text-sm font-medium text-primary-700">
-                                    Estimate status
-                                    <select
-                                        value={currentEstimateStatus}
-                                        disabled={!currentEstimateId}
-                                        onChange={(event) => setCurrentEstimateStatus(event.target.value)}
-                                        className="input mt-1 w-full disabled:cursor-not-allowed disabled:bg-primary-50 disabled:text-primary-400"
-                                    >
-                                        {estimateStatusFilters.filter((option) => option.value).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                                    </select>
-                                    {!currentEstimateId && <span className="mt-1 block text-xs font-normal text-primary-500">Save the new quotation first, then set its workflow status.</span>}
-                                </label>
                             </div>
                         </div>
                     </Card>
