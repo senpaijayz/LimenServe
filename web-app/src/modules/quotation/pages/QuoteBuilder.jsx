@@ -37,6 +37,16 @@ const defaultMeta = {
     source: 'internal',
 };
 
+const formatCreatedDate = (value) => {
+    if (!value) return 'Date unavailable';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Date unavailable';
+    return new Intl.DateTimeFormat('en-PH', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+    }).format(date);
+};
+
 const escapeHtml = (value) => String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -306,7 +316,7 @@ const QuoteBuilder = () => {
     const [currentEstimateId, setCurrentEstimateId] = useState(null);
     const [currentEstimateNumber, setCurrentEstimateNumber] = useState('');
     const [changeNote, setChangeNote] = useState('Customer requested item updates');
-    const [revisions, setRevisions] = useState([]);
+    const [, setRevisions] = useState([]);
     const [focusedProduct, setFocusedProduct] = useState(null);
     const [showSmartBundles, setShowSmartBundles] = useState(true);
     const [quoteToDelete, setQuoteToDelete] = useState(null);
@@ -681,15 +691,25 @@ const QuoteBuilder = () => {
                                             <button
                                                 type="button"
                                                 onClick={() => loadQuote(quote.id)}
-                                                className={`w-full rounded-xl border p-4 pr-12 text-left transition-all ${currentEstimateId === quote.id ? 'border-accent-blue bg-accent-blue/5 shadow-sm' : 'border-primary-200 bg-white hover:border-primary-300 hover:shadow-sm'}`}
+                                                className={`w-full rounded-xl border p-4 pr-14 text-left transition-all ${currentEstimateId === quote.id ? 'border-accent-blue bg-accent-blue/5 shadow-sm' : 'border-primary-200 bg-white hover:border-primary-300 hover:shadow-sm'}`}
                                             >
-                                                <div className="flex items-center justify-between gap-3">
-                                                    <span className="font-semibold text-primary-950">{quote.estimate_number}</span>
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <span className="inline-flex items-center gap-1.5 rounded-md bg-primary-950 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white">
+                                                            <FileClock className="h-3 w-3" aria-hidden="true" />
+                                                            EST
+                                                        </span>
+                                                        <p className="mt-2 truncate text-lg font-display font-bold tracking-tight text-primary-950">{quote.estimate_number}</p>
+                                                    </div>
                                                     <span className="text-xs uppercase tracking-[0.18em] text-primary-400">{quote.status}</span>
                                                 </div>
                                                 <p className="mt-2 text-sm text-primary-700">{quote.customer_name || 'Walk-in Customer'}</p>
-                                                <p className="text-xs text-primary-500">{quote.customer_phone || 'No phone'} � Valid until {quote.valid_until || 'N/A'}</p>
+                                                <p className="text-xs text-primary-500">{quote.customer_phone || 'No phone'}</p>
                                                 <p className="mt-2 text-sm font-semibold text-accent-blue">{formatCurrency(quote.grand_total || 0)}</p>
+                                                <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-primary-100 pt-3 text-xs text-primary-500">
+                                                    <span>Created {formatCreatedDate(quote.created_at)}</span>
+                                                    <span>Valid until {quote.valid_until || 'N/A'}</span>
+                                                </div>
                                             </button>
                                             {String(quote.status || '').toLowerCase() === 'draft' && (
                                                 <button
@@ -697,9 +717,9 @@ const QuoteBuilder = () => {
                                                     aria-label={`Delete draft quotation ${quote.estimate_number || ''}`.trim()}
                                                     title="Delete draft quotation"
                                                     onClick={() => setQuoteToDelete(quote)}
-                                                    className="absolute right-3 top-3 rounded-lg p-2 text-primary-400 transition-colors hover:bg-accent-danger/10 hover:text-accent-danger"
+                                                    className="absolute right-3 top-3 rounded-lg border border-accent-danger/20 bg-accent-danger/5 p-2.5 text-accent-danger shadow-sm transition-all duration-150 hover:scale-110 hover:border-accent-danger/60 hover:bg-accent-danger hover:text-white hover:shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-danger/40"
                                                 >
-                                                    <Trash2 className="h-4 w-4" />
+                                                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                                                 </button>
                                             )}
                                         </div>
@@ -715,10 +735,6 @@ const QuoteBuilder = () => {
                                         <p className="mt-1 text-sm text-primary-500">
                                             Save revisions without creating a brand new quotation. Customers can retrieve the same quotation for 30 days using the quote number and phone.
                                         </p>
-                                    </div>
-                                    <div className="rounded-xl border border-primary-200 bg-white px-4 py-3">
-                                        <p className="text-xs uppercase tracking-[0.18em] text-primary-400">Revision count</p>
-                                        <p className="mt-1 text-2xl font-display font-bold text-primary-950">{revisions.length}</p>
                                     </div>
                                 </div>
 
