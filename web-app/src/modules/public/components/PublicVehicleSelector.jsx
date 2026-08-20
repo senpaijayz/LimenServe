@@ -83,12 +83,12 @@ export default function PublicVehicleSelector({
           {includePlate ? (
             <label className="block">
               <span className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-primary-500">
-                <CarFront className="h-4 w-4 text-accent-primary" /> Plate / note
+                <CarFront className="h-4 w-4 text-accent-primary" /> Chassis Number
               </span>
               <input
                 value={vehicle?.plateNo || ''}
                 onChange={(event) => onChange({ plateNo: event.target.value })}
-                placeholder="ABC 1234"
+                placeholder="Enter chassis number"
                 className={fieldBaseClassName}
               />
             </label>
