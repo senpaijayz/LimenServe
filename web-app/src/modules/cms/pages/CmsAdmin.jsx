@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
+  Boxes,
+  CheckCircle2,
+  ClipboardList,
+  Clock3,
+  ExternalLink,
   FileText,
   Globe2,
   LoaderCircle,
@@ -13,6 +18,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
+import { Link } from 'react-router';
 import CatalogContentCmsPanel from '../catalog-content/CatalogContentCmsPanel';
 import {
   buildPageLinkOptions,
@@ -31,6 +37,8 @@ import {
   saveCmsSiteSettings,
   uploadCmsImage,
 } from '../../../services/cmsApi';
+import { getCatalogSummary } from '../../../services/catalogApi';
+import { listEstimates } from '../../../services/estimatesApi';
 
 const SECTION_TYPES = [
   { value: 'hero', label: 'Hero banner' },
@@ -1161,7 +1169,126 @@ function SectionEditor({ section, index, total, onChange, onMove, onRemove, onIm
   );
 }
 
+function formatOverviewEstimateStatus(value) {
+  return String(value || 'unknown').replace(/_/g, ' ');
+}
+
+function CmsOverview({ pageCount, catalogSummary, estimates }) {
+  const estimateRows = Array.isArray(estimates) ? estimates : [];
+  const activeEstimateRows = estimateRows.filter((estimate) => !['completed', 'cancelled', 'declined'].includes(String(estimate.status || '').toLowerCase()));
+  const summary = catalogSummary && typeof catalogSummary === 'object' ? catalogSummary : null;
+  const metricCards = [
+    {
+      label: 'Catalog products',
+      value: summary ? Number(summary.totalProducts ?? summary.uniqueProducts ?? 0).toLocaleString() : '—',
+      detail: summary ? `${Number(summary.currentPrices ?? 0).toLocaleString()} with current prices` : 'Catalog summary unavailable',
+      icon: Boxes,
+      href: '/products',
+    },
+    {
+      label: 'Open estimates',
+      value: estimates ? activeEstimateRows.length.toLocaleString() : '—',
+      detail: estimates ? `${estimateRows.length.toLocaleString()} recent requests loaded` : 'Estimate list unavailable',
+      icon: ClipboardList,
+      href: '/quotation',
+    },
+    {
+      label: 'Published pages',
+      value: Number(pageCount || 0).toLocaleString(),
+      detail: 'Managed from the Pages editor',
+      icon: CheckCircle2,
+      href: '/cms',
+    },
+    {
+      label: 'Inventory value',
+      value: summary ? `₱${Number(summary.inventoryValue ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—',
+      detail: summary ? 'Current catalog snapshot' : 'Catalog summary unavailable',
+      icon: Clock3,
+      href: '/inventory',
+    },
+  ];
+
+  return (
+    <div className="space-y-6 p-5 lg:p-6">
+      <section className="rounded-3xl border border-primary-200 bg-primary-950 p-6 text-white shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-300">CMS workspace</p>
+        <h2 className="mt-3 text-2xl font-display font-bold">Manage the parts of LIMEN that change often.</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-primary-200">
+          Use the focused editors below for website content, catalog highlights, site settings, and navigation. Operational modules remain connected through the existing staff workspace.
+        </p>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {metricCards.map((metric) => {
+          const Icon = metric.icon;
+          return (
+            <Link key={metric.label} to={metric.href} className="group rounded-3xl border border-primary-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-accent-primary hover:shadow-md">
+              <div className="flex items-start justify-between gap-3">
+                <span className="rounded-2xl bg-primary-50 p-3 text-accent-primary"><Icon className="h-5 w-5" /></span>
+                <ExternalLink className="h-4 w-4 text-primary-300 transition group-hover:text-accent-primary" />
+              </div>
+              <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-primary-500">{metric.label}</p>
+              <p className="mt-2 text-2xl font-display font-bold text-primary-950">{metric.value}</p>
+              <p className="mt-1 text-xs text-primary-500">{metric.detail}</p>
+            </Link>
+          );
+        })}
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
+        <div className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-xl font-display font-semibold text-primary-950">Recent estimate requests</h3>
+              <p className="mt-1 text-sm text-primary-500">Open the quotation workspace to review, price, and update a request.</p>
+            </div>
+            <Link to="/quotation" className="text-sm font-semibold text-accent-primary hover:text-accent-blueDark">View all</Link>
+          </div>
+
+          {estimates === null ? (
+            <div className="mt-5 rounded-2xl border border-dashed border-primary-300 bg-primary-50 p-5 text-sm text-primary-600">Estimate requests are temporarily unavailable.</div>
+          ) : estimateRows.length === 0 ? (
+            <div className="mt-5 rounded-2xl border border-dashed border-primary-300 bg-primary-50 p-5 text-sm text-primary-600">No estimate requests have been received yet.</div>
+          ) : (
+            <div className="mt-5 divide-y divide-primary-100 rounded-2xl border border-primary-200">
+              {estimateRows.slice(0, 6).map((estimate) => (
+                <Link key={estimate.id || estimate.estimate_number} to="/quotation" className="flex items-center justify-between gap-4 p-4 transition hover:bg-primary-50">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-primary-950">{estimate.estimate_number || 'Estimate request'}</p>
+                    <p className="mt-1 truncate text-sm text-primary-500">{estimate.customer_name || estimate.customerName || estimate.phone || 'Customer details pending'}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-primary-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-primary-600">{formatOverviewEstimateStatus(estimate.status)}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
+          <h3 className="text-xl font-display font-semibold text-primary-950">Quick actions</h3>
+          <p className="mt-1 text-sm text-primary-500">Go directly to the workflow you need.</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+            <Link to="/products" className="rounded-2xl border border-primary-200 bg-primary-50 p-4 transition hover:border-accent-primary hover:bg-white">
+              <p className="font-semibold text-primary-950">Manage products</p>
+              <p className="mt-1 text-sm text-primary-500">Add, edit, publish, archive, and search catalog products.</p>
+            </Link>
+            <Link to="/quotation" className="rounded-2xl border border-primary-200 bg-primary-50 p-4 transition hover:border-accent-primary hover:bg-white">
+              <p className="font-semibold text-primary-950">Review estimates</p>
+              <p className="mt-1 text-sm text-primary-500">Open requests, add parts or services, and save a quote.</p>
+            </Link>
+            <Link to="/reservations" className="rounded-2xl border border-primary-200 bg-primary-50 p-4 transition hover:border-accent-primary hover:bg-white">
+              <p className="font-semibold text-primary-950">Reserve a part</p>
+              <p className="mt-1 text-sm text-primary-500">Create and manage customer reservations from the admin workspace.</p>
+            </Link>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 const tabs = [
+  { id: 'overview', label: 'Overview', icon: Globe2 },
   { id: 'pages', label: 'Pages', icon: FileText },
   { id: 'catalog', label: 'Catalog Content', icon: PackageSearch },
   { id: 'settings', label: 'Site Settings', icon: Settings },
@@ -1171,7 +1298,7 @@ const tabs = [
 export default function CmsAdmin() {
   const { success, error: showError } = useToast();
   const skipNextPageLoadSlugRef = useRef('');
-  const [activeTab, setActiveTab] = useState('pages');
+  const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingMessage, setSavingMessage] = useState('');
@@ -1184,6 +1311,8 @@ export default function CmsAdmin() {
   const [pageDraft, setPageDraft] = useState(createPageDraft());
   const [settingsDraft, setSettingsDraft] = useState(DEFAULT_SETTINGS);
   const [navigationDraft, setNavigationDraft] = useState([]);
+  const [catalogSummary, setCatalogSummary] = useState(null);
+  const [recentEstimates, setRecentEstimates] = useState(null);
   const [savedPageSnapshot, setSavedPageSnapshot] = useState('');
   const [savedSettingsSnapshot, setSavedSettingsSnapshot] = useState(JSON.stringify(DEFAULT_SETTINGS));
   const [savedNavigationSnapshot, setSavedNavigationSnapshot] = useState('[]');
@@ -1227,9 +1356,11 @@ export default function CmsAdmin() {
     async function loadCms() {
       setLoading(true);
       try {
-        const [pageRows, site] = await Promise.all([
+        const [pageRows, site, summary, estimates] = await Promise.all([
           listCmsPages(),
           getPublicCmsSite().catch(() => ({ settings: {}, navigation: [] })),
+          getCatalogSummary().catch(() => null),
+          listEstimates('', 20).catch(() => null),
         ]);
 
         if (!active) {
@@ -1240,6 +1371,8 @@ export default function CmsAdmin() {
         const normalizedSettings = normalizeSettings(site?.settings ?? {});
         const normalizedNavigation = normalizeNavigationItems(site?.navigation ?? []);
         setPages(editablePages);
+        setCatalogSummary(summary);
+        setRecentEstimates(Array.isArray(estimates) ? estimates : null);
         setSettingsDraft(normalizedSettings);
         setSavedSettingsSnapshot(JSON.stringify(normalizedSettings));
         setNavigationDraft(normalizedNavigation);
@@ -1630,7 +1763,7 @@ export default function CmsAdmin() {
             </div>
           ) : (
             <div className="rounded-2xl border border-primary-200 bg-white px-4 py-3 text-sm font-semibold text-primary-600">
-              Save each catalog card after editing.
+              {activeTab === 'overview' ? 'Live operational snapshot.' : 'Save each catalog card after editing.'}
             </div>
           )}
         </div>
@@ -1668,6 +1801,8 @@ export default function CmsAdmin() {
             <LoaderCircle className="mr-2 h-5 w-5 animate-spin" />
             Loading CMS workspace...
           </div>
+        ) : activeTab === 'overview' ? (
+          <CmsOverview pageCount={pages.length} catalogSummary={catalogSummary} estimates={recentEstimates} />
         ) : activeTab === 'pages' ? (
           <div className="grid gap-0 lg:grid-cols-[320px_1fr]">
             <aside className="border-b border-primary-200 bg-primary-50 p-4 lg:border-b-0 lg:border-r">
