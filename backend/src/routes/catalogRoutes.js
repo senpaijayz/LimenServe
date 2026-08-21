@@ -2881,9 +2881,13 @@ async function fetchVehiclePricelistCatalog({ searchQuery = '', selectedCategory
     throw error;
   }
 
+  // Vehicle packages feed directly into the public quote builder. Resolve
+  // staging rows to their active catalogue UUIDs even when inventory
+  // enrichment is not requested; otherwise package items retain synthetic
+  // `staging-*` IDs and are rejected during quote validation.
   const products = enrichInventory
     ? await mapPricelistStagingRowsWithInventory(data ?? [])
-    : (data ?? []).map((row) => mapPricelistStagingRow(row));
+    : await enrichPricelistCatalogProducts((data ?? []).map((row) => mapPricelistStagingRow(row)));
   if (!products) {
     return null;
   }
