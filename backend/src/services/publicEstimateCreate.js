@@ -6,6 +6,7 @@ import {
   normalizePhilippinePhoneNumber,
 } from './publicEstimateLookup.js';
 import { PUBLIC_ESTIMATE_PRICING_INVALID_MESSAGE } from './publicEstimatePricing.js';
+import { createPublicEstimateEditToken } from './publicEstimateEdit.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/;
@@ -487,6 +488,7 @@ export function createPublicEstimateCreateHandler({
   resolvePricing,
   notify = () => undefined,
   onNotificationError = () => undefined,
+  editTokenSecret = null,
   now = () => new Date(),
 } = {}) {
   if (
@@ -541,7 +543,16 @@ export function createPublicEstimateCreateHandler({
       }
 
       Promise.resolve(notify(estimate)).catch(onNotificationError);
-      res.status(201).json({ estimate: publicEstimate });
+      const response = { estimate: publicEstimate };
+      if (editTokenSecret) {
+        response.editToken = createPublicEstimateEditToken({
+          estimateId,
+          secret: editTokenSecret,
+          now,
+        });
+      }
+
+      res.status(201).json(response);
     } catch (error) {
       const safeError = new Error(PUBLIC_ESTIMATE_CREATE_UNAVAILABLE_MESSAGE);
       safeError.statusCode = 503;

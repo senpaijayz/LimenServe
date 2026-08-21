@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion as Motion } from 'framer-motion';
 import { useSearchParams } from 'react-router';
-import { Search, Plus, Minus, Calculator, Printer, User, Phone, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
+import { Search, Plus, Minus, Calculator, Printer, Pencil, User, Phone, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
 import { normalizePhilippinePhoneNumber } from '../../../utils/phone';
 import useProductCatalog from '../../../hooks/useProductCatalog';
@@ -10,7 +10,7 @@ import usePublicVehicleSelection from '../../../hooks/usePublicVehicleSelection'
 import useVehiclePackages from '../../../hooks/useVehiclePackages';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
-import { createEstimate, lookupPublicEstimate } from '../../../services/estimatesApi';
+import { createEstimate, lookupPublicEstimate, revisePublicEstimate } from '../../../services/estimatesApi';
 import ProductPackageSuggestions from '../components/ProductPackageSuggestions';
 import PublicQuoteLookupCard from '../components/PublicQuoteLookupCard';
 import PublicVehicleSelector from '../components/PublicVehicleSelector';
@@ -346,6 +346,8 @@ const PublicEstimate = () => {
     const [lookupError, setLookupError] = useState('');
     const [retrievedQuote, setRetrievedQuote] = useState(null);
     const [savedDraftQuote, setSavedDraftQuote] = useState(null);
+    const [savedQuoteEditToken, setSavedQuoteEditToken] = useState('');
+    const [quoteHasChanges, setQuoteHasChanges] = useState(false);
     const [savingQuote, setSavingQuote] = useState(false);
     const [saveError, setSaveError] = useState('');
     const [isDesktopDock, setIsDesktopDock] = useState(() => {
@@ -355,6 +357,12 @@ const PublicEstimate = () => {
 
         return window.matchMedia(DESKTOP_DOCK_QUERY).matches;
     });
+
+    const markSavedQuoteDirty = () => {
+        if (savedDraftQuote?.estimate?.estimate_number) {
+            setQuoteHasChanges(true);
+        }
+    };
 
     const {
         products: priceListProducts,
@@ -505,7 +513,7 @@ const PublicEstimate = () => {
 
         setSaveError('');
         setFocusedProduct(product);
-        setSavedDraftQuote(null);
+        markSavedQuoteDirty();
         setSelectedParts((parts) => {
             const existing = parts.find((part) => part.id === product.id);
             const nextPrice = Number(extra.price ?? product.price ?? existing?.price ?? 0);
@@ -530,7 +538,7 @@ const PublicEstimate = () => {
     };
 
     const removePart = (id) => {
-        setSavedDraftQuote(null);
+        markSavedQuoteDirty();
         setSelectedParts((parts) => parts.filter((part) => part.id !== id));
         if (focusedProduct?.id === id) {
             setFocusedProduct(null);
@@ -538,7 +546,7 @@ const PublicEstimate = () => {
     };
 
     const updateQty = (id, qty) => {
-        setSavedDraftQuote(null);
+        markSavedQuoteDirty();
         if (qty < 1) {
             removePart(id);
             return;
@@ -548,12 +556,12 @@ const PublicEstimate = () => {
     };
 
     const removeService = (id) => {
-        setSavedDraftQuote(null);
+        markSavedQuoteDirty();
         setSelectedServices((services) => services.filter((service) => service.id !== id));
     };
 
     const toggleService = (service) => {
-        setSavedDraftQuote(null);
+        markSavedQuoteDirty();
         setSelectedServices((services) => {
             const existing = services.find((selected) => selected.id === service.id);
             if (existing) {
@@ -569,7 +577,7 @@ const PublicEstimate = () => {
     };
 
     const addSuggestedPart = (recommendation) => {
-        setSavedDraftQuote(null);
+        markSavedQuoteDirty();
         const matchedProduct = recommendation.recommendedProduct || null;
         const productId = recommendation.recommendedProductId || matchedProduct?.id;
 
@@ -634,7 +642,7 @@ const PublicEstimate = () => {
     };
 
     const addSuggestedService = (recommendation) => {
-        setSavedDraftQuote(null);
+        markSavedQuoteDirty();
         const recommendedService = recommendation.recommendedService || null;
         const serviceId = recommendation.recommendedServiceId || recommendedService?.id;
 
@@ -781,8 +789,14 @@ const PublicEstimate = () => {
     };
 
     const saveDraftQuote = async () => {
-        if (savedDraftQuote?.estimate?.estimate_number) {
+        const existingQuoteNumber = savedDraftQuote?.estimate?.estimate_number;
+        if (existingQuoteNumber && !quoteHasChanges) {
             return savedDraftQuote;
+        }
+
+        if (existingQuoteNumber && !savedQuoteEditToken) {
+            setSaveError('This quote can no longer be edited in this browser session. Start a new quotation to make changes.');
+            return null;
         }
 
         if (selectedParts.some((part) => !isUuid(part.id))) {
@@ -815,17 +829,27 @@ const PublicEstimate = () => {
         setSaveError('');
 
         try {
-            const createdQuote = await createEstimate(payload);
-            const persistedQuote = enrichCreatedQuoteWithRequestedLabels(createdQuote?.estimate, payload.items);
+            const response = existingQuoteNumber
+                ? await revisePublicEstimate(savedQuoteEditToken, payload)
+                : await createEstimate(payload);
+            const persistedQuote = enrichCreatedQuoteWithRequestedLabels(response?.estimate, payload.items);
 
             if (!persistedQuote?.estimate?.estimate_number) {
-                throw new Error('The quote was saved, but the saved quote number could not be loaded.');
+                throw new Error(existingQuoteNumber
+                    ? 'The quote changes were saved, but the quote number could not be loaded.'
+                    : 'The quote was saved, but the saved quote number could not be loaded.');
             }
 
             setSavedDraftQuote(persistedQuote);
+            if (!existingQuoteNumber) {
+                setSavedQuoteEditToken(response?.editToken || '');
+                if (!response?.editToken) {
+                    setSaveError('Quote saved. Editing is unavailable until the server update finishes deploying.');
+                }
+            }
+            setQuoteHasChanges(false);
             return persistedQuote;
         } catch (saveFailure) {
-            setSavedDraftQuote(null);
             setSaveError(saveFailure.message || 'Unable to save quotation.');
             return null;
         } finally {
@@ -853,7 +877,7 @@ const PublicEstimate = () => {
 
         setShowSummaryDrawer(false);
         if (source === 'draft') {
-            if (!savedDraftQuote?.estimate?.estimate_number) {
+            if (!savedDraftQuote?.estimate?.estimate_number || quoteHasChanges) {
                 const persistedQuote = await saveDraftQuote();
                 if (!persistedQuote) {
                     return;
@@ -880,6 +904,8 @@ const PublicEstimate = () => {
         setPrintSource('draft');
         setEstimatePhase('details');
         setSavedDraftQuote(null);
+        setSavedQuoteEditToken('');
+        setQuoteHasChanges(false);
         setSaveError('');
         addedBundleKeysRef.current.clear();
     };
@@ -891,7 +917,7 @@ const PublicEstimate = () => {
     };
 
     const handleVehicleChange = (patch) => {
-        setSavedDraftQuote(null);
+        markSavedQuoteDirty();
         if (Object.prototype.hasOwnProperty.call(patch, 'model') || Object.prototype.hasOwnProperty.call(patch, 'year')) {
             setFocusedProduct(null);
         }
@@ -899,7 +925,7 @@ const PublicEstimate = () => {
     };
 
     const handleVehicleClear = () => {
-        setSavedDraftQuote(null);
+        markSavedQuoteDirty();
         clearVehicle();
     };
 
@@ -916,11 +942,18 @@ const PublicEstimate = () => {
         setShowSummaryDrawer(false);
     };
 
+    const editSavedQuote = () => {
+        setSaveError('');
+        setEstimatePhase('catalog');
+    };
+
     const contentShiftClass = '';
     const isCartPanelVisible = false;
     const cartPanelTitle = estimatePhase === 'catalog' ? 'Active Quote Cart' : 'Confirm Your Quotation';
     const cartPanelDescription = estimatePhase === 'catalog'
         ? 'Added parts and services stay visible while you browse. Adjust quantities or remove items before review.'
+            : quoteHasChanges && savedDraftQuote?.estimate?.estimate_number
+                ? `Editing ${savedDraftQuote.estimate.estimate_number}. Save changes to keep the same quote number.`
             : savedDraftQuote?.estimate?.estimate_number
                 ? 'Quotation saved. Use the quote number and verified phone number to retrieve it later.'
                 : 'Confirm the final draft, or go back to add more parts and compare better package options.';
@@ -1175,13 +1208,13 @@ const PublicEstimate = () => {
                         <Button variant="primary" fullWidth onClick={() => setEstimatePhase('summary')} isDisabled={!hasItems}>
                             Review Quote
                         </Button>
-                    ) : quoteNumber ? (
+                    ) : quoteNumber && !quoteHasChanges ? (
                         <Button variant="primary" fullWidth leftIcon={<Printer className="h-4 w-4" />} onClick={() => openPreview('draft')}>
                             Printable Preview
                         </Button>
                     ) : (
                         <Button variant="primary" fullWidth onClick={finishQuote} isDisabled={!hasItems} isLoading={savingQuote}>
-                            Finish Quote
+                            {quoteNumber ? 'Save Changes' : 'Finish Quote'}
                         </Button>
                     )}
                 </div>
@@ -1215,9 +1248,14 @@ const PublicEstimate = () => {
                             <p className="text-3xl font-display font-bold text-primary-950">{quoteNumber}</p>
                             <p className="mt-2 text-sm text-primary-600">Use this quote number and the same phone number in Retrieve Quote to open the saved quotation again.</p>
                         </div>
-                        <Button variant="primary" leftIcon={<Printer className="h-4 w-4" />} onClick={() => openPreview('draft')}>
-                            Open Printable Preview
-                        </Button>
+                        <div className="flex flex-col gap-3 sm:flex-row">
+                            <Button variant="secondary" leftIcon={<Pencil className="h-4 w-4" />} onClick={editSavedQuote}>
+                                Edit Quote
+                            </Button>
+                            <Button variant="primary" leftIcon={<Printer className="h-4 w-4" />} onClick={() => openPreview('draft')}>
+                                Open Printable Preview
+                            </Button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -1518,7 +1556,7 @@ const PublicEstimate = () => {
                                         <div className="relative">
                                             <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                                             <input value={customerName} onChange={(event) => {
-                                                setSavedDraftQuote(null);
+                                                markSavedQuoteDirty();
                                                 setCustomerName(event.target.value);
                                             }} placeholder="Walk-in customer" className="input pl-10 py-2.5 text-sm" />
                                         </div>
@@ -1528,7 +1566,7 @@ const PublicEstimate = () => {
                                         <div className="relative">
                                             <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                                             <input id="public-estimate-phone" type="tel" inputMode="tel" autoComplete="tel" required aria-describedby="public-estimate-phone-help" aria-invalid={Boolean(customerPhone.trim()) && !normalizedCustomerPhone} value={customerPhone} onChange={(event) => {
-                                                setSavedDraftQuote(null);
+                                                markSavedQuoteDirty();
                                                 setSaveError('');
                                                 setCustomerPhone(event.target.value);
                                             }} placeholder="09XX XXX XXXX" className="input pl-10 py-2.5 text-sm" />
@@ -2098,13 +2136,13 @@ const PublicEstimate = () => {
                                                 <Button variant="primary" fullWidth onClick={() => setEstimatePhase('summary')} isDisabled={!hasItems}>
                                                     Review Quote
                                                 </Button>
-                                            ) : savedDraftQuote?.estimate?.estimate_number ? (
+                                            ) : savedDraftQuote?.estimate?.estimate_number && !quoteHasChanges ? (
                                                 <Button variant="primary" fullWidth leftIcon={<Printer className="h-4 w-4" />} onClick={() => openPreview('draft')}>
                                                     Printable Preview
                                                 </Button>
                                             ) : (
                                                 <Button variant="primary" fullWidth onClick={finishQuote} isDisabled={!hasItems} isLoading={savingQuote}>
-                                                    Finish Quote
+                                                    {quoteNumber ? 'Save Changes' : 'Finish Quote'}
                                                 </Button>
                                             )}
                                         </div>

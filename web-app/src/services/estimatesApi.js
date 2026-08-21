@@ -6,6 +6,7 @@ export async function createEstimate(payload) {
     return {
       estimateId: data.estimateId,
       estimate: data.estimate ?? null,
+      editToken: data.editToken ?? null,
     };
   } catch (error) {
     extractApiError(error, 'Failed to create estimate.');
@@ -98,6 +99,18 @@ export async function lookupPublicEstimate(estimateNumber, phone) {
     return data.estimate ?? null;
   } catch (error) {
     extractApiError(error, 'Failed to retrieve quotation.');
+  }
+}
+
+export async function revisePublicEstimate(editToken, payload) {
+  try {
+    const { data } = await apiClient.post('/estimates/public/revise', {
+      ...payload,
+      editToken,
+    });
+    return { estimate: data.estimate ?? null };
+  } catch (error) {
+    extractApiError(error, 'Failed to save quotation changes.');
   }
 }
 

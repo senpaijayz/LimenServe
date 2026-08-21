@@ -17,6 +17,7 @@ import {
 } from '../services/publicEstimateCreate.js';
 import { createPublicEstimateLookupHandler } from '../services/publicEstimateLookup.js';
 import { createPublicEstimatePricingResolver } from '../services/publicEstimatePricing.js';
+import { createPublicEstimateRevisionHandler } from '../services/publicEstimateRevision.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import { filterActiveEstimates } from '../services/estimateValidity.js';
 
@@ -63,6 +64,15 @@ function normalizeQuoteNumber(value) {
 
 async function createEstimatePersisted(payload) {
   return callRpc('create_estimate', { payload });
+}
+
+async function revisePublicEstimatePersisted(estimateId, payload, changeNote) {
+  return callRpc('revise_estimate', {
+    p_estimate_id: estimateId,
+    p_payload: payload,
+    p_editor_id: null,
+    p_change_note: changeNote,
+  });
 }
 
 function isOptionalRecommendationSourceError(error) {
@@ -384,10 +394,25 @@ const publicEstimateCreateHandler = createPublicEstimateCreateHandler({
   createEstimate: createEstimatePersisted,
   loadEstimate: loadEstimateSnapshot,
   resolvePricing: resolvePublicEstimatePricing,
+  editTokenSecret: env.supabaseServiceRoleKey,
   notify: createQuotationNotification,
   onNotificationError(error) {
     logger.error('estimate.notification_failed', { error });
   },
+});
+
+const publicEstimateRevisionRateLimiter = createPublicEstimateRateLimiter({
+  scope: 'estimate.revise.ip',
+  windowMs: 15 * 60 * 1000,
+  limit: 12,
+  keyGenerator: getDefaultRateLimitKey,
+  message: 'Too many quote edits. Please try again later.',
+});
+const publicEstimateRevisionHandler = createPublicEstimateRevisionHandler({
+  loadEstimate: loadEstimateSnapshot,
+  reviseEstimate: revisePublicEstimatePersisted,
+  resolvePricing: resolvePublicEstimatePricing,
+  editTokenSecret: env.supabaseServiceRoleKey,
 });
 
 async function createTrustedEstimate(req, res, next) {
@@ -416,6 +441,12 @@ router.post(
   (req, res, next) => (isTrustedEstimateCreator(req.user)
     ? createTrustedEstimate(req, res, next)
     : publicEstimateCreateHandler(req, res, next)),
+);
+
+router.post(
+  '/public/revise',
+  publicEstimateRevisionRateLimiter,
+  publicEstimateRevisionHandler,
 );
 
 router.get('/:estimateId', requireRole('admin'), async (req, res, next) => {
