@@ -4271,8 +4271,15 @@ router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next)
     const effectiveFrom = req.body?.effectiveFrom || new Date().toISOString().slice(0, 10);
     const result = await replaceRetailPrices(items, effectiveFrom);
 
+    if (req.timedOut || res.headersSent) {
+      return;
+    }
+
     res.json(result);
   } catch (error) {
+    if (req.timedOut || res.headersSent) {
+      return;
+    }
     next(error);
   }
 });
@@ -4287,8 +4294,15 @@ router.post('/prices/bulk-replace-file', requireRole('admin'), handlePriceListUp
     const effectiveFrom = req.body?.effectiveFrom || new Date().toISOString().slice(0, 10);
     const result = await replaceRetailPrices(items, effectiveFrom);
 
+    if (req.timedOut || res.headersSent) {
+      return;
+    }
+
     res.json(result);
   } catch (error) {
+    if (req.timedOut || res.headersSent) {
+      return;
+    }
     next(error);
   }
 });
