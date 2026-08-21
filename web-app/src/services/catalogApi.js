@@ -687,7 +687,7 @@ export async function updateCatalogProduct(productId, payload) {
   }
 }
 
-export async function getArchivedCatalogProducts(limit = 8) {
+export async function getArchivedCatalogProducts(limit = 250) {
   try {
     const { data } = await apiClient.get('/catalog/products/archived', {
       params: { limit },
@@ -735,7 +735,7 @@ export async function replaceRetailPriceList(items, effectiveFrom) {
   }
 }
 
-export async function replaceRetailPriceListFile(file, effectiveFrom) {
+export async function replaceRetailPriceListFile(file, effectiveFrom, requestOptions = {}) {
   try {
     const formData = new FormData();
     formData.append('priceList', file);
@@ -743,6 +743,7 @@ export async function replaceRetailPriceListFile(file, effectiveFrom) {
 
     const { data } = await apiClient.post('/catalog/prices/bulk-replace-file', formData, {
       timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS,
+      onUploadProgress: requestOptions.onUploadProgress,
     });
 
     clearProductCatalogCaches();

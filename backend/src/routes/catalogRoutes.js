@@ -4088,7 +4088,7 @@ router.patch('/products/:productId/archive', requireRole('admin'), async (req, r
 
 router.get('/products/archived', requireRole('admin'), async (req, res, next) => {
   try {
-    const limit = parsePositiveInteger(req.query.limit, 8, 50);
+    const limit = parsePositiveInteger(req.query.limit, 250, 250);
     const { data: products, error: productsError } = await supabaseAdmin
       .schema('catalog')
       .from('products')
@@ -4294,6 +4294,45 @@ router.post('/prices/bulk-replace-file', requireRole('admin'), handlePriceListUp
 });
 
 async function replaceRetailPrices(items, effectiveFrom) {
+  if (items.length === 0) {
+    const error = new Error('Provide at least one valid part number and price.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(effectiveFrom || ''))) {
+    const error = new Error('Choose a valid effective date before applying the price list.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const { data, error: rpcError } = await supabaseAdmin.rpc('replace_retail_pricelist', {
+    p_items: items,
+    p_effective_from: effectiveFrom,
+  });
+
+  if (rpcError) {
+    const message = String(rpcError.message || '').toLowerCase();
+    if (message.includes('function') && message.includes('does not exist')) {
+      rpcError.statusCode = 503;
+      rpcError.publicMessage = 'The pricelist replacement service is still being prepared. Please try again after deployment finishes.';
+    }
+    throw rpcError;
+  }
+
+  invalidateProductCatalogCache();
+
+  return {
+    ...(data ?? {}),
+    skippedItems: Array.isArray(data?.skippedItems) ? data.skippedItems : [],
+    priceChanges: Array.isArray(data?.priceChanges) ? data.priceChanges : [],
+    effectiveFrom: data?.effectiveFrom || effectiveFrom,
+  };
+}
+
+// Kept as a reference implementation for rollback/debugging. Production uploads
+// use the single-transaction RPC above so large workbooks do not time out.
+async function replaceRetailPricesLegacy(items, effectiveFrom) {
   if (items.length === 0) {
     const error = new Error('Provide at least one valid part number and price.');
     error.statusCode = 400;

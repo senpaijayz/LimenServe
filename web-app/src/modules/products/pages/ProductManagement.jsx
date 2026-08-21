@@ -144,7 +144,7 @@ export default function ProductManagement() {
   const refreshArchivedProducts = useCallback(async () => {
     setArchivedLoading(true);
     try {
-      setArchivedProducts(await getArchivedCatalogProducts(8));
+      setArchivedProducts(await getArchivedCatalogProducts(250));
     } catch (archiveError) {
       showError(archiveError.message || 'Unable to load archived products.');
     } finally {
@@ -480,7 +480,7 @@ export default function ProductManagement() {
 
       <Card
         title="Archived Products"
-        subtitle="Restore soft-deleted catalog items from Product Management."
+        subtitle="Products removed from the active pricelist stay here for audit and restoration. Showing the 250 most recently archived items."
         headerAction={(
           <Button variant="outline" size="sm" leftIcon={<RefreshCw className="h-4 w-4" />} isLoading={archivedLoading} onClick={refreshArchivedProducts}>
             Refresh

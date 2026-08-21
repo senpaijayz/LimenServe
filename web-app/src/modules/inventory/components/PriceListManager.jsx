@@ -71,6 +71,8 @@ const PriceListManager = ({ onUpdated }) => {
     const [isDownloading, setIsDownloading] = useState(false);
     const [lastResult, setLastResult] = useState(null);
     const [selectedFile, setSelectedFile] = useState(null);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadPhase, setUploadPhase] = useState('');
 
     const priceChangeRows = lastResult?.priceChanges ?? [];
     const priceChangesTotalCount = lastResult?.priceChangesTotalCount ?? priceChangeRows.length;
@@ -79,6 +81,8 @@ const PriceListManager = ({ onUpdated }) => {
         setIsOpen(false);
         setLastResult(null);
         setSelectedFile(null);
+        setUploadProgress(0);
+        setUploadPhase('');
     };
 
     const handleDownloadTemplate = async () => {
@@ -124,12 +128,30 @@ const PriceListManager = ({ onUpdated }) => {
 
         setIsSubmitting(true);
         setLastResult(null);
+        setUploadProgress(4);
+        setUploadPhase('Preparing the workbook…');
 
         try {
-            const result = await replaceRetailPriceListFile(selectedFile, effectiveFrom);
+            const result = await replaceRetailPriceListFile(selectedFile, effectiveFrom, {
+                onUploadProgress: (event) => {
+                    if (!event.total) {
+                        setUploadProgress((current) => Math.max(current, 12));
+                        setUploadPhase('Uploading the workbook…');
+                        return;
+                    }
+
+                    const uploadedPercent = Math.min(78, Math.max(8, Math.round((event.loaded / event.total) * 78)));
+                    setUploadProgress(uploadedPercent);
+                    setUploadPhase(uploadedPercent >= 78 ? 'Validating rows and applying prices…' : 'Uploading the workbook…');
+                },
+            });
+            setUploadProgress(100);
+            setUploadPhase('Pricelist replaced successfully.');
             applyResult(result);
             setSelectedFile(null);
         } catch (submitError) {
+            setUploadProgress(0);
+            setUploadPhase('Replacement did not finish. Your existing pricelist was kept.');
             error(submitError.message || 'Failed to upload the price list file.');
         } finally {
             setIsSubmitting(false);
@@ -156,7 +178,7 @@ const PriceListManager = ({ onUpdated }) => {
                     <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4">
                         <p className="text-sm font-semibold text-primary-950">Retail price list source</p>
                         <p className="mt-1 text-sm text-primary-600">
-                            Upload the new Mitsubishi price list and review exactly which part numbers changed before you leave this screen. Prices become active for the selected date, previous prices stay in history, and inventory stock quantities are never overwritten.
+                            Upload the new Mitsubishi price list and review exactly which part numbers changed before you leave this screen. Prices become active for the selected date, removed parts move to Archived Products, and inventory stock quantities are never overwritten.
                         </p>
                     </div>
 
@@ -214,6 +236,28 @@ const PriceListManager = ({ onUpdated }) => {
                         )}
                     </div>
 
+                    {isSubmitting && (
+                        <div className="rounded-2xl border border-accent-blue/20 bg-accent-blue/5 p-4" role="status" aria-live="polite">
+                            <div className="flex items-center justify-between gap-3 text-sm">
+                                <p className="font-semibold text-primary-950">{uploadPhase || 'Working…'}</p>
+                                <span className="font-mono text-xs font-semibold text-accent-blue">{uploadProgress}%</span>
+                            </div>
+                            <div className="mt-3 h-2 overflow-hidden rounded-full bg-primary-100">
+                                <div
+                                    className="h-full rounded-full bg-accent-blue transition-[width] duration-300 ease-out"
+                                    style={{ width: `${uploadProgress}%` }}
+                                />
+                            </div>
+                            <p className="mt-2 text-xs text-primary-500">The server is applying the change in one transaction. Keep this window open.</p>
+                        </div>
+                    )}
+
+                    {!isSubmitting && uploadPhase && !lastResult && (
+                        <div className="rounded-2xl border border-accent-danger/20 bg-accent-danger/5 px-4 py-3 text-sm text-accent-danger" role="alert">
+                            {uploadPhase}
+                        </div>
+                    )}
+
                     {lastResult && (
                         <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white text-sm text-primary-700 shadow-sm">
                             <div className="flex flex-col gap-3 border-b border-emerald-100 bg-emerald-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -231,7 +275,7 @@ const PriceListManager = ({ onUpdated }) => {
                                 </p>
                             </div>
 
-                            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
                                 <div className="rounded-xl bg-primary-50 p-3">
                                     <p className="text-xs uppercase tracking-[0.16em] text-primary-400">Rows received</p>
                                     <p className="mt-1 text-lg font-semibold text-primary-950">{formatUploadCount(lastResult.receivedCount ?? lastResult.updatedCount)}</p>
@@ -243,6 +287,10 @@ const PriceListManager = ({ onUpdated }) => {
                                 <div className="rounded-xl bg-primary-50 p-3">
                                     <p className="text-xs uppercase tracking-[0.16em] text-primary-400">New parts</p>
                                     <p className="mt-1 text-lg font-semibold text-primary-950">{formatUploadCount(lastResult.newProductsCount ?? 0)}</p>
+                                </div>
+                                <div className="rounded-xl bg-amber-50 p-3">
+                                    <p className="text-xs uppercase tracking-[0.16em] text-amber-600">Moved to archive</p>
+                                    <p className="mt-1 text-lg font-semibold text-amber-950">{formatUploadCount(lastResult.archivedProductsCount ?? 0)}</p>
                                 </div>
                                 <div className="rounded-xl bg-primary-50 p-3">
                                     <p className="text-xs uppercase tracking-[0.16em] text-primary-400">Skipped</p>
