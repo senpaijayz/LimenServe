@@ -17,10 +17,6 @@ import {
     Wrench,
 } from 'lucide-react';
 import storefrontImage from '../../../assets/homepage/limen-storefront-real.jpg';
-import monteroImage from '../../../assets/homepage/montero-trimmed.png';
-import tritonImage from '../../../assets/homepage/triton-trimmed.png';
-import xforceImage from '../../../assets/homepage/xforce-trimmed.png';
-import xpanderImage from '../../../assets/homepage/xpander-trimmed.png';
 import { getPublicCmsPage } from '../../../services/cmsApi';
 
 const categoryCards = [
@@ -34,40 +30,44 @@ const categoryCards = [
 
 const featuredParts = [
     {
-        name: 'Montero Sport Oil Filter',
-        partNo: 'ME-013307',
-        price: 'PHP 1,245',
-        image: monteroImage,
-        catalogQuery: 'Montero Sport Oil Filter',
-        vehicle: 'Montero Sport',
-        note: 'Best for PMS and daily service visits',
+        name: 'Mitsubishi Oil Filter',
+        partNo: 'ME013307',
+        price: 'PHP 3,148',
+        image: 'https://motorpartsjunction.in/cdn/shop/files/WhatsAppImage2024-03-15at17.01.56_09285caf.jpg?v=1710643991',
+        catalogQuery: 'ME013307',
+        vehicle: 'Pajero / Montero',
+        note: 'Engine-oil filtration for compatible Pajero and Montero diesel applications. Confirm engine and chassis fitment before ordering.',
+        imageAlt: 'Mitsubishi ME013307 oil filter',
     },
     {
-        name: 'Triton Front Brake Pads',
-        partNo: 'MB-699200',
-        price: 'PHP 3,980',
-        image: tritonImage,
-        catalogQuery: 'Triton Front Brake Pads',
-        vehicle: 'Triton',
-        note: 'Fast-moving pickup wear-item replacement',
+        name: 'Front Brake Pad Set',
+        partNo: 'MZ690572',
+        price: 'PHP 4,478',
+        image: 'https://partschai.com/public/uploads/all/2YzhtqHOSDQQYK6JeKOoDqv58JMfDOS3BfngvmDT.jpg',
+        catalogQuery: 'MZ690572',
+        vehicle: 'Pajero / Montero',
+        note: 'Front-axle pad set for compatible Pajero and Montero applications. Replace as a complete axle set and verify fitment by chassis number.',
+        imageAlt: 'Mitsubishi MZ690572 front brake pad set',
     },
     {
-        name: 'Xforce Air Filter',
-        partNo: '1500A760',
-        price: 'PHP 1,760',
-        image: xforceImage,
-        catalogQuery: 'Xforce Air Filter',
-        vehicle: 'Xforce',
-        note: 'Clean intake maintenance for newer compact SUVs',
+        name: 'Engine Air Cleaner Element',
+        partNo: '1500A687',
+        price: 'PHP 1,505',
+        image: 'https://cdn.phutungmitsubishi.vn/media/xpander%201/l%E1%BB%8Dc%20gió%20%C4%91%E1%BB%99ng%20c%C6%A1%20xe%20mitsubishi%20xpander%2C%20xpander%20cross%20v%C3%A0%20xforce%20h%C3%A0ng%20koto%20%281%29.jpg',
+        catalogQuery: '1500A687',
+        vehicle: 'Xpander / Xforce',
+        note: 'Pleated intake filter for compatible Xpander and Xforce applications. Replace when loaded with dust or at the scheduled service interval.',
+        imageAlt: 'Mitsubishi 1500A687 engine air cleaner element',
     },
     {
-        name: 'Xpander Cabin Filter Set',
-        partNo: '7803A167',
-        price: 'PHP 2,140',
-        image: xpanderImage,
-        catalogQuery: 'Xpander Cabin Filter Set',
-        vehicle: 'Xpander',
-        note: 'Popular MPV maintenance item for family-use vehicles',
+        name: 'Cabin Air Filter',
+        partNo: 'MZ691067',
+        price: 'PHP 493',
+        image: 'https://i.ebayimg.com/images/g/VR4AAOSwuLFkwTcn/s-l500.png',
+        catalogQuery: 'MZ691067',
+        vehicle: 'Xpander / Mirage',
+        note: 'Pleated HVAC filter that helps reduce dust and pollen in the cabin. Check the airflow arrow and vehicle fitment before installation.',
+        imageAlt: 'Mitsubishi MZ691067 cabin air filter in genuine packaging',
     },
 ];
 
@@ -446,7 +446,7 @@ const PublicHome = () => {
                     <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                         <div className="max-w-2xl">
                             <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-danger">{bestSellersCms.eyebrow || 'Best Sellers'}</p>
-                            <h2 className="mt-2 text-4xl font-bold text-primary-950">{bestSellersCms.title || 'Featured parts anchored to real Mitsubishi vehicle lines'}</h2>
+                            <h2 className="mt-2 text-4xl font-bold text-primary-950">{bestSellersCms.title || 'Popular Mitsubishi parts with clear fitment guidance'}</h2>
                         </div>
                     </div>
 
