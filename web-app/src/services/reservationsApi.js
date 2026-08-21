@@ -1,15 +1,6 @@
 import apiClient, { extractApiError } from './apiClient';
 import { invalidateCatalogClientCaches } from './catalogApi';
 
-export async function createPartReservation(payload) {
-  try {
-    const { data } = await apiClient.post('/reservations', payload);
-    return data.reservation;
-  } catch (error) {
-    extractApiError(error, 'Failed to create the part reservation.');
-  }
-}
-
 export async function createAdminReservation(payload) {
   try {
     const { data } = await apiClient.post('/reservations/admin', payload);

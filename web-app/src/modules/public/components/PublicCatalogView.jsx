@@ -15,7 +15,6 @@ import {
   Sparkles,
   CarFront,
   ScanLine,
-  PackagePlus,
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
 import { formatCurrency } from '../../../utils/formatters';
@@ -29,9 +28,6 @@ import VehiclePackageShowcase from './VehiclePackageShowcase';
 import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import { getPublicFeaturedCatalogItems } from '../../cms/api/cmsCatalogApi';
 import Button from '../../../components/ui/Button';
-import { useToast } from '../../../components/ui/Toast';
-import { createPartReservation } from '../../../services/reservationsApi';
-import { normalizePhilippinePhoneNumber } from '../../../utils/phone';
 
 const PAGE_SIZE = 12;
 
@@ -94,7 +90,6 @@ const FeaturedCatalogProductCard = ({ item, onSelect }) => (
 );
 
 const PublicCatalogView = () => {
-  const { success, error: showError } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -104,17 +99,7 @@ const PublicCatalogView = () => {
   const [largeBarcodeProduct, setLargeBarcodeProduct] = useState(null);
   const [featuredItems, setFeaturedItems] = useState([]);
   const [viewMode, setViewMode] = useState('grid');
-  const [preorderProduct, setPreorderProduct] = useState(null);
-  const [preorderQuantity, setPreorderQuantity] = useState(1);
-  const [preorderName, setPreorderName] = useState('');
-  const [preorderPhone, setPreorderPhone] = useState('');
-  const [preorderEmail, setPreorderEmail] = useState('');
-  const [preorderNote, setPreorderNote] = useState('');
-  const [preorderRequestKey, setPreorderRequestKey] = useState('');
-  const [preorderSubmitting, setPreorderSubmitting] = useState(false);
-  const [preorderError, setPreorderError] = useState('');
   const productDialogRef = useRef(null);
-  const preorderDialogRef = useRef(null);
   const { vehicle, updateVehicle, clearVehicle, hasVehicle } = usePublicVehicleSelection({
     persist: false,
     readFromSearch: false,
@@ -162,20 +147,16 @@ const PublicCatalogView = () => {
   }, []);
 
   useEffect(() => {
-    if (!selectedProduct && !preorderProduct) return undefined;
+    if (!selectedProduct) return undefined;
 
     const previousFocus = document.activeElement;
     const previousOverflow = document.body.style.overflow;
-    const activeDialog = preorderProduct ? preorderDialogRef.current : productDialogRef.current;
+    const activeDialog = productDialogRef.current;
     document.body.style.overflow = 'hidden';
     window.requestAnimationFrame(() => activeDialog?.focus());
 
     const handleDialogKeyDown = (event) => {
       if (event.key !== 'Escape') return;
-      if (preorderProduct) {
-        if (!preorderSubmitting) setPreorderProduct(null);
-        return;
-      }
       setSelectedProduct(null);
     };
 
@@ -185,7 +166,7 @@ const PublicCatalogView = () => {
       document.body.style.overflow = previousOverflow;
       previousFocus?.focus?.();
     };
-  }, [preorderProduct, preorderSubmitting, selectedProduct]);
+  }, [selectedProduct]);
 
   useEffect(() => {
     let active = true;
@@ -310,66 +291,6 @@ const PublicCatalogView = () => {
       pathname: '/estimate',
       search: params.toString() ? `?${params.toString()}` : '',
     };
-  };
-
-  const openPreorder = (product) => {
-    setPreorderProduct(product);
-    setPreorderQuantity(Math.min(Math.max(Number(product.availableStock || 0) + 1, 1), 999));
-    setPreorderName('');
-    setPreorderPhone('');
-    setPreorderEmail('');
-    setPreorderNote('');
-    setPreorderError('');
-    setPreorderRequestKey(window.crypto.randomUUID());
-  };
-
-  const submitPreorder = async (event) => {
-    event.preventDefault();
-    const quantity = Number(preorderQuantity);
-
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
-      setPreorderError('Quantity must be a whole number from 1 to 999.');
-      return;
-    }
-
-    if (quantity <= Number(preorderProduct?.availableStock || 0)) {
-      setPreorderError(`Choose more than the ${preorderProduct.availableStock} units currently available, or use the normal quote flow.`);
-      return;
-    }
-
-    const phone = normalizePhilippinePhoneNumber(preorderPhone);
-    if (preorderName.trim().length < 2 || !phone) {
-      setPreorderError('Enter your name and a valid Philippine phone number so the admin can contact you.');
-      return;
-    }
-
-    if (preorderEmail.trim() && !/^\S+@\S+\.\S+$/.test(preorderEmail.trim())) {
-      setPreorderError('Enter a valid email address or leave it blank.');
-      return;
-    }
-
-    setPreorderSubmitting(true);
-    setPreorderError('');
-    try {
-      const reservation = await createPartReservation({
-        productId: preorderProduct.id,
-        quantity,
-        customerName: preorderName.trim(),
-        customerPhone: phone,
-        customerEmail: preorderEmail.trim().toLowerCase(),
-        note: preorderNote.trim(),
-        requestKey: preorderRequestKey,
-      });
-      success(`${reservation.reservationNumber} was submitted. The admin will contact you when it is reviewed.`);
-      setPreorderProduct(null);
-      setSelectedProduct(null);
-    } catch (error) {
-      const message = error.message || 'Unable to submit this reservation.';
-      setPreorderError(message);
-      showError(message);
-    } finally {
-      setPreorderSubmitting(false);
-    }
   };
 
   return (
@@ -763,7 +684,6 @@ const PublicCatalogView = () => {
               role="dialog"
               aria-modal="true"
               aria-labelledby="product-detail-title"
-              aria-hidden={preorderProduct ? 'true' : undefined}
               tabIndex={-1}
             >
               <div className="pointer-events-none flex justify-center pt-3 sm:hidden">
@@ -817,7 +737,6 @@ const PublicCatalogView = () => {
                     <div className={`mb-3 rounded-xl border px-4 py-3 text-sm ${selectedProduct.inStock ? 'border-blue-100 bg-blue-50 text-blue-900' : 'border-red-200 bg-red-50 text-red-900'}`}>
                       <strong>{selectedProduct.availableStock} unit{selectedProduct.availableStock === 1 ? '' : 's'} available</strong>
                       {selectedProduct.reservedStock > 0 && <span> · {selectedProduct.reservedStock} reserved</span>}
-                       <p className="mt-1 text-xs opacity-80">Submit a request when you need more than current availability. No customer account is required.</p>
                     </div>
 
                     <div className="mb-2">
@@ -860,103 +779,11 @@ const PublicCatalogView = () => {
                         <Link to={buildEstimateHref()} className="btn btn-primary w-full sm:w-auto px-8" onClick={() => setSelectedProduct(null)}>
                           <ShoppingCart className="w-5 h-5" /> Calculate Quote
                         </Link>
-                        <Button variant={selectedProduct.inStock ? 'warning' : 'approve'} onClick={() => openPreorder(selectedProduct)} leftIcon={<PackagePlus className="h-5 w-5" />}>
-                          {selectedProduct.inStock ? 'Request extra quantity' : 'Request this part'}
-                        </Button>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </Motion.div>
-          </Motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {preorderProduct && (
-          <Motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="modal-overlay"
-            onClick={() => !preorderSubmitting && setPreorderProduct(null)}
-          >
-            <Motion.div
-              ref={preorderDialogRef}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="modal max-w-lg"
-              onClick={(event) => event.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="preorder-title"
-              tabIndex={-1}
-            >
-              <div className="modal-header">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent-primary">Request a part</p>
-                  <h2 id="preorder-title" className="modal-title mt-1">{preorderProduct.inStock ? 'Request extra quantity' : 'Request an unavailable part'}</h2>
-                </div>
-                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setPreorderProduct(null)} disabled={preorderSubmitting} aria-label="Close reservation form"><X className="h-5 w-5" /></button>
-              </div>
-
-              <form onSubmit={submitPreorder}>
-                <div className="modal-body space-y-5">
-                  <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4">
-                    <p className="font-bold text-primary-950">{preorderProduct.name}</p>
-                    <p className="mt-1 font-mono text-sm text-primary-500">{preorderProduct.sku}</p>
-                    <p className="mt-3 text-sm text-primary-700">Current available quantity: <strong>{preorderProduct.availableStock}</strong></p>
-                  </div>
-
-                  {preorderError && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">{preorderError}</div>}
-
-                    <label className="block text-sm font-semibold text-primary-700">
-                      Your name
-                      <input type="text" required maxLength="120" autoComplete="name" className="input mt-2" value={preorderName} onChange={(event) => { setPreorderName(event.target.value); setPreorderError(''); }} placeholder="Full name" />
-                    </label>
-
-                    <label className="block text-sm font-semibold text-primary-700">
-                      Phone number
-                      <input type="tel" required inputMode="tel" autoComplete="tel" maxLength="32" className="input mt-2" value={preorderPhone} onChange={(event) => { setPreorderPhone(event.target.value); setPreorderError(''); }} placeholder="09XX XXX XXXX" />
-                    </label>
-
-                    <label className="block text-sm font-semibold text-primary-700">
-                      Email (optional)
-                      <input type="email" maxLength="160" autoComplete="email" className="input mt-2" value={preorderEmail} onChange={(event) => { setPreorderEmail(event.target.value); setPreorderError(''); }} placeholder="you@example.com" />
-                    </label>
-
-                    <label className="block text-sm font-semibold text-primary-700">
-                      Requested quantity
-                    <input
-                      type="number"
-                      min="1"
-                      max="999"
-                      step="1"
-                      required
-                      className="input mt-2"
-                      value={preorderQuantity}
-                      onChange={(event) => { setPreorderQuantity(event.target.value); setPreorderError(''); }}
-                    />
-                    <span className="mt-2 block text-xs font-normal text-primary-500">Whole quantities from 1 to 999. For in-stock parts, request more than current availability.</span>
-                  </label>
-
-                  <label className="block text-sm font-semibold text-primary-700">
-                    Note (optional)
-                    <textarea className="input mt-2 min-h-24 resize-y" maxLength="1000" value={preorderNote} onChange={(event) => setPreorderNote(event.target.value)} placeholder="Vehicle details or preferred contact information" />
-                  </label>
-
-                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
-                    This is a request, not a confirmed sale. No customer account is created and only Limen administrators can review, approve, allocate, reject, or complete it.
-                  </p>
-                </div>
-
-                <div className="modal-footer">
-                  <Button variant="cancel" onClick={() => setPreorderProduct(null)} disabled={preorderSubmitting}>Cancel</Button>
-                  <Button type="submit" variant="confirm" isLoading={preorderSubmitting} loadingLabel="Submitting request" leftIcon={<PackagePlus className="h-4 w-4" />}>Send request</Button>
-                </div>
-              </form>
             </Motion.div>
           </Motion.div>
         )}
