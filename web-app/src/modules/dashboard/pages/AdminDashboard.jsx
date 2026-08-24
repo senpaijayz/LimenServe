@@ -3,15 +3,21 @@ import { Link } from 'react-router';
 import {
     DollarSign,
     AlertTriangle,
+    ClipboardList,
     Package,
     RefreshCw,
+    ShoppingCart,
     TrendingUp,
+    Warehouse,
+    Wrench,
+    FileText,
 } from 'lucide-react';
 import Card, { KPICard } from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import { useAuth } from '../../../context/useAuth';
 import { formatCurrency, formatNumber } from '../../../utils/formatters';
 import { getAnalyticsDashboardSnapshot, runFullAnalyticsRefresh } from '../../../services/analyticsApi';
+import { getDashboardOperationsSnapshot, summarizeDashboardOperations } from '../../../services/dashboardApi';
 
 const SalesChart = lazy(() => import('../components/SalesChart'));
 const InventoryMovementLedger = lazy(() => import('../components/InventoryMovementLedger'));
@@ -37,6 +43,7 @@ function getGreeting() {
 const AdminDashboard = () => {
     const { user, isProfileReady, profileWarning } = useAuth();
     const [snapshot, setSnapshot] = useState(null);
+    const [operations, setOperations] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
@@ -49,11 +56,23 @@ const AdminDashboard = () => {
         setError('');
 
         try {
-            const data = await getAnalyticsDashboardSnapshot({
-                startDate: new Date(new Date().setMonth(new Date().getMonth() - 6)).toISOString().slice(0, 10),
-                endDate: new Date().toISOString().slice(0, 10),
-            });
-            setSnapshot(data);
+            const [analyticsResult, operationsResult] = await Promise.allSettled([
+                getAnalyticsDashboardSnapshot({
+                    startDate: new Date(new Date().setMonth(new Date().getMonth() - 6)).toISOString().slice(0, 10),
+                    endDate: new Date().toISOString().slice(0, 10),
+                }),
+                getDashboardOperationsSnapshot(),
+            ]);
+
+            if (analyticsResult.status === 'fulfilled') {
+                setSnapshot(analyticsResult.value);
+            } else {
+                setError(analyticsResult.reason?.message || 'Unable to load analytics snapshot.');
+            }
+
+            if (operationsResult.status === 'fulfilled') {
+                setOperations(operationsResult.value);
+            }
         } catch (snapshotError) {
             setError(snapshotError.message || 'Unable to load analytics snapshot.');
         } finally {
@@ -107,6 +126,7 @@ const AdminDashboard = () => {
     const topSellingItems = snapshot?.topSellingItems || [];
     const itemTrend = snapshot?.itemTrend || [];
     const peakPeriods = snapshot?.peakPeriods || [];
+    const operationalSummary = summarizeDashboardOperations(operations || {});
 
     const predictedRevenue = topProductForecasts.reduce((sum, item) => sum + Number(item.predicted_revenue || 0), 0);
     const forecastedProductCount = topProductForecasts.reduce((sum, item) => sum + Number(item.predicted_quantity || 0), 0);
@@ -181,6 +201,40 @@ const AdminDashboard = () => {
                     </div>
                 </Card>
             )}
+
+            {operationalSummary.errors.length > 0 && (
+                <Card className="border border-amber-200 bg-amber-50" padding="sm">
+                    <div className="flex items-start gap-3 text-sm text-amber-800">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                            <p className="font-semibold">Some live dashboard data is unavailable</p>
+                            <p className="mt-1">{operationalSummary.errors.join(' · ')}</p>
+                        </div>
+                    </div>
+                </Card>
+            )}
+
+            <div>
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                        <p className="text-xs font-black uppercase tracking-[0.22em] text-primary-400">Live operations</p>
+                        <h2 className="mt-1 font-display text-xl font-bold text-primary-950">Today at a glance</h2>
+                    </div>
+                    <p className="text-xs text-primary-500">
+                        {operationalSummary.loadedAt
+                            ? `Updated ${new Date(operationalSummary.loadedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+                            : 'Loading live data...'}
+                    </p>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <KPICard title="Today's Sales" value={loading ? 'Loading...' : formatCurrency(operationalSummary.todaySalesTotal)} icon={<ShoppingCart className="h-6 w-6" />} accentColor="border-emerald-500" iconBg="bg-emerald-50 text-emerald-600" />
+                    <KPICard title="Sales Count" value={loading ? 'Loading...' : formatNumber(operationalSummary.todaySalesCount)} icon={<DollarSign className="h-6 w-6" />} accentColor="border-accent-blue" iconBg="bg-blue-50 text-accent-blue" />
+                    <KPICard title="Inventory Value" value={loading ? 'Loading...' : formatCurrency(operationalSummary.inventoryValue)} icon={<Warehouse className="h-6 w-6" />} accentColor="border-indigo-500" iconBg="bg-indigo-50 text-indigo-600" />
+                    <KPICard title="Open Service Orders" value={loading ? 'Loading...' : formatNumber(operationalSummary.openServiceOrderCount)} icon={<Wrench className="h-6 w-6" />} accentColor="border-amber-500" iconBg="bg-amber-50 text-amber-700" />
+                    <KPICard title="Pending Reservations" value={loading ? 'Loading...' : formatNumber(operationalSummary.pendingReservationCount)} icon={<ClipboardList className="h-6 w-6" />} accentColor="border-rose-500" iconBg="bg-rose-50 text-rose-600" />
+                    <KPICard title="Active Quotations" value={loading ? 'Loading...' : formatNumber(operationalSummary.activeEstimateCount)} icon={<FileText className="h-6 w-6" />} accentColor="border-violet-500" iconBg="bg-violet-50 text-violet-600" />
+                </div>
+            </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <KPICard title="Predicted Revenue" value={loading ? 'Loading...' : formatCurrency(predictedRevenue)} icon={<DollarSign className="w-6 h-6" />} trend="up" trendValue={`${topProductForecasts.length} top products`} accentColor="border-accent-blue" iconBg="bg-blue-50 text-accent-blue" />
