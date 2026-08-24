@@ -84,6 +84,15 @@ describe('deployment environment routing', () => {
     expect(vercelConfig.rewrites).toEqual([
       { source: '/(.*)', destination: '/index.html' },
     ]);
+    const securityHeaders = vercelConfig.headers
+      ?.find((entry) => entry.source === '/(.*)')
+      ?.headers ?? [];
+    expect(securityHeaders).toEqual(expect.arrayContaining([
+      { key: 'Strict-Transport-Security', value: expect.stringContaining('max-age=31536000') },
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'X-Frame-Options', value: 'DENY' },
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+    ]));
     expect(JSON.stringify(vercelConfig)).not.toContain('limen-backend.onrender.com');
   });
 
