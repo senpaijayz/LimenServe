@@ -1,10 +1,15 @@
 import { useState } from 'react';
-import { CheckCircle2, Download, FileSpreadsheet, RefreshCcw, Upload } from 'lucide-react';
+import { CheckCircle2, Download, FileSpreadsheet, History, RefreshCcw, Upload } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import Input from '../../../components/ui/Input';
 import { useToast } from '../../../components/ui/Toast';
-import { getCurrentRetailPriceList, replaceRetailPriceListFile } from '../../../services/catalogApi';
+import {
+    activateRetailPriceListVersion,
+    getCurrentRetailPriceList,
+    getRetailPriceListVersions,
+    replaceRetailPriceListFile,
+} from '../../../services/catalogApi';
 
 function formatUploadCount(value) {
     return Number(value ?? 0).toLocaleString('en-PH');
@@ -46,6 +51,10 @@ function getChangeLabel(status) {
         return 'Same price';
     }
 
+    if (status === 'removed_from_list') {
+        return 'Not in this list';
+    }
+
     return 'Changed';
 }
 
@@ -67,8 +76,13 @@ const PriceListManager = ({ onUpdated }) => {
     const { success, error } = useToast();
     const [isOpen, setIsOpen] = useState(false);
     const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
+    const [versionYear, setVersionYear] = useState(String(new Date().getFullYear()));
+    const [activateImmediately, setActivateImmediately] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+    const [activatingVersionId, setActivatingVersionId] = useState(null);
+    const [versions, setVersions] = useState([]);
     const [lastResult, setLastResult] = useState(null);
     const [selectedFile, setSelectedFile] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(0);
@@ -85,13 +99,30 @@ const PriceListManager = ({ onUpdated }) => {
         setUploadPhase('');
     };
 
+    const loadVersions = async () => {
+        setIsLoadingVersions(true);
+        try {
+            setVersions(await getRetailPriceListVersions());
+        } catch (loadError) {
+            error(loadError.message || 'Failed to load saved price lists.');
+        } finally {
+            setIsLoadingVersions(false);
+        }
+    };
+
+    const handleOpen = () => {
+        setIsOpen(true);
+        void loadVersions();
+    };
+
     const handleDownloadTemplate = async () => {
         setIsDownloading(true);
         try {
             const currentPriceList = await getCurrentRetailPriceList();
+            const currentItems = currentPriceList?.items ?? currentPriceList ?? [];
             const rows = [
                 ['PART_NUMBER', 'PRICE', 'NAME', 'MODEL', 'CATEGORY'],
-                ...currentPriceList.map((item) => [item.sku, item.price, item.name, item.model, item.category]),
+                ...currentItems.map((item) => [item.sku, item.price, item.name, item.model, item.category]),
             ];
             downloadCsv('limen-price-list-template.csv', rows);
         } catch (downloadError) {
@@ -103,8 +134,27 @@ const PriceListManager = ({ onUpdated }) => {
 
     const applyResult = (result) => {
         setLastResult(result);
-        success(`Price list applied: ${formatUploadCount(result.changedCount ?? result.updatedCount)} changed, ${formatUploadCount(result.unchangedCount ?? 0)} already matched.`);
+        success(`Price list ${result.versionYear ?? versionYear} ${result.isActive === false ? 'saved as a draft' : 'activated'}: ${formatUploadCount(result.changedCount ?? result.updatedCount)} changed, ${formatUploadCount(result.unchangedCount ?? 0)} already matched.`);
+        void loadVersions();
         onUpdated?.();
+    };
+
+    const handleActivate = async (version) => {
+        if (!version?.id || version.isActive) {
+            return;
+        }
+
+        setActivatingVersionId(version.id);
+        try {
+            await activateRetailPriceListVersion(version.id);
+            success(`Price list ${version.versionYear} is now active in inventory and quotations.`);
+            await loadVersions();
+            onUpdated?.();
+        } catch (activateError) {
+            error(activateError.message || 'Failed to activate the selected price list.');
+        } finally {
+            setActivatingVersionId(null);
+        }
     };
 
     const handleFileChange = (event) => {
@@ -133,6 +183,8 @@ const PriceListManager = ({ onUpdated }) => {
 
         try {
             const result = await replaceRetailPriceListFile(selectedFile, effectiveFrom, {
+                versionYear,
+                activate: activateImmediately,
                 onUploadProgress: (event) => {
                     if (!event.total) {
                         setUploadProgress((current) => Math.max(current, 12));
@@ -142,11 +194,11 @@ const PriceListManager = ({ onUpdated }) => {
 
                     const uploadedPercent = Math.min(78, Math.max(8, Math.round((event.loaded / event.total) * 78)));
                     setUploadProgress(uploadedPercent);
-                    setUploadPhase(uploadedPercent >= 78 ? 'Validating rows and applying prices…' : 'Uploading the workbook…');
+                    setUploadPhase(uploadedPercent >= 78 ? (activateImmediately ? 'Validating rows and applying prices…' : 'Validating and saving the draft…') : 'Uploading the workbook…');
                 },
             });
             setUploadProgress(100);
-            setUploadPhase('Pricelist replaced successfully.');
+            setUploadPhase(activateImmediately ? 'Pricelist applied successfully.' : 'Pricelist saved as a draft.');
             applyResult(result);
             setSelectedFile(null);
         } catch (submitError) {
@@ -163,7 +215,7 @@ const PriceListManager = ({ onUpdated }) => {
             <Button
                 variant="secondary"
                 leftIcon={<FileSpreadsheet className="w-4 h-4" />}
-                onClick={() => setIsOpen(true)}
+                onClick={handleOpen}
             >
                 Replace Price List
             </Button>
@@ -178,19 +230,48 @@ const PriceListManager = ({ onUpdated }) => {
                     <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4">
                         <p className="text-sm font-semibold text-primary-950">Retail price list source</p>
                         <p className="mt-1 text-sm text-primary-600">
-                            Upload the new Mitsubishi price list and review exactly which part numbers changed before you leave this screen. Prices become active for the selected date, removed parts move to Archived Products, and inventory stock quantities are never overwritten.
+                            Save each Mitsubishi price list by year. A newer list can add or remove part numbers without deleting inventory history; only the active list changes selling prices. Stock quantities are never overwritten.
                         </p>
                     </div>
 
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                        <Input
-                            label="Effective From"
-                            type="date"
-                            value={effectiveFrom}
-                            onChange={(event) => setEffectiveFrom(event.target.value)}
-                            containerClassName="max-w-xs"
-                            required
-                        />
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <Input
+                                label="Price list year"
+                                type="number"
+                                min="2000"
+                                max="2200"
+                                value={versionYear}
+                                onChange={(event) => setVersionYear(event.target.value)}
+                                required
+                            />
+                            <Input
+                                label="Effective From"
+                                type="date"
+                                value={effectiveFrom}
+                                onChange={(event) => {
+                                    setEffectiveFrom(event.target.value);
+                                    if (!versionYear) {
+                                        setVersionYear(event.target.value.slice(0, 4));
+                                    }
+                                }}
+                                required
+                            />
+                        </div>
+
+                        <label className="flex max-w-xl items-start gap-3 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2.5 text-sm text-primary-700">
+                            <input
+                                type="checkbox"
+                                className="mt-0.5 h-4 w-4 rounded border-primary-300 text-accent-blue focus:ring-accent-blue/30"
+                                checked={activateImmediately}
+                                onChange={(event) => setActivateImmediately(event.target.checked)}
+                                disabled={isSubmitting}
+                            />
+                            <span>
+                                <span className="block font-semibold text-primary-950">Make this the active price list now</span>
+                                <span className="mt-0.5 block text-xs text-primary-500">Uncheck to save the year for review without changing live prices.</span>
+                            </span>
+                        </label>
 
                         <div className="flex flex-wrap gap-3">
                             <Button
@@ -215,6 +296,49 @@ const PriceListManager = ({ onUpdated }) => {
                                 />
                             </label>
                         </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-primary-200 bg-white p-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                                <History className="h-4 w-4 text-accent-blue" />
+                                <p className="text-sm font-semibold text-primary-950">Saved price lists</p>
+                            </div>
+                            <Button type="button" variant="ghost" size="sm" onClick={loadVersions} isLoading={isLoadingVersions}>
+                                Refresh
+                            </Button>
+                        </div>
+                        {versions.length > 0 ? (
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                {versions.map((version) => (
+                                    <div key={version.id} className="rounded-xl border border-primary-100 bg-primary-50 p-3">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div>
+                                                <p className="font-semibold text-primary-950">{version.versionYear} list</p>
+                                                <p className="mt-1 text-xs text-primary-500">{formatUploadCount(version.rowCount)} parts · effective {version.effectiveFrom}</p>
+                                            </div>
+                                            <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${version.isActive ? 'bg-emerald-100 text-emerald-700' : version.status === 'draft' ? 'bg-amber-100 text-amber-700' : 'bg-primary-100 text-primary-600'}`}>
+                                                {version.isActive ? 'Active' : version.status}
+                                            </span>
+                                        </div>
+                                        {!version.isActive && (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className="mt-3 w-full"
+                                                isLoading={activatingVersionId === version.id}
+                                                onClick={() => handleActivate(version)}
+                                            >
+                                                Use this year
+                                            </Button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="mt-2 text-sm text-primary-500">No saved versions yet. Upload the first list to create a year that can be selected later.</p>
+                        )}
                     </div>
 
                     <div className="rounded-2xl border border-primary-200 bg-white p-4">
@@ -264,7 +388,7 @@ const PriceListManager = ({ onUpdated }) => {
                                 <div className="flex items-start gap-3">
                                     <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
                                     <div>
-                                        <p className="font-semibold text-emerald-950">Price list applied successfully</p>
+                                        <p className="font-semibold text-emerald-950">{lastResult.isActive === false ? 'Price list draft saved' : 'Price list applied successfully'}</p>
                                         <p className="mt-1 text-emerald-700">
                                             {formatUploadCount(lastResult.changedCount ?? lastResult.updatedCount)} changed or new prices, {formatUploadCount(lastResult.unchangedCount ?? 0)} already matched.
                                         </p>
@@ -275,7 +399,7 @@ const PriceListManager = ({ onUpdated }) => {
                                 </p>
                             </div>
 
-                            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
+                            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6">
                                 <div className="rounded-xl bg-primary-50 p-3">
                                     <p className="text-xs uppercase tracking-[0.16em] text-primary-400">Rows received</p>
                                     <p className="mt-1 text-lg font-semibold text-primary-950">{formatUploadCount(lastResult.receivedCount ?? lastResult.updatedCount)}</p>
@@ -289,8 +413,8 @@ const PriceListManager = ({ onUpdated }) => {
                                     <p className="mt-1 text-lg font-semibold text-primary-950">{formatUploadCount(lastResult.newProductsCount ?? 0)}</p>
                                 </div>
                                 <div className="rounded-xl bg-amber-50 p-3">
-                                    <p className="text-xs uppercase tracking-[0.16em] text-amber-600">Moved to archive</p>
-                                    <p className="mt-1 text-lg font-semibold text-amber-950">{formatUploadCount(lastResult.archivedProductsCount ?? 0)}</p>
+                                    <p className="text-xs uppercase tracking-[0.16em] text-amber-600">Not in new list</p>
+                                    <p className="mt-1 text-lg font-semibold text-amber-950">{formatUploadCount(lastResult.removedFromListCount ?? 0)}</p>
                                 </div>
                                 <div className="rounded-xl bg-primary-50 p-3">
                                     <p className="text-xs uppercase tracking-[0.16em] text-primary-400">Skipped</p>

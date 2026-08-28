@@ -713,17 +713,54 @@ export async function getServiceCatalog() {
 export async function getCurrentRetailPriceList() {
   try {
     const { data } = await apiClient.get('/catalog/prices/current');
+    // Preserve the historical array contract; the endpoint also returns
+    // `activeVersion` for callers that need metadata about the selected year.
     return data.priceList ?? [];
   } catch (error) {
     extractApiError(error, 'Failed to load the current price list.');
   }
 }
 
-export async function replaceRetailPriceList(items, effectiveFrom) {
+export async function getRetailPriceListVersions() {
+  try {
+    const { data } = await apiClient.get('/catalog/prices/versions');
+    return data.versions ?? [];
+  } catch (error) {
+    extractApiError(error, 'Failed to load saved price list versions.');
+  }
+}
+
+export async function getRetailPriceListVersionItems(versionId, params = {}) {
+  try {
+    const { data } = await apiClient.get(`/catalog/prices/versions/${encodeURIComponent(versionId)}/items`, {
+      params: {
+        ...params,
+        skus: Array.isArray(params.skus) ? params.skus.join(',') : params.skus,
+      },
+    });
+    return data.items ?? [];
+  } catch (error) {
+    extractApiError(error, 'Failed to load the selected price list.');
+  }
+}
+
+export async function activateRetailPriceListVersion(versionId) {
+  try {
+    const { data } = await apiClient.post(`/catalog/prices/versions/${encodeURIComponent(versionId)}/activate`);
+    clearProductCatalogCaches();
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Failed to activate the selected price list.');
+  }
+}
+
+export async function replaceRetailPriceList(items, effectiveFrom, options = {}) {
   try {
     const { data } = await apiClient.post('/catalog/prices/bulk-replace', {
       items,
       effectiveFrom,
+      versionYear: options.versionYear,
+      activate: options.activate !== false,
     }, {
       timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS,
     });
@@ -740,6 +777,10 @@ export async function replaceRetailPriceListFile(file, effectiveFrom, requestOpt
     const formData = new FormData();
     formData.append('priceList', file);
     formData.append('effectiveFrom', effectiveFrom);
+    if (requestOptions.versionYear) {
+      formData.append('versionYear', requestOptions.versionYear);
+    }
+    formData.append('activate', requestOptions.activate === false ? 'false' : 'true');
 
     const { data } = await apiClient.post('/catalog/prices/bulk-replace-file', formData, {
       timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS,

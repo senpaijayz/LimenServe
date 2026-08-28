@@ -101,6 +101,22 @@ const ProductCard = memo(({ product, onEdit, onDelete, onLocate, onSelect }) => 
                         </span>
                     </div>
 
+                    {product.priceListYear && (
+                        <div className="rounded-lg border border-primary-100 bg-primary-50 px-3 py-2 text-xs">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="font-semibold text-primary-500">{product.priceListYear} list</span>
+                                <span className={`font-bold ${product.priceListListed ? 'text-primary-900' : 'text-primary-400'}`}>
+                                    {product.priceListListed ? formatCurrency(product.priceListPrice) : 'Not listed'}
+                                </span>
+                            </div>
+                            {product.priceDifference !== null && product.priceDifference !== undefined && (
+                                <p className={`mt-1 font-semibold ${Number(product.priceDifference) > 0 ? 'text-accent-danger' : Number(product.priceDifference) < 0 ? 'text-emerald-700' : 'text-primary-500'}`}>
+                                    Difference: {formatCurrency(product.priceDifference)}
+                                </p>
+                            )}
+                        </div>
+                    )}
+
                     <div className="flex items-center justify-between pt-3 border-t border-primary-100">
                         <div className="flex items-center gap-2">
                             <span className="text-sm font-semibold text-primary-500 uppercase tracking-widest">Qty:</span>

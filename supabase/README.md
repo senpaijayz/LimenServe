@@ -115,3 +115,53 @@ Both migrations require a recovered, production-compatible baseline; staging cur
 - `get_monthly_service_forecasts`
 - `get_analytics_dashboard_snapshot`
 - `run_full_analytics_refresh`
+
+## Versioned retail price lists
+
+`20260828100000_versioned_retail_pricelists.sql` adds durable yearly snapshots
+in `catalog.pricelist_versions` and `catalog.pricelist_version_items`. Uploading
+the 2026 list no longer deletes the 2025 list or archives products that are
+missing from 2026. Each version records its effective date, row count, and
+status; the active version is the one used for current retail prices and the
+legacy staging table remains only as a compatibility projection.
+
+The backend exposes these admin-only operations:
+
+- `GET /api/catalog/prices/versions` — list saved years and the active version.
+- `GET /api/catalog/prices/versions/:id/items` — inspect a saved year (use
+  `skus` for a small inventory comparison).
+- `POST /api/catalog/prices/versions/:id/activate` — switch the active year in
+  one transaction.
+- Existing bulk upload endpoints now accept `versionYear` and save a snapshot;
+  `effectiveFrom` remains required for pricing history.
+
+Activation changes only retail price rows and the compatibility staging
+projection. `catalog.inventory_balances` quantities and reservation fields are
+never overwritten. The import response includes added parts, removed-from-list
+parts, increases, decreases, unchanged rows, and a bounded preview so the
+inventory screen can show the difference before staff switch years.
+
+An upload can be saved as a draft from the inventory screen. For safety, a
+draft cannot reuse the exact year/effective-date identity of the active
+snapshot; apply that replacement immediately or choose a distinct effective
+date, then activate it after review.
+
+Apply this migration to an isolated rehearsal database first. Do not run it on
+production until the migration ledger is reconciled and the SQL invariant test
+`tests/20260828_versioned_pricelist_invariants.sql` passes.
+
+## Historical period totals
+
+`20260828120000_historical_sales_period_totals.sql` adds a separate,
+service-role-only ledger for paper summaries that provide a total for a day,
+month, or year without itemized lines. Period boundaries are normalized by the
+database, with an audit snapshot for every create or update. These totals are
+shown separately from item-level analytics so an unknown paper total is never
+assigned to an arbitrary part. The admin reports page exposes **Add Period
+Total** alongside the existing itemized historical-sale encoder.
+
+Rehearse the migration and run
+`tests/20260828_historical_sales_period_totals_invariants.sql` before applying
+it to a hosted database. The RPCs are intentionally not executable by `anon`
+or `authenticated`; the Express API calls them with the server-only
+service-role key.

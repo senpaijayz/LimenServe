@@ -11,6 +11,8 @@
     "20260817_guest_reservation_invariants.sql",
     "20260820_admin_reservation_invariants.sql",
     "20260820_estimate_validity_invariants.sql",
-    "20260820_admin_reservation_customer_fields.sql"
+    "20260820_admin_reservation_customer_fields.sql",
+    "20260828_versioned_pricelist_invariants.sql",
+    "20260828_historical_sales_period_totals_invariants.sql"
   ]
 }

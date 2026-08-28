@@ -132,6 +132,33 @@ Customers can request an unavailable or insufficiently stocked part directly fro
 
 Do not apply this migration automatically to production. Validate it first against a schema-compatible non-production database and run the SQL tests. Deployment must be coordinated because the new backend requires these RPCs and the new lookup UI requires the backend phone-verification contract.
 
+## Year-based inventory pricing
+
+Inventory now supports multiple dated retail price lists (for example, 2025
+and 2026). In the Inventory screen, an administrator can switch the comparison
+year to see the selected-list price beside the active selling price and its
+difference. Parts that are absent from a selected year are labelled **Not
+listed**; their product, stock, locations, and older prices remain available.
+
+Upload each workbook from **Replace Price List**, enter its four-digit year and
+effective date, and review the added, removed-from-list, increased, decreased,
+and unchanged counts. Activating a saved year updates current retail prices in
+one transaction while preserving `inventory_balances.on_hand` and `reserved`.
+The implementation and service-role-only RPCs are in
+`supabase/migrations/20260828100000_versioned_retail_pricelists.sql`; rehearse
+that migration and run
+`supabase/tests/20260828_versioned_pricelist_invariants.sql` before production.
+
+Historical sales encoding now supports two safe paths in the reports workspace:
+itemized receipts for part-level reporting, and separate **day**, **month**, or
+**year period totals** for paper summaries that contain only a total. Period
+totals retain their original reference, cashier, transaction count, normalized
+date range, and an audit snapshot; they are deliberately shown outside item
+analytics because their part mix is unknown. Apply
+`supabase/migrations/20260828120000_historical_sales_period_totals.sql` after an
+isolated rehearsal and run the matching invariant test before using **Add
+Period Total** in production.
+
 Recommended production order:
 
 1. Back up schema metadata and record current migration/deployment identifiers.

@@ -50,3 +50,33 @@ export async function updateHistoricalPosSale(saleId, payload) {
         extractApiError(error, 'Failed to update the historical sale.');
     }
 }
+
+export async function listHistoricalSalesAggregates(params = {}) {
+    try {
+        const { data } = await apiClient.get('/pos/sales/historical-aggregates', { params });
+        return {
+            aggregates: data.aggregates ?? [],
+            pagination: data.pagination ?? null,
+        };
+    } catch (error) {
+        extractApiError(error, 'Failed to load historical period totals.');
+    }
+}
+
+export async function createHistoricalSalesAggregate(payload) {
+    try {
+        const { data } = await apiClient.post('/pos/sales/historical-aggregates', payload);
+        return data;
+    } catch (error) {
+        extractApiError(error, 'Failed to encode the historical period total.');
+    }
+}
+
+export async function updateHistoricalSalesAggregate(aggregateId, payload) {
+    try {
+        const { data } = await apiClient.put(`/pos/sales/historical-aggregates/${aggregateId}`, payload);
+        return data;
+    } catch (error) {
+        extractApiError(error, 'Failed to update the historical period total.');
+    }
+}

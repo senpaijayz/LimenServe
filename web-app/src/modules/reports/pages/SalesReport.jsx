@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { AlertTriangle, Download, FilePlus2, Filter, Receipt, RefreshCw, TrendingUp } from 'lucide-react';
+import { AlertTriangle, CalendarRange, Download, FilePlus2, Filter, Receipt, RefreshCw, TrendingUp } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
@@ -14,12 +14,13 @@ import {
     runFullAnalyticsRefresh,
 } from '../../../services/analyticsApi';
 import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
-import { getPosSaleDetail, listPosSales } from '../../../services/posApi';
+import { getPosSaleDetail, listHistoricalSalesAggregates, listPosSales } from '../../../services/posApi';
 import { getManagedCategories } from '../../../services/catalogApi';
 import { PAYMENT_LABELS } from '../../../utils/constants';
 import { useAuth } from '../../../context/useAuth';
 import SaleReceiptPreview from '../../pos/components/SaleReceiptPreview.jsx';
 import HistoricalSaleEditorModal from '../components/HistoricalSaleEditorModal.jsx';
+import HistoricalAggregateEditorModal from '../components/HistoricalAggregateEditorModal.jsx';
 
 function toReportNumber(value, fallback = 0) {
     const parsed = Number(value);
@@ -374,6 +375,11 @@ const SalesReport = () => {
     const [loadingSaleDetail, setLoadingSaleDetail] = useState(false);
     const [isHistoricalEditorOpen, setIsHistoricalEditorOpen] = useState(false);
     const [editingHistoricalSale, setEditingHistoricalSale] = useState(null);
+    const [historicalAggregates, setHistoricalAggregates] = useState([]);
+    const [aggregateLoading, setAggregateLoading] = useState(true);
+    const [aggregateUnavailable, setAggregateUnavailable] = useState(false);
+    const [isHistoricalAggregateEditorOpen, setIsHistoricalAggregateEditorOpen] = useState(false);
+    const [editingHistoricalAggregate, setEditingHistoricalAggregate] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
     const [historySort, setHistorySort] = useState({ key: 'date', dir: 'desc' });
     const [categoryOptions, setCategoryOptions] = useState([{ value: '', label: 'All categories' }]);
@@ -459,6 +465,31 @@ const SalesReport = () => {
         }
     }, [filters.endDate, filters.startDate, historySearch]);
 
+    const loadHistoricalAggregates = useCallback(async () => {
+        setAggregateLoading(true);
+        try {
+            const { aggregates } = await listHistoricalSalesAggregates({
+                startDate: filters.startDate,
+                endDate: filters.endDate,
+                search: historySearch || null,
+                limit: 200,
+                page: 1,
+            });
+            setHistoricalAggregates(aggregates ?? []);
+            setAggregateUnavailable(false);
+        } catch (loadError) {
+            const message = String(loadError?.message || '').toLowerCase();
+            if (message.includes('historical period') || message.includes('function') || message.includes('schema cache') || message.includes('internal server error') || message.includes('temporarily unavailable')) {
+                setHistoricalAggregates([]);
+                setAggregateUnavailable(true);
+            } else {
+                setHistoryError(loadError.message || 'Unable to load historical period totals.');
+            }
+        } finally {
+            setAggregateLoading(false);
+        }
+    }, [filters.endDate, filters.startDate, historySearch]);
+
     useEffect(() => {
         void loadAnalytics();
     }, [loadAnalytics]);
@@ -466,6 +497,10 @@ const SalesReport = () => {
     useEffect(() => {
         void loadSalesHistory();
     }, [loadSalesHistory]);
+
+    useEffect(() => {
+        void loadHistoricalAggregates();
+    }, [loadHistoricalAggregates]);
 
     const handleRefresh = async () => {
         setRefreshing(true);
@@ -475,6 +510,7 @@ const SalesReport = () => {
             await runFullAnalyticsRefresh('Manual refresh from reports page');
             await loadAnalytics();
             await loadSalesHistory();
+            await loadHistoricalAggregates();
         } catch (refreshError) {
             setError(refreshError.message || 'Unable to refresh analytics.');
         } finally {
@@ -511,9 +547,23 @@ const SalesReport = () => {
         }
     };
 
+    const handleHistoricalAggregateSaved = async () => {
+        await loadHistoricalAggregates();
+    };
+
     const topLeader = topSellingItems[0];
     const peakLeader = peakPeriods[0];
     const trendRevenue = useMemo(() => itemTrend.reduce((sum, item) => sum + Number(item.revenue ?? 0), 0), [itemTrend]);
+    const historicalAggregateSummary = useMemo(() => {
+        const summary = { day: { total: 0, count: 0 }, month: { total: 0, count: 0 }, year: { total: 0, count: 0 } };
+        historicalAggregates.forEach((aggregate) => {
+            const bucket = summary[aggregate.periodGranularity];
+            if (!bucket) return;
+            bucket.total += Number(aggregate.totalAmount ?? 0);
+            bucket.count += Number(aggregate.transactionCount ?? 0);
+        });
+        return summary;
+    }, [historicalAggregates]);
     const salesByCategory = useMemo(() => {
         const grouped = topSellingItems.reduce((map, item) => {
             const category = item.category || 'Uncategorized';
@@ -618,16 +668,28 @@ const SalesReport = () => {
 
                 <div className="flex flex-wrap gap-3">
                     {isAdmin && (
-                        <Button
-                            variant="primary"
-                            leftIcon={<FilePlus2 className="w-4 h-4" />}
-                            onClick={() => {
-                                setEditingHistoricalSale(null);
-                                setIsHistoricalEditorOpen(true);
-                            }}
-                        >
-                            Encode Historical Sale
-                        </Button>
+                        <>
+                            <Button
+                                variant="primary"
+                                leftIcon={<FilePlus2 className="w-4 h-4" />}
+                                onClick={() => {
+                                    setEditingHistoricalSale(null);
+                                    setIsHistoricalEditorOpen(true);
+                                }}
+                            >
+                                Encode Itemized Sale
+                            </Button>
+                            <Button
+                                variant="outline"
+                                leftIcon={<CalendarRange className="w-4 h-4" />}
+                                onClick={() => {
+                                    setEditingHistoricalAggregate(null);
+                                    setIsHistoricalAggregateEditorOpen(true);
+                                }}
+                            >
+                                Add Period Total
+                            </Button>
+                        </>
                     )}
                     <Button variant="secondary" leftIcon={<RefreshCw className="w-4 h-4" />} isLoading={refreshing} onClick={handleRefresh}>Refresh Analytics</Button>
                     <Button
@@ -691,6 +753,70 @@ const SalesReport = () => {
                 <KPICard title="Peak Month Leader" value={loading ? 'Loading...' : (peakLeader?.product_name || 'N/A')} icon={<TrendingUp className="w-6 h-6" />} trend="up" trendValue={peakLeader?.peak_month ? new Date(peakLeader.peak_month).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' }) : 'No data'} accentColor="border-emerald-500" iconBg="bg-emerald-50 text-emerald-600" />
                 <KPICard title="Low Stock Risks" value={loading ? 'Loading...' : String((dashboardSnapshot?.predictedLowStockRisk || []).length)} icon={<AlertTriangle className="w-6 h-6" />} trend="down" trendValue="Forecast-based risk watch" accentColor="border-amber-500" iconBg="bg-amber-50 text-amber-600" />
             </div>
+
+            <Card
+                title="Historical Period Totals"
+                subtitle="Use this ledger for paper summaries that contain a day, month, or year total but no item breakdown."
+                headerAction={aggregateUnavailable ? <span className="text-xs font-semibold text-primary-500">Migration pending</span> : null}
+            >
+                {aggregateUnavailable ? (
+                    <div className="rounded-xl border border-dashed border-primary-200 bg-primary-50 px-4 py-5 text-sm text-primary-600">
+                        Period totals are ready after the historical-sales migration is applied. Itemized sales remain available now.
+                    </div>
+                ) : (
+                    <>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                            {['day', 'month', 'year'].map((granularity) => (
+                                <div key={granularity} className="rounded-xl border border-primary-200 bg-white px-4 py-3">
+                                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">{granularity} totals</p>
+                                    <p className="mt-1 text-xl font-display font-bold text-primary-950">
+                                        {aggregateLoading ? 'Loading...' : formatCurrency(historicalAggregateSummary[granularity].total)}
+                                    </p>
+                                    <p className="mt-1 text-xs text-primary-500">{historicalAggregateSummary[granularity].count} transactions represented</p>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-4 overflow-x-auto">
+                            <table className="table">
+                                <thead>
+                                    <tr>
+                                        <th>Period</th>
+                                        <th>Reference</th>
+                                        <th>Cashier</th>
+                                        <th className="text-right">Transactions</th>
+                                        <th className="text-right">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {historicalAggregates.map((aggregate) => (
+                                        <tr key={aggregate.aggregateId}>
+                                            <td>
+                                                <div className="flex flex-col">
+                                                    <span className="font-semibold capitalize text-primary-950">{aggregate.periodGranularity}</span>
+                                                    <span className="text-xs text-primary-500">{aggregate.periodStart} → {aggregate.periodEnd}</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span className="font-medium text-primary-900">{aggregate.originalReference}</span>
+                                                {aggregate.note && <span className="mt-1 block max-w-xs text-xs text-primary-500">{aggregate.note}</span>}
+                                            </td>
+                                            <td>{aggregate.cashierName}</td>
+                                            <td className="text-right">{formatNumber(aggregate.transactionCount)}</td>
+                                            <td className="text-right font-semibold text-accent-blue">{formatCurrency(aggregate.totalAmount)}</td>
+                                        </tr>
+                                    ))}
+                                    {!aggregateLoading && historicalAggregates.length === 0 && (
+                                        <tr><td colSpan="5" className="py-6 text-center text-primary-500">No period totals matched the selected filters.</td></tr>
+                                    )}
+                                    {aggregateLoading && (
+                                        <tr><td colSpan="5" className="py-6 text-center text-primary-500">Loading period totals...</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </>
+                )}
+            </Card>
 
             <SalesChart data={itemTrend} title="Item-Level Sales Trend" subtitle="Revenue and units sold over the selected period" />
 
@@ -1046,6 +1172,18 @@ const SalesReport = () => {
                     }}
                     onSaved={(saved) => void handleHistoricalSaved(saved)}
                     saleDetail={editingHistoricalSale}
+                />
+            )}
+
+            {isAdmin && (
+                <HistoricalAggregateEditorModal
+                    isOpen={isHistoricalAggregateEditorOpen}
+                    onClose={() => {
+                        setIsHistoricalAggregateEditorOpen(false);
+                        setEditingHistoricalAggregate(null);
+                    }}
+                    onSaved={() => void handleHistoricalAggregateSaved()}
+                    aggregate={editingHistoricalAggregate}
                 />
             )}
         </div>

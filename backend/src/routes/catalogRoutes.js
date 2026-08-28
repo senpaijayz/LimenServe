@@ -7,6 +7,7 @@ import { clearPublicResponseCache } from '../middleware/cache.js';
 import { analyzeSupplierInvoiceImage } from '../services/invoiceOcrService.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import { receiveCatalogStock, receiveSupplierInvoiceStock, requireIdempotencyKey } from '../services/stockReceipt.js';
+import { parsePriceListActivation, parsePriceListVersionYear } from '../services/priceListVersionModel.js';
 import { selectByInChunks } from '../utils/supabaseBatchSelect.js';
 import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 
@@ -4249,17 +4250,200 @@ router.get('/services', async (_req, res, next) => {
 
 router.get('/prices/current', requireRole('admin'), async (_req, res, next) => {
   try {
-    const products = await getCachedProductCatalog();
-    const priceList = (products ?? []).map((product) => ({
-      id: product.id,
-      sku: product.sku,
-      name: product.name,
-      model: product.model,
-      category: product.category,
-      price: Number(product.price ?? 0),
-    }));
+    let activeVersion = null;
+    try {
+      const { data, error } = await supabaseAdmin
+        .schema('catalog')
+        .from('pricelist_versions')
+        .select('id, version_year, effective_from, status, is_active, row_count, activated_at')
+        .eq('price_type', 'retail')
+        .eq('is_active', true)
+        .maybeSingle();
+      if (error && !isPrivateSchemaAccessError(error)) {
+        throw error;
+      }
+      activeVersion = data ?? null;
+    } catch (versionError) {
+      if (!isPrivateSchemaAccessError(versionError)) {
+        throw versionError;
+      }
+    }
 
-    res.json({ priceList });
+    let priceList = [];
+    if (activeVersion?.id) {
+      const { data: versionItems, error: versionItemsError } = await supabaseAdmin
+        .schema('catalog')
+        .from('pricelist_version_items')
+        .select('id, product_id, sku, name, model_name, category, price')
+        .eq('pricelist_version_id', activeVersion.id)
+        .order('name', { ascending: true })
+        .order('sku', { ascending: true });
+
+      if (versionItemsError && !isPrivateSchemaAccessError(versionItemsError)) {
+        throw versionItemsError;
+      }
+
+      if (!versionItemsError) {
+        priceList = (versionItems ?? []).map((item) => ({
+          id: item.product_id ?? item.id,
+          sku: item.sku,
+          name: item.name,
+          model: item.model_name,
+          category: item.category,
+          price: Number(item.price ?? 0),
+        }));
+      }
+    }
+
+    // Keep the endpoint usable while a staged rollout has not applied the
+    // versioned migration yet, or if an older database has no active snapshot.
+    if (priceList.length === 0) {
+      const products = await getCachedProductCatalog();
+      priceList = (products ?? []).map((product) => ({
+        id: product.id,
+        sku: product.sku,
+        name: product.name,
+        model: product.model,
+        category: product.category,
+        price: Number(product.price ?? 0),
+      }));
+    }
+
+    res.json({
+      priceList,
+      activeVersion: activeVersion ? {
+        id: activeVersion.id,
+        versionYear: Number(activeVersion.version_year),
+        effectiveFrom: activeVersion.effective_from,
+        status: activeVersion.status,
+        isActive: Boolean(activeVersion.is_active),
+        rowCount: Number(activeVersion.row_count ?? 0),
+        activatedAt: activeVersion.activated_at,
+      } : null,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/prices/versions', requireRole('admin'), async (_req, res, next) => {
+  try {
+    const { data: versions, error: versionsError } = await supabaseAdmin
+      .schema('catalog')
+      .from('pricelist_versions')
+      .select('id, price_type, version_year, effective_from, effective_to, status, is_active, source_filename, row_count, created_at, activated_at')
+      .eq('price_type', 'retail')
+      .order('version_year', { ascending: false })
+      .order('effective_from', { ascending: false });
+
+    if (versionsError) {
+      if (isPrivateSchemaAccessError(versionsError)) {
+        res.json({ versions: [] });
+        return;
+      }
+      throw versionsError;
+    }
+
+    res.json({
+      versions: (versions ?? []).map((version) => ({
+        id: version.id,
+        priceType: version.price_type,
+        versionYear: Number(version.version_year),
+        effectiveFrom: version.effective_from,
+        effectiveTo: version.effective_to,
+        status: version.status,
+        isActive: Boolean(version.is_active),
+        sourceFilename: version.source_filename,
+        rowCount: Number(version.row_count ?? 0),
+        createdAt: version.created_at,
+        activatedAt: version.activated_at,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/prices/versions/:versionId/items', requireRole('admin'), async (req, res, next) => {
+  try {
+    const versionId = String(req.params.versionId || '').trim();
+    const limit = parsePositiveInteger(req.query.limit, 1000, 5000);
+    const search = normalizePostgrestSearchTerm(req.query.q || '');
+    const skuFilter = String(req.query.skus || '')
+      .split(',')
+      .map((sku) => normalizePriceListPartNumber(sku))
+      .filter(Boolean)
+      .slice(0, 250);
+    let query = supabaseAdmin
+      .schema('catalog')
+      .from('pricelist_version_items')
+      .select('id, pricelist_version_id, product_id, source_line_number, sku, name, model_name, uom, pcc, price, category, source_category, status')
+      .eq('pricelist_version_id', versionId)
+      .order('name', { ascending: true })
+      .order('sku', { ascending: true })
+      .limit(limit);
+
+    if (search) {
+      query = query.or(`sku.ilike.*${search}*,name.ilike.*${search}*,model_name.ilike.*${search}*`);
+    }
+    if (skuFilter.length > 0) {
+      query = query.in('sku', skuFilter);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      if (isPrivateSchemaAccessError(error)) {
+        res.status(404).json({ error: 'Price list versioning is not available yet.' });
+        return;
+      }
+      throw error;
+    }
+
+    res.json({
+      items: (data ?? []).map((item) => ({
+        id: item.id,
+        versionId: item.pricelist_version_id,
+        productId: item.product_id,
+        sourceLineNumber: item.source_line_number,
+        sku: item.sku,
+        name: item.name,
+        model: item.model_name,
+        uom: item.uom,
+        pcc: item.pcc,
+        price: Number(item.price ?? 0),
+        category: item.category,
+        sourceCategory: item.source_category,
+        status: item.status,
+      })),
+      limit,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/prices/versions/:versionId/activate', requireRole('admin'), async (req, res, next) => {
+  try {
+    const versionId = String(req.params.versionId || '').trim();
+    const { data, error } = await supabaseAdmin.rpc('activate_retail_pricelist_version', {
+      p_version_id: versionId,
+      p_actor_id: req.user?.id ?? null,
+    });
+
+    if (error) {
+      const message = String(error.message || '').toLowerCase();
+      if (message.includes('function') && message.includes('does not exist')) {
+        error.statusCode = 503;
+        error.publicMessage = 'Apply the versioned price list migration before activating a saved list.';
+      }
+      throw error;
+    }
+
+    invalidateProductCatalogCache();
+    res.json({
+      ...(data ?? {}),
+      versionId: data?.versionId ?? versionId,
+    });
   } catch (error) {
     next(error);
   }
@@ -4269,7 +4453,11 @@ router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next)
   try {
     const items = normalizePriceListItems(req.body?.items);
     const effectiveFrom = req.body?.effectiveFrom || new Date().toISOString().slice(0, 10);
-    const result = await replaceRetailPrices(items, effectiveFrom);
+    const result = await replaceRetailPrices(items, effectiveFrom, {
+      versionYear: req.body?.versionYear,
+      activate: parsePriceListActivation(req.body?.activate, true),
+      actorId: req.user?.id,
+    });
 
     if (req.timedOut || res.headersSent) {
       return;
@@ -4292,7 +4480,12 @@ router.post('/prices/bulk-replace-file', requireRole('admin'), handlePriceListUp
 
     const items = parsePriceListUpload(req.file);
     const effectiveFrom = req.body?.effectiveFrom || new Date().toISOString().slice(0, 10);
-    const result = await replaceRetailPrices(items, effectiveFrom);
+    const result = await replaceRetailPrices(items, effectiveFrom, {
+      versionYear: req.body?.versionYear,
+      activate: parsePriceListActivation(req.body?.activate, true),
+      sourceFilename: req.file.originalname,
+      actorId: req.user?.id,
+    });
 
     if (req.timedOut || res.headersSent) {
       return;
@@ -4307,7 +4500,7 @@ router.post('/prices/bulk-replace-file', requireRole('admin'), handlePriceListUp
   }
 });
 
-async function replaceRetailPrices(items, effectiveFrom) {
+async function replaceRetailPrices(items, effectiveFrom, options = {}) {
   if (items.length === 0) {
     const error = new Error('Provide at least one valid part number and price.');
     error.statusCode = 400;
@@ -4320,16 +4513,27 @@ async function replaceRetailPrices(items, effectiveFrom) {
     throw error;
   }
 
-  const { data, error: rpcError } = await supabaseAdmin.rpc('replace_retail_pricelist', {
+  const versionYear = parsePriceListVersionYear(options.versionYear, effectiveFrom);
+  if (!versionYear) {
+    const error = new Error('Choose a valid four-digit price list year.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const { data, error: rpcError } = await supabaseAdmin.rpc('import_retail_pricelist_version', {
     p_items: items,
+    p_version_year: versionYear,
     p_effective_from: effectiveFrom,
+    p_source_filename: options.sourceFilename || null,
+    p_activate: options.activate !== false,
+    p_actor_id: options.actorId || null,
   });
 
   if (rpcError) {
     const message = String(rpcError.message || '').toLowerCase();
     if (message.includes('function') && message.includes('does not exist')) {
       rpcError.statusCode = 503;
-      rpcError.publicMessage = 'The pricelist replacement service is still being prepared. Please try again after deployment finishes.';
+      rpcError.publicMessage = 'Apply the versioned price list migration before uploading a list.';
     }
     throw rpcError;
   }
@@ -4341,6 +4545,8 @@ async function replaceRetailPrices(items, effectiveFrom) {
     skippedItems: Array.isArray(data?.skippedItems) ? data.skippedItems : [],
     priceChanges: Array.isArray(data?.priceChanges) ? data.priceChanges : [],
     effectiveFrom: data?.effectiveFrom || effectiveFrom,
+    versionYear: Number(data?.versionYear ?? versionYear),
+    versionId: data?.versionId ?? null,
   };
 }
 

@@ -15,7 +15,14 @@ import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
 import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
-import { getCatalogSummary, getProductStockHistory, receiveInventoryStock, updateCatalogProduct } from '../../../services/catalogApi';
+import {
+    getCatalogSummary,
+    getProductStockHistory,
+    getRetailPriceListVersionItems,
+    getRetailPriceListVersions,
+    receiveInventoryStock,
+    updateCatalogProduct,
+} from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
 import { getPartNumberSearchSuggestions, getProductPartNumber, productMatchesIdentifier } from '../../../utils/barcode';
@@ -65,6 +72,10 @@ function formatCatalogProduct(product) {
         sourceCategory: product.sourceCategory ?? null,
         classification: product.classification ?? null,
         price: Number(product.price ?? 0),
+        priceListPrice: product.priceListPrice == null ? null : Number(product.priceListPrice),
+        priceDifference: product.priceDifference == null ? null : Number(product.priceDifference),
+        priceListYear: product.priceListYear ?? null,
+        priceListListed: product.priceListListed !== false,
         stock: Number(product.stock ?? 0),
         quantity: Number(product.stock ?? 0),
         status: product.status ?? 'in_stock',
@@ -363,6 +374,9 @@ const InventoryList = () => {
     const [editingProduct, setEditingProduct] = useState(null);
     const [savingProductDetails, setSavingProductDetails] = useState(false);
     const [sortConfig, setSortConfig] = useState({ key: null, dir: null });
+    const [priceListVersions, setPriceListVersions] = useState([]);
+    const [selectedPriceListVersionId, setSelectedPriceListVersionId] = useState('');
+    const [selectedVersionPrices, setSelectedVersionPrices] = useState({});
     const {
         products,
         categories: catalogCategories,
@@ -402,6 +416,30 @@ const InventoryList = () => {
         };
     }, []);
 
+    useEffect(() => {
+        if (!isAdmin) {
+            return undefined;
+        }
+
+        let active = true;
+        void getRetailPriceListVersions()
+            .then((versions) => {
+                if (!active) return;
+                setPriceListVersions(versions ?? []);
+                const activeVersion = (versions ?? []).find((version) => version.isActive);
+                setSelectedPriceListVersionId((current) => current || activeVersion?.id || versions?.[0]?.id || '');
+            })
+            .catch((loadError) => {
+                if (active) {
+                    setSummaryError(loadError.message || 'Unable to load price list versions.');
+                }
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [isAdmin]);
+
     const refreshInventoryMeta = async () => {
         const [summary] = await Promise.all([
             getCatalogSummary(),
@@ -413,6 +451,44 @@ const InventoryList = () => {
     const visibleProducts = useMemo(() => (
         products.map((product) => productOverrides[product.id] ?? formatCatalogProduct(product))
     ), [productOverrides, products]);
+
+    const visibleProductSkus = useMemo(() => visibleProducts.map((product) => product.sku).filter(Boolean), [visibleProducts]);
+    const visibleProductSkuKey = visibleProductSkus.join('|');
+
+    useEffect(() => {
+        const requestedSkus = visibleProductSkuKey.split('|').filter(Boolean);
+        if (!isAdmin || !selectedPriceListVersionId || requestedSkus.length === 0) {
+            setSelectedVersionPrices({});
+            return undefined;
+        }
+
+        let active = true;
+        void getRetailPriceListVersionItems(selectedPriceListVersionId, { skus: requestedSkus })
+            .then((items) => {
+                if (!active) return;
+                setSelectedVersionPrices(Object.fromEntries((items ?? []).map((item) => [item.sku, Number(item.price ?? 0)])));
+            })
+            .catch(() => {
+                if (active) setSelectedVersionPrices({});
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [isAdmin, selectedPriceListVersionId, visibleProductSkuKey]);
+
+    const pricedProducts = useMemo(() => visibleProducts.map((product) => {
+        if (!selectedPriceListVersionId) return product;
+        const hasSelectedPrice = Object.prototype.hasOwnProperty.call(selectedVersionPrices, product.sku);
+        const selectedPrice = hasSelectedPrice ? selectedVersionPrices[product.sku] : null;
+        return {
+            ...product,
+            priceListPrice: selectedPrice,
+            priceDifference: selectedPrice == null ? null : Number((selectedPrice - product.price).toFixed(2)),
+            priceListYear: priceListVersions.find((version) => version.id === selectedPriceListVersionId)?.versionYear ?? null,
+            priceListListed: hasSelectedPrice,
+        };
+    }), [priceListVersions, selectedPriceListVersionId, selectedVersionPrices, visibleProducts]);
 
     const categories = useMemo(() => (
         catalogCategories.map((category) => ({
@@ -433,7 +509,7 @@ const InventoryList = () => {
     }, []);
 
     const filteredProducts = useMemo(() => (
-        visibleProducts.filter((product) => {
+        pricedProducts.filter((product) => {
             const matchesStock = selectedStockFilter === 'all'
                 || (selectedStockFilter === 'available' && product.quantity > 0)
                 || (selectedStockFilter === 'out' && product.quantity <= 0)
@@ -442,14 +518,14 @@ const InventoryList = () => {
                 || (selectedStockFilter === 'high' && product.quantity > 20);
             return matchesStock;
         })
-    ), [selectedStockFilter, visibleProducts]);
+    ), [pricedProducts, selectedStockFilter]);
 
     const sortedProducts = useMemo(() => {
         if (!sortConfig.key || !sortConfig.dir) return filteredProducts;
         return [...filteredProducts].sort((a, b) => {
             let aVal = a[sortConfig.key];
             let bVal = b[sortConfig.key];
-            if (sortConfig.key === 'price' || sortConfig.key === 'quantity') {
+            if (sortConfig.key === 'price' || sortConfig.key === 'quantity' || sortConfig.key === 'priceListPrice' || sortConfig.key === 'priceDifference') {
                 aVal = Number(aVal ?? 0);
                 bVal = Number(bVal ?? 0);
                 return sortConfig.dir === 'asc' ? aVal - bVal : bVal - aVal;
@@ -756,6 +832,19 @@ const InventoryList = () => {
                     />
                 </div>
 
+                {isAdmin && priceListVersions.length > 0 && (
+                    <div className="flex-shrink-0 w-52">
+                        <Dropdown
+                            options={priceListVersions.map((version) => ({
+                                value: version.id,
+                                label: `${version.versionYear} price list${version.isActive ? ' · active' : ''}`,
+                            }))}
+                            value={selectedPriceListVersionId}
+                            onChange={setSelectedPriceListVersionId}
+                        />
+                    </div>
+                )}
+
                 {/* Right actions — pushed to the end */}
                 <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
                     {isAdmin && (
@@ -797,6 +886,15 @@ const InventoryList = () => {
                 </div>
             </div>
 
+            {isAdmin && selectedPriceListVersionId && (
+                <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-accent-blue/20 bg-accent-blue/5 px-4 py-3 text-sm text-primary-700">
+                    <span className="font-semibold text-primary-950">
+                        Comparing inventory with the {priceListVersions.find((version) => version.id === selectedPriceListVersionId)?.versionYear} price list
+                    </span>
+                    <span className="text-primary-500">Selected-list prices are shown beside the active price; omitted parts stay in inventory history.</span>
+                </div>
+            )}
+
             {loading ? (
                 <Card className="text-center py-12">
                     <Package className="w-12 h-12 text-primary-400 mx-auto mb-4 animate-pulse" />
@@ -837,7 +935,7 @@ const InventoryList = () => {
                         <table className="table">
                             <thead>
                                 <tr>
-                                    {[{ key: 'name', label: 'Product', align: 'left' }, { key: 'sku', label: 'Part Number', align: 'left' }, { key: 'category', label: 'Category', align: 'left' }, { key: 'price', label: 'Price', align: 'right' }, { key: 'quantity', label: 'Qty', align: 'right' }].map(({ key, label, align }) => (
+                                    {[{ key: 'name', label: 'Product', align: 'left' }, { key: 'sku', label: 'Part Number', align: 'left' }, { key: 'category', label: 'Category', align: 'left' }, { key: 'price', label: 'Active price', align: 'right' }, ...(selectedPriceListVersionId ? [{ key: 'priceListPrice', label: 'Selected list', align: 'right' }, { key: 'priceDifference', label: 'Difference', align: 'right' }] : []), { key: 'quantity', label: 'Qty', align: 'right' }].map(({ key, label, align }) => (
                                         <th key={key} className={`cursor-pointer select-none ${align === 'right' ? 'text-right' : 'text-left'}`}>
                                             <button
                                                 type="button"
@@ -874,6 +972,16 @@ const InventoryList = () => {
                                         <td className="font-mono text-sm text-primary-500 border-b border-primary-100 py-3">{getProductPartNumber(product)}</td>
                                         <td className="border-b border-primary-100 py-3 text-primary-700">{product.category}</td>
                                         <td className="text-right border-b border-primary-100 py-3 font-semibold text-accent-blue">{formatCurrency(product.price)}</td>
+                                        {selectedPriceListVersionId && (
+                                            <>
+                                                <td className={`text-right border-b border-primary-100 py-3 font-semibold ${product.priceListListed ? 'text-primary-900' : 'text-primary-400'}`}>
+                                                    {product.priceListListed ? formatCurrency(product.priceListPrice) : 'Not listed'}
+                                                </td>
+                                                <td className={`text-right border-b border-primary-100 py-3 font-semibold ${Number(product.priceDifference ?? 0) > 0 ? 'text-accent-danger' : Number(product.priceDifference ?? 0) < 0 ? 'text-emerald-700' : 'text-primary-500'}`}>
+                                                    {product.priceDifference == null ? '—' : formatCurrency(product.priceDifference)}
+                                                </td>
+                                            </>
+                                        )}
                                         <td className="text-right border-b border-primary-100 py-3 text-primary-900 font-bold">{product.quantity}</td>
                                         <td className="border-b border-primary-100 py-3"><StockBadge quantity={product.quantity} /></td>
                                         <td className="border-b border-primary-100 py-3">

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireRole } from '../middleware/auth.js';
 import { callRpc } from '../services/supabaseRpc.js';
+import { normalizeHistoricalAggregatePayload } from '../services/historicalSalesModel.js';
 
 const router = Router();
 
@@ -20,6 +21,9 @@ function normalizePosError(error) {
     message.includes('Manual service lines must include') ||
     message.includes('Insufficient stock') ||
     message.includes('Historical sales require') ||
+    message.includes('Historical totals require') ||
+    message.includes('Historical period total') ||
+    message.includes('Historical period totals') ||
     message.includes('Only historical encoded sales can be edited')
   ) {
     error.statusCode = error.statusCode || 400;
@@ -88,6 +92,24 @@ function buildHistoricalSalePayload(body) {
     cashierName: typeof body?.cashierName === 'string' ? body.cashierName.trim() : '',
     note: typeof body?.note === 'string' ? body.note.trim() : '',
     inventoryApplied: false,
+  };
+}
+
+function normalizeHistoricalAggregateEntry(entry) {
+  return {
+    ...entry,
+    aggregateId: entry?.aggregate_id ?? entry?.aggregateId ?? null,
+    periodGranularity: entry?.period_granularity ?? entry?.periodGranularity ?? null,
+    periodStart: entry?.period_start ?? entry?.periodStart ?? null,
+    periodEnd: entry?.period_end ?? entry?.periodEnd ?? null,
+    totalAmount: Number(entry?.total_amount ?? entry?.totalAmount ?? 0),
+    transactionCount: Number(entry?.transaction_count ?? entry?.transactionCount ?? 0),
+    paymentMethod: entry?.payment_method ?? entry?.paymentMethod ?? 'unknown',
+    originalReference: entry?.original_reference ?? entry?.originalReference ?? null,
+    customerName: entry?.customer_name ?? entry?.customerName ?? null,
+    cashierName: entry?.cashier_name ?? entry?.cashierName ?? null,
+    createdAt: entry?.created_at ?? entry?.createdAt ?? null,
+    updatedAt: entry?.updated_at ?? entry?.updatedAt ?? null,
   };
 }
 
@@ -309,6 +331,65 @@ router.put('/sales/:saleId/historical', requireRole('admin'), async (req, res, n
       sale: detail?.sale ?? null,
       items: detail?.items ?? [],
       receipt: detail?.receipt ?? null,
+    });
+  } catch (error) {
+    next(normalizePosError(error));
+  }
+});
+
+router.post('/sales/historical-aggregates', requireRole('admin'), async (req, res, next) => {
+  try {
+    const payload = normalizeHistoricalAggregatePayload(req.body);
+    const aggregateId = await callRpc('create_historical_sales_aggregate', {
+      payload,
+      p_operator_id: req.user?.id ?? null,
+    });
+
+    res.status(201).json({ aggregateId, aggregate: { ...payload, aggregateId } });
+  } catch (error) {
+    next(normalizePosError(error));
+  }
+});
+
+router.put('/sales/historical-aggregates/:aggregateId', requireRole('admin'), async (req, res, next) => {
+  try {
+    const payload = normalizeHistoricalAggregatePayload(req.body);
+    const aggregateId = await callRpc('update_historical_sales_aggregate', {
+      p_aggregate_id: req.params.aggregateId,
+      payload,
+      p_operator_id: req.user?.id ?? null,
+    });
+
+    res.json({ aggregateId, aggregate: { ...payload, aggregateId } });
+  } catch (error) {
+    next(normalizePosError(error));
+  }
+});
+
+router.get('/sales/historical-aggregates', requireRole('admin', 'cashier', 'stock_clerk'), async (req, res, next) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit || 100), 1), 200);
+    const page = Math.max(Number(req.query.page || 1), 1);
+    const offset = (page - 1) * limit;
+    const rows = await callRpc('list_historical_sales_aggregates', {
+      p_start_date: req.query.startDate || null,
+      p_end_date: req.query.endDate || null,
+      p_search: req.query.search || null,
+      p_limit_count: limit,
+      p_offset_count: offset,
+    });
+    const aggregates = (rows ?? []).map(normalizeHistoricalAggregateEntry);
+    const total = Number(rows?.[0]?.total_count ?? rows?.[0]?.totalCount ?? aggregates.length);
+
+    res.json({
+      aggregates,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: total > 0 ? Math.ceil(total / limit) : 0,
+        hasMore: offset + limit < total,
+      },
     });
   } catch (error) {
     next(normalizePosError(error));
