@@ -93,6 +93,7 @@ describe('CameraScannerModal', () => {
             'reader',
             expect.objectContaining({
                 fps: 12,
+                aspectRatio: 1.777778,
                 disableFlip: true,
                 qrbox: expect.any(Function),
                 rememberLastUsedCamera: true,
@@ -310,7 +311,7 @@ describe('CameraScannerModal', () => {
             />
         );
 
-        fireEvent.change(screen.getByLabelText(/enter the printed part number/i), {
+        fireEvent.change(screen.getByLabelText(/enter printed part number/i), {
             target: { value: '21305W010P 0001' },
         });
         fireEvent.click(screen.getByText('Use Part Number'));
@@ -331,5 +332,7 @@ describe('CameraScannerModal', () => {
         const input = screen.getByLabelText(/take or choose a barcode photo/i);
         expect(input.getAttribute('accept')).toBe('image/*');
         expect(input.getAttribute('capture')).toBe('environment');
+        expect(screen.getByText('Other scan options')).toBeTruthy();
+        expect(screen.getByText('Photo or part number')).toBeTruthy();
     });
 });

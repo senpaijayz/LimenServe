@@ -165,6 +165,7 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                 {
                     fps: 12,
                     qrbox: getBarcodeScanBox,
+                    aspectRatio: 1.777778,
                     disableFlip: true,
                     rememberLastUsedCamera: true,
                     // BarcodeDetector integration in html5-qrcode is experimental
@@ -287,16 +288,16 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
             title="Camera Barcode Scanner"
             size="md"
         >
-            <div className="space-y-4">
-                <div className="rounded-2xl border border-primary-200 bg-primary-50/80 p-4">
+            <div className="space-y-3">
+                <div className="rounded-2xl border border-primary-200 bg-primary-50/80 p-3 sm:p-4">
                     <div className="flex items-start gap-3">
-                        <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl bg-white text-accent-blue shadow-sm">
+                        <div className="mt-0.5 hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-accent-blue shadow-sm sm:flex">
                             <ScanLine className="h-5 w-5" />
                         </div>
-                        <div className="space-y-2 text-sm text-primary-600">
+                        <div className="space-y-1 text-sm text-primary-600 sm:space-y-2">
                             <p className="font-semibold text-primary-900">Keep the barcode horizontal and fill most of the guide.</p>
-                            <p>Hold the phone 12–20 cm away, wait for focus, and tilt glossy boxes slightly to remove glare.</p>
-                            <div className="flex flex-wrap gap-2 text-xs uppercase tracking-wide text-primary-500">
+                            <p className="text-xs sm:text-sm">Hold the phone 12–20 cm away and tilt glossy boxes slightly to remove glare.</p>
+                            <div className="hidden flex-wrap gap-2 text-xs uppercase tracking-wide text-primary-500 sm:flex">
                                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
                                     <Camera className="h-3.5 w-3.5" /> Back camera first
                                 </span>
@@ -311,59 +312,65 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                     </div>
                 </div>
 
-                <div className="bg-primary-50 border border-primary-200 rounded-xl overflow-hidden relative min-h-[360px] flex items-center justify-center">
+                <div className="relative flex min-h-[180px] items-center justify-center overflow-hidden rounded-xl border border-primary-200 bg-primary-950 sm:min-h-[240px]">
                     {/* The div where html5-qrcode will render the video element */}
                     <div id="reader" className="w-full" />
 
                 </div>
                 <div id="reader-file-scanner" className="hidden" />
 
-                <div className="rounded-xl border border-primary-200 bg-white p-3">
-                    <label className="block text-xs font-semibold text-primary-500" htmlFor="barcode-image-upload">
-                        Take or choose a barcode photo
-                    </label>
-                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <input
-                            id="barcode-image-upload"
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            className="block w-full text-sm text-primary-600 file:mr-3 file:rounded-lg file:border-0 file:bg-primary-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-primary-700 hover:file:bg-primary-200"
-                            onChange={scanUploadedFile}
-                        />
-                        <span className="inline-flex items-center gap-1 text-xs text-primary-500">
-                            <ImageUp className="h-3.5 w-3.5" />
-                            Reliable fallback for glossy or damaged labels
+                <details className="group rounded-xl border border-primary-200 bg-white">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-primary-800 marker:content-none">
+                        <span className="inline-flex items-center gap-2">
+                            <ImageUp className="h-4 w-4 text-accent-blue" />
+                            Other scan options
                         </span>
-                    </div>
-                    {fileScanStatus && (
-                        <p className="mt-2 text-xs font-medium text-primary-500">{fileScanStatus}</p>
-                    )}
-                </div>
+                        <span className="text-xs font-medium text-primary-400 group-open:hidden">Photo or part number</span>
+                        <span className="hidden text-xs font-medium text-primary-400 group-open:inline">Hide</span>
+                    </summary>
+                    <div className="grid gap-3 border-t border-primary-100 p-3 sm:grid-cols-2">
+                        <div className="rounded-xl bg-primary-50 p-3">
+                            <label className="block text-xs font-semibold text-primary-600" htmlFor="barcode-image-upload">
+                                Take or choose a barcode photo
+                            </label>
+                            <input
+                                id="barcode-image-upload"
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                className="mt-2 block w-full text-xs text-primary-600 file:mr-2 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-xs file:font-semibold file:text-primary-700 hover:file:bg-primary-100"
+                                onChange={scanUploadedFile}
+                            />
+                            {fileScanStatus && (
+                                <p className="mt-2 text-xs font-medium text-primary-500">{fileScanStatus}</p>
+                            )}
+                        </div>
 
-                <div className="rounded-xl border border-primary-200 bg-white p-3">
-                    <label className="block text-xs font-semibold text-primary-500" htmlFor="manual-barcode-entry">
-                        If the sticker is scratched or glossy, enter the printed part number
-                    </label>
-                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                        <input
-                            id="manual-barcode-entry"
-                            className="input flex-1 font-mono text-sm uppercase"
-                            value={manualCode}
-                            onChange={(event) => setManualCode(event.target.value)}
-                            onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                    event.preventDefault();
-                                    submitManualCode();
-                                }
-                            }}
-                            placeholder="21305W010P"
-                        />
-                        <Button variant="secondary" onClick={submitManualCode} disabled={!manualCode.trim()}>
-                            Use Part Number
-                        </Button>
+                        <div className="rounded-xl bg-primary-50 p-3">
+                            <label className="block text-xs font-semibold text-primary-600" htmlFor="manual-barcode-entry">
+                                Enter printed part number
+                            </label>
+                            <div className="mt-2 flex gap-2">
+                                <input
+                                    id="manual-barcode-entry"
+                                    className="input min-w-0 flex-1 font-mono text-sm uppercase"
+                                    value={manualCode}
+                                    onChange={(event) => setManualCode(event.target.value)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                            event.preventDefault();
+                                            submitManualCode();
+                                        }
+                                    }}
+                                    placeholder="21305W010P"
+                                />
+                                <Button variant="secondary" onClick={submitManualCode} disabled={!manualCode.trim()}>
+                                    Use Part Number
+                                </Button>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                </details>
 
                 {/* CSS Override for html5-qrcode default styling to make it look decent */}
                 <style>{`
@@ -408,10 +415,14 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                     }
                     #reader video {
                         width: 100% !important;
+                        height: auto !important;
+                        max-height: min(38svh, 320px);
+                        aspect-ratio: 16 / 9;
                         object-fit: cover;
                     }
                     #reader__scan_region {
                         background: #020617;
+                        overflow: hidden;
                     }
                     #reader__scan_region img {
                         max-width: 92%;
@@ -421,7 +432,7 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                     }
                 `}</style>
 
-                <div className="flex justify-end pt-2">
+                <div className="flex justify-end">
                     <Button variant="secondary" onClick={onClose}>
                         Cancel
                     </Button>
