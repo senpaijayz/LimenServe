@@ -60,6 +60,11 @@ describe('barcode utilities', () => {
         expect(productMatchesIdentifier(product, 'PA1810A4280001')).toBe(false);
     });
 
+    it('matches the Mitsubishi Code 39 labels used for camera regression testing', () => {
+        expect(productMatchesIdentifier({ sku: 'MD094120' }, '*MD094120*')).toBe(true);
+        expect(productMatchesIdentifier({ sku: '6370A933HA' }, '6370A933HA')).toBe(true);
+    });
+
     it('treats part number fields as the primary searchable identifier', () => {
         const product = {
             id: 42,

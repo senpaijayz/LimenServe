@@ -76,7 +76,7 @@ describe('CameraScannerModal', () => {
         scanFileSpy.mockReset();
     });
 
-    it('configures the scanner to prefer the back camera and support code 128 product barcodes', async () => {
+    it('configures an iPhone-safe back-camera scanner for one-dimensional product barcodes', async () => {
         render(
             <CameraScannerModal
                 isOpen
@@ -92,33 +92,27 @@ describe('CameraScannerModal', () => {
         expect(constructorSpy).toHaveBeenCalledWith(
             'reader',
             expect.objectContaining({
-                fps: 18,
-                aspectRatio: 1.777778,
+                fps: 12,
                 disableFlip: true,
                 qrbox: expect.any(Function),
                 rememberLastUsedCamera: true,
-                useBarCodeDetectorIfSupported: true,
+                useBarCodeDetectorIfSupported: false,
                 showTorchButtonIfSupported: true,
-                showZoomSliderIfSupported: false,
-                preferredCamera: 'environment',
+                showZoomSliderIfSupported: true,
+                defaultZoomValueIfSupported: 1.25,
                 videoConstraints: {
                     facingMode: { ideal: 'environment' },
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
                 },
                 formatsToSupport: [
-                    'QR_CODE',
-                    'AZTEC',
                     'CODABAR',
                     'CODE_39',
                     'CODE_93',
                     'CODE_128',
-                    'DATA_MATRIX',
-                    'MAXICODE',
                     'ITF',
                     'EAN_13',
                     'EAN_8',
-                    'PDF_417',
-                    'RSS_14',
-                    'RSS_EXPANDED',
                     'UPC_A',
                     'UPC_E',
                     'UPC_EAN_EXTENSION',
@@ -129,7 +123,9 @@ describe('CameraScannerModal', () => {
         );
 
         const [, scannerConfig] = constructorSpy.mock.calls[0];
-        expect(scannerConfig.qrbox(390, 640)).toEqual({ width: 374, height: 442 });
+        expect(scannerConfig.qrbox(390, 640)).toEqual({ width: 358, height: 115 });
+        expect(scannerConfig.qrbox(390, 220)).toEqual({ width: 358, height: 115 });
+        expect(scannerConfig.qrbox(320, 180)).toEqual({ width: 294, height: 96 });
     });
 
     it('ignores empty scan callbacks instead of closing with an invalid code', async () => {
@@ -216,7 +212,7 @@ describe('CameraScannerModal', () => {
         );
 
         const file = new File(['barcode'], 'barcode.png', { type: 'image/png' });
-        fireEvent.change(screen.getByLabelText(/upload barcode image/i), {
+        fireEvent.change(screen.getByLabelText(/take or choose a barcode photo/i), {
             target: { files: [file] },
         });
 
@@ -224,14 +220,14 @@ describe('CameraScannerModal', () => {
             expect(scanFileSpy).toHaveBeenCalledWith(file, true);
         });
         expect(fileScannerConstructorSpy).toHaveBeenCalledWith('reader-file-scanner', expect.objectContaining({
-            useBarCodeDetectorIfSupported: true,
-            formatsToSupport: expect.arrayContaining(['QR_CODE', 'DATA_MATRIX', 'PDF_417', 'CODE_128']),
+            useBarCodeDetectorIfSupported: false,
+            formatsToSupport: expect.arrayContaining(['CODE_39', 'CODE_93', 'CODE_128']),
         }));
         expect(onScan).toHaveBeenCalledWith('DP010374');
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it('retries uploaded barcode images with a generated quiet zone when the raw crop is too tight', async () => {
+    it('retries full phone photos with scanner-friendly horizontal crops', async () => {
         const onClose = vi.fn();
         const onScan = vi.fn();
         const originalCreateObjectUrl = URL.createObjectURL;
@@ -282,7 +278,7 @@ describe('CameraScannerModal', () => {
         );
 
         const file = new File(['barcode'], 'cropped-barcode.png', { type: 'image/png' });
-        fireEvent.change(screen.getByLabelText(/upload barcode image/i), {
+        fireEvent.change(screen.getByLabelText(/take or choose a barcode photo/i), {
             target: { files: [file] },
         });
 
@@ -292,7 +288,7 @@ describe('CameraScannerModal', () => {
 
         expect(scanFileSpy.mock.calls[0]).toEqual([file, true]);
         expect(scanFileSpy.mock.calls[1][0]).toBeInstanceOf(File);
-        expect(scanFileSpy.mock.calls[1][0].name).toBe('quiet-zone-cropped-barcode.png');
+        expect(scanFileSpy.mock.calls[1][0].name).toBe('barcode-crop-1-cropped-barcode.png');
         expect(onScan).toHaveBeenCalledWith('DP010374');
         expect(onClose).toHaveBeenCalledTimes(1);
 
@@ -321,5 +317,19 @@ describe('CameraScannerModal', () => {
 
         expect(onScan).toHaveBeenCalledWith('21305W010P');
         expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens the iPhone rear camera when staff take a fallback barcode photo', () => {
+        render(
+            <CameraScannerModal
+                isOpen
+                onClose={vi.fn()}
+                onScan={vi.fn()}
+            />
+        );
+
+        const input = screen.getByLabelText(/take or choose a barcode photo/i);
+        expect(input.getAttribute('accept')).toBe('image/*');
+        expect(input.getAttribute('capture')).toBe('environment');
     });
 });

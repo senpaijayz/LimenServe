@@ -10,29 +10,36 @@ import Modal from './Modal';
 import Button from './Button';
 import { normalizeBarcodeToken, stripProductBarcodeSuffix } from '../../utils/barcode';
 
-const ALL_SUPPORTED_BARCODE_FORMATS = [
-    Html5QrcodeSupportedFormats.QR_CODE,
-    Html5QrcodeSupportedFormats.AZTEC,
+// This scanner is used for physical product labels, so keep the decoder on
+// one-dimensional formats. Asking ZXing to try every 2D format on every frame
+// makes dense Code 39 labels noticeably harder to acquire on mobile devices.
+const PRODUCT_BARCODE_FORMATS = [
     Html5QrcodeSupportedFormats.CODABAR,
     Html5QrcodeSupportedFormats.CODE_39,
     Html5QrcodeSupportedFormats.CODE_93,
     Html5QrcodeSupportedFormats.CODE_128,
-    Html5QrcodeSupportedFormats.DATA_MATRIX,
-    Html5QrcodeSupportedFormats.MAXICODE,
     Html5QrcodeSupportedFormats.ITF,
     Html5QrcodeSupportedFormats.EAN_13,
     Html5QrcodeSupportedFormats.EAN_8,
-    Html5QrcodeSupportedFormats.PDF_417,
-    Html5QrcodeSupportedFormats.RSS_14,
-    Html5QrcodeSupportedFormats.RSS_EXPANDED,
     Html5QrcodeSupportedFormats.UPC_A,
     Html5QrcodeSupportedFormats.UPC_E,
     Html5QrcodeSupportedFormats.UPC_EAN_EXTENSION,
 ].filter((format) => format !== undefined);
 
 const getBarcodeScanBox = (viewfinderWidth, viewfinderHeight) => {
-    const width = Math.max(300, Math.min(Math.floor(viewfinderWidth * 0.96), 680));
-    const height = Math.max(280, Math.min(Math.round(viewfinderHeight * 0.69), 500));
+    const safeWidth = Math.max(1, Math.floor(Number(viewfinderWidth) || 0));
+    const safeHeight = Math.max(1, Math.floor(Number(viewfinderHeight) || 0));
+    const width = Math.min(
+        safeWidth,
+        680,
+        Math.max(50, Math.floor(safeWidth * 0.92)),
+    );
+    const desiredHeight = Math.max(96, Math.round(width * 0.32));
+    const verticalBudget = Math.min(
+        safeHeight,
+        Math.max(50, Math.floor(safeHeight * 0.58)),
+    );
+    const height = Math.min(220, desiredHeight, verticalBudget);
 
     return { width, height };
 };
@@ -41,9 +48,17 @@ const normalizeScannedBarcode = (value) => (
     stripProductBarcodeSuffix(normalizeBarcodeToken(value))
 );
 
-const createBarcodeImageWithQuietZone = async (file) => {
+const BARCODE_PHOTO_CROP_PRESETS = [
+    { startY: 0.18, height: 0.32, insetX: 0.06, enhance: false },
+    { startY: 0.34, height: 0.32, insetX: 0.06, enhance: false },
+    { startY: 0.48, height: 0.32, insetX: 0.06, enhance: false },
+    { startY: 0.50, height: 0.24, insetX: 0.14, enhance: true },
+    { startY: 0.58, height: 0.20, insetX: 0.16, enhance: true },
+];
+
+const createBarcodePhotoVariants = async (file) => {
     if (typeof document === 'undefined' || !file?.type?.startsWith('image/')) {
-        return null;
+        return [];
     }
 
     const imageUrl = URL.createObjectURL(file);
@@ -55,33 +70,60 @@ const createBarcodeImageWithQuietZone = async (file) => {
             img.onerror = reject;
             img.src = imageUrl;
         });
+        const variants = [];
 
-        const quietZone = Math.max(48, Math.round(Math.min(image.naturalWidth, image.naturalHeight) * 0.24));
-        const canvas = document.createElement('canvas');
-        canvas.width = image.naturalWidth + quietZone * 2;
-        canvas.height = image.naturalHeight + quietZone * 2;
+        for (const [index, preset] of BARCODE_PHOTO_CROP_PRESETS.entries()) {
+            const insetX = Math.round(image.naturalWidth * preset.insetX);
+            const cropWidth = image.naturalWidth - insetX * 2;
+            const cropHeight = Math.round(image.naturalHeight * preset.height);
+            const cropY = Math.min(
+                Math.round(image.naturalHeight * preset.startY),
+                image.naturalHeight - cropHeight,
+            );
+            const quietZone = Math.max(48, Math.round(cropWidth * 0.06));
+            const canvas = document.createElement('canvas');
+            canvas.width = cropWidth + quietZone * 2;
+            canvas.height = cropHeight + quietZone * 2;
 
-        const context = canvas.getContext('2d');
-        if (!context) {
-            return null;
+            const context = canvas.getContext('2d');
+            if (!context) {
+                continue;
+            }
+
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            if (preset.enhance) {
+                context.filter = 'grayscale(1) contrast(2) brightness(1.08)';
+            }
+            context.drawImage(
+                image,
+                insetX,
+                cropY,
+                cropWidth,
+                cropHeight,
+                quietZone,
+                quietZone,
+                cropWidth,
+                cropHeight,
+            );
+
+            const blob = await new Promise((resolve) => {
+                canvas.toBlob(resolve, 'image/png', 1);
+            });
+
+            if (blob) {
+                variants.push(new File(
+                    [blob],
+                    `barcode-crop-${index + 1}-${file.name || 'photo.png'}`,
+                    {
+                        type: 'image/png',
+                        lastModified: Date.now(),
+                    },
+                ));
+            }
         }
 
-        context.fillStyle = '#ffffff';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        context.drawImage(image, quietZone, quietZone);
-
-        const blob = await new Promise((resolve) => {
-            canvas.toBlob(resolve, file.type || 'image/png', 1);
-        });
-
-        if (!blob) {
-            return null;
-        }
-
-        return new File([blob], `quiet-zone-${file.name || 'barcode.png'}`, {
-            type: blob.type || file.type || 'image/png',
-            lastModified: Date.now(),
-        });
+        return variants;
     } finally {
         URL.revokeObjectURL(imageUrl);
     }
@@ -121,20 +163,24 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
             scanner = new Html5QrcodeScanner(
                 "reader",
                 {
-                    fps: 18,
+                    fps: 12,
                     qrbox: getBarcodeScanBox,
-                    aspectRatio: 1.777778,
                     disableFlip: true,
                     rememberLastUsedCamera: true,
-                    useBarCodeDetectorIfSupported: true,
-                    preferredCamera: 'environment',
+                    // BarcodeDetector integration in html5-qrcode is experimental
+                    // and can fail when Safari exposes only part of the requested
+                    // format set. ZXing is slower but consistent across iOS/Android.
+                    useBarCodeDetectorIfSupported: false,
                     videoConstraints: {
                         facingMode: { ideal: 'environment' },
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
                     },
                     supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
                     showTorchButtonIfSupported: true,
-                    showZoomSliderIfSupported: false,
-                    formatsToSupport: ALL_SUPPORTED_BARCODE_FORMATS,
+                    showZoomSliderIfSupported: true,
+                    defaultZoomValueIfSupported: 1.25,
+                    formatsToSupport: PRODUCT_BARCODE_FORMATS,
                 },
                 /* verbose= */ false
             );
@@ -187,22 +233,34 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
 
         try {
             imageScanner = new Html5Qrcode('reader-file-scanner', {
-                formatsToSupport: ALL_SUPPORTED_BARCODE_FORMATS,
-                useBarCodeDetectorIfSupported: true,
+                formatsToSupport: PRODUCT_BARCODE_FORMATS,
+                useBarCodeDetectorIfSupported: false,
             });
             let decodedText;
 
             try {
                 decodedText = await imageScanner.scanFile(file, true);
             } catch (scanError) {
-                const paddedFile = await createBarcodeImageWithQuietZone(file);
+                const photoVariants = await createBarcodePhotoVariants(file);
 
-                if (!paddedFile) {
+                if (photoVariants.length === 0) {
                     throw scanError;
                 }
 
-                setFileScanStatus('Retrying with scanner-friendly padding...');
-                decodedText = await imageScanner.scanFile(paddedFile, true);
+                for (const [index, photoVariant] of photoVariants.entries()) {
+                    setFileScanStatus(`Enhancing barcode photo (${index + 1}/${photoVariants.length})...`);
+                    try {
+                        decodedText = await imageScanner.scanFile(photoVariant, true);
+                        break;
+                    } catch {
+                        // Try the next horizontal band. Product labels are often
+                        // only a small part of a full portrait phone photo.
+                    }
+                }
+
+                if (!decodedText) {
+                    throw scanError;
+                }
             }
 
             if (!completeScan(decodedText)) {
@@ -211,7 +269,12 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
         } catch {
             setFileScanStatus('No barcode found. Try a sharper photo with the full barcode visible.');
         } finally {
-            imageScanner?.clear?.().catch(() => {});
+            try {
+                imageScanner?.clear?.();
+            } catch {
+                // The file decoder is already disposable; cleanup must not hide
+                // a successful scan on browsers where clear() is synchronous.
+            }
         }
     };
 
@@ -229,13 +292,17 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                             <ScanLine className="h-5 w-5" />
                         </div>
                         <div className="space-y-2 text-sm text-primary-600">
-                            <p className="font-semibold text-primary-900">Keep the part number and barcode bars inside the guide.</p>
+                            <p className="font-semibold text-primary-900">Keep the barcode horizontal and fill most of the guide.</p>
+                            <p>Hold the phone 12–20 cm away, wait for focus, and tilt glossy boxes slightly to remove glare.</p>
                             <div className="flex flex-wrap gap-2 text-xs uppercase tracking-wide text-primary-500">
                                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
                                     <Camera className="h-3.5 w-3.5" /> Back camera first
                                 </span>
                                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
                                     <Zap className="h-3.5 w-3.5" /> Torch when supported
+                                </span>
+                                <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
+                                    <ScanLine className="h-3.5 w-3.5" /> Pinch or use zoom
                                 </span>
                             </div>
                         </div>
@@ -251,19 +318,20 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
 
                 <div className="rounded-xl border border-primary-200 bg-white p-3">
                     <label className="block text-xs font-semibold text-primary-500" htmlFor="barcode-image-upload">
-                        Upload barcode image
+                        Take or choose a barcode photo
                     </label>
                     <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                         <input
                             id="barcode-image-upload"
                             type="file"
                             accept="image/*"
+                            capture="environment"
                             className="block w-full text-sm text-primary-600 file:mr-3 file:rounded-lg file:border-0 file:bg-primary-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-primary-700 hover:file:bg-primary-200"
                             onChange={scanUploadedFile}
                         />
                         <span className="inline-flex items-center gap-1 text-xs text-primary-500">
                             <ImageUp className="h-3.5 w-3.5" />
-                            Use when camera access fails
+                            Reliable fallback for glossy or damaged labels
                         </span>
                     </div>
                     {fileScanStatus && (
