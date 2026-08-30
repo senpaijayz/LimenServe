@@ -98,8 +98,7 @@ describe('CameraScannerModal', () => {
                 rememberLastUsedCamera: true,
                 useBarCodeDetectorIfSupported: false,
                 showTorchButtonIfSupported: true,
-                showZoomSliderIfSupported: true,
-                defaultZoomValueIfSupported: 1.25,
+                showZoomSliderIfSupported: false,
                 videoConstraints: {
                     facingMode: { ideal: 'environment' },
                     width: { ideal: 1920 },
@@ -123,6 +122,7 @@ describe('CameraScannerModal', () => {
         );
 
         const [, scannerConfig] = constructorSpy.mock.calls[0];
+        expect(scannerConfig).not.toHaveProperty('defaultZoomValueIfSupported');
         expect(scannerConfig.qrbox(390, 640)).toEqual({ width: 358, height: 115 });
         expect(scannerConfig.qrbox(390, 220)).toEqual({ width: 358, height: 115 });
         expect(scannerConfig.qrbox(320, 180)).toEqual({ width: 294, height: 96 });

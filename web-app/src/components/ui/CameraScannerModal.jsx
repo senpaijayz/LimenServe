@@ -178,8 +178,10 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                     },
                     supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
                     showTorchButtonIfSupported: true,
-                    showZoomSliderIfSupported: true,
-                    defaultZoomValueIfSupported: 1.25,
+                    // html5-qrcode assumes zoom capability.step is always a
+                    // number. Safari on iPhone can expose zoom without that
+                    // field, which crashes the scanner while the camera is live.
+                    showZoomSliderIfSupported: false,
                     formatsToSupport: PRODUCT_BARCODE_FORMATS,
                 },
                 /* verbose= */ false
@@ -302,7 +304,7 @@ const CameraScannerModal = ({ isOpen, onClose, onScan }) => {
                                     <Zap className="h-3.5 w-3.5" /> Torch when supported
                                 </span>
                                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1">
-                                    <ScanLine className="h-3.5 w-3.5" /> Pinch or use zoom
+                                    <ScanLine className="h-3.5 w-3.5" /> Hold steady to focus
                                 </span>
                             </div>
                         </div>
