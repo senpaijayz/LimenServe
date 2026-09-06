@@ -23,7 +23,7 @@ const SELECTED_EMISSIVE = '#38bdf8';
 const LOCKED_EDGE = '#f59e0b';
 const LOCATED_EDGE = '#facc15';
 const LOCATED_EMISSIVE = '#fde047';
-const SHARED_FLOOR_TYPES = new Set(['floor', 'walls']);
+const SHARED_FLOOR_TYPES = new Set(['floor']);
 const LocatorQualityContext = createContext(getLocatorQualityProfile('high'));
 const LocatorInteractionContext = createContext({ onShelfClick: null });
 
@@ -153,10 +153,6 @@ function objectVisibleOnFloor(object, activeFloor) {
         return true;
     }
 
-    if (object.type === 'wall') {
-        return Number(object.floor || 1) === floor;
-    }
-
     if (Array.isArray(object.floors)) {
         return object.floors.map(Number).includes(floor);
     }
@@ -244,6 +240,7 @@ function TransformableObject({ children, object, onTransformingChange }) {
     const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
+    const floorHeight = useSceneFloorHeight();
     const selectObject = useLocator3DStore((state) => state.selectObject);
     const goToFloor = useLocator3DStore((state) => state.goToFloor);
     const beginObjectTransform = useLocator3DStore((state) => state.beginObjectTransform);
@@ -302,7 +299,7 @@ function TransformableObject({ children, object, onTransformingChange }) {
 
         event.stopPropagation?.();
         event.target?.setPointerCapture?.(event.pointerId);
-        const floorY = Number(object.floor) === 2 ? FLOOR_HEIGHT : 0;
+        const floorY = Number(object.floor) === 2 ? floorHeight : 0;
         dragRef.current = {
             floor: new THREE.Plane(new THREE.Vector3(0, 1, 0), -floorY),
             offset: new THREE.Vector3(object.position[0] - event.point.x, 0, object.position[2] - event.point.z),
@@ -438,33 +435,9 @@ function FloorObject({ object, onTransformingChange }) {
     );
 }
 
-function WallsObject({ object, onTransformingChange }) {
-    const activeFloor = useLocator3DStore((state) => state.activeFloor);
-    const floorHeight = useSceneFloorHeight();
-    const width = Number(object.dimensions?.width || 18);
-    const depth = Number(object.dimensions?.depth || 14);
-    const height = Math.max(0.5, Math.min(Number(object.dimensions?.height || FLOOR_HEIGHT), 8));
-    const floorY = activeFloor === 2 ? floorHeight : 0;
-    const halfWidth = width / 2;
-    const halfDepth = depth / 2;
-
-    return (
-        <TransformableObject object={object} onTransformingChange={onTransformingChange}>
-            {({ located, locked, selected }) => (
-                <>
-                    <Block args={[width + 0.2, height, 0.24]} color="#cbd5e1" located={located} locked={locked} position={[0, floorY + height / 2, -halfDepth - 0.1]} selected={selected} />
-                    <Block args={[0.24, height, depth + 0.2]} color="#cbd5e1" located={located} locked={locked} position={[-halfWidth - 0.1, floorY + height / 2, 0]} selected={selected} />
-                    <Block args={[0.24, height, depth + 0.2]} color="#cbd5e1" located={located} locked={locked} position={[halfWidth + 0.1, floorY + height / 2, 0]} selected={selected} />
-                    <Block args={[width * 0.38, height, 0.24]} color="#cbd5e1" located={located} locked={locked} position={[-width * 0.32, floorY + height / 2, halfDepth + 0.1]} selected={selected} />
-                    <Block args={[width * 0.38, height, 0.24]} color="#cbd5e1" located={located} locked={locked} position={[width * 0.32, floorY + height / 2, halfDepth + 0.1]} selected={selected} />
-                </>
-            )}
-        </TransformableObject>
-    );
-}
-
 function WallEndpoint({ endpoint, object }) {
     const dragRef = useRef(null);
+    const floorHeight = useSceneFloorHeight();
     const beginObjectTransform = useLocator3DStore((state) => state.beginObjectTransform);
     const commitObjectTransform = useLocator3DStore((state) => state.commitObjectTransform);
     const previewWallEndpoint = useLocator3DStore((state) => state.previewWallEndpoint);
@@ -481,7 +454,7 @@ function WallEndpoint({ endpoint, object }) {
             onPointerDown={(event) => {
                 event.stopPropagation();
                 event.target?.setPointerCapture?.(event.pointerId);
-                const floorY = Number(object.floor) === 2 ? FLOOR_HEIGHT : 0;
+                const floorY = Number(object.floor) === 2 ? floorHeight : 0;
                 dragRef.current = { floor: new THREE.Plane(new THREE.Vector3(0, 1, 0), -floorY) };
                 beginObjectTransform(object.id);
             }}
@@ -503,6 +476,20 @@ function WallEndpoint({ endpoint, object }) {
             <meshStandardMaterial color="#f8fafc" emissive="#38bdf8" emissiveIntensity={0.8} roughness={0.32} />
         </mesh>
     );
+}
+
+function getWallPieces(object) {
+    const width = Number(object.dimensions?.width || 1);
+    const openingWidth = Math.min(width - 0.1, Math.max(0, Number(object.opening?.width || 0)));
+    if (openingWidth <= 0) return [{ width, x: 0 }];
+
+    const openingCenter = Math.min(width / 2 - openingWidth / 2, Math.max(-width / 2 + openingWidth / 2, Number(object.opening?.offset || 0)));
+    const openingStart = openingCenter - openingWidth / 2;
+    const openingEnd = openingCenter + openingWidth / 2;
+    return [
+        { width: openingStart + width / 2, x: (-width / 2 + openingStart) / 2 },
+        { width: width / 2 - openingEnd, x: (openingEnd + width / 2) / 2 },
+    ].filter((piece) => piece.width > 0.05);
 }
 
 function ResizeHandle({ object, signX, signZ }) {
@@ -538,7 +525,7 @@ function ResizeHandle({ object, signX, signZ }) {
                 event.target?.setPointerCapture?.(event.pointerId);
                 const floorY = object.type === 'floor' || object.type === 'walls'
                     ? (activeFloor === 2 ? floorHeight : 0)
-                    : (Number(object.floor) === 2 ? FLOOR_HEIGHT : 0);
+                    : (Number(object.floor) === 2 ? floorHeight : 0);
                 dragRef.current = { floor: new THREE.Plane(new THREE.Vector3(0, 1, 0), -floorY) };
                 beginObjectTransform(object.id);
             }}
@@ -586,12 +573,15 @@ function WallSegmentObject({ object, onTransformingChange }) {
     const width = Number(object.dimensions?.width || 1);
     const height = Number(object.dimensions?.height || 2.7);
     const depth = Number(object.dimensions?.depth || 0.18);
+    const pieces = getWallPieces(object);
 
     return (
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
             {({ located, locked, selected }) => (
                 <>
-                    <Block args={[width, height, depth]} color="#64748b" located={located} locked={locked} opacity={0.9} position={[0, height / 2, 0]} selected={selected} />
+                    {pieces.map((piece, index) => (
+                        <Block args={[piece.width, height, depth]} color="#64748b" key={`${object.id}-piece-${index}`} located={located} locked={locked} opacity={0.9} position={[piece.x, height / 2, 0]} selected={selected} />
+                    ))}
                     {selected && isDesignMode && activeTool !== 'rotate' && !locked && (
                         <>
                             <WallEndpoint endpoint="start" object={object} />
@@ -950,10 +940,6 @@ function EntranceDoorObject({ object, onTransformingChange }) {
 function LocatorObject({ object, onTransformingChange }) {
     if (object.type === 'floor') {
         return <FloorObject object={object} onTransformingChange={onTransformingChange} />;
-    }
-
-    if (object.type === 'walls') {
-        return <WallsObject object={object} onTransformingChange={onTransformingChange} />;
     }
 
     if (object.type === 'wall') {

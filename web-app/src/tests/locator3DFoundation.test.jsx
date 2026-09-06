@@ -18,7 +18,7 @@ import { useLocator3DStore } from '../modules/locator3d/store/useLocator3DStore'
 
 const REQUIRED_OBJECT_TYPES = [
     'floor',
-    'walls',
+    'wall',
     'shelf-2-layer',
     'shelf-4-layer',
     'stairs',
@@ -43,7 +43,7 @@ describe('3D Locator foundation', () => {
     it('defines the object library and seed scene', () => {
         expect(LOCATOR_OBJECT_LIBRARY.map((object) => object.type)).toEqual([
             'floor',
-            'walls',
+            'wall',
             'shelf',
             ...REQUIRED_OBJECT_TYPES.slice(4),
         ]);
@@ -53,7 +53,7 @@ describe('3D Locator foundation', () => {
     it('summarizes the initial two-floor store layout', () => {
         expect(getLocatorObjectSummary(LOCATOR_SCENE_OBJECTS)).toEqual({
             floors: 2,
-            objects: 12,
+            objects: 19,
             shelves: 6,
         });
     });

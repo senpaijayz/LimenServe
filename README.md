@@ -14,6 +14,8 @@ The locator opens the saved priority stockroom (or `main-store`). Search by part
 
 **Display settings** offers Auto, High, Medium and Low quality, labels, grid and optional see-through fixtures. The camera fits the current room dimensions and respects reduced motion. Editing tools sit above the map, and shelf details move below it on smaller screens. **More stockroom actions** opens saved layouts and Save As; switching layouts prompts before replacing unsaved edits.
 
+Each floor now has four separately selectable perimeter walls—Back, Right, Front, and Left. In Design Mode, select a side to use **Size** for its length, height, and thickness, or drag its endpoint handles for a custom length. The Floor 1 front wall retains its entrance opening as one editable wall; Floor 2 uses its own solid front wall. Older layouts containing the former single `walls` perimeter are safely expanded into these segments when opened and are saved in the new form on the next layout save.
+
 This workspace update requires no SQL or environment changes. Deploy the frontend from `main` using the existing Vercel integration. Verify locating a mapped part, switching floors, opening a shelf, resizing in Design Mode, and Save As with a disposable layout. Roll back the frontend deployment in Vercel if needed; existing layout data is not migrated by this update.
 
 The upstairs stairwell is derived from the landing/upper flight in floor-local coordinates, including stair rotation and size. Adjacent flooring remains solid; floor markings are clipped out of the opening. No saved-layout rewrite is required. Regression coverage is in `web-app/src/tests/stairOpening.test.js`, including 15°/45°/90° rotations, shifted floors, edge clipping, and ray-casting through the actual mesh.

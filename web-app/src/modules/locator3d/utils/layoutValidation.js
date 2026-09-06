@@ -1,7 +1,9 @@
 import { FLOOR_HEIGHT } from '../data/locatorScene';
 
 const FLOOR_BOUNDS = { width: 24, depth: 16 };
-const STRUCTURE_TYPES = new Set(['floor', 'walls']);
+// Walls define the room boundary; they are not movable inventory fixtures and
+// must not produce false collision or out-of-bounds warnings.
+const STRUCTURE_TYPES = new Set(['floor', 'wall', 'walls']);
 
 function numberOr(value, fallback = 0) {
     const numberValue = Number(value);

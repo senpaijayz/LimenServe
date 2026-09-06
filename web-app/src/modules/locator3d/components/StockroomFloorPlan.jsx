@@ -8,7 +8,7 @@ export default function StockroomFloorPlan({ onShelfClick }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const bounds = useMemo(() => getFloorBounds(sceneObjects, activeFloor), [sceneObjects, activeFloor]);
-    const objects = sceneObjects.filter((object) => object.type !== 'floor' && object.type !== 'walls'
+    const objects = sceneObjects.filter((object) => object.type !== 'floor' && object.type !== 'wall' && object.type !== 'walls'
         && (Number(object.floor || 1) === activeFloor || object.type === 'stairs'));
     const activate = (object) => {
         if (object.type === 'stairs') useLocator3DStore.getState().goToFloor(activeFloor === 1 ? 2 : 1);

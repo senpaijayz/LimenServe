@@ -17,12 +17,12 @@ export const LOCATOR_OBJECT_LIBRARY = [
         description: 'Two-level base plane',
     },
     {
-        type: 'walls',
-        label: 'Walls',
+        type: 'wall',
+        label: 'Wall',
         category: 'Structure',
         icon: 'BrickWall',
         color: '#64748b',
-        description: 'Store perimeter walls',
+        description: 'Independent wall segment',
     },
     {
         type: 'shelf',
@@ -66,6 +66,114 @@ export const LOCATOR_OBJECT_LIBRARY = [
     },
 ];
 
+export const WALL_OBJECT_TEMPLATE = {
+    type: 'wall',
+    name: 'Wall',
+    isLocked: false,
+    dimensions: { width: 3, depth: 0.18, height: 2.7 },
+    rotation: [0, 0, 0],
+};
+
+function normalizeWallPoint(point, fallback = [0, 0, 0]) {
+    return [
+        Number(Number(point?.[0] ?? fallback[0]).toFixed(3)),
+        Number(Number(point?.[1] ?? fallback[1]).toFixed(3)),
+        Number(Number(point?.[2] ?? fallback[2]).toFixed(3)),
+    ];
+}
+
+export function buildWallObjectFromEndpoints({
+    end,
+    floor = 1,
+    id = `wall-${Date.now().toString(36)}`,
+    name = 'Wall',
+    start,
+    ...wallMetadata
+} = {}) {
+    const safeFloor = Number(floor) === 2 ? 2 : 1;
+    const requestedFloorY = Number(start?.[1] ?? end?.[1]);
+    const floorY = safeFloor === 2 && Number.isFinite(requestedFloorY) ? requestedFloorY : safeFloor === 2 ? FLOOR_HEIGHT : 0;
+    const wallStart = normalizeWallPoint(start, [-1.5, floorY, 0]);
+    const wallEnd = normalizeWallPoint(end, [1.5, floorY, 0]);
+    const deltaX = wallEnd[0] - wallStart[0];
+    const deltaZ = wallEnd[2] - wallStart[2];
+    const length = Math.max(0.25, Math.hypot(deltaX, deltaZ));
+
+    return {
+        ...cloneSceneObject(WALL_OBJECT_TEMPLATE),
+        ...wallMetadata,
+        id,
+        name,
+        floor: safeFloor,
+        position: [
+            Number(((wallStart[0] + wallEnd[0]) / 2).toFixed(3)),
+            floorY,
+            Number(((wallStart[2] + wallEnd[2]) / 2).toFixed(3)),
+        ],
+        rotation: [0, Number(Math.atan2(-deltaZ, deltaX).toFixed(3)), 0],
+        dimensions: { ...WALL_OBJECT_TEMPLATE.dimensions, ...(wallMetadata.dimensions || {}), width: Number(length.toFixed(3)) },
+        wallStart,
+        wallEnd,
+    };
+}
+
+function perimeterPoint(point, position, yaw, floorY) {
+    const [x = 0, z = 0] = point;
+    const cos = Math.cos(yaw);
+    const sin = Math.sin(yaw);
+    return [
+        Number((Number(position?.[0] || 0) + cos * x + sin * z).toFixed(3)),
+        floorY,
+        Number((Number(position?.[2] || 0) - sin * x + cos * z).toFixed(3)),
+    ];
+}
+
+// The legacy `walls` object was a single, all-or-nothing perimeter. Keep this
+// conversion here so old saved designs open as individually editable sides.
+export function buildPerimeterWallSegments({
+    dimensions = {},
+    floorHeight = FLOOR_HEIGHT,
+    floors = [1, 2],
+    id = 'perimeter',
+    isLocked = false,
+    position = [0, 0, 0],
+    rotation = [0, 0, 0],
+} = {}) {
+    const width = Math.max(1, Number(dimensions.width || 24));
+    const depth = Math.max(1, Number(dimensions.depth || 16));
+    const height = Math.max(0.5, Number(dimensions.height || FLOOR_HEIGHT));
+    const thickness = Math.min(1, Math.max(0.12, Number(dimensions.wallThickness || 0.24)));
+    const halfWidth = width / 2;
+    const halfDepth = depth / 2;
+    const yaw = Number(rotation?.[1] || 0);
+    const sides = [
+        { key: 'north', label: 'Back', start: [-halfWidth, -halfDepth], end: [halfWidth, -halfDepth] },
+        { key: 'east', label: 'Right', start: [halfWidth, -halfDepth], end: [halfWidth, halfDepth] },
+        { key: 'south', label: 'Front', start: [halfWidth, halfDepth], end: [-halfWidth, halfDepth] },
+        { key: 'west', label: 'Left', start: [-halfWidth, halfDepth], end: [-halfWidth, -halfDepth] },
+    ];
+    const levels = [...new Set((Array.isArray(floors) ? floors : [floors]).map(Number).filter((floor) => floor === 1 || floor === 2))];
+
+    return levels.flatMap((floor) => sides.map((side) => {
+        const floorY = floor === 2 ? floorHeight : 0;
+        const opening = side.key === 'south' && floor === 1
+            ? { offset: 0, width: Math.min(width * 0.26, 6.24) }
+            : null;
+        return buildWallObjectFromEndpoints({
+            id: `${id}-floor-${floor}-${side.key}`,
+            name: `Floor ${floor} ${side.label} Wall`,
+            floor,
+            isLocked,
+            isPerimeterWall: true,
+            opening,
+            perimeterSide: side.key,
+            dimensions: { depth: thickness, height },
+            start: perimeterPoint(side.start, position, yaw, floorY),
+            end: perimeterPoint(side.end, position, yaw, floorY),
+        });
+    }));
+}
+
 export const LOCATOR_SCENE_OBJECTS = [
     {
         id: 'floor-main',
@@ -77,16 +185,10 @@ export const LOCATOR_SCENE_OBJECTS = [
         position: [0, 0, 0],
         dimensions: { width: 24, depth: 16, height: FLOOR_HEIGHT },
     },
-    {
-        id: 'walls-main',
-        type: 'walls',
-        name: 'Perimeter Walls',
-        floor: 1,
-        floors: [1, 2],
-        isLocked: false,
-        position: [0, 0, 0],
+    ...buildPerimeterWallSegments({
         dimensions: { width: 24, depth: 16, height: FLOOR_HEIGHT },
-    },
+        id: 'perimeter',
+    }),
     {
         id: 'shelf-2-a',
         type: 'shelf-2-layer',
@@ -218,14 +320,6 @@ export const LOCATOR_SCENE_OBJECTS = [
     },
 ];
 
-export const WALL_OBJECT_TEMPLATE = {
-    type: 'wall',
-    name: 'Wall',
-    isLocked: false,
-    dimensions: { width: 3, depth: 0.18, height: 2.7 },
-    rotation: [0, 0, 0],
-};
-
 export function getLocatorObjectSummary(objects = LOCATOR_SCENE_OBJECTS) {
     const floors = new Set();
 
@@ -262,6 +356,7 @@ export function cloneSceneObject(object) {
         ...object,
         dimensions: object.dimensions ? { ...object.dimensions } : undefined,
         floors: object.floors ? [...object.floors] : undefined,
+        opening: object.opening ? { ...object.opening } : undefined,
         position: Array.isArray(object.position) ? [...object.position] : [0, 0, 0],
         rotation: object.rotation ? [...object.rotation] : [0, 0, 0],
     };
@@ -269,46 +364,6 @@ export function cloneSceneObject(object) {
 
 export function cloneLocatorSceneObjects() {
     return LOCATOR_SCENE_OBJECTS.map(cloneSceneObject);
-}
-
-function normalizeWallPoint(point, fallback = [0, 0, 0]) {
-    return [
-        Number(Number(point?.[0] ?? fallback[0]).toFixed(3)),
-        Number(Number(point?.[1] ?? fallback[1]).toFixed(3)),
-        Number(Number(point?.[2] ?? fallback[2]).toFixed(3)),
-    ];
-}
-
-export function buildWallObjectFromEndpoints({
-    end,
-    floor = 1,
-    id = `wall-${Date.now().toString(36)}`,
-    name = 'Wall',
-    start,
-} = {}) {
-    const safeFloor = Number(floor) === 2 ? 2 : 1;
-    const floorY = safeFloor === 2 ? FLOOR_HEIGHT : 0;
-    const wallStart = normalizeWallPoint(start, [-1.5, floorY, 0]);
-    const wallEnd = normalizeWallPoint(end, [1.5, floorY, 0]);
-    const deltaX = wallEnd[0] - wallStart[0];
-    const deltaZ = wallEnd[2] - wallStart[2];
-    const length = Math.max(0.25, Math.hypot(deltaX, deltaZ));
-
-    return {
-        ...cloneSceneObject(WALL_OBJECT_TEMPLATE),
-        id,
-        name,
-        floor: safeFloor,
-        position: [
-            Number(((wallStart[0] + wallEnd[0]) / 2).toFixed(3)),
-            floorY,
-            Number(((wallStart[2] + wallEnd[2]) / 2).toFixed(3)),
-        ],
-        rotation: [0, Number(Math.atan2(-deltaZ, deltaX).toFixed(3)), 0],
-        dimensions: { ...WALL_OBJECT_TEMPLATE.dimensions, width: Number(length.toFixed(3)) },
-        wallStart,
-        wallEnd,
-    };
 }
 
 function getDefaultObjectName(object, count) {
@@ -324,7 +379,7 @@ function getDefaultObjectPosition(object, activeFloor, count) {
     const floorY = Number(activeFloor) === 2 ? FLOOR_HEIGHT : 0;
     const offset = (count % 4) * 1.25;
 
-    if (object.type === 'floor' || object.type === 'walls') {
+    if (object.type === 'floor') {
         return [0, floorY, 0];
     }
 
@@ -380,7 +435,7 @@ export function createLocatorSceneObject(type, { activeFloor = 1, count = 0 } = 
         id,
         type: type === 'shelf' ? 'shelf' : object.type,
         floor: object.type === 'stairs' ? 1 : floor,
-        floors: object.type === 'floor' || object.type === 'walls' ? [1, 2] : object.floors,
+        floors: object.type === 'floor' ? [1, 2] : object.floors,
         isLocked: false,
         name: getDefaultObjectName(object, count),
         position: getDefaultObjectPosition(object, floor, count),
@@ -393,16 +448,26 @@ export function normalizeLayoutObjects(objects) {
         return cloneLocatorSceneObjects();
     }
 
-    return objects.map((object) => {
+    const floorHeight = Number(objects.find((object) => object?.type === 'floor')?.dimensions?.height) || FLOOR_HEIGHT;
+
+    return objects.flatMap((object) => {
+        if (object?.type === 'walls') {
+            return buildPerimeterWallSegments({
+                ...object,
+                floorHeight,
+                floors: object.floors || [object.floor || 1],
+            });
+        }
+
         if (object?.type === 'wall' && Array.isArray(object.wallStart) && Array.isArray(object.wallEnd)) {
-            return {
+            return [{
                 ...buildWallObjectFromEndpoints({
                     ...object,
                     end: object.wallEnd,
                     start: object.wallStart,
                 }),
                 isLocked: Boolean(object.isLocked),
-            };
+            }];
         }
 
         const normalized = cloneSceneObject(object);
@@ -419,7 +484,7 @@ export function normalizeLayoutObjects(objects) {
             normalized.layoutOrientation = STAIR_LAYOUT_ORIENTATION;
         }
 
-        return normalized;
+        return [normalized];
     });
 }
 
@@ -427,7 +492,7 @@ export function buildDefaultLayoutData() {
     return {
         layoutName: LOCATOR_LAYOUT_NAME,
         objects: cloneLocatorSceneObjects(),
-        version: 1,
+        version: 2,
     };
 }
 

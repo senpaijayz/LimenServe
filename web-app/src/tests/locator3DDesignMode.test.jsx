@@ -46,7 +46,8 @@ describe('3D Design Mode layout safety', () => {
         store.previewWallDrawing([1.12, 0, -1.12]);
         store.completeWallDrawing([1.12, 0, -1.12]);
 
-        const wall = useLocator3DStore.getState().sceneObjects.find((object) => object.type === 'wall');
+        const drawnWallId = useLocator3DStore.getState().selectedObjectId;
+        const wall = useLocator3DStore.getState().sceneObjects.find((object) => object.id === drawnWallId);
         expect(wall.wallStart).toEqual([-1.25, 0, -1]);
         expect(wall.wallEnd).toEqual([1, 0, -1]);
         expect(wall.position[1]).toBe(0);
@@ -77,7 +78,8 @@ describe('3D Design Mode layout safety', () => {
         const store = useLocator3DStore.getState();
         store.beginWallDrawing([0, 0, 0]);
         store.completeWallDrawing([2, 0, 0]);
-        const wall = useLocator3DStore.getState().sceneObjects.find((object) => object.type === 'wall');
+        const drawnWallId = useLocator3DStore.getState().selectedObjectId;
+        const wall = useLocator3DStore.getState().sceneObjects.find((object) => object.id === drawnWallId);
 
         store.beginObjectTransform(wall.id);
         store.previewObjectTransform(wall.id, { position: [2, 0, 2], rotation: [0, Math.PI / 2, 0] });

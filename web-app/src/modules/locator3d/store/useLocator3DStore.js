@@ -25,6 +25,7 @@ function cloneObjects(objects) {
         ...object,
         dimensions: object.dimensions ? { ...object.dimensions } : undefined,
         floors: object.floors ? [...object.floors] : undefined,
+        opening: object.opening ? { ...object.opening } : undefined,
         position: [...(object.position || [0, 0, 0])],
         rotation: [...(object.rotation || [0, 0, 0])],
         wallEnd: object.wallEnd ? [...object.wallEnd] : undefined,
@@ -783,9 +784,33 @@ export const useLocator3DStore = create((set, get) => ({
             };
             const floorHeightChanged = target.type === 'floor' && nextDimensions.height !== target.dimensions.height;
 
+            const resizedWall = target.type === 'wall' && Array.isArray(target.wallStart) && Array.isArray(target.wallEnd)
+                ? (() => {
+                    const floorY = Number(target.floor) === 2 ? getLayoutFloorHeight(sceneObjects) : 0;
+                    const center = target.position || [0, floorY, 0];
+                    const yaw = Number(target.rotation?.[1] || 0);
+                    const halfLength = nextDimensions.width / 2;
+                    const deltaX = Math.cos(yaw) * halfLength;
+                    const deltaZ = -Math.sin(yaw) * halfLength;
+                    const opening = target.opening
+                        ? {
+                            ...target.opening,
+                            width: Number((Number(target.opening.width || 0) * nextDimensions.width / Number(target.dimensions.width || nextDimensions.width)).toFixed(3)),
+                        }
+                        : target.opening;
+                    return buildWallObjectFromEndpoints({
+                        ...target,
+                        dimensions: nextDimensions,
+                        opening,
+                        start: [center[0] - deltaX, floorY, center[2] - deltaZ],
+                        end: [center[0] + deltaX, floorY, center[2] + deltaZ],
+                    });
+                })()
+                : null;
+
             return sceneObjects.map((object) => {
                 if (object.id === objectId) {
-                    return { ...object, dimensions: nextDimensions };
+                    return resizedWall ?? { ...object, dimensions: nextDimensions };
                 }
 
                 if (!floorHeightChanged) {
