@@ -1,0 +1,50 @@
+.locator-workspace .locator-canvas-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 16px;
+}
+.locator-workspace .locator-canvas {
+    height: clamp(360px, 62svh, 760px);
+}
+.locator-workspace .locator-canvas:fullscreen {
+    height: 100%;
+    border-radius: 0;
+}
+.locator-workspace [aria-label="Shelf inspector"] {
+    position: static;
+    width: 100%;
+    box-shadow: 0 2px 6px #0f172a08;
+    max-height: 760px;
+    overflow-y: auto;
+}
+.locator-workspace .locator-canvas > .pointer-events-none.left-4.top-4 {
+    top: 76px;
+    max-width: min(320px, calc(100% - 5rem));
+}
+.locator-workspace .locator-canvas > [role="status"] {
+    pointer-events: auto;
+}
+.locator-workspace button:focus-visible,
+.locator-workspace select:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 3px;
+}
+@media (min-width: 1100px) {
+    .locator-workspace .locator-canvas-layout:has([aria-label="Shelf inspector"]) {
+        grid-template-columns: minmax(0, 1fr) 310px;
+    }
+}
+@media (max-width: 639px) {
+    .locator-workspace > header { padding: 16px; }
+    .locator-workspace [aria-label="Design toolbar"] { gap: 6px; padding: 10px; }
+    .locator-workspace [aria-label="Design toolbar"] button { min-height: 40px; }
+    .locator-workspace [aria-label="Stockroom summary"] > div { padding: 12px; }
+    .locator-workspace [aria-label="Stockroom summary"] > div > span:first-child { width: 32px; height: 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .locator-workspace *, .locator-workspace *::before, .locator-workspace *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0s !important;
+    }
+}

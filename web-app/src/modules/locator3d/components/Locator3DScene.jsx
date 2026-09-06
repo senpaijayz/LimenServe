@@ -9,11 +9,13 @@ import {
     getCounterObject,
     getStairLayoutMetrics,
     isShelfObject,
+    locationBelongsToShelf,
     normalizeAisle,
 } from '../data/locatorScene';
 import { useLocator3DStore } from '../store/useLocator3DStore';
 import { getLocatorQualityCapabilities, getLocatorQualityProfile } from '../utils/qualityTier';
 import { buildObstacleAwarePath } from '../utils/locatorPathfinding';
+import { getFloorBounds, getOverviewCamera } from '../utils/locatorViewport';
 
 const SELECTED_EDGE = '#0ea5e9';
 const SELECTED_EMISSIVE = '#38bdf8';
@@ -35,24 +37,19 @@ const CAMERA_TARGETS = {
     },
 };
 
-function buildFloorCameraTarget(activeFloor, floorHeight = FLOOR_HEIGHT) {
-    const floorTarget = CAMERA_TARGETS[activeFloor] ?? CAMERA_TARGETS[1];
-    const verticalOffset = activeFloor === 2 ? floorHeight - FLOOR_HEIGHT : 0;
-
+function buildFloorCameraTarget(activeFloor, floorHeight, sceneObjects, aspect) {
+    const target = getOverviewCamera(sceneObjects, activeFloor, floorHeight, aspect);
     return {
-        lookAt: new THREE.Vector3(floorTarget.lookAt[0], floorTarget.lookAt[1] + verticalOffset, floorTarget.lookAt[2]),
-        position: new THREE.Vector3(floorTarget.position[0], floorTarget.position[1] + verticalOffset, floorTarget.position[2]),
+        lookAt: new THREE.Vector3(...target.lookAt),
+        position: new THREE.Vector3(...target.position),
     };
 }
 
-function buildTopDownCameraTarget(activeFloor, floorHeight = FLOOR_HEIGHT) {
-    const floorTarget = CAMERA_TARGETS[activeFloor] ?? CAMERA_TARGETS[1];
-    const [x, y, z] = floorTarget.lookAt;
-    const verticalOffset = activeFloor === 2 ? floorHeight - FLOOR_HEIGHT : 0;
-
+function buildTopDownCameraTarget(activeFloor, floorHeight, sceneObjects, aspect) {
+    const target = getOverviewCamera(sceneObjects, activeFloor, floorHeight, aspect, true);
     return {
-        lookAt: new THREE.Vector3(x, y + verticalOffset, z),
-        position: new THREE.Vector3(x, y + verticalOffset + 18.5, z + 0.01),
+        lookAt: new THREE.Vector3(...target.lookAt),
+        position: new THREE.Vector3(...target.position),
     };
 }
 
@@ -434,7 +431,7 @@ function FloorObject({ object, onTransformingChange }) {
                         <group key={`floor-panel-${index}`}>
                             <Block
                                 args={[panel.width, 0.18, panel.depth]}
-                                color="#1f1f1f"
+                                color="#94a3b8"
                                 located={located}
                                 locked={locked}
                                 position={[panel.x, floorY - 0.09, panel.z]}
@@ -442,7 +439,7 @@ function FloorObject({ object, onTransformingChange }) {
                             />
                             <mesh position={[panel.x, floorY + 0.012, panel.z]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
                                 <planeGeometry args={[Math.max(0.1, panel.width - 0.55), Math.max(0.1, panel.depth - 0.55)]} />
-                                <meshStandardMaterial color="#263246" roughness={0.82} metalness={0.08} />
+                                <meshStandardMaterial color="#dce3ea" roughness={0.88} metalness={0.02} />
                             </mesh>
                         </group>
                     ))}
@@ -691,10 +688,7 @@ function ShelfObject({ object, onTransformingChange }) {
     const accentColor = '#3182CE';
     const slotWidth = width / binCount;
     const slotPositions = Array.from({ length: binCount }, (_, index) => (-width / 2) + slotWidth / 2 + index * slotWidth);
-    const shelfLocations = productLocations.filter((location) => (
-        location.shelfObjectId === object.id
-        || (normalizeAisle(location.aisle) === normalizeAisle(object.aisle) && Number(location.shelfNumber) === Number(object.shelfNumber))
-    ));
+    const shelfLocations = productLocations.filter((location) => locationBelongsToShelf(location, object));
 
     return (
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
@@ -761,7 +755,10 @@ function ShelfObject({ object, onTransformingChange }) {
                     </Label>
                     {shelfLocations.map((location, index) => {
                         const safeBin = Math.min(binCount, Math.max(1, Number(location.binNumber || 1)));
-                        const markerLevel = shelfLevels[index % shelfLevels.length] ?? shelfLevels[0];
+                        const savedLayer = Number(location.layerNumber || 0);
+                        const markerLevel = savedLayer > 0
+                            ? shelfLevels[Math.min(layers, Math.max(1, savedLayer)) - 1]
+                            : shelfLevels[index % shelfLevels.length] ?? shelfLevels[0];
 
                         return (
                             <ProductMarker
@@ -1118,17 +1115,20 @@ function CameraRig({ controlsRef, isTransforming }) {
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
     const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
-    const { camera } = useThree();
+    const { camera, size, invalidate = () => {} } = useThree();
+    const aspect = size?.width && size?.height ? size.width / size.height : 1.5;
+    const reducedMotion = useMemo(() => getLocatorQualityCapabilities().reducedMotion, []);
+    const bounds = getFloorBounds(sceneObjects, activeFloor);
     const activeTargetRef = useRef(null);
     const isAnimatingRef = useRef(true);
     const targetTriggerRef = useRef('');
     const target = useMemo(() => {
         if (cameraPresetRequest?.preset === 'overview') {
-            return buildFloorCameraTarget(activeFloor, floorHeight);
+            return buildFloorCameraTarget(activeFloor, floorHeight, sceneObjects, aspect);
         }
 
         if (cameraPresetRequest?.preset === 'topDown') {
-            return buildTopDownCameraTarget(activeFloor, floorHeight);
+            return buildTopDownCameraTarget(activeFloor, floorHeight, sceneObjects, aspect);
         }
 
         if (cameraPresetRequest?.preset === 'counter') {
@@ -1173,11 +1173,13 @@ function CameraRig({ controlsRef, isTransforming }) {
             return focusedTarget;
         }
 
-        return buildFloorCameraTarget(activeFloor, floorHeight);
-    }, [activeFloor, cameraFocusRequest, cameraPresetRequest, floorHeight, locatedProduct, sceneObjects, selectedObjectId]);
+        return buildFloorCameraTarget(activeFloor, floorHeight, sceneObjects, aspect);
+    }, [activeFloor, aspect, cameraFocusRequest, cameraPresetRequest, floorHeight, locatedProduct, sceneObjects, selectedObjectId]);
 
     const targetTrigger = [
         activeFloor,
+        aspect,
+        bounds.width, bounds.depth, bounds.x, bounds.z,
         cameraFocusRequest?.sequence || 0,
         cameraPresetRequest?.sequence || 0,
         locatedProduct?.productId || '',
@@ -1193,17 +1195,18 @@ function CameraRig({ controlsRef, isTransforming }) {
         targetTriggerRef.current = targetTrigger;
         activeTargetRef.current = target;
         isAnimatingRef.current = true;
-    }, [isTransforming, target, targetTrigger]);
+        invalidate();
+    }, [invalidate, isTransforming, target, targetTrigger]);
 
     useFrame((state) => {
         if (!isAnimatingRef.current || !activeTargetRef.current) {
             return;
         }
 
-        camera.position.lerp(activeTargetRef.current.position, 0.065);
+        camera.position.lerp(activeTargetRef.current.position, reducedMotion ? 1 : 0.1);
 
         if (controlsRef.current?.target) {
-            controlsRef.current.target.lerp(activeTargetRef.current.lookAt, 0.085);
+            controlsRef.current.target.lerp(activeTargetRef.current.lookAt, reducedMotion ? 1 : 0.12);
             controlsRef.current.update();
         }
 
@@ -1334,9 +1337,9 @@ function SceneContents({ onContextLost, onShelfClick, quality }) {
             <LocatorQualityContext.Provider value={quality}>
             <RenderScheduler />
             <WebGLContextLossHandler onContextLost={onContextLost} />
-            <color args={['#0b1120']} attach="background" />
-            <ambientLight intensity={0.44} />
-            <hemisphereLight args={['#bfdbfe', '#111827', 0.56]} />
+            <color args={['#edf2f7']} attach="background" />
+            <ambientLight intensity={0.7} />
+            <hemisphereLight args={['#f8fafc', '#94a3b8', 0.8]} />
             <directionalLight castShadow={quality.shadows} intensity={1.45} position={[7, 11, 6]} shadow-mapSize={[quality.shadowMapSize, quality.shadowMapSize]} />
             <spotLight angle={0.42} color="#e0f2fe" intensity={quality.tier === 'low' ? 0.7 : 1.35} penumbra={0.55} position={[-7, 9, 7]} />
             <pointLight color="#38bdf8" intensity={0.42} position={[-4, 4, 3]} />
@@ -1344,14 +1347,14 @@ function SceneContents({ onContextLost, onShelfClick, quality }) {
             <pointLight color="#22c55e" intensity={locatedProduct ? 0.42 : 0.16} position={[-6, activeFloor === 2 ? floorHeight + 3 : 3, 5.2]} />
             {showGrid && (
                 <Grid
-                    cellColor="#334155"
+                    cellColor="#cbd5e1"
                     cellSize={1}
                     cellThickness={0.42}
                     fadeDistance={24}
                     fadeStrength={1.2}
                     infiniteGrid
                     position={[0, activeGridY, 0]}
-                    sectionColor="#475569"
+                    sectionColor="#94a3b8"
                     sectionSize={4}
                     sectionThickness={0.9}
                 />
@@ -1399,7 +1402,8 @@ function SceneContents({ onContextLost, onShelfClick, quality }) {
                 enableDamping
                 panSpeed={0.72}
                 makeDefault
-                maxDistance={80}
+                maxDistance={300}
+                maxPolarAngle={Math.PI / 2.05}
                 minDistance={1.2}
                 ref={controlsRef}
                 rotateSpeed={0.62}

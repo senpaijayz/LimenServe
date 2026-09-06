@@ -439,6 +439,15 @@ export function formatProductLocationLabel(location) {
     return `Product located \u2192 Aisle ${normalizeAisle(location.aisle)} \u2022 Shelf ${location.shelfNumber} \u2022 Bin ${location.binNumber}`;
 }
 
+export function locationBelongsToShelf(location, shelf) {
+    if (!location || !shelf || !isShelfObject(shelf)) return false;
+    const id = location.shelfObjectId || location.shelf_object_id;
+    if (id) return id === shelf.id;
+    return Number(location.floor || 1) === Number(shelf.floor || 1)
+        && normalizeAisle(location.aisle) === normalizeAisle(shelf.aisle)
+        && Number(location.shelfNumber ?? location.shelf_number) === Number(shelf.shelfNumber);
+}
+
 export function getShelfObjectByLocation(location, objects = LOCATOR_SCENE_OBJECTS) {
     if (!location) {
         return null;
@@ -447,9 +456,7 @@ export function getShelfObjectByLocation(location, objects = LOCATOR_SCENE_OBJEC
     const shelfObjectId = location.shelfObjectId || location.shelf_object_id;
     if (shelfObjectId) {
         const directMatch = objects.find((object) => object.id === shelfObjectId);
-        if (directMatch) {
-            return directMatch;
-        }
+        return directMatch && isShelfObject(directMatch) ? directMatch : null;
     }
 
     const aisle = normalizeAisle(location.aisle);
@@ -457,6 +464,7 @@ export function getShelfObjectByLocation(location, objects = LOCATOR_SCENE_OBJEC
 
     return objects.find((object) => (
         isShelfObject(object)
+        && Number(object.floor || 1) === Number(location.floor || 1)
         && normalizeAisle(object.aisle) === aisle
         && Number(object.shelfNumber) === shelfNumber
     )) ?? null;

@@ -11,6 +11,7 @@ import {
     getShelfBinWorldPosition,
     getShelfObjectByLocation,
     isShelfObject,
+    locationBelongsToShelf,
     normalizeLayoutObjects,
 } from '../data/locatorScene';
 import { normalizeLocatorQualityPreference } from '../utils/qualityTier';
@@ -437,13 +438,18 @@ export const useLocator3DStore = create((set, get) => ({
         });
     },
     deleteSelectedObject: () => {
-        const { sceneObjects, selectedObjectId, selectedObjectIds = [] } = get();
+        const { sceneObjects, productLocations, selectedObjectId, selectedObjectIds = [] } = get();
         const ids = selectedObjectIds.length ? selectedObjectIds : selectedObjectId ? [selectedObjectId] : [];
         const selectedObject = sceneObjects.find((object) => ids.includes(object.id) && !object.isLocked);
 
         if (!selectedObject || selectedObject.isLocked) {
             return;
         }
+
+        // All delete entry points, including keyboard/multiselect, protect mapped shelves.
+        const mappedSelection = sceneObjects.some((object) => ids.includes(object.id) && !object.isLocked
+            && productLocations.some((location) => locationBelongsToShelf(location, object)));
+        if (mappedSelection) return false;
 
         const nextObjects = sceneObjects.filter((object) => !ids.includes(object.id) || object.isLocked);
         const past = [...(get().history?.past || []), cloneObjects(sceneObjects)].slice(-MAX_HISTORY_ENTRIES);
@@ -463,7 +469,14 @@ export const useLocator3DStore = create((set, get) => ({
         });
     },
     forceSelectObject: (objectId) => set({ selectedObjectIds: objectId ? [objectId] : [], selectedObjectId: objectId }),
-    goToFloor: (floor) => set({ activeFloor: floor === 2 ? 2 : 1 }),
+    goToFloor: (floor) => set({
+        activeFloor: floor === 2 ? 2 : 1,
+        cameraFocusRequest: null,
+        cameraPresetRequest: null,
+        selectedObjectId: null,
+        selectedObjectIds: [],
+        locatedProduct: null,
+    }),
     loadLayoutData: (layoutData) => {
         const sceneObjects = normalizeLayoutObjects(Array.isArray(layoutData) ? layoutData : layoutData?.objects);
 

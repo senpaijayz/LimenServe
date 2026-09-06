@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
 import {
     AlertTriangle,
@@ -31,6 +31,7 @@ import {
     Save,
     Search,
     Star,
+    SlidersHorizontal,
     Trash2,
     Undo2,
     Unlock,
@@ -41,6 +42,8 @@ import { useToast } from '../../../components/ui/Toast';
 import AuthContext from '../../../context/auth-context';
 import { getFullProductCatalog } from '../../../services/catalogApi';
 import Locator3DScene from '../components/Locator3DScene';
+import StockroomFloorPlan from '../components/StockroomFloorPlan';
+import '../locatorWorkspace.css';
 import {
     LOCATOR_LAYOUT_NAME,
     SHELF_BIN_RANGE,
@@ -48,6 +51,7 @@ import {
     getLocatorObjectSummary,
     getShelfObjectByLocation,
     isShelfObject,
+    locationBelongsToShelf,
     normalizeAisle,
 } from '../data/locatorScene';
 import {
@@ -116,7 +120,7 @@ function formatLocation(location) {
 function Button({ children, className = '', tone = 'secondary', type = 'button', ...props }) {
     const tones = {
         danger: 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100',
-        primary: 'border-indigo-600 bg-indigo-600 text-white shadow-[0_8px_20px_rgba(79,70,229,0.24)] hover:bg-indigo-500',
+        primary: 'border-blue-600 bg-blue-600 text-white shadow-[0_8px_20px_rgba(79,70,229,0.24)] hover:bg-blue-500',
         secondary: 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
         subtle: 'border-transparent bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-950',
         success: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
@@ -125,7 +129,7 @@ function Button({ children, className = '', tone = 'secondary', type = 'button',
     return (
         <button
             className={cx(
-                'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50',
+                'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
                 tones[tone],
                 className,
             )}
@@ -142,7 +146,7 @@ function IconButton({ label, children, className = '', ...props }) {
         <button
             aria-label={label}
             className={cx(
-                'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-45',
+                'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-45',
                 className,
             )}
             title={label}
@@ -157,7 +161,8 @@ function IconButton({ label, children, className = '', ...props }) {
 function ProductSearch({ isLoading, notice, onLocateProduct, productLocations, products, sceneObjects }) {
     const [query, setQuery] = useState('');
     const [isOpen, setIsOpen] = useState(false);
-    const normalizedQuery = query.trim().toLowerCase();
+    const [activeIndex, setActiveIndex] = useState(-1);
+    const normalizedQuery = useDeferredValue(query.trim().toLowerCase());
     const searchableProducts = useMemo(() => {
         const knownIds = new Set(products.map((product) => String(product.id)));
         const mappedFallbacks = productLocations
@@ -171,15 +176,17 @@ function ProductSearch({ isLoading, notice, onLocateProduct, productLocations, p
         return [...products, ...mappedFallbacks];
     }, [productLocations, products]);
 
-    const results = useMemo(() => {
-        if (!normalizedQuery) {
-            return [];
+    const searchIndex = useMemo(() => {
+        const locationsByProduct = new Map();
+        for (const location of productLocations) {
+            const key = String(location.productId);
+            if (!locationsByProduct.has(key)) locationsByProduct.set(key, location);
         }
-
+        const shelvesByProduct = new Map([...locationsByProduct].map(([id, location]) => [id, getShelfObjectByLocation(location, sceneObjects)]));
         return searchableProducts
             .map((product) => {
-                const location = productLocations.find((item) => String(item.productId) === String(product.id)) ?? null;
-                const shelf = location ? getShelfObjectByLocation(location, sceneObjects) : null;
+                const location = locationsByProduct.get(String(product.id)) ?? null;
+                const shelf = shelvesByProduct.get(String(product.id)) ?? null;
                 const searchable = [
                     product.name,
                     product.sku,
@@ -196,10 +203,17 @@ function ProductSearch({ isLoading, notice, onLocateProduct, productLocations, p
                 ].filter(Boolean).join(' ').toLowerCase();
 
                 return { location, product, searchable, shelf };
-            })
-            .filter((item) => item.searchable.includes(normalizedQuery))
-            .slice(0, 7);
-    }, [normalizedQuery, productLocations, sceneObjects, searchableProducts]);
+            });
+    }, [productLocations, sceneObjects, searchableProducts]);
+    const results = useMemo(() => {
+        if (!normalizedQuery) return [];
+        const matches = [];
+        for (const item of searchIndex) {
+            if (item.searchable.includes(normalizedQuery)) matches.push(item);
+            if (matches.length === 7) break;
+        }
+        return matches;
+    }, [normalizedQuery, searchIndex]);
 
     const chooseResult = (result) => {
         setQuery(result.product.name || result.product.sku || '');
@@ -208,20 +222,37 @@ function ProductSearch({ isLoading, notice, onLocateProduct, productLocations, p
     };
 
     return (
-        <div className="relative w-full max-w-3xl">
+        <div className="relative w-full" onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setIsOpen(false);
+        }}>
             <div className="relative">
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                 <input
                     aria-controls="locator-product-results"
                     aria-expanded={isOpen && Boolean(query.trim())}
+                    aria-autocomplete="list"
+                    aria-activedescendant={isOpen && activeIndex >= 0 && results[activeIndex] ? `locator-result-${activeIndex}` : undefined}
                     aria-label="Search products, material codes, shelves, or barcodes"
-                    className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100"
+                    className="h-12 w-full min-w-0 rounded-xl border border-slate-200 bg-white pl-11 pr-11 text-sm font-medium text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
                     onChange={(event) => {
                         setQuery(event.target.value);
                         setIsOpen(true);
+                        setActiveIndex(-1);
+                    }}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Escape') { event.stopPropagation(); setIsOpen(false); }
+                        if (['ArrowDown', 'ArrowUp'].includes(event.key)) {
+                            event.preventDefault();
+                            setIsOpen(true);
+                            setActiveIndex((current) => results.length ? (current + (event.key === 'ArrowDown' ? 1 : -1) + results.length) % results.length : -1);
+                        }
+                        if (event.key === 'Enter' && isOpen && results.length) {
+                            event.preventDefault();
+                            chooseResult(results[activeIndex < 0 ? 0 : activeIndex] || results[0]);
+                        }
                     }}
                     onFocus={() => setIsOpen(true)}
-                    placeholder="Search product, material code, SKU, shelf, bin, or barcode..."
+                    placeholder="Find a part by name, code or barcode…"
                     role="combobox"
                     value={query}
                 />
@@ -257,11 +288,11 @@ function ProductSearch({ isLoading, notice, onLocateProduct, productLocations, p
                     role="listbox"
                 >
                     {results.length ? (
-                        results.map((result) => (
+                        results.map((result, index) => (
+                            <div role="option" aria-selected={index === activeIndex} id={`locator-result-${index}`} key={String(result.product.id)}>
                             <button
                                 aria-label={'Locate ' + result.product.name}
-                                className="flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition hover:bg-indigo-50"
-                                key={String(result.product.id)}
+                                className={cx('flex w-full flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-3 text-left transition hover:bg-blue-50 sm:flex-nowrap', index === activeIndex && 'bg-blue-50')}
                                 onMouseDown={(event) => event.preventDefault()}
                                 onClick={() => chooseResult(result)}
                                 type="button"
@@ -271,13 +302,14 @@ function ProductSearch({ isLoading, notice, onLocateProduct, productLocations, p
                                     <span className="mt-1 block truncate font-mono text-xs text-slate-500">{result.product.sku || result.product.materialCode || 'No SKU'}</span>
                                 </span>
                                 <span className={cx(
-                                    'max-w-[54%] shrink-0 truncate rounded-full px-2.5 py-1 text-[11px] font-semibold',
-                                    result.location && result.shelf ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700',
+                                    'max-w-full truncate rounded-full px-2.5 py-1 text-[11px] font-semibold sm:max-w-[54%]',
+                                    result.location && result.shelf ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700',
                                 )}
                                 >
                                     {result.location && result.shelf ? formatLocation(result.location) : 'Not mapped'}
                                 </span>
                             </button>
+                            </div>
                         ))
                     ) : isLoading ? (
                         <div className="px-4 py-5 text-sm font-medium text-slate-500">Loading products...</div>
@@ -296,31 +328,32 @@ function HeaderActions({
     isSaving,
     layoutName,
     layoutOptions,
-    onChangeLayoutName,
     onExitDesignMode,
     onLoadLayout,
     onSaveLayout,
     onSetPriority,
-    onSelectLayout,
     priorityLayoutName,
+    viewMode,
+    onViewModeChange,
 }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const goToFloor = useLocator3DStore((state) => state.goToFloor);
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
-    const requestCameraPreset = useLocator3DStore((state) => state.requestCameraPreset);
     const [isMoreOpen, setIsMoreOpen] = useState(false);
+    const [selectedLayout, setSelectedLayout] = useState('');
     const [saveAsName, setSaveAsName] = useState('');
     const [saveAsPriority, setSaveAsPriority] = useState(false);
 
     return (
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
             <div aria-label="Floor selector" className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
                 {[1, 2].map((floor) => (
                     <button
                         className={cx(
                             'min-h-8 rounded-lg px-3 text-xs font-bold transition',
-                            activeFloor === floor ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-950',
+                            activeFloor === floor ? 'bg-white text-blue-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-950',
                         )}
+                        aria-pressed={activeFloor === floor}
                         key={floor}
                         onClick={() => goToFloor(floor)}
                         type="button"
@@ -331,11 +364,11 @@ function HeaderActions({
             </div>
             <Button
                 aria-label="Top-down 2D floor view"
-                className="hidden sm:inline-flex"
-                onClick={() => requestCameraPreset('topDown')}
+                aria-pressed={viewMode === '2d'}
+                onClick={() => onViewModeChange(viewMode === '2d' ? '3d' : '2d')}
             >
                 <Grid3X3 className="h-4 w-4" />
-                2D View
+                {viewMode === '2d' ? '3D View' : '2D View'}
             </Button>
             {canEditLayout && (
                 <Button
@@ -343,6 +376,7 @@ function HeaderActions({
                         if (isDesignMode) {
                             onExitDesignMode();
                         } else {
+                            onViewModeChange('3d');
                             useLocator3DStore.getState().setDesignMode(true);
                         }
                     }}
@@ -357,29 +391,30 @@ function HeaderActions({
                     <MoreHorizontal className="h-5 w-5" />
                 </IconButton>
                 {isMoreOpen && (
-                    <div className="absolute right-0 top-12 z-50 w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_20px_48px_rgba(15,23,42,0.16)]">
+                    <Modal isOpen={isMoreOpen} onClose={() => setIsMoreOpen(false)} title="Stockroom layouts" size="sm">
                         <p className="px-2 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Saved layouts</p>
                         <select
                             aria-label="Select saved layout"
-                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 outline-none focus:border-indigo-400"
-                            onChange={(event) => onSelectLayout(event.target.value)}
-                            value={layoutName}
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 outline-none focus:border-blue-400"
+                            onChange={(event) => setSelectedLayout(event.target.value)}
+                            value={selectedLayout || layoutName}
                         >
                             {layoutOptions.map((name) => <option key={name} value={name}>{name === priorityLayoutName ? `★ ${name}` : name}</option>)}
                         </select>
                         <Button className="mt-2 w-full" onClick={() => {
                             setIsMoreOpen(false);
-                            onLoadLayout(layoutName);
+                            onLoadLayout(selectedLayout || layoutName);
                         }}
                         >
                             <RefreshCw className="h-4 w-4" />
                             Load selected layout
                         </Button>
+                        {canEditLayout && <>
                         <div className="my-3 border-t border-slate-100" />
                         <p className="px-2 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Save a copy</p>
                         <input
                             aria-label="Save layout as"
-                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 outline-none focus:border-indigo-400"
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 outline-none focus:border-blue-400"
                             onChange={(event) => setSaveAsName(event.target.value)}
                             placeholder="e.g. Layout Backup"
                             value={saveAsName}
@@ -392,7 +427,6 @@ function HeaderActions({
                             className="mt-2 w-full"
                             disabled={!saveAsName.trim() || isSaving}
                             onClick={() => {
-                                onChangeLayoutName(saveAsName.trim());
                                 onSaveLayout(saveAsName.trim(), { priority: saveAsPriority });
                                 setSaveAsName('');
                                 setSaveAsPriority(false);
@@ -410,7 +444,8 @@ function HeaderActions({
                             </Button>
                         )}
                         {hasUnsavedChanges && <p className="px-2 pt-3 text-[11px] font-medium text-amber-700">Unsaved design changes are open in this browser.</p>}
-                    </div>
+                        </>}
+                    </Modal>
                 )}
             </div>
         </div>
@@ -425,23 +460,31 @@ function StockroomHeader(props) {
         <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)] sm:p-6">
             <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-indigo-600">
-                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50">
+                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-blue-600">
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50">
                             <LayoutDashboard className="h-4 w-4" />
                         </span>
                         {activeFloor === 1 ? '1st Floor' : '2nd Floor'} · Parts Mapping
                     </div>
-                    <h1 className="mt-3 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+                    <h1 className="mt-2 text-2xl font-black tracking-tight !text-slate-950 sm:text-3xl">
                         {isDesignMode ? '3D Stockroom · Design' : '3D Stockroom'}
                     </h1>
                     <p className="mt-1.5 text-sm font-medium text-slate-500">
-                        {isDesignMode ? 'Drag objects to rearrange the stockroom.' : 'Interactive 3D map · Find parts instantly'}
+                        {isDesignMode ? 'Arrange your space. Select a fixture to edit its size and details.' : 'Find the right part, right where it belongs.'}
                     </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
+                        <span className="max-w-64 truncate">{props.layoutName}</span>
+                        <span className={cx('inline-flex items-center gap-1.5 rounded-full px-2 py-0.5', props.hasUnsavedChanges ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600')}>
+                            <span className={cx('h-1.5 w-1.5 rounded-full', props.hasUnsavedChanges ? 'bg-amber-500' : 'bg-slate-400')} />
+                            {props.hasUnsavedChanges ? 'Unsaved changes' : 'Viewing layout'}
+                        </span>
+                        {props.layoutName === props.priorityLayoutName && <span className="text-blue-700">★ Priority</span>}
+                    </div>
                 </div>
                 <HeaderActions {...props} />
             </div>
             {!isDesignMode && (
-                <div className="mt-6 border-t border-slate-100 pt-5">
+                <div className="mt-4 border-t border-slate-100 pt-4">
                     <ProductSearch
                         isLoading={props.isLoadingProducts}
                         notice={props.locationNotice}
@@ -456,13 +499,20 @@ function StockroomHeader(props) {
     );
 }
 
-function ViewportControls({ canvasShellRef }) {
+function ViewportControls({ canvasShellRef, viewMode }) {
     const resetCamera = useLocator3DStore((state) => state.resetCamera);
     const requestCameraPreset = useLocator3DStore((state) => state.requestCameraPreset);
     const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [isViewOpen, setIsViewOpen] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const qualityPreference = useLocator3DStore((state) => state.qualityPreference);
+    const setQualityPreference = useLocator3DStore((state) => state.setQualityPreference);
+    const showLabels = useLocator3DStore((state) => state.showLabels);
+    const showGrid = useLocator3DStore((state) => state.showGrid);
+    const xrayMode = useLocator3DStore((state) => state.xrayMode);
+    const toggleSceneOption = useLocator3DStore((state) => state.toggleSceneOption);
 
     useEffect(() => {
         const updateFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -470,16 +520,15 @@ function ViewportControls({ canvasShellRef }) {
         return () => document.removeEventListener('fullscreenchange', updateFullscreen);
     }, []);
 
-    const toggleFullscreen = () => {
+    const toggleFullscreen = async () => {
         const target = canvasShellRef.current;
         if (!target) {
             return;
         }
-        if (document.fullscreenElement) {
-            void document.exitFullscreen?.();
-            return;
-        }
-        void target.requestFullscreen?.();
+        try {
+            if (document.fullscreenElement) await document.exitFullscreen?.();
+            else await target.requestFullscreen?.();
+        } catch { /* Fullscreen may be unavailable in embedded/mobile browsers. */ }
     };
 
     const nudgeZoom = (deltaY) => {
@@ -490,14 +539,15 @@ function ViewportControls({ canvasShellRef }) {
     return (
         <>
             <div className="pointer-events-auto absolute right-4 top-4 z-20 flex items-center gap-2">
+                {viewMode === '3d' && <>
                 <div className="relative">
-                    <Button className="bg-white/95 shadow-sm" onClick={() => setIsViewOpen((value) => !value)}>
+                    <Button aria-expanded={isViewOpen} className="bg-white/95 shadow-sm" onClick={() => { setIsViewOpen((value) => !value); setIsSettingsOpen(false); }}>
                         <Camera className="h-4 w-4" />
                         View
                         <ChevronDown className="h-3.5 w-3.5" />
                     </Button>
                     {isViewOpen && (
-                        <div className="absolute right-0 top-12 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
+                        <div className="absolute left-0 top-12 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
                             {[
                                 ['overview', 'Overview'],
                                 ['counter', 'Counter View'],
@@ -505,7 +555,7 @@ function ViewportControls({ canvasShellRef }) {
                                 ['selected', 'Focus Selected'],
                             ].map(([preset, label]) => (
                                 <button
-                                    className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-indigo-50 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                    className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
                                     disabled={preset === 'selected' && !selectedObjectId && !locatedProduct}
                                     key={preset}
                                     onClick={() => {
@@ -523,15 +573,30 @@ function ViewportControls({ canvasShellRef }) {
                 <IconButton className="bg-white/95" label="Reset camera" onClick={resetCamera}>
                     <RefreshCw className="h-4 w-4" />
                 </IconButton>
+                <div className="relative">
+                    <IconButton label="Display settings" aria-expanded={isSettingsOpen} onClick={() => { setIsSettingsOpen((value) => !value); setIsViewOpen(false); }}><SlidersHorizontal className="h-4 w-4" /></IconButton>
+                    {isSettingsOpen && <div className="absolute right-0 top-12 w-56 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+                        <label className="text-xs font-bold text-slate-700" htmlFor="locator-quality">3D quality</label>
+                        <select id="locator-quality" value={qualityPreference} onChange={(event) => setQualityPreference(event.target.value)} className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm text-slate-800">
+                            <option value="auto">Auto · match my device</option><option value="high">High · best detail</option><option value="medium">Medium · balanced</option><option value="low">Low · faster on mobile</option>
+                        </select>
+                        <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
+                            {[['showLabels', 'Shelf labels', showLabels], ['showGrid', 'Floor grid', showGrid], ['xrayMode', 'See through fixtures', xrayMode]].map(([key, label, value]) => (
+                                <label className="flex items-center justify-between gap-3 text-xs font-medium text-slate-700" key={key}>{label}<input type="checkbox" checked={value} onChange={() => toggleSceneOption(key)} className="h-4 w-4 accent-blue-600" /></label>
+                            ))}
+                        </div>
+                    </div>}
+                </div>
+                </>}
                 <IconButton className="bg-white/95" label={isFullscreen ? 'Exit fullscreen' : 'Open fullscreen'} onClick={toggleFullscreen}>
                     {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                 </IconButton>
             </div>
-            <div className="pointer-events-auto absolute right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.16)]">
-                <button aria-label="Zoom in" className="flex h-10 w-10 items-center justify-center text-lg font-medium text-slate-700 transition hover:bg-indigo-50 hover:text-indigo-700" onClick={() => nudgeZoom(-140)} type="button">+</button>
+            {viewMode === '3d' && <div className="pointer-events-auto absolute right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.16)]">
+                <button aria-label="Zoom in" className="flex h-10 w-10 items-center justify-center text-lg font-medium text-slate-700 transition hover:bg-blue-50 hover:text-blue-700" onClick={() => nudgeZoom(-140)} type="button">+</button>
                 <span className="mx-2 h-px bg-slate-100" />
-                <button aria-label="Zoom out" className="flex h-10 w-10 items-center justify-center text-lg font-medium text-slate-700 transition hover:bg-indigo-50 hover:text-indigo-700" onClick={() => nudgeZoom(140)} type="button">−</button>
-            </div>
+                <button aria-label="Zoom out" className="flex h-10 w-10 items-center justify-center text-lg font-medium text-slate-700 transition hover:bg-blue-50 hover:text-blue-700" onClick={() => nudgeZoom(140)} type="button">−</button>
+            </div>}
         </>
     );
 }
@@ -542,11 +607,11 @@ function FloorInfo() {
     const objects = sceneObjects.filter((object) => Number(object.floor || 1) === activeFloor);
     const shelfCount = objects.filter((object) => isShelfObject(object)).length;
     const counterCount = objects.filter((object) => object.type === 'counter-computer').length;
-    const stairCount = objects.filter((object) => object.type === 'stairs').length;
+    const stairCount = sceneObjects.filter((object) => object.type === 'stairs').length;
 
     return (
         <div className="pointer-events-none absolute bottom-4 left-4 z-10 rounded-xl border border-white/35 bg-white/90 px-3.5 py-3 shadow-sm backdrop-blur">
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-600">{activeFloor === 1 ? '1st Floor' : '2nd Floor'}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-600">{activeFloor === 1 ? '1st Floor' : '2nd Floor'}</p>
             <p className="mt-1 text-xs font-semibold text-slate-700">{shelfCount} Shelves · {counterCount} Counter · {stairCount} Stair</p>
         </div>
     );
@@ -611,7 +676,7 @@ function DesignToolbar({ isSaving, onDiscardChanges, onOpenAssignment, onRequest
     };
 
     return (
-        <div aria-label="Design toolbar" className="pointer-events-auto absolute inset-x-3 top-3 z-30 flex flex-wrap items-center gap-2 rounded-2xl border border-indigo-100 bg-white/95 p-2 shadow-[0_16px_38px_rgba(15,23,42,0.16)] backdrop-blur">
+        <div aria-label="Design toolbar" className="relative z-30 flex flex-wrap items-center gap-2 rounded-2xl border border-blue-100 bg-white p-3 shadow-sm">
             <div className="relative">
                 <Button onClick={() => setIsAddOpen((value) => !value)} tone="primary">
                     <Plus className="h-4 w-4" />
@@ -624,7 +689,7 @@ function DesignToolbar({ isSaving, onDiscardChanges, onOpenAssignment, onRequest
                             const Icon = libraryIconMap[object.icon] ?? Box;
                             return (
                                 <button
-                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-slate-700 transition hover:bg-indigo-50 hover:text-indigo-700"
+                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700"
                                     key={object.type}
                                     onClick={() => addObject(object.type)}
                                     type="button"
@@ -638,7 +703,7 @@ function DesignToolbar({ isSaving, onDiscardChanges, onOpenAssignment, onRequest
                 )}
             </div>
             <Button
-                className={activeTool === 'move' || activeTool === 'select' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : ''}
+                className={activeTool === 'move' || activeTool === 'select' ? 'border-blue-200 bg-blue-50 text-blue-700' : ''}
                 onClick={() => setActiveTool('move')}
             >
                 <MousePointer2 className="h-4 w-4" />
@@ -665,7 +730,7 @@ function DesignToolbar({ isSaving, onDiscardChanges, onOpenAssignment, onRequest
                             Size
                         </Button>
                         {isSizeOpen && (
-                            <div className="absolute left-0 top-12 z-40 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
+                            <Modal isOpen={isSizeOpen} onClose={() => setIsSizeOpen(false)} title={`Resize ${selected.name}`} size="sm">
                                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Dimensions · metres</p>
                                 <div className="mt-2 grid grid-cols-3 gap-2">
                                     {['width', 'height', 'depth'].map((key) => (
@@ -673,7 +738,7 @@ function DesignToolbar({ isSaving, onDiscardChanges, onOpenAssignment, onRequest
                                             {key}
                                             <input
                                                 aria-label={`${key} dimension`}
-                                                className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-400"
+                                                className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-400"
                                                 inputMode="decimal"
                                                 min="0.25"
                                                 onChange={(event) => setSizeDraft((current) => ({ ...current, [key]: event.target.value }))}
@@ -689,7 +754,7 @@ function DesignToolbar({ isSaving, onDiscardChanges, onOpenAssignment, onRequest
                                         Layers (1–12)
                                         <input
                                             aria-label="shelf layer count"
-                                            className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-400"
+                                            className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-400"
                                             inputMode="numeric"
                                             max="12"
                                             min="1"
@@ -716,7 +781,7 @@ function DesignToolbar({ isSaving, onDiscardChanges, onOpenAssignment, onRequest
                                 >
                                     Apply size
                                 </Button>
-                            </div>
+                            </Modal>
                         )}
                     </div>
                     <Button aria-label="Rotate selected object" onClick={() => rotateSelectedObject(-15)}>
@@ -792,12 +857,12 @@ function SummaryCards() {
     ];
 
     return (
-        <section aria-label="Stockroom summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <section aria-label="Stockroom summary" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             {cards.map((card) => {
                 const Icon = card.icon;
                 return (
                     <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_22px_rgba(15,23,42,0.04)]" key={card.label}>
-                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                             <Icon className="h-5 w-5" />
                         </span>
                         <span>
@@ -860,11 +925,7 @@ function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shel
 
         const layerCount = Math.max(1, Number(shelf.layerCount || 1));
         return productLocations
-            .filter((location) => (
-                location.shelfObjectId === shelf.id
-                || (normalizeAisle(location.aisle) === normalizeAisle(shelf.aisle)
-                    && Number(location.shelfNumber) === Number(shelf.shelfNumber))
-            ))
+            .filter((location) => locationBelongsToShelf(location, shelf))
             .map((location, index) => ({
                 ...location,
                 displayLayer: Number(location.layerNumber || ((index % layerCount) + 1)),
@@ -882,13 +943,13 @@ function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shel
 
     return (
         <aside aria-label="Shelf inspector" className="pointer-events-auto absolute bottom-4 right-4 z-30 w-[min(360px,calc(100%-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-[0_20px_50px_rgba(15,23,42,0.22)] backdrop-blur">
-            <div className="border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-sky-50 px-4 py-3">
+            <div className="border-b border-slate-100 bg-gradient-to-r from-blue-50 to-sky-50 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                     <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Shelf inspector</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">Shelf inspector</p>
                         <h2 className="mt-1 text-sm font-black text-slate-950">{shelf.name || 'Selected shelf'}</h2>
                     </div>
-                    <Layers3 className="h-5 w-5 text-indigo-500" />
+                    <Layers3 className="h-5 w-5 text-blue-500" />
                 </div>
                 <div className="mt-3 grid grid-cols-4 gap-1.5 text-center text-[10px] font-bold text-slate-600">
                     <span className="rounded-lg bg-white/80 px-1.5 py-2">F{shelf.floor || 1}</span>
@@ -904,7 +965,7 @@ function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shel
                         <PencilLine className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                         <input
                             aria-label="Shelf name"
-                            className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-2 text-xs font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-indigo-400 focus:bg-white"
+                            className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-2 text-xs font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-blue-400 focus:bg-white"
                             id="shelf-inspector-name"
                             maxLength={80}
                             onChange={(event) => setNameDraft(event.target.value)}
@@ -916,7 +977,7 @@ function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shel
                     Location description
                     <textarea
                         aria-label="Shelf description"
-                        className="mt-1 min-h-16 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium normal-case tracking-normal text-slate-700 outline-none focus:border-indigo-400 focus:bg-white"
+                        className="mt-1 min-h-16 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium normal-case tracking-normal text-slate-700 outline-none focus:border-blue-400 focus:bg-white"
                         id="shelf-inspector-description"
                         maxLength={240}
                         onChange={(event) => setDescriptionDraft(event.target.value)}
@@ -957,7 +1018,7 @@ function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shel
     );
 }
 
-function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }) {
+function ProductAssignmentModal({ canAssign = false, isOpen, onAssigned, onClose, products, shelf }) {
     const [query, setQuery] = useState('');
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [binNumber, setBinNumber] = useState(1);
@@ -977,13 +1038,7 @@ function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }
         setLayerNumber(1);
     }, [isOpen, shelf?.id]);
 
-    const assignedProducts = useMemo(() => productLocations.filter((location) => (
-        shelf && (
-            location.shelfObjectId === shelf.id
-            || (normalizeAisle(location.aisle) === normalizeAisle(shelf.aisle)
-                && Number(location.shelfNumber) === Number(shelf.shelfNumber))
-        )
-    )), [productLocations, shelf]);
+    const assignedProducts = useMemo(() => productLocations.filter((location) => locationBelongsToShelf(location, shelf)), [productLocations, shelf]);
 
     const results = useMemo(() => {
         const normalized = query.trim().toLowerCase();
@@ -1000,7 +1055,7 @@ function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }
     }, [products, query]);
 
     const saveAssignment = async () => {
-        if (!shelf || !selectedProduct) {
+        if (!canAssign || !shelf || !selectedProduct || isSaving) {
             return;
         }
         setIsSaving(true);
@@ -1028,20 +1083,21 @@ function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} size="md" title={shelf ? 'Assign product to ' + shelf.name : 'Assign product'}>
+        <Modal isOpen={isOpen} onClose={onClose} size="md" title={shelf ? (canAssign ? 'Assign product to ' : 'Products in ') + shelf.name : 'Shelf products'}>
             <div className="space-y-4">
-                <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3">
-                    <p className="text-xs font-black text-indigo-950">{shelf?.name || 'Shelf'}</p>
-                    <p className="mt-1 text-[11px] font-semibold leading-5 text-indigo-700">
+                <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3">
+                    <p className="text-xs font-black text-blue-950">{shelf?.name || 'Shelf'}</p>
+                    <p className="mt-1 text-[11px] font-semibold leading-5 text-blue-700">
                         Floor {shelf?.floor || 1} · Aisle {normalizeAisle(shelf?.aisle) || '-'} · Shelf {shelf?.shelfNumber || '-'} · {shelf?.layerCount || 1} layers · {shelf?.binCount || 0} bins
                     </p>
                     {shelf?.description && <p className="mt-2 text-[11px] font-medium leading-5 text-slate-600">{shelf.description}</p>}
                 </div>
+                {canAssign && <>
                 <p className="text-sm leading-6 text-slate-600">Choose the product, layer, and bin. This stays attached to the shelf even when you drag it in Design Mode.</p>
                 <div>
                     <label className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500" htmlFor="assignment-product">Product</label>
                     <input
-                        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-indigo-400 focus:bg-white"
+                        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-blue-400 focus:bg-white"
                         id="assignment-product"
                         onChange={(event) => {
                             setQuery(event.target.value);
@@ -1054,7 +1110,7 @@ function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }
                         <div className="mt-2 overflow-hidden rounded-xl border border-slate-200">
                             {results.map((product) => (
                                 <button
-                                    className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2.5 text-left text-sm transition last:border-b-0 hover:bg-indigo-50"
+                                    className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2.5 text-left text-sm transition last:border-b-0 hover:bg-blue-50"
                                     key={product.id}
                                     onClick={() => {
                                         setSelectedProduct(product);
@@ -1072,7 +1128,7 @@ function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }
                 <div>
                     <label className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500" htmlFor="assignment-layer">Layer</label>
                     <select
-                        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-indigo-400 focus:bg-white"
+                        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-blue-400 focus:bg-white"
                         id="assignment-layer"
                         onChange={(event) => setLayerNumber(Number(event.target.value))}
                         value={layerNumber}
@@ -1085,7 +1141,7 @@ function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }
                 <div>
                     <label className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500" htmlFor="assignment-bin">Bin</label>
                     <select
-                        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-indigo-400 focus:bg-white"
+                        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-blue-400 focus:bg-white"
                         id="assignment-bin"
                         onChange={(event) => setBinNumber(Number(event.target.value))}
                         value={binNumber}
@@ -1095,6 +1151,7 @@ function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }
                         ))}
                     </select>
                 </div>
+                </>}
                 <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Current shelf map</p>
                     <div className="mt-2 space-y-1.5">
@@ -1108,17 +1165,18 @@ function ProductAssignmentModal({ isOpen, onAssigned, onClose, products, shelf }
                 </div>
                 <div className="flex justify-end gap-2 pt-1">
                     <Button onClick={onClose}>Cancel</Button>
-                    <Button disabled={!selectedProduct || isSaving} onClick={() => void saveAssignment()} tone="primary">
+                    {canAssign && <Button disabled={!selectedProduct || isSaving} onClick={() => void saveAssignment()} tone="primary">
                         <Save className="h-4 w-4" />
                         {isSaving ? 'Saving…' : 'Save location'}
-                    </Button>
+                    </Button>}
                 </div>
             </div>
         </Modal>
     );
 }
 
-function useLocatorKeyboardShortcuts(onSaveLayout) {
+function useLocatorKeyboardShortcuts(onSaveLayout, enabled) {
+    const { warning } = useToast();
     const activeTool = useLocator3DStore((state) => state.activeTool);
     const cancelWallDrawing = useLocator3DStore((state) => state.cancelWallDrawing);
     const clearSelection = useLocator3DStore((state) => state.clearSelection);
@@ -1130,8 +1188,10 @@ function useLocatorKeyboardShortcuts(onSaveLayout) {
 
     useEffect(() => {
         const onKeyDown = (event) => {
+            if (!enabled || !useLocator3DStore.getState().isDesignMode) return;
             const tag = event.target?.tagName?.toLowerCase();
             const isEditing = tag === 'input' || tag === 'textarea' || tag === 'select';
+            if (isEditing || event.target?.isContentEditable || event.target?.closest?.('[role="dialog"]')) return;
 
             if (event.key === 'Escape') {
                 if (activeTool === 'draw-wall') {
@@ -1162,7 +1222,8 @@ function useLocatorKeyboardShortcuts(onSaveLayout) {
                 return;
             }
             if ((event.key === 'Delete' || event.key === 'Backspace') && !isEditing) {
-                deleteSelectedObject();
+                event.preventDefault();
+                if (deleteSelectedObject() === false) warning('Move the product mappings to another shelf before deleting this selection.');
                 return;
             }
             if (event.key.startsWith('Arrow') && !isEditing) {
@@ -1173,7 +1234,7 @@ function useLocatorKeyboardShortcuts(onSaveLayout) {
 
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [activeTool, cancelWallDrawing, clearSelection, deleteSelectedObject, duplicateSelectedObject, nudgeSelectedObjects, onSaveLayout, redo, undo]);
+    }, [activeTool, cancelWallDrawing, clearSelection, deleteSelectedObject, duplicateSelectedObject, enabled, nudgeSelectedObjects, onSaveLayout, redo, undo, warning]);
 }
 
 export default function Locator3DAdmin() {
@@ -1214,7 +1275,10 @@ export default function Locator3DAdmin() {
     const [locationNotice, setLocationNotice] = useState(EMPTY_LOCATION_NOTICE);
     const [pendingAction, setPendingAction] = useState(null);
     const [products, setProducts] = useState([]);
+    const [viewMode, setViewMode] = useState('3d');
     const canvasShellRef = useRef(null);
+    const saveInFlight = useRef(false);
+    const loadSequence = useRef(0);
     const canEditLayout = Boolean(authContext?.isAdmin);
 
     useEffect(() => {
@@ -1233,21 +1297,9 @@ export default function Locator3DAdmin() {
         return () => window.removeEventListener('beforeunload', onBeforeUnload);
     }, [hasUnsavedChanges]);
 
-    const refreshLayoutOptions = useCallback(async () => {
-        try {
-            const layouts = await listStoreLayouts();
-            const names = layouts.map((layout) => layout.layoutName).filter(Boolean);
-            const priority = layouts.find((layout) => layout.isPriority)?.layoutName;
-            if (priority) {
-                setPriorityLayoutName(priority);
-            }
-            setLayoutOptions((current) => [...new Set([LOCATOR_LAYOUT_NAME, layoutName, ...current, ...names])]);
-        } catch {
-            setLayoutOptions((current) => [...new Set([LOCATOR_LAYOUT_NAME, layoutName, ...current])]);
-        }
-    }, [layoutName]);
-
     const handleSaveLayout = useCallback(async (name = layoutName, options = {}) => {
+        if (!canEditLayout || saveInFlight.current) return false;
+        saveInFlight.current = true;
         const safeName = String(name || LOCATOR_LAYOUT_NAME).trim() || LOCATOR_LAYOUT_NAME;
         const priority = options.priority === true || (options.priority === undefined && safeName === priorityLayoutName);
         setIsSavingLayout(true);
@@ -1261,8 +1313,11 @@ export default function Locator3DAdmin() {
                 await setStoreLayoutPriority(safeName);
                 setPriorityLayoutName(safeName);
             }
-            markLayoutSaved();
-            setAutosaveSnapshot(null);
+            // Only acknowledge the snapshot that was actually sent to the server.
+            if (useLocator3DStore.getState().sceneObjects === sceneObjects) {
+                markLayoutSaved();
+                setAutosaveSnapshot(null);
+            }
             setLayoutName(safeName);
             setLayoutOptions((current) => [...new Set([safeName, ...current])]);
             success('Layout saved.');
@@ -1271,11 +1326,13 @@ export default function Locator3DAdmin() {
             showError(saveError.message || 'Could not save layout. Your changes remain open in this session.');
             return false;
         } finally {
+            saveInFlight.current = false;
             setIsSavingLayout(false);
         }
-    }, [layoutName, markLayoutSaved, priorityLayoutName, sceneObjects, showError, success]);
+    }, [canEditLayout, layoutName, markLayoutSaved, priorityLayoutName, sceneObjects, showError, success]);
 
     const handleSetPriority = useCallback(async (name) => {
+        if (!canEditLayout || saveInFlight.current) return;
         const safeName = String(name || '').trim();
         if (!safeName) {
             return;
@@ -1290,7 +1347,7 @@ export default function Locator3DAdmin() {
         } finally {
             setIsSavingLayout(false);
         }
-    }, [showError, success]);
+    }, [canEditLayout, showError, success]);
 
     const locateFromProduct = useCallback((product, locations = productLocations) => {
         const location = locations.find((item) => String(item.productId) === String(product.id)) ?? null;
@@ -1340,14 +1397,26 @@ export default function Locator3DAdmin() {
         success('Product located in the 3D stockroom.');
     }, [locateProduct, productLocations, products, setSelectedProductForLocation, success, warning]);
 
-    const handleLoadLayout = useCallback(async (name = layoutName) => {
+    const handleLoadLayout = useCallback(async (name = layoutName, discard = false) => {
         const safeName = String(name || LOCATOR_LAYOUT_NAME).trim() || LOCATOR_LAYOUT_NAME;
+        if (saveInFlight.current) return;
+        if (useLocator3DStore.getState().hasUnsavedChanges && !discard) {
+            setPendingAction({ type: 'load-layout', name: safeName });
+            return;
+        }
+        const sequence = ++loadSequence.current;
+        const startingObjects = useLocator3DStore.getState().sceneObjects;
         setIsLoadingLayout(true);
         try {
             const [savedLayout, locations] = await Promise.all([
                 loadStoreLayout(safeName),
                 getProductLocations(),
             ]);
+            if (sequence !== loadSequence.current) return;
+            if (startingObjects !== useLocator3DStore.getState().sceneObjects) {
+                warning('Your layout changed while loading. Your current edits have been kept.');
+                return;
+            }
             if (savedLayout?.layoutData) {
                 loadLayoutData(savedLayout.layoutData);
                 markLayoutSaved();
@@ -1367,9 +1436,9 @@ export default function Locator3DAdmin() {
         } catch (loadError) {
             showError(loadError.message || 'Could not load the 3D layout.');
         } finally {
-            setIsLoadingLayout(false);
+            if (sequence === loadSequence.current) setIsLoadingLayout(false);
         }
-    }, [info, layoutName, loadLayoutData, markLayoutSaved, resetToDefaultLayout, setProductLocations, showError, success]);
+    }, [info, layoutName, loadLayoutData, markLayoutSaved, resetToDefaultLayout, setProductLocations, showError, success, warning]);
 
     const addedShelfMappings = useMemo(() => {
         const defaultIds = new Set(defaultLayoutObjects.map((object) => object.id));
@@ -1399,7 +1468,7 @@ export default function Locator3DAdmin() {
     };
 
     const requestDeleteShelf = (shelf) => {
-        const mappings = productLocations.filter((location) => location.shelfObjectId === shelf.id);
+        const mappings = productLocations.filter((location) => locationBelongsToShelf(location, shelf));
         if (mappings.length) {
             setPendingAction({ count: mappings.length, shelf, type: 'delete-mapped-shelf' });
             return;
@@ -1409,7 +1478,12 @@ export default function Locator3DAdmin() {
 
     const confirmPendingAction = async () => {
         const type = pendingAction?.type;
+        const requestedLayout = pendingAction?.name;
         setPendingAction(null);
+        if (type === 'load-layout') {
+            await handleLoadLayout(requestedLayout, true);
+            return;
+        }
         if (type === 'reset-floor') {
             resetCurrentFloor();
             locateProduct(null);
@@ -1447,51 +1521,31 @@ export default function Locator3DAdmin() {
     };
 
     useEffect(() => {
-        void refreshLayoutOptions();
-    }, [refreshLayoutOptions]);
-
-    useEffect(() => {
         let active = true;
+        const sequence = ++loadSequence.current;
+        const startingObjects = useLocator3DStore.getState().sceneObjects;
         setIsLoadingProducts(true);
-        void Promise.all([getFullProductCatalog(), getProductLocations()])
-            .then(([catalogProducts, locations]) => {
-                if (!active) {
-                    return;
-                }
-                setProducts(Array.isArray(catalogProducts) ? catalogProducts : []);
-                setProductLocations(Array.isArray(locations) ? locations : []);
-            })
-            .catch((loadError) => {
-                if (active) {
-                    showError(loadError.message || 'Could not load product search data.');
-                }
-            })
-            .finally(() => {
-                if (active) {
-                    setIsLoadingProducts(false);
-                }
-            });
-        return () => {
-            active = false;
-        };
-    }, [setProductLocations, showError]);
-
-    useEffect(() => {
-        if (!productId) {
-            return;
-        }
-        let active = true;
-        void Promise.all([loadStoreLayout(layoutName), getProductLocations(), getFullProductCatalog()])
-            .then(([savedLayout, locations, catalogProducts]) => {
-                if (!active) {
-                    return;
-                }
-                if (savedLayout?.layoutData) {
-                    loadLayoutData(savedLayout.layoutData);
-                    markLayoutSaved();
-                }
+        setIsLoadingLayout(true);
+        void Promise.all([listStoreLayouts(), getProductLocations(), getFullProductCatalog()])
+            .then(async ([layouts, locations, catalogProducts]) => {
+                if (!active || sequence !== loadSequence.current) return;
+                const priority = layouts.find((layout) => layout.isPriority)?.layoutName || '';
+                const initialName = priority || LOCATOR_LAYOUT_NAME;
+                setLayoutOptions([...new Set([LOCATOR_LAYOUT_NAME, ...layouts.map((layout) => layout.layoutName).filter(Boolean)])]);
+                setPriorityLayoutName(priority);
                 setProductLocations(locations || []);
                 setProducts(catalogProducts || []);
+                const savedLayout = await loadStoreLayout(initialName);
+                if (!active || sequence !== loadSequence.current) return;
+                const current = useLocator3DStore.getState();
+                // A late request must not replace a recovery or an active edit.
+                if (current.hasUnsavedChanges || current.isDesignMode || current.sceneObjects !== startingObjects) return;
+                if (savedLayout?.layoutData) {
+                    loadLayoutData(savedLayout.layoutData);
+                    // Loading the server snapshot must not erase a recoverable local draft.
+                    setLayoutName(savedLayout.layoutName || initialName);
+                }
+                if (!productId) return;
                 const product = resolveProductDetails({
                     catalogProducts: catalogProducts || [],
                     fallbackProduct: productFromRoute,
@@ -1516,17 +1570,24 @@ export default function Locator3DAdmin() {
             })
             .catch((loadError) => {
                 if (active) {
-                    showError(loadError.message || 'Could not load the selected product location.');
+                    showError(loadError.message || 'Could not load the stockroom. Use saved layouts to retry.');
+                }
+            })
+            .finally(() => {
+                if (active) {
+                    setIsLoadingProducts(false);
+                    if (sequence === loadSequence.current) setIsLoadingLayout(false);
                 }
             });
         return () => {
             active = false;
         };
-    }, [layoutName, loadLayoutData, locateProduct, markLayoutSaved, productFromRoute, productId, productName, productSku, setProductLocations, setSelectedProductForLocation, showError]);
+    }, [loadLayoutData, locateProduct, productFromRoute, productId, productName, productSku, setProductLocations, setSelectedProductForLocation, showError]);
 
-    useLocatorKeyboardShortcuts(() => void handleSaveLayout());
+    useLocatorKeyboardShortcuts(() => void handleSaveLayout(), canEditLayout);
 
-    const pendingTitle = pendingAction?.type === 'exit'
+    const pendingTitle = pendingAction?.type === 'load-layout' ? 'Load a different layout?'
+        : pendingAction?.type === 'exit'
         ? 'Save layout changes?'
         : pendingAction?.type === 'reset-floor'
             ? 'Reset Floor ' + activeFloor + '?'
@@ -1537,7 +1598,7 @@ export default function Locator3DAdmin() {
                     : 'Product locations need attention';
 
     return (
-        <div className="min-w-0 space-y-5 bg-[#f6f8fc] p-3 text-slate-950 sm:p-5 lg:p-7">
+        <div className="locator-workspace min-w-0 space-y-4 bg-[#f6f8fc] p-3 text-slate-950 sm:p-5 lg:p-6">
             <StockroomHeader
                 canEditLayout={canEditLayout}
                 hasUnsavedChanges={hasUnsavedChanges}
@@ -1548,12 +1609,12 @@ export default function Locator3DAdmin() {
                 priorityLayoutName={priorityLayoutName}
                 onSetPriority={(name) => void handleSetPriority(name)}
                 locationNotice={locationNotice}
-                onChangeLayoutName={setLayoutName}
                 onExitDesignMode={exitDesignMode}
                 onLoadLayout={(name) => void handleLoadLayout(name)}
                 onLocateProduct={locateFromProduct}
                 onSaveLayout={(name, options) => void handleSaveLayout(name, options)}
-                onSelectLayout={setLayoutName}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
                 productLocations={productLocations}
                 products={products}
                 sceneObjects={sceneObjects}
@@ -1573,16 +1634,7 @@ export default function Locator3DAdmin() {
                 snapshot={autosaveSnapshot}
             />
 
-            <main
-                aria-label="3D stockroom canvas"
-                className="relative h-[min(72vh,800px)] min-h-[520px] overflow-hidden rounded-[20px] border border-slate-200 bg-slate-950 shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
-                ref={canvasShellRef}
-            >
-                <Locator3DScene onShelfClick={canEditLayout ? setAssignmentShelf : undefined} />
-                <LocatedProductNote notice={locationNotice} />
-                <FloorInfo />
-                <ViewportControls canvasShellRef={canvasShellRef} />
-                <DesignToolbar
+            <DesignToolbar
                     isSaving={isSavingLayout}
                     onDiscardChanges={() => {
                         discardUnsavedChanges();
@@ -1595,15 +1647,21 @@ export default function Locator3DAdmin() {
                     onRequestResetStockroom={requestResetStockroom}
                     onSave={() => void handleSaveLayout()}
                 />
-                <ShelfInspector
-                    onOpenAssignment={setAssignmentShelf}
-                    productLocations={productLocations}
-                    products={products}
-                />
+            <div className="locator-canvas-layout">
+            <main
+                aria-label="3D stockroom canvas"
+                className="locator-canvas relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm"
+                ref={canvasShellRef}
+            >
+                {viewMode === '2d'
+                    ? <StockroomFloorPlan onShelfClick={setAssignmentShelf} />
+                    : <Locator3DScene onShelfClick={setAssignmentShelf} />}
+                {viewMode === '3d' && <><LocatedProductNote notice={locationNotice} /><FloorInfo /></>}
+                <ViewportControls canvasShellRef={canvasShellRef} viewMode={viewMode} />
                 {isLoadingLayout && (
                     <div aria-live="polite" className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-slate-950/35 backdrop-blur-sm" role="status">
                         <div className="flex items-center gap-3 rounded-2xl bg-white px-5 py-4 text-sm font-semibold text-slate-700 shadow-xl">
-                            <LoaderCircle className="h-5 w-5 animate-spin text-indigo-600" />
+                            <LoaderCircle className="h-5 w-5 animate-spin text-blue-600" />
                             Loading stockroom…
                         </div>
                     </div>
@@ -1611,17 +1669,20 @@ export default function Locator3DAdmin() {
                 {isSavingLayout && (
                     <div aria-live="polite" className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-slate-950/35 backdrop-blur-sm" role="status">
                         <div className="flex items-center gap-3 rounded-2xl bg-white px-5 py-4 text-sm font-semibold text-slate-700 shadow-xl">
-                            <LoaderCircle className="h-5 w-5 animate-spin text-indigo-600" />
+                            <LoaderCircle className="h-5 w-5 animate-spin text-blue-600" />
                             Saving stockroom design…
                         </div>
                     </div>
                 )}
-                <div className="pointer-events-none absolute bottom-4 right-4 z-10 hidden rounded-lg bg-slate-950/55 px-3 py-2 text-[11px] font-medium text-white/80 backdrop-blur sm:block">Drag to rotate · Scroll to zoom</div>
+                {viewMode === '3d' && <div className="pointer-events-none absolute bottom-4 right-4 z-10 hidden rounded-lg bg-white/90 px-3 py-2 text-[11px] font-medium text-slate-600 backdrop-blur sm:block">Drag to rotate · Pinch or scroll to zoom</div>}
             </main>
+                <ShelfInspector onOpenAssignment={setAssignmentShelf} productLocations={productLocations} products={products} />
+            </div>
 
             <SummaryCards />
 
             <ProductAssignmentModal
+                canAssign={canEditLayout}
                 isOpen={Boolean(assignmentShelf)}
                 onAssigned={(location) => {
                     setLocationNotice({ message: 'Mapped ' + (location.productName || 'product') + ' · ' + formatLocation(location), tone: 'success' });
@@ -1639,8 +1700,8 @@ export default function Locator3DAdmin() {
                 footer={pendingAction?.type === 'exit' ? (
                     <div className="flex flex-wrap justify-end gap-2">
                         <Button onClick={() => setPendingAction(null)}>Cancel</Button>
-                        <Button onClick={() => setPendingAction({ type: 'exit-discard' })} tone="danger">Discard</Button>
-                        <Button onClick={() => setPendingAction({ type: 'exit-save' })} tone="primary">Save & Exit</Button>
+                        <Button onClick={() => { discardUnsavedChanges(); setAutosaveSnapshot(null); setDesignMode(false); setPendingAction(null); }} tone="danger">Discard</Button>
+                        <Button disabled={isSavingLayout} onClick={async () => { if (await handleSaveLayout()) { setDesignMode(false); setPendingAction(null); } }} tone="primary">Save & Exit</Button>
                     </div>
                 ) : pendingAction?.type === 'mapping-safety' || pendingAction?.type === 'delete-mapped-shelf' ? (
                     <div className="flex justify-end gap-2">
@@ -1658,12 +1719,12 @@ export default function Locator3DAdmin() {
                     <div className="flex justify-end gap-2">
                         <Button onClick={() => setPendingAction(null)}>Cancel</Button>
                         <Button onClick={() => void confirmPendingAction()} tone="danger">
-                            {pendingAction?.type === 'reset-floor' ? 'Reset Floor' : 'Reset Stockroom'}
+                            {pendingAction?.type === 'load-layout' ? 'Discard edits & load' : pendingAction?.type === 'reset-floor' ? 'Reset Floor' : 'Reset Stockroom'}
                         </Button>
                     </div>
                 )}
             >
-                {pendingAction?.type === 'exit' ? (
+                {pendingAction?.type === 'load-layout' ? <p className="text-sm leading-6 text-slate-600">Loading “{pendingAction.name}” will replace your unsaved layout edits. Cancel to keep working or save them first.</p> : pendingAction?.type === 'exit' ? (
                     <p className="text-sm leading-6 text-slate-600">Your current layout edits are local and unsaved. Product, inventory, and business records will not be affected.</p>
                 ) : pendingAction?.type === 'mapping-safety' ? (
                     <div className="flex gap-3 text-sm leading-6 text-slate-600">

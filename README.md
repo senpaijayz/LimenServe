@@ -8,6 +8,14 @@ LimenServe is an incremental production application with:
 
 Do not place `SUPABASE_SERVICE_ROLE_KEY` in Vercel or any `VITE_*` variable. It is a backend-only secret.
 
+## 3D locator workspace
+
+The locator opens the saved priority stockroom (or `main-store`). Search by part name, code or barcode; use Arrow keys and Enter to locate a result. **2D View** opens a lightweight floor plan with selectable shelves and stairs. Staff can inspect shelf contents; administrators can assign parts and edit the design.
+
+**Display settings** offers Auto, High, Medium and Low quality, labels, grid and optional see-through fixtures. The camera fits the current room dimensions and respects reduced motion. Editing tools sit above the map, and shelf details move below it on smaller screens. **More stockroom actions** opens saved layouts and Save As; switching layouts prompts before replacing unsaved edits.
+
+This workspace update requires no SQL or environment changes. Deploy the frontend from `main` using the existing Vercel integration. Verify locating a mapped part, switching floors, opening a shelf, resizing in Design Mode, and Save As with a disposable layout. Roll back the frontend deployment in Vercel if needed; existing layout data is not migrated by this update.
+
 ## Local setup
 
 Requirements: Node.js 22 and npm. Supabase CLI v2.113.0 plus Docker are required for the isolated database replay after the migration baseline is reconciled.
