@@ -16,6 +16,8 @@ The locator opens the saved priority stockroom (or `main-store`). Search by part
 
 This workspace update requires no SQL or environment changes. Deploy the frontend from `main` using the existing Vercel integration. Verify locating a mapped part, switching floors, opening a shelf, resizing in Design Mode, and Save As with a disposable layout. Roll back the frontend deployment in Vercel if needed; existing layout data is not migrated by this update.
 
+The upstairs stairwell is derived from the landing/upper flight in floor-local coordinates, including stair rotation and size. Adjacent flooring remains solid; floor markings are clipped out of the opening. No saved-layout rewrite is required. Regression coverage is in `web-app/src/tests/stairOpening.test.js`, including 15°/45°/90° rotations, shifted floors, edge clipping, and ray-casting through the actual mesh.
+
 ## Local setup
 
 Requirements: Node.js 22 and npm. Supabase CLI v2.113.0 plus Docker are required for the isolated database replay after the migration baseline is reconciled.

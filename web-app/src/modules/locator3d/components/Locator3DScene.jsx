@@ -16,6 +16,7 @@ import { useLocator3DStore } from '../store/useLocator3DStore';
 import { getLocatorQualityCapabilities, getLocatorQualityProfile } from '../utils/qualityTier';
 import { buildObstacleAwarePath } from '../utils/locatorPathfinding';
 import { getFloorBounds, getOverviewCamera } from '../utils/locatorViewport';
+import { getFloorSurface, rectanglePolygon, subtractFloorOpenings } from '../utils/stairOpening';
 
 const SELECTED_EDGE = '#0ea5e9';
 const SELECTED_EMISSIVE = '#38bdf8';
@@ -385,72 +386,42 @@ function TransformableObject({ children, object, onTransformingChange }) {
     );
 }
 
+const FLOOR_EXTRUSION = { depth: 0.18, bevelEnabled: false, steps: 1 };
+const floorShapes = (polygons) => polygons.map((polygon) => new THREE.Shape(
+    polygon.map(([x, z]) => new THREE.Vector2(x, -z)),
+));
+
 function FloorObject({ object, onTransformingChange }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
-    const stairsObject = useLocator3DStore((state) => state.sceneObjects.find((candidate) => candidate.type === 'stairs'));
+    const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
     const floorHeight = useSceneFloorHeight();
     const width = Number(object.dimensions?.width || 18);
     const depth = Number(object.dimensions?.depth || 14);
     const floorY = activeFloor === 2 ? floorHeight : 0;
     const entranceZ = (depth / 2) - 0.72;
     const laneLength = Math.max(1.2, depth * 0.36);
-    const laneXs = [-0.3, -0.1, 0.1, 0.3].map((ratio) => width * ratio);
-    const stairMetrics = useMemo(() => getStairLayoutMetrics(stairsObject), [stairsObject]);
-    const floorPanels = useMemo(() => {
-        // Only the landing and upper flight need an opening on Floor 2.
-        const stairWidth = stairMetrics.flightWidth + 0.48;
-        const stairDepth = stairMetrics.overallDepth + 0.48;
-        const stairX = Number(stairsObject?.position?.[0] || 0) + stairMetrics.landingX;
-        const stairZ = Number(stairsObject?.position?.[2] || 0);
-        const halfOpeningWidth = Math.min(Math.max(0.5, stairWidth / 2), Math.max(0.5, (width / 2) - 0.12));
-        const halfOpeningDepth = Math.min(Math.max(0.5, stairDepth / 2), Math.max(0.5, (depth / 2) - 0.12));
-        const openingMinX = Math.max(-width / 2 + 0.08, stairX - halfOpeningWidth);
-        const openingMaxX = Math.min(width / 2 - 0.08, stairX + halfOpeningWidth);
-        const openingMinZ = Math.max(-depth / 2 + 0.08, stairZ - halfOpeningDepth);
-        const openingMaxZ = Math.min(depth / 2 - 0.08, stairZ + halfOpeningDepth);
-
-        if (activeFloor !== 2 || !stairsObject) {
-            return [{ depth, width, x: 0, z: 0 }];
-        }
-
-        const panels = [
-            { depth, width: openingMinX + (width / 2), x: (-width / 2) + ((openingMinX + (width / 2)) / 2), z: 0 },
-            { depth, width: (width / 2) - openingMaxX, x: openingMaxX + (((width / 2) - openingMaxX) / 2), z: 0 },
-            { depth: openingMinZ + (depth / 2), width: openingMaxX - openingMinX, x: (openingMinX + openingMaxX) / 2, z: (-depth / 2) + ((openingMinZ + (depth / 2)) / 2) },
-            { depth: (depth / 2) - openingMaxZ, width: openingMaxX - openingMinX, x: (openingMinX + openingMaxX) / 2, z: openingMaxZ + (((depth / 2) - openingMaxZ) / 2) },
-        ];
-
-        return panels.filter((panel) => panel.width > 0.1 && panel.depth > 0.1);
-    }, [activeFloor, depth, stairMetrics, stairsObject, width]);
+    const surface = useMemo(() => getFloorSurface(object, sceneObjects, activeFloor), [object, sceneObjects, activeFloor]);
+    const slabShapes = useMemo(() => floorShapes(surface.panels), [surface]);
+    const paint = useMemo(() => [
+        { color: '#243b53', polygon: rectanglePolygon(Math.min(width * 0.36, 5.2), Math.min(depth * 0.16, 1.4), 0, entranceZ) },
+        ...[-0.3, -0.1, 0.1, 0.3].map((ratio) => ({ color: '#f8c76a', polygon: rectanglePolygon(0.075, laneLength, width * ratio) })),
+    ].map(({ color, polygon }) => ({ color, shapes: floorShapes(subtractFloorOpenings(polygon, surface.openings)) })), [depth, entranceZ, laneLength, surface, width]);
 
     return (
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
             {({ located, locked, selected }) => (
                 <>
-                    {floorPanels.map((panel, index) => (
-                        <group key={`floor-panel-${index}`}>
-                            <Block
-                                args={[panel.width, 0.18, panel.depth]}
-                                color="#94a3b8"
-                                located={located}
-                                locked={locked}
-                                position={[panel.x, floorY - 0.09, panel.z]}
-                                selected={selected}
-                            />
-                            <mesh position={[panel.x, floorY + 0.012, panel.z]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-                                <planeGeometry args={[Math.max(0.1, panel.width - 0.55), Math.max(0.1, panel.depth - 0.55)]} />
-                                <meshStandardMaterial color="#dce3ea" roughness={0.88} metalness={0.02} />
-                            </mesh>
-                        </group>
-                    ))}
-                    <mesh position={[0, floorY + 0.026, entranceZ]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-                        <planeGeometry args={[Math.min(width * 0.36, 5.2), Math.min(depth * 0.16, 1.4)]} />
-                        <meshStandardMaterial color="#243b53" roughness={0.72} />
-                    </mesh>
-                    {laneXs.map((x) => (
-                        <mesh key={`lane-${x}`} position={[x, floorY + 0.028, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                            <planeGeometry args={[0.075, laneLength]} />
-                            <meshBasicMaterial color="#f8c76a" transparent opacity={0.62} />
+                    {slabShapes.length > 0 && <mesh position={[0, floorY - 0.18, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+                        <extrudeGeometry args={[slabShapes, FLOOR_EXTRUSION]} />
+                        <meshStandardMaterial attach="material-0" color={located ? '#fff7a8' : selected ? '#1e3a5f' : '#dce3ea'}
+                            emissive={selected ? SELECTED_EMISSIVE : '#000000'} emissiveIntensity={selected ? 0.34 : 0} roughness={0.88} metalness={0.02} />
+                        <meshStandardMaterial attach="material-1" color="#94a3b8" roughness={0.88} />
+                        {selected && <Edges color={locked ? LOCKED_EDGE : SELECTED_EDGE} />}
+                    </mesh>}
+                    {paint.map(({ color, shapes }, index) => shapes.length > 0 && (
+                        <mesh key={`floor-paint-${index}`} position={[0, floorY + 0.028, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                            <shapeGeometry args={[shapes]} />
+                            <meshStandardMaterial color={color} roughness={0.82} />
                         </mesh>
                     ))}
                     {activeFloor === 1 && (
@@ -461,7 +432,6 @@ function FloorObject({ object, onTransformingChange }) {
                         </>
                     )}
                     <Label position={[-width / 2 + 1.55, floorY + 0.14, -depth / 2 + 0.55]} tone="floor">{`FLOOR ${activeFloor}`}</Label>
-                    {activeFloor === 2 && stairsObject && <Label position={[stairsObject.position[0] + stairMetrics.landingX, floorY + 0.16, stairsObject.position[2]]} tone="floor">L-STAIR OPENING · FLOOR 1</Label>}
                 </>
             )}
         </TransformableObject>
