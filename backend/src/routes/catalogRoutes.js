@@ -2702,13 +2702,43 @@ async function getOptionalPackageRecommendationRows(productId, vehicleModelId, p
 }
 
 async function fetchProductCatalogPage({ page, pageSize, searchQuery = null, selectedCategory = 'all', sortBy = 'name-asc' }) {
-  return callRpc('get_product_catalog_page', {
-    p_page: page,
-    p_page_size: pageSize,
-    p_search: searchQuery || null,
-    p_category: selectedCategory,
-    p_sort_by: sortBy,
-  });
+  try {
+    return await callRpc('get_product_catalog_page', {
+      p_page: page,
+      p_page_size: pageSize,
+      p_search: searchQuery || null,
+      p_category: selectedCategory,
+      p_sort_by: sortBy,
+    });
+  } catch (error) {
+    // Older/staging databases may not yet have the paging RPC. Keep catalog
+    // search available while the migration is being applied by using the
+    // already cached catalog source as a compatibility path.
+    const code = String(error?.code || '');
+    const message = String(error?.message || '').toLowerCase();
+    const missingRpc = ['42883', 'PGRST202', '42P01', '42703'].includes(code)
+      || message.includes('get_product_catalog_page')
+      || message.includes('schema cache');
+    if (!missingRpc) throw error;
+
+    const catalog = await getCachedProductCatalog();
+    const normalizedSearch = normalizePostgrestSearchTerm(searchQuery);
+    const filtered = (catalog || []).filter((product) => {
+      if (selectedCategory && selectedCategory !== 'all' && product.category !== selectedCategory) return false;
+      if (!normalizedSearch) return true;
+      const needle = normalizedSearch.toLowerCase();
+      return [product.sku, product.name, product.model_name, product.source_category]
+        .some((value) => String(value || '').toLowerCase().includes(needle));
+    });
+    const sorted = sortCatalogProducts(filtered, sortBy);
+    const start = (Math.max(page, 1) - 1) * pageSize;
+    const rows = sorted.slice(start, start + pageSize).map((product) => ({
+      ...product,
+      model: product.model ?? product.model_name ?? null,
+      total_count: sorted.length,
+    }));
+    return rows;
+  }
 }
 
 async function getArchivedProductIds() {
@@ -2762,9 +2792,29 @@ async function filterActiveCatalogProducts(products = []) {
 }
 
 async function fetchProductCatalogCategories({ searchQuery = null }) {
-  return callRpc('get_product_catalog_categories', {
-    p_search: searchQuery || null,
-  });
+  try {
+    return await callRpc('get_product_catalog_categories', {
+      p_search: searchQuery || null,
+    });
+  } catch (error) {
+    const code = String(error?.code || '');
+    const message = String(error?.message || '').toLowerCase();
+    const missingRpc = ['42883', 'PGRST202', '42P01', '42703'].includes(code)
+      || message.includes('get_product_catalog_categories')
+      || message.includes('schema cache');
+    if (!missingRpc) throw error;
+    const catalog = await getCachedProductCatalog();
+    const normalizedSearch = normalizePostgrestSearchTerm(searchQuery).toLowerCase();
+    const counts = new Map();
+    (catalog || []).forEach((product) => {
+      if (normalizedSearch && ![product.sku, product.name, product.model_name, product.source_category]
+        .some((value) => String(value || '').toLowerCase().includes(normalizedSearch))) return;
+      const value = String(product.category || 'Uncategorized');
+      counts.set(value, (counts.get(value) || 0) + 1);
+    });
+    return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b))
+      .map(([value, count]) => ({ value, label: value, count }));
+  }
 }
 
 function normalizePostgrestSearchTerm(value) {
