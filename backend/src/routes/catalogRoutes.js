@@ -2716,7 +2716,7 @@ async function fetchProductCatalogPage({ page, pageSize, searchQuery = null, sel
     // already cached catalog source as a compatibility path.
     const code = String(error?.code || '');
     const message = String(error?.message || '').toLowerCase();
-    const missingRpc = ['42883', 'PGRST202', '42P01', '42703'].includes(code)
+    const missingRpc = ['42883', 'PGRST202', 'PGRST204', '42P01', '42702', '42703', '42804'].includes(code)
       || message.includes('get_product_catalog_page')
       || message.includes('schema cache');
     if (!missingRpc) throw error;
@@ -2799,7 +2799,7 @@ async function fetchProductCatalogCategories({ searchQuery = null }) {
   } catch (error) {
     const code = String(error?.code || '');
     const message = String(error?.message || '').toLowerCase();
-    const missingRpc = ['42883', 'PGRST202', '42P01', '42703'].includes(code)
+    const missingRpc = ['42883', 'PGRST202', 'PGRST204', '42P01', '42702', '42703', '42804'].includes(code)
       || message.includes('get_product_catalog_categories')
       || message.includes('schema cache');
     if (!missingRpc) throw error;
