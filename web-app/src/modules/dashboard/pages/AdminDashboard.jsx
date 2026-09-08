@@ -12,7 +12,7 @@ import {
     Wrench,
     FileText,
 } from 'lucide-react';
-import Card, { KPICard } from '../../../components/ui/Card';
+import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import { useAuth } from '../../../context/useAuth';
 import { formatCurrency, formatNumber } from '../../../utils/formatters';
@@ -33,15 +33,21 @@ function DashboardPanelFallback({ title }) {
     );
 }
 
-function getGreeting() {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
+function KPICard({ title, value, icon, trendValue }) {
+    return (
+        <div className="min-w-0 rounded-lg border border-primary-200 bg-white px-5 py-4">
+            <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-primary-600">{title}</p>
+                <span className="shrink-0 text-primary-400" aria-hidden="true">{icon}</span>
+            </div>
+            <p className="mt-3 break-words text-2xl font-semibold tabular-nums tracking-tight text-primary-950">{value}</p>
+            {trendValue && <p className="mt-2 text-xs text-primary-500">{trendValue}</p>}
+        </div>
+    );
 }
 
 const AdminDashboard = () => {
-    const { user, isProfileReady, profileWarning } = useAuth();
+    const { isProfileReady, profileWarning } = useAuth();
     const [snapshot, setSnapshot] = useState(null);
     const [operations, setOperations] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -135,28 +141,26 @@ const AdminDashboard = () => {
 
     return (
         <div className="space-y-6">
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800 p-6 text-white sm:p-8">
-                <div className="absolute top-0 right-0 h-72 w-72 -translate-y-1/2 translate-x-1/3 rounded-full bg-accent-danger/10 blur-[100px]" />
-                <div className="absolute bottom-0 left-0 h-48 w-48 translate-y-1/2 -translate-x-1/4 rounded-full bg-accent-blue/10 blur-[80px]" />
-                <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="border-b border-primary-200 pb-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                         <p className="mb-1 text-sm font-medium text-primary-400">
                             {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                         </p>
-                        <h1 className="text-2xl font-display font-bold tracking-tight text-white sm:text-3xl">
-                            {getGreeting()}, {user?.firstName || user?.email || 'team'}!
+                        <h1 className="text-2xl font-semibold tracking-tight text-primary-950 sm:text-3xl">
+                            Shop overview
                         </h1>
-                        <p className="mt-1 text-sm text-primary-300">
-                            Open the next staff task immediately, then let analytics and summaries load in behind the shell.
+                        <p className="mt-1 text-sm text-primary-600">
+                            Sales, stock and work in progress.
                         </p>
                         {latestRefresh?.endedAt && (
-                            <p className="mt-3 text-xs text-primary-400">
+                            <p className="mt-2 text-xs text-primary-500">
                                 Last analytics refresh: {new Date(latestRefresh.endedAt).toLocaleString()}
                             </p>
                         )}
                         {!isProfileReady && (
-                            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-primary-300">
-                                Syncing staff profile in the background
+                            <p className="mt-2 text-xs text-primary-500">
+                                Loading your profile…
                             </p>
                         )}
                     </div>
@@ -164,15 +168,15 @@ const AdminDashboard = () => {
                     <div className="flex flex-wrap gap-3">
                         <Button
                             variant="secondary"
-                            className="border-white/10 bg-white/10 text-white hover:bg-white/20"
+                            className="border-primary-200 bg-white text-primary-700 hover:bg-primary-50"
                             leftIcon={<RefreshCw className="w-4 h-4" />}
                             isLoading={refreshing}
                             onClick={handleAnalyticsRefresh}
                         >
-                            Refresh Analytics
+                            Refresh
                         </Button>
-                        <Link to="/reports" className="inline-flex items-center gap-2 rounded-lg bg-accent-danger px-5 py-2.5 text-sm font-medium text-white shadow-lg shadow-accent-danger/20 transition-all hover:bg-accent-danger/90">
-                            <TrendingUp className="h-4 w-4" /> Open Reports
+                        <Link to="/reports" className="inline-flex items-center gap-2 rounded-lg bg-primary-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-900">
+                            <TrendingUp className="h-4 w-4" /> View reports
                         </Link>
                     </div>
                 </div>
@@ -217,8 +221,8 @@ const AdminDashboard = () => {
             <div>
                 <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
                     <div>
-                        <p className="text-xs font-black uppercase tracking-[0.22em] text-primary-400">Live operations</p>
-                        <h2 className="mt-1 font-display text-xl font-bold text-primary-950">Today at a glance</h2>
+                        <h2 className="text-base font-semibold text-primary-950">Current operations</h2>
+                        <p className="mt-1 text-xs text-primary-500">Today's sales and current stock, orders and quotations</p>
                     </div>
                     <p className="text-xs text-primary-500">
                         {operationalSummary.loadedAt
@@ -236,11 +240,17 @@ const AdminDashboard = () => {
                 </div>
             </div>
 
+            <section className="space-y-3" aria-label="Sales forecasts">
+                <div>
+                    <h2 className="text-base font-semibold text-primary-950">Sales outlook</h2>
+                    <p className="mt-1 text-xs text-primary-500">Estimates based on recorded sales. Forecasts are not confirmed revenue.</p>
+                </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <KPICard title="Predicted Revenue" value={loading ? 'Loading...' : formatCurrency(predictedRevenue)} icon={<DollarSign className="w-6 h-6" />} trend="up" trendValue={`${topProductForecasts.length} top products`} accentColor="border-accent-blue" iconBg="bg-blue-50 text-accent-blue" />
                 <KPICard title="Forecasted Units" value={loading ? 'Loading...' : formatNumber(forecastedProductCount)} icon={<Package className="w-6 h-6" />} trend="up" trendValue="Next month demand" accentColor="border-indigo-500" iconBg="bg-indigo-50 text-indigo-600" />
                 <KPICard title="Top Selling Items" value={loading ? 'Loading...' : formatNumber(topSellingItems.length)} icon={<TrendingUp className="w-6 h-6" />} trend="up" trendValue={topSellingLeader?.product_name || 'No item leader yet'} accentColor="border-emerald-500" iconBg="bg-emerald-50 text-emerald-600" />
             </div>
+            </section>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                 <div className="lg:col-span-2">
