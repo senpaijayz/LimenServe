@@ -20,6 +20,7 @@ import { createPublicEstimatePricingResolver } from '../services/publicEstimateP
 import { createPublicEstimateRevisionHandler } from '../services/publicEstimateRevision.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import { filterActiveEstimates } from '../services/estimateValidity.js';
+import { parseUpsellAction } from '../services/upsellAction.js';
 
 const router = Router();
 const ESTIMATE_STATUS_FILTERS = new Set(['draft', 'sent', 'approved', 'converted_sale', 'converted_service', 'expired', 'rejected']);
@@ -415,6 +416,14 @@ const publicEstimateRevisionHandler = createPublicEstimateRevisionHandler({
   editTokenSecret: env.supabaseServiceRoleKey,
 });
 
+const publicUpsellActionRateLimiter = createPublicEstimateRateLimiter({
+  scope: 'estimate.upsell-action.ip',
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  keyGenerator: getDefaultRateLimitKey,
+  message: 'Too many recommendation events. Please try again later.',
+});
+
 async function createTrustedEstimate(req, res, next) {
   try {
     const estimateId = await createEstimatePersisted(req.body);
@@ -600,17 +609,24 @@ router.post('/:estimateId/convert-service-order', requireRole('admin'), async (r
   }
 });
 
-router.post('/upsell-actions', async (req, res, next) => {
+router.post('/upsell-actions', publicUpsellActionRateLimiter, async (req, res, next) => {
   try {
+    const parsed = parseUpsellAction(req.body);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+
+    const event = parsed.value;
     const eventId = await callRpc('record_upsell_action', {
-      p_context_type: req.body.contextType,
-      p_context_id: req.body.contextId,
-      p_product_id: req.body.productId,
-      p_recommended_product_id: req.body.recommendedProductId || null,
-      p_recommended_service_id: req.body.recommendedServiceId || null,
-      p_action: req.body.action || 'shown',
-      p_rule_id: req.body.ruleId || null,
-      p_reason_label: req.body.reasonLabel || null,
+      p_context_type: event.contextType,
+      p_context_id: event.contextId,
+      p_product_id: event.productId,
+      p_recommended_product_id: event.recommendedProductId,
+      p_recommended_service_id: event.recommendedServiceId,
+      p_action: event.action,
+      p_rule_id: event.ruleId,
+      p_reason_label: event.reasonLabel,
     });
 
     res.status(201).json({ eventId });

@@ -237,6 +237,33 @@ test('sensitive estimate lookup and creation routes enforce their own counters',
   });
 });
 
+test('public recommendation telemetry rejects malformed writes before database access', async () => {
+  const lifecycle = createRuntimeState();
+  lifecycle.markReady();
+  const app = createApp({
+    runtimeEnv: appEnvironment({ globalRateLimitMax: 100 }),
+    applicationLogger: createTestLogger(),
+    lifecycle,
+    readinessCheck: async () => ({ ok: true, status: 'ready' }),
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/estimates/upsell-actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contextType: 'estimate',
+        contextId: 'not-a-uuid',
+        productId: 'also-not-a-uuid',
+        action: 'accepted',
+      }),
+    });
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: 'Invalid recommendation event.' });
+  });
+});
+
 test('analytics reads require an authenticated admin role', async () => {
   const lifecycle = createRuntimeState();
   lifecycle.markReady();
