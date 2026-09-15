@@ -30,6 +30,7 @@ import publicRoutes from './routes/publicRoutes.js';
 import reservationRoutes from './routes/reservationRoutes.js';
 import serviceOrderRoutes from './routes/serviceOrderRoutes.js';
 import stockroomRoutes from './routes/stockroomRoutes.js';
+import locatorRoutes from './routes/locatorRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 
 const defaultReadinessCheck = createSupabaseReadinessCheck({
@@ -147,6 +148,7 @@ export function createApp({
   app.use('/api/inventory/stockroom', inventoryStockroomRoutes);
   app.use('/api/parts-mapping', partsMappingRoutes);
   app.use('/api/stockroom', stockroomRoutes);
+  app.use('/api/locator', locatorRoutes);
 
   app.use(createNotFoundHandler());
   app.use(createErrorHandler({ logger: applicationLogger }));
