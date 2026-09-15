@@ -1025,6 +1025,9 @@ function LocatorPath() {
     const showPaths = useLocator3DStore((state) => state.showPaths);
     const points = useMemo(() => buildPathPoints(sceneObjects, locatedProduct), [locatedProduct, sceneObjects]);
 
+    if (showPaths && locatedProduct && points.length < 2) {
+        return <Html fullscreen style={{ pointerEvents: 'none' }}><div role="status" className="absolute bottom-4 left-4 max-w-xs rounded-lg border border-amber-200 bg-white p-3 text-sm text-amber-900">No clear route is available. Use the shelf location and check walls, aisles and stair access in Design Mode.</div></Html>;
+    }
     if (!showPaths || points.length < 2) {
         return null;
     }

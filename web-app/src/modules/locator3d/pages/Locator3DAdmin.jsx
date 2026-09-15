@@ -56,7 +56,8 @@ import {
 } from '../data/locatorScene';
 import {
     assignProductLocation,
-    getProductLocations,
+    getLayoutHistory,
+    restoreLayoutRevision,
     listStoreLayouts,
     loadStoreLayout,
     saveStoreLayout,
@@ -1018,7 +1019,7 @@ function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shel
     );
 }
 
-function ProductAssignmentModal({ canAssign = false, isOpen, onAssigned, onClose, products, shelf }) {
+function ProductAssignmentModal({ canAssign = false, layoutContext, isOpen, onAssigned, onClose, products, shelf }) {
     const [query, setQuery] = useState('');
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [binNumber, setBinNumber] = useState(1);
@@ -1070,7 +1071,7 @@ function ProductAssignmentModal({ canAssign = false, isOpen, onAssigned, onClose
                 shelfNumber: shelf.shelfNumber || 1,
                 shelfObjectId: shelf.id,
                 sku: selectedProduct.sku || '',
-            });
+            }, layoutContext);
             useLocator3DStore.getState().upsertProductLocation(location);
             onAssigned?.(location);
             success('Product location saved.');
@@ -1270,6 +1271,8 @@ export default function Locator3DAdmin() {
     const [isLoadingProducts, setIsLoadingProducts] = useState(false);
     const [isSavingLayout, setIsSavingLayout] = useState(false);
     const [layoutName, setLayoutName] = useState(LOCATOR_LAYOUT_NAME);
+    const [currentLayout, setCurrentLayout] = useState(null);
+    const [history, setHistory] = useState(null);
     const [layoutOptions, setLayoutOptions] = useState([LOCATOR_LAYOUT_NAME]);
     const [priorityLayoutName, setPriorityLayoutName] = useState('');
     const [locationNotice, setLocationNotice] = useState(EMPTY_LOCATION_NOTICE);
@@ -1299,20 +1302,20 @@ export default function Locator3DAdmin() {
 
     const handleSaveLayout = useCallback(async (name = layoutName, options = {}) => {
         if (!canEditLayout || saveInFlight.current) return false;
+        if (isLoadingLayout) {
+            warning('Wait for the saved layout to finish loading before saving.');
+            return false;
+        }
         saveInFlight.current = true;
         const safeName = String(name || LOCATOR_LAYOUT_NAME).trim() || LOCATOR_LAYOUT_NAME;
-        const priority = options.priority === true || (options.priority === undefined && safeName === priorityLayoutName);
+        const priority = options.priority === true;
         setIsSavingLayout(true);
         try {
-            if (priority) {
-                await saveStoreLayout(sceneObjects, safeName, { priority: true });
-            } else {
-                await saveStoreLayout(sceneObjects, safeName);
-            }
-            if (priority) {
-                await setStoreLayoutPriority(safeName);
-                setPriorityLayoutName(safeName);
-            }
+            let saved = await saveStoreLayout(sceneObjects, safeName, {
+                layoutId: currentLayout?.id, expectedRevision: currentLayout?.revision,
+            });
+            setCurrentLayout(saved);
+            setProductLocations(saved?.locations || []);
             // Only acknowledge the snapshot that was actually sent to the server.
             if (useLocator3DStore.getState().sceneObjects === sceneObjects) {
                 markLayoutSaved();
@@ -1320,7 +1323,17 @@ export default function Locator3DAdmin() {
             }
             setLayoutName(safeName);
             setLayoutOptions((current) => [...new Set([safeName, ...current])]);
-            success('Layout saved.');
+            if (priority) {
+                try {
+                    saved = await setStoreLayoutPriority(safeName, { layoutId: saved.id, expectedRevision: saved.revision });
+                    setCurrentLayout(saved);
+                    setPriorityLayoutName(safeName);
+                } catch (publishError) {
+                    showError(`Draft saved, but publishing failed. ${publishError.message || 'Try Publish for staff again.'}`);
+                    return false;
+                }
+            }
+            success(priority ? 'Layout published for staff.' : 'Draft saved. Publish it when ready for staff.');
             return true;
         } catch (saveError) {
             showError(saveError.message || 'Could not save layout. Your changes remain open in this session.');
@@ -1329,25 +1342,32 @@ export default function Locator3DAdmin() {
             saveInFlight.current = false;
             setIsSavingLayout(false);
         }
-    }, [canEditLayout, layoutName, markLayoutSaved, priorityLayoutName, sceneObjects, showError, success]);
+    }, [canEditLayout, currentLayout, isLoadingLayout, layoutName, markLayoutSaved, sceneObjects, setProductLocations, showError, success, warning]);
 
     const handleSetPriority = useCallback(async (name) => {
         if (!canEditLayout || saveInFlight.current) return;
+        if (hasUnsavedChanges || !currentLayout?.id) {
+            warning('Save your draft before publishing.');
+            return;
+        }
         const safeName = String(name || '').trim();
         if (!safeName) {
             return;
         }
+        saveInFlight.current = true;
         setIsSavingLayout(true);
         try {
-            await setStoreLayoutPriority(safeName);
+            const saved = await setStoreLayoutPriority(safeName, { layoutId: currentLayout.id, expectedRevision: currentLayout.revision });
+            setCurrentLayout(saved);
             setPriorityLayoutName(safeName);
             success(`“${safeName}” is now the priority stockroom.`);
         } catch (priorityError) {
             showError(priorityError.message || 'Could not update the priority stockroom.');
         } finally {
+            saveInFlight.current = false;
             setIsSavingLayout(false);
         }
-    }, [canEditLayout, showError, success]);
+    }, [canEditLayout, currentLayout, hasUnsavedChanges, showError, success, warning]);
 
     const locateFromProduct = useCallback((product, locations = productLocations) => {
         const location = locations.find((item) => String(item.productId) === String(product.id)) ?? null;
@@ -1397,7 +1417,7 @@ export default function Locator3DAdmin() {
         success('Product located in the 3D stockroom.');
     }, [locateProduct, productLocations, products, setSelectedProductForLocation, success, warning]);
 
-    const handleLoadLayout = useCallback(async (name = layoutName, discard = false) => {
+    const handleLoadLayout = useCallback(async (name = layoutName, discard = false, publishedOnly = false) => {
         const safeName = String(name || LOCATOR_LAYOUT_NAME).trim() || LOCATOR_LAYOUT_NAME;
         if (saveInFlight.current) return;
         if (useLocator3DStore.getState().hasUnsavedChanges && !discard) {
@@ -1408,16 +1428,14 @@ export default function Locator3DAdmin() {
         const startingObjects = useLocator3DStore.getState().sceneObjects;
         setIsLoadingLayout(true);
         try {
-            const [savedLayout, locations] = await Promise.all([
-                loadStoreLayout(safeName),
-                getProductLocations(),
-            ]);
+            const savedLayout = await loadStoreLayout(safeName, { publishedOnly });
             if (sequence !== loadSequence.current) return;
             if (startingObjects !== useLocator3DStore.getState().sceneObjects) {
                 warning('Your layout changed while loading. Your current edits have been kept.');
                 return;
             }
             if (savedLayout?.layoutData) {
+                setCurrentLayout(savedLayout);
                 loadLayoutData(savedLayout.layoutData);
                 markLayoutSaved();
                 setLayoutName(savedLayout.layoutName || safeName);
@@ -1425,11 +1443,12 @@ export default function Locator3DAdmin() {
                     setPriorityLayoutName(savedLayout.layoutName || safeName);
                 }
             } else {
+                setCurrentLayout(null);
                 resetToDefaultLayout();
                 markLayoutSaved();
                 info('No saved layout was found. The protected default layout is shown.');
             }
-            setProductLocations(locations || []);
+            setProductLocations(savedLayout?.locations || []);
             setAutosaveSnapshot(null);
             setLocationNotice(EMPTY_LOCATION_NOTICE);
             success('3D layout loaded.');
@@ -1526,19 +1545,21 @@ export default function Locator3DAdmin() {
         const startingObjects = useLocator3DStore.getState().sceneObjects;
         setIsLoadingProducts(true);
         setIsLoadingLayout(true);
-        void Promise.all([listStoreLayouts(), getProductLocations(), getFullProductCatalog()])
-            .then(async ([layouts, locations, catalogProducts]) => {
+        void Promise.all([listStoreLayouts(), getFullProductCatalog()])
+            .then(async ([layouts, catalogProducts]) => {
                 if (!active || sequence !== loadSequence.current) return;
                 const priority = layouts.find((layout) => layout.isPriority)?.layoutName || '';
                 const initialName = priority || LOCATOR_LAYOUT_NAME;
                 setLayoutOptions([...new Set([LOCATOR_LAYOUT_NAME, ...layouts.map((layout) => layout.layoutName).filter(Boolean)])]);
                 setPriorityLayoutName(priority);
-                setProductLocations(locations || []);
                 setProducts(catalogProducts || []);
-                const savedLayout = await loadStoreLayout(initialName);
+                const savedLayout = await loadStoreLayout(initialName, { publishedOnly: Boolean(priority) });
                 if (!active || sequence !== loadSequence.current) return;
                 const current = useLocator3DStore.getState();
-                // A late request must not replace a recovery or an active edit.
+                const locations = savedLayout?.locations || [];
+                setProductLocations(locations);
+                setCurrentLayout(savedLayout);
+                // Retain server identity/revision without replacing active local edits.
                 if (current.hasUnsavedChanges || current.isDesignMode || current.sceneObjects !== startingObjects) return;
                 if (savedLayout?.layoutData) {
                     loadLayoutData(savedLayout.layoutData);
@@ -1586,6 +1607,29 @@ export default function Locator3DAdmin() {
 
     useLocatorKeyboardShortcuts(() => void handleSaveLayout(), canEditLayout);
 
+    const showHistory = async () => {
+        try {
+            setHistory(await getLayoutHistory({ layoutId: currentLayout.id }) || []);
+        } catch (error) { showError(error.message); }
+    };
+    const restoreRevision = async (revision) => {
+        if (saveInFlight.current || hasUnsavedChanges) return;
+        saveInFlight.current = true;
+        setIsSavingLayout(true);
+        try {
+            const restored = await restoreLayoutRevision({
+                layoutId: currentLayout.id, expectedRevision: currentLayout.revision, restoreRevision: revision,
+            });
+            setCurrentLayout(restored);
+            loadLayoutData(restored.layoutData);
+            setProductLocations(restored.locations);
+            markLayoutSaved();
+            setHistory(null);
+            success('Revision restored as a draft. Review it before publishing.');
+        } catch (error) { showError(error.message); }
+        finally { saveInFlight.current = false; setIsSavingLayout(false); }
+    };
+
     const pendingTitle = pendingAction?.type === 'load-layout' ? 'Load a different layout?'
         : pendingAction?.type === 'exit'
         ? 'Save layout changes?'
@@ -1606,7 +1650,7 @@ export default function Locator3DAdmin() {
                 isSaving={isSavingLayout}
                 layoutName={layoutName}
                 layoutOptions={layoutOptions}
-                priorityLayoutName={priorityLayoutName}
+                priorityLayoutName={currentLayout?.status === 'published' ? priorityLayoutName : ''}
                 onSetPriority={(name) => void handleSetPriority(name)}
                 locationNotice={locationNotice}
                 onExitDesignMode={exitDesignMode}
@@ -1620,6 +1664,29 @@ export default function Locator3DAdmin() {
                 sceneObjects={sceneObjects}
             />
 
+            {currentLayout && (
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                    <span className="font-semibold text-slate-800">{currentLayout.status === 'published' ? 'Published for staff' : 'Design draft'} · Revision {currentLayout.revision}</span>
+                    {canEditLayout && <>
+                        <Button disabled={isSavingLayout || hasUnsavedChanges} onClick={() => void showHistory()}>Version history</Button>
+                        {currentLayout.status !== 'published' && priorityLayoutName && <Button disabled={isSavingLayout || hasUnsavedChanges} onClick={() => void handleLoadLayout(priorityLayoutName, false, true)}>View published layout</Button>}
+                        {currentLayout.status !== 'published' && <Button disabled={isSavingLayout || hasUnsavedChanges} onClick={() => void handleSetPriority(layoutName)} tone="primary">Publish for staff</Button>}
+                        {hasUnsavedChanges && <span className="text-slate-600">Save changes before publishing or assigning products.</span>}
+                    </>}
+                </div>
+            )}
+            <Modal isOpen={history !== null} onClose={() => setHistory(null)} title="Layout version history">
+                <p className="mb-4 text-sm text-slate-600">Restoring creates a draft. The published layout stays available to staff until you publish again.</p>
+                <div className="max-h-80 space-y-2 overflow-y-auto">
+                    {(history || []).map((entry) => (
+                        <div key={entry.revision} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
+                            <div><p className="font-semibold">Revision {entry.revision} · {entry.event_type}</p><p className="text-xs text-slate-500">{new Date(entry.created_at).toLocaleString()}</p></div>
+                            <Button disabled={isSavingLayout || hasUnsavedChanges} onClick={() => void restoreRevision(entry.revision)}>Restore draft</Button>
+                        </div>
+                    ))}
+                    {!history?.length && <p>No saved revisions yet.</p>}
+                </div>
+            </Modal>
             <AutosaveRecoveryBanner
                 onDiscard={() => {
                     discardAutosave();
@@ -1682,9 +1749,11 @@ export default function Locator3DAdmin() {
             <SummaryCards />
 
             <ProductAssignmentModal
-                canAssign={canEditLayout}
+                canAssign={canEditLayout && !hasUnsavedChanges && Boolean(currentLayout?.id)}
+                layoutContext={{ layoutId: currentLayout?.id, expectedRevision: currentLayout?.revision }}
                 isOpen={Boolean(assignmentShelf)}
                 onAssigned={(location) => {
+                    setCurrentLayout((layout) => ({ ...layout, revision: location.layoutRevision }));
                     setLocationNotice({ message: 'Mapped ' + (location.productName || 'product') + ' · ' + formatLocation(location), tone: 'success' });
                 }}
                 onClose={() => setAssignmentShelf(null)}

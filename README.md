@@ -192,6 +192,73 @@ Recommended production order:
 
 ## Supabase baseline warning
 
+### September 15, 2026 locator rollout update
+
+This update supersedes the older locator rollout status below. The current 3D
+editor and inventory location picker use the protected Render endpoint
+`POST /api/locator/command`, backed by the normalized `stockroom` hierarchy.
+Migration `20260915064614_locator_normalized_workspace.sql` was rehearsed in
+an isolated PostgreSQL-compatible PGlite database and applied to the existing
+production Supabase project. No new branch or project was created.
+
+- **Drafts and publishing:** Save creates/updates a design draft. Published
+  designs are copied before geometry edits. Only **Publish for staff** changes
+  the active shop; staff and inventory read only the published snapshot.
+- **Location integrity:** Layout/store-scoped foreign keys connect each part to
+  its shelf, layer and bin. Multiple parts may share a bin. Shelves support
+  1–12 layers/bins. Removing an occupied shelf or shrinking occupied layers is
+  rejected, not silently reassigned. Existing geometry and six current product
+  mappings were preserved; older normalized mappings remain with their
+  archived layout, not merged into the active shop.
+- **Conflict protection:** Every mutation includes its loaded revision. A stale
+  request returns HTTP 409 without retrying over newer work. Keep/copy local
+  changes, reload the latest draft, reconcile assignments, then save. Drafts
+  based on a changed published parent must be reconciled before publishing.
+- **History/recovery:** Administrators can inspect revision history and restore
+  a previous snapshot as a draft. Publish it explicitly after review. Local
+  autosave remains recovery assistance, not an authoritative database copy.
+- **Access:** Only administrators can save, assign, restore or publish. Other
+  authorized staff can read published layouts. Browser credentials cannot
+  execute the command RPC or write the legacy/hierarchy tables directly.
+  Supabase service-role credentials remain on Render only.
+- **Routing:** Guidance respects resized/rotated floors, thin walls, explicit
+  door openings, shelf clearance and rotated L-shaped stairs. Unreachable
+  destinations show a warning instead of a straight route through obstacles.
+  This is navigation assistance, not a certified emergency/accessible route.
+
+Deployment order: first deploy the backend adapter (`2afe427`), apply only the
+reviewed forward migration above, then deploy the matching frontend from
+`main`. Refresh open staff tabs after release; old tabs cannot save to the
+now-read-only legacy path. The migration timestamp matches the hosted ledger.
+Do not bulk-push the unreconciled historical migration directory. No new
+Vercel/Render environment variables are required; existing environment-specific
+API URL, Supabase URL/key, CORS allowlist and server-only role key still apply.
+
+Rollback: retain the normalized adapter and use History → Restore → Publish
+to recover a design. Prefer a reviewed forward fix for application failures.
+Do not re-enable legacy writes or deploy an old direct-write editor without a
+separate reconciliation plan: preserved legacy tables are archives, not live
+mirrors. No layouts, product records or previous audit history were deleted.
+Formal legacy crosswalk approvals remain pending human review; candidate
+normalized IDs are recorded without fabricating an approver.
+
+Verification: frontend tests/lint/build (including dependency-graph bundle
+budgets), backend tests and `supabase/tests/20260914_locator_workspace.sql`.
+The SQL test is rollback-only and registered in `database-test-suite.json`;
+run it through the repository database test runner on an isolated compatible
+database. Coverage includes stale revisions, invalid-FK rollback, shared bins,
+layout isolation, occupied-layer changes, restoration and publish conflicts.
+The targeted PGlite rehearsal is not proof of multi-session lock contention or
+a full clean-database replay. The pre-existing migration-history guard still
+rejects old non-14-digit versions; full database CI remains blocked until that
+history is reconciled. Do not conceal this by weakening the guard.
+
+Local browser checks covered the real editor at 320/360/390/430px with fixture
+API responses and simulated save/publish. They do not replace a signed-in
+production smoke test: search a known mapped part, inspect its floor/bin,
+save a deliberate draft, reload it, and publish only after reviewing the
+physical shop. Keep the existing adaptive quality/2D fallback on mobile.
+
 `supabase/config.toml`, an immutable migration-history check, and a gated database-test workflow now exist. The repository is still not a trustworthy clean-database bootstrap: 11 local version groups collapse multiple files in the Supabase CLI ledger, production and staging contain different history, and `supabase/generated/setup_full.sql` is stale. The default CI job checks that this known drift does not change; full local replay remains skipped until both remote ledgers are reconciled and an isolated replay succeeds. Do not claim `supabase db reset` works or run production repair commands. Existing data in either stockroom model must not be deleted.
 
 The normalized `stockroom` schema is the intended long-term source of truth. Legacy `public.store_layouts` and `public.product_locations` remain in service and require an archive/crosswalk, normalized-first compatibility reads, revisioned draft/publish RPCs, and migration coverage before retirement. Detailed gates are in [PHASES_2_TO_4_PLAN.md](PHASES_2_TO_4_PLAN.md).

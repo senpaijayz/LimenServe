@@ -19,8 +19,9 @@ vi.mock('../modules/locator3d/services/locator3DApi', () => ({
     assignProductLocation: vi.fn(async (location) => location),
     getProductLocations: vi.fn(async () => []),
     listStoreLayouts: vi.fn(async () => [{ layoutName: 'main-store' }]),
-    loadStoreLayout: vi.fn(async () => ({ layoutData: { objects: useLocator3DStore.getState().sceneObjects } })),
-    saveStoreLayout: vi.fn(async () => ({ id: 'layout-1' })),
+    loadStoreLayout: vi.fn(async () => ({ id: 'layout-1', revision: 2, status: 'draft', locations: [], layoutData: { objects: useLocator3DStore.getState().sceneObjects } })),
+    saveStoreLayout: vi.fn(async () => ({ id: 'layout-1', revision: 3, status: 'draft', locations: [] })),
+    getLayoutHistory: vi.fn(), restoreLayoutRevision: vi.fn(), setStoreLayoutPriority: vi.fn(),
 }));
 
 import { assignProductLocation, loadStoreLayout, saveStoreLayout } from '../modules/locator3d/services/locator3DApi';
@@ -43,6 +44,7 @@ describe('3D Locator admin integration', () => {
         resetLocator3DStore();
         useLocator3DStore.getState().forceSelectObject('shelf-4-a');
         renderLocator();
+        await waitFor(() => expect(screen.queryByText('Loading stockroom…')).toBeNull());
 
         fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -78,7 +80,7 @@ describe('3D Locator admin integration', () => {
             productId: 'product-1',
             shelfNumber: 2,
             shelfObjectId: 'shelf-4-a',
-        })));
+        }), expect.objectContaining({ layoutId: 'layout-1', expectedRevision: expect.any(Number) })));
         expect(useLocator3DStore.getState().productLocations[0].productId).toBe('product-1');
     });
 
@@ -90,6 +92,7 @@ describe('3D Locator admin integration', () => {
             releaseSave = resolve;
         }));
         renderLocator();
+        await waitFor(() => expect(screen.queryByText('Loading stockroom…')).toBeNull());
 
         fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
         const saveButton = screen.getByRole('button', { name: 'Save' });

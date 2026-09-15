@@ -12,8 +12,9 @@ vi.mock('../modules/locator3d/services/locator3DApi', () => ({
     assignProductLocation: vi.fn(async (location) => location),
     getProductLocations: vi.fn(async () => [{ productId: 'part-1', productName: 'Oil Filter', shelfObjectId: 'shelf-4-a', aisle: 'B', shelfNumber: 2, floor: 1, binNumber: 4 }]),
     listStoreLayouts: vi.fn(), loadStoreLayout: vi.fn(), saveStoreLayout: vi.fn(), setStoreLayoutPriority: vi.fn(),
+    getLayoutHistory: vi.fn(), restoreLayoutRevision: vi.fn(),
 }));
-import { listStoreLayouts, loadStoreLayout, saveStoreLayout } from '../modules/locator3d/services/locator3DApi';
+import { listStoreLayouts, loadStoreLayout, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
 import Locator3DAdmin from '../modules/locator3d/pages/Locator3DAdmin';
 
 function mount(isAdmin = true) {
@@ -29,13 +30,16 @@ describe('Stockroom workspace workflows', () => {
         vi.resetAllMocks();
         resetLocator3DStore();
         listStoreLayouts.mockResolvedValue([{ layoutName: 'main-store' }, { layoutName: 'Workshop', isPriority: true }]);
-        loadStoreLayout.mockImplementation(async (name) => ({ layoutName: name, layoutData: { objects: LOCATOR_SCENE_OBJECTS } }));
+        loadStoreLayout.mockImplementation(async (name) => ({
+            id: 'layout-1', revision: 4, status: 'published', layoutName: name, layoutData: { objects: LOCATOR_SCENE_OBJECTS },
+            locations: [{ productId: 'part-1', productName: 'Oil Filter', shelfObjectId: 'shelf-4-a', aisle: 'B', shelfNumber: 2, floor: 1, binNumber: 4 }],
+        }));
         saveStoreLayout.mockResolvedValue({ id: 'saved' });
     });
 
     it('loads the priority saved design when opened without a product link', async () => {
         mount(); await loaded();
-        expect(loadStoreLayout).toHaveBeenCalledWith('Workshop');
+        expect(loadStoreLayout).toHaveBeenCalledWith('Workshop', { publishedOnly: true });
         expect(screen.getByText('Workshop')).toBeTruthy();
     });
 
@@ -101,6 +105,33 @@ describe('Stockroom workspace workflows', () => {
         act(() => { useLocator3DStore.getState().addSceneObject('shelf'); });
         await act(async () => release({ id: 'saved' }));
         expect(useLocator3DStore.getState().hasUnsavedChanges).toBe(true);
+    });
+
+    it('retains the saved draft identity when publishing fails so retry does not create another copy', async () => {
+        mount(); await loaded();
+        saveStoreLayout.mockResolvedValue({ id: 'draft-2', revision: 2, status: 'draft', locations: [] });
+        setStoreLayoutPriority.mockRejectedValueOnce(new Error('Source revision changed.'));
+        setStoreLayoutPriority.mockResolvedValueOnce({ id: 'draft-2', revision: 3, status: 'published', locations: [] });
+        fireEvent.click(screen.getByRole('button', { name: 'More stockroom actions' }));
+        fireEvent.change(screen.getByLabelText('Save layout as'), { target: { value: 'New design' } });
+        fireEvent.click(screen.getByLabelText('Use as priority stockroom'));
+        fireEvent.click(screen.getByRole('button', { name: 'Save As' }));
+        await screen.findByText(/Draft saved, but publishing failed/);
+        fireEvent.click(screen.getByRole('button', { name: 'Publish for staff' }));
+        await waitFor(() => expect(setStoreLayoutPriority).toHaveBeenCalledTimes(2));
+        expect(setStoreLayoutPriority).toHaveBeenLastCalledWith('New design', { layoutId: 'draft-2', expectedRevision: 2 });
+        expect(saveStoreLayout).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps edits open on a stale revision and never publishes an ordinary save', async () => {
+        mount(); await loaded();
+        fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
+        act(() => useLocator3DStore.getState().addSceneObject('shelf'));
+        saveStoreLayout.mockRejectedValueOnce(new Error('Layout changed. Reload before saving.'));
+        fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+        await screen.findByText('Layout changed. Reload before saving.');
+        expect(useLocator3DStore.getState().hasUnsavedChanges).toBe(true);
+        expect(setStoreLayoutPriority).not.toHaveBeenCalled();
     });
 
     it('protects product mappings when a shelf is deleted with the keyboard', async () => {

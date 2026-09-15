@@ -30,9 +30,14 @@ vi.mock('../modules/locator3d/services/locator3DApi', () => ({
             sku: 'OF-1',
         },
     ]),
-    loadStoreLayout: vi.fn(async () => ({ layoutData: { objects: useLocator3DStore.getState().sceneObjects } })),
+    loadStoreLayout: vi.fn(async () => ({
+        id: 'layout-1', revision: 2, status: 'draft',
+        layoutData: { objects: useLocator3DStore.getState().sceneObjects },
+        locations: [{ aisle: 'B', binNumber: 4, floor: 1, productId: 'product-1', productName: 'Oil Filter', shelfNumber: 2, shelfObjectId: 'shelf-4-a', sku: 'OF-1' }],
+    })),
     listStoreLayouts: vi.fn(async () => [{ layoutName: 'main-store' }]),
     saveStoreLayout: vi.fn(async () => ({ id: 'layout-1' })),
+    getLayoutHistory: vi.fn(), restoreLayoutRevision: vi.fn(), setStoreLayoutPriority: vi.fn(),
 }));
 
 import { saveStoreLayout } from '../modules/locator3d/services/locator3DApi';
@@ -109,6 +114,7 @@ describe('3D Locator rebuild', () => {
 
     it('keeps design mode canvas-first while supporting add, direct transforms, and save', async () => {
         renderLocator();
+        await waitFor(() => expect(screen.queryByText('Loading stockroom…')).toBeNull());
 
         fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
         expect(screen.getByRole('heading', { name: '3D Stockroom · Design' })).toBeTruthy();
@@ -133,7 +139,7 @@ describe('3D Locator rebuild', () => {
         expect(shelf.rotation[1]).toBeCloseTo(Math.PI / 4, 3);
 
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        await waitFor(() => expect(saveStoreLayout).toHaveBeenCalledWith(expect.any(Array), 'main-store'));
+        await waitFor(() => expect(saveStoreLayout).toHaveBeenCalledWith(expect.any(Array), 'main-store', expect.any(Object)));
     });
 
     it('shows editable shelf details and product positions in Design Mode', async () => {

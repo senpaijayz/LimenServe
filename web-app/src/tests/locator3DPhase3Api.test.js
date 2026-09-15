@@ -1,143 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const chains = [];
-
-function createChain(table) {
-    const chain = {
-        table,
-        calls: [],
-        data: table === 'store_layouts'
-            ? {
-                id: 'layout-1',
-                layout_name: 'main-store',
-                layout_data: { objects: [{ id: 'floor-main' }] },
-                updated_at: '2026-05-12T00:00:00.000Z',
-            }
-            : {
-                product_id: 'product-1',
-                product_name: 'Oil Filter',
-                sku: 'OF-1',
-                aisle: 'C',
-                shelf_number: 3,
-                bin_number: 4,
-                floor: 2,
-                shelf_object_id: 'shelf-4-b',
-                assignment_data: { layerNumber: 2 },
-            },
-        delete: vi.fn(() => chain),
-        eq: vi.fn((column, value) => {
-            chain.calls.push(['eq', column, value]);
-            return chain;
-        }),
-        limit: vi.fn((value) => {
-            chain.calls.push(['limit', value]);
-            return chain;
-        }),
-        order: vi.fn((column, options) => {
-            chain.calls.push(['order', column, options]);
-            return chain;
-        }),
-        select: vi.fn((columns) => {
-            chain.calls.push(['select', columns]);
-            return chain;
-        }),
-        single: vi.fn(async () => ({ data: chain.data, error: null })),
-        upsert: vi.fn((payload, options) => {
-            chain.calls.push(['upsert', payload, options]);
-            return chain;
-        }),
-    };
-
-    chains.push(chain);
-    return chain;
-}
-
-vi.mock('../services/supabase', () => ({
-    getFreshAccessToken: vi.fn(async () => null),
-    supabase: {
-        from: vi.fn((table) => createChain(table)),
-    },
-}));
-
-import {
-    assignProductLocation,
-    getProductLocation,
-    loadStoreLayout,
-    saveStoreLayout,
-} from '../modules/locator3d/services/locator3DApi';
-
-describe('3D Locator Supabase API', () => {
-    beforeEach(() => {
-        chains.length = 0;
+vi.mock('../services/apiClient', () => ({ default: { post: vi.fn() } }));
+import api from '../services/apiClient';
+import { assignProductLocation, getProductLocations, loadStoreLayout, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
+const row = { id: 'layout-a', name: 'Workshop', store_id: 'store-a', revision: 5, status: 'published', metadata: { scene: { objects: [] }, locations: [{ productId: 'part-a', shelfObjectId: 'shelf-a', layoutId: 'layout-a' }] } };
+describe('normalized locator API', () => {
+    beforeEach(() => { vi.resetAllMocks(); api.post.mockResolvedValue({ data: { result: row } }); });
+    it('loads a layout and its mappings together', async () => {
+        expect(await loadStoreLayout('Workshop')).toMatchObject({ id: 'layout-a', revision: 5, locations: row.metadata.locations });
+        expect(api.post).toHaveBeenCalledWith('/locator/command', { action: 'load', payload: { name: 'Workshop' } });
     });
-
-    it('saves the full scene layout as jsonb data', async () => {
-        const layout = await saveStoreLayout([{ id: 'shelf-1', position: [1, 0, 1] }]);
-        const chain = chains[0];
-
-        expect(chain.table).toBe('store_layouts');
-        expect(chain.upsert).toHaveBeenCalledWith(
-            expect.objectContaining({
-                layout_name: 'main-store',
-                layout_data: expect.objectContaining({
-                    objects: [{ id: 'shelf-1', position: [1, 0, 1] }],
-                    version: 1,
-                }),
-            }),
-            { onConflict: 'layout_name' },
-        );
-        expect(layout.layoutData.objects[0].id).toBe('floor-main');
+    it('sends the revision seen by the editor, not a cached newer revision', async () => {
+        await saveStoreLayout([], 'Workshop', { layoutId: 'layout-a', expectedRevision: 3 });
+        expect(api.post.mock.calls[0][1]).toEqual({ action: 'save', payload: { name: 'Workshop', objects: [], layoutId: 'layout-a', expectedRevision: 3 } });
     });
-
-    it('persists priority metadata without changing the layout schema', async () => {
-        await saveStoreLayout([{ id: 'shelf-1' }], 'front-counter', { priority: true });
-        expect(chains[0].upsert).toHaveBeenCalledWith(
-            expect.objectContaining({
-                layout_name: 'front-counter',
-                layout_data: expect.objectContaining({ priority: true }),
-            }),
-            { onConflict: 'layout_name' },
-        );
+    it('publishes explicitly rather than updating priorities in parallel', async () => {
+        await setStoreLayoutPriority('Workshop', { layoutId: 'layout-a', expectedRevision: 5 });
+        expect(api.post).toHaveBeenCalledTimes(1);
+        expect(api.post.mock.calls[0][1].action).toBe('publish');
     });
-
-    it('loads the latest saved layout', async () => {
-        const layout = await loadStoreLayout();
-        const chain = chains[0];
-
-        expect(chain.table).toBe('store_layouts');
-        expect(chain.eq).toHaveBeenCalledWith('layout_name', 'main-store');
-        expect(layout.layoutData.objects[0].id).toBe('floor-main');
+    it('uses only the published snapshot for inventory assignments', async () => {
+        const location = await assignProductLocation({ productId: 'part-a', shelfObjectId: 'shelf-a' });
+        expect(api.post.mock.calls[0][1].payload.publishedOnly).toBe(true);
+        expect(api.post.mock.calls[1][1].payload.expectedRevision).toBe(5);
+        expect(location.layoutRevision).toBe(5);
     });
-
-    it('upserts and reads product shelf locations', async () => {
-        const location = await assignProductLocation({
-            productId: 'product-1',
-            productName: 'Oil Filter',
-            sku: 'OF-1',
-            aisle: 'C',
-            shelfNumber: 3,
-            binNumber: 4,
-            floor: 2,
-            layerNumber: 2,
-            shelfObjectId: 'shelf-4-b',
-        });
-
-        expect(chains[0].table).toBe('product_locations');
-        expect(chains[0].upsert).toHaveBeenCalledWith(
-            expect.objectContaining({
-                product_id: 'product-1',
-                aisle: 'C',
-                shelf_number: 3,
-                bin_number: 4,
-                assignment_data: { layerNumber: 2 },
-            }),
-            { onConflict: 'product_id' },
-        );
-        expect(location.shelfNumber).toBe(3);
-        expect(location.layerNumber).toBe(2);
-
-        const loaded = await getProductLocation('product-1');
-        expect(chains[1].eq).toHaveBeenCalledWith('product_id', 'product-1');
-        expect(loaded.binNumber).toBe(4);
+    it('never fetches global unscoped legacy locations', async () => {
+        expect(await getProductLocations()).toEqual(row.metadata.locations);
+        expect(api.post.mock.calls[0][1]).toEqual({ action: 'load', payload: { name: '', publishedOnly: true } });
+    });
+    it('retains conflicts for the caller without retrying the write', async () => {
+        api.post.mockRejectedValue({ response: { status: 409, data: { error: 'Reload before saving.' } } });
+        await expect(saveStoreLayout([], 'Workshop')).rejects.toMatchObject({ status: 409, message: 'Reload before saving.' });
+        expect(api.post).toHaveBeenCalledTimes(1);
     });
 });

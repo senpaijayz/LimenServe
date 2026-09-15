@@ -26,8 +26,8 @@ import {
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
 import { getPartNumberSearchSuggestions, getProductPartNumber, productMatchesIdentifier } from '../../../utils/barcode';
-import { LOCATOR_SCENE_OBJECTS, isShelfObject, normalizeAisle } from '../../locator3d/data/locatorScene';
-import { assignProductLocation } from '../../locator3d/services/locator3DApi';
+import { isShelfObject, normalizeAisle } from '../../locator3d/data/locatorScene';
+import { assignProductLocation, loadStoreLayout } from '../../locator3d/services/locator3DApi';
 import { buildLocator3DUrl } from '../../locator3d/utils/locatorNavigation';
 
 const PAGE_SIZE = 12;
@@ -118,7 +118,7 @@ function normalizeLocationForDisplay(rawLocation) {
 }
 
 const inputClassName = 'w-full rounded-xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-950 shadow-sm outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15';
-const stockroomShelfOptions = LOCATOR_SCENE_OBJECTS
+const buildShelfOptions = (objects = []) => objects
     .filter(isShelfObject)
     .map((object) => ({
         aisle: normalizeAisle(object.aisle),
@@ -129,7 +129,7 @@ const stockroomShelfOptions = LOCATOR_SCENE_OBJECTS
         shelfNumber: Number(object.shelfNumber || 1),
     }));
 
-function getShelfOptionByLocation(location = {}) {
+function getShelfOptionByLocation(location = {}, stockroomShelfOptions = []) {
     const shelfObjectId = location.shelfObjectId || location.shelf_object_id;
 
     return stockroomShelfOptions.find((option) => option.id === shelfObjectId)
@@ -187,7 +187,7 @@ function getStockStatusLabel(stock) {
     return 'In Stock';
 }
 
-function EditProductModal({ isOpen, product, isSaving, onClose, onSave }) {
+function EditProductModal({ isOpen, product, isSaving, onClose, onSave, stockroomShelfOptions }) {
     if (!product) {
         return null;
     }
@@ -195,6 +195,7 @@ function EditProductModal({ isOpen, product, isSaving, onClose, onSave }) {
     return (
         <EditProductModalContent
             key={product.id}
+            stockroomShelfOptions={stockroomShelfOptions}
             isOpen={isOpen}
             product={product}
             isSaving={isSaving}
@@ -204,7 +205,7 @@ function EditProductModal({ isOpen, product, isSaving, onClose, onSave }) {
     );
 }
 
-function EditProductModalContent({ isOpen, product, isSaving, onClose, onSave }) {
+function EditProductModalContent({ isOpen, product, isSaving, onClose, onSave, stockroomShelfOptions = [] }) {
     const [form, setForm] = useState(() => buildEditProductForm(product));
     const selectedShelf = stockroomShelfOptions.find((option) => option.id === form.locationShelfObjectId) ?? null;
     const binOptions = Array.from({ length: selectedShelf?.binCount || 0 }, (_, index) => String(index + 1));
@@ -372,6 +373,8 @@ const InventoryList = () => {
     const [previewStockHistory, setPreviewStockHistory] = useState([]);
     const [previewHistoryLoading, setPreviewHistoryLoading] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
+    const [publishedStockroom, setPublishedStockroom] = useState(null);
+    const stockroomShelfOptions = useMemo(() => buildShelfOptions(publishedStockroom?.layoutData?.objects), [publishedStockroom]);
     const [savingProductDetails, setSavingProductDetails] = useState(false);
     const [sortConfig, setSortConfig] = useState({ key: null, dir: null });
     const [priceListVersions, setPriceListVersions] = useState([]);
@@ -595,8 +598,18 @@ const InventoryList = () => {
         setCurrentPage(1);
     }, []);
 
-    const openEditProduct = useCallback((product) => {
-        setEditingProduct(productOverrides[product.id] ?? formatCatalogProduct(product));
+    const openEditProduct = useCallback(async (product) => {
+        setPublishedStockroom(null);
+        const normalized = productOverrides[product.id] ?? formatCatalogProduct(product);
+        // Fetch the current published revision before opening the assignment form.
+        try {
+            const layout = await loadStoreLayout('', { publishedOnly: true });
+            setPublishedStockroom(layout);
+            setEditingProduct({ ...normalized, location: layout?.locations.find((item) => item.productId === product.id) || normalized.location });
+        } catch {
+            // Product editing still works; no guessed/default shelves are offered.
+            setEditingProduct(normalized);
+        }
     }, [productOverrides]);
 
     const handleLocateIn3D = useCallback((product) => {
@@ -653,7 +666,7 @@ const InventoryList = () => {
                     shelfNumber: selectedShelf.shelfNumber,
                     shelfObjectId: selectedShelf.id,
                     sku: productForm.sku || editingProduct.sku,
-                });
+                }, { layoutId: publishedStockroom?.id, expectedRevision: publishedStockroom?.revision });
                 updatedLocation = {
                     ...savedLocation,
                     aisle: savedLocation?.aisle ?? selectedShelf.aisle,
@@ -1149,6 +1162,7 @@ const InventoryList = () => {
             />
 
             <EditProductModal
+                stockroomShelfOptions={stockroomShelfOptions}
                 isOpen={Boolean(editingProduct)}
                 product={editingProduct}
                 isSaving={savingProductDetails}
