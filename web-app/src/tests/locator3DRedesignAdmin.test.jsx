@@ -91,7 +91,8 @@ describe('3D Locator rebuild', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Locate Oil Filter' }));
 
         await waitFor(() => expect(useLocator3DStore.getState().locatedProduct?.productId).toBe('product-1'));
-        expect(screen.getByText(/Located Oil Filter/i)).toBeTruthy();
+        expect(screen.getByRole('status').textContent).toContain('Oil Filter');
+        expect(screen.getByRole('button', { name: 'Fit Selection' })).toBeTruthy();
         expect(useLocator3DStore.getState().activeFloor).toBe(1);
     });
 
@@ -100,7 +101,8 @@ describe('3D Locator rebuild', () => {
 
         await waitFor(() => expect(useLocator3DStore.getState().locatedProduct?.productId).toBe('product-1'));
         expect(screen.getByText('Oil Filter')).toBeTruthy();
-        expect(screen.getByText(/Floor 1 · Aisle B · Shelf 2 · Bin 4/i)).toBeTruthy();
+        expect(screen.getAllByText(/Floor 1 → Aisle B → Shelf 2 → Layer 1 → Bin 4/i).length).toBeGreaterThan(0);
+        expect(screen.getByRole('button', { name: 'Fit Selection' })).toBeTruthy();
         expect(useLocator3DStore.getState().selectedObjectId).toBe('shelf-4-a');
     });
 

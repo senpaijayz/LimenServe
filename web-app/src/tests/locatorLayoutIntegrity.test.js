@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cloneLocatorSceneObjects } from '../modules/locator3d/data/locatorScene';
 import { validateLayoutObjects } from '../modules/locator3d/utils/layoutValidation';
 import { getLocatorAutosave, resetLocator3DStore, useLocator3DStore } from '../modules/locator3d/store/useLocator3DStore';
+import { configureLocatorRecovery } from '../modules/locator3d/utils/locatorRecovery';
 
 describe('3D layout integrity and editor history', () => {
     it('detects collisions and floor-boundary violations', () => {
@@ -52,6 +53,7 @@ describe('3D layout integrity and editor history', () => {
 
     it('writes and recovers a local autosave snapshot', () => {
         localStorage.clear();
+        configureLocatorRecovery({ userId: 'test-admin', layoutId: 'test-layout', revision: 1 });
         resetLocator3DStore();
         useLocator3DStore.getState().forceSelectObject('shelf-2-a');
         useLocator3DStore.getState().updateObjectTransform('shelf-2-a', { position: [-2.2, 0, -1.6] });

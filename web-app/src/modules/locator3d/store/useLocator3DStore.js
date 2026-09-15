@@ -15,9 +15,9 @@ import {
     normalizeLayoutObjects,
 } from '../data/locatorScene';
 import { normalizeLocatorQualityPreference } from '../utils/qualityTier';
-import { validateLayoutObjects } from '../utils/layoutValidation';
+import { nextShelfNumber, validateLayoutObjects } from '../utils/layoutValidation';
+import { readLocatorRecovery as readAutosave, writeLocatorRecovery as writeAutosave, clearLocatorRecovery as clearAutosaveStorage } from '../utils/locatorRecovery';
 
-const AUTOSAVE_STORAGE_KEY = 'limen:locator3d:autosave:v1';
 const MAX_HISTORY_ENTRIES = 50;
 
 function cloneObjects(objects) {
@@ -31,44 +31,6 @@ function cloneObjects(objects) {
         wallEnd: object.wallEnd ? [...object.wallEnd] : undefined,
         wallStart: object.wallStart ? [...object.wallStart] : undefined,
     }));
-}
-
-function readAutosave() {
-    try {
-        if (typeof localStorage === 'undefined') {
-            return null;
-        }
-
-        const parsed = JSON.parse(localStorage.getItem(AUTOSAVE_STORAGE_KEY) || 'null');
-        return Array.isArray(parsed?.objects) ? parsed : null;
-    } catch {
-        return null;
-    }
-}
-
-function writeAutosave(objects) {
-    try {
-        if (typeof localStorage === 'undefined') {
-            return;
-        }
-
-        localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify({
-            createdAt: new Date().toISOString(),
-            objects: cloneObjects(objects),
-        }));
-    } catch {
-        // Storage may be unavailable in private browsing or embedded contexts.
-    }
-}
-
-function clearAutosaveStorage() {
-    try {
-        if (typeof localStorage !== 'undefined') {
-            localStorage.removeItem(AUTOSAVE_STORAGE_KEY);
-        }
-    } catch {
-        // Ignore storage cleanup failures.
-    }
 }
 
 function createInitialState() {
@@ -249,6 +211,7 @@ export const useLocator3DStore = create((set, get) => ({
                 activeFloor: state.activeFloor,
                 count,
             });
+            if (isShelfObject(object)) object.shelfNumber = nextShelfNumber(state.sceneObjects, object);
             const sceneObjects = [...state.sceneObjects, object];
             return applyLayoutChange(state, sceneObjects, {
                 selectedObjectIds: [object.id],
@@ -321,7 +284,8 @@ export const useLocator3DStore = create((set, get) => ({
     animatePathFromCounter: () => set((state) => ({
         pathAnimationRequest: state.pathAnimationRequest + 1,
     })),
-    clearLocatedProduct: () => set({ cameraPresetRequest: null, locatedProduct: null, selectedProductForLocation: null }),
+    clearLocatedProduct: () => set((state) => ({ cameraPresetRequest: null, locatedProduct: null, selectedProductForLocation: null,
+        selectedObjectId: state.isDesignMode ? state.selectedObjectId : null, selectedObjectIds: state.isDesignMode ? state.selectedObjectIds : [] })),
     clearSelection: () => set({ selectedObjectIds: [], selectedObjectId: null }),
     clearAutosave: () => {
         clearAutosaveStorage();
@@ -346,6 +310,11 @@ export const useLocator3DStore = create((set, get) => ({
             isLocked: false,
         }));
         const nextObjects = [...sceneObjects, ...duplicates];
+        const allocated = [...sceneObjects];
+        for (const duplicate of duplicates) {
+            if (isShelfObject(duplicate)) duplicate.shelfNumber = nextShelfNumber(allocated, duplicate);
+            allocated.push(duplicate);
+        }
         const past = [...(get().history?.past || []), cloneObjects(sceneObjects)].slice(-MAX_HISTORY_ENTRIES);
         writeAutosave(nextObjects);
         set({

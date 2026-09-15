@@ -54,3 +54,12 @@ test('database failures remain sanitized', async () => {
   const result = await request({ role: 'admin' }, { action: 'load' }, async () => ({ error: { message: 'secret database host' } }));
   assert.equal(result.status, 500); assert.doesNotMatch(JSON.stringify(result.body), /secret/);
 });
+
+test('duplicate or invalid shelf labels fail before writing; labels may repeat on different floors', async () => {
+  const shelf = { id: 'a', type: 'shelf', floor: 1, aisle: 'A', shelfNumber: 1 };
+  for (const second of [{ ...shelf, id: 'b', aisle: ' a ' }, { ...shelf, id: 'b', shelfNumber: -1 }, { ...shelf, id: 'b', aisle: '' }]) {
+    const result = await request({ role: 'admin' }, { action: 'save', payload: { objects: [shelf, second] } }, () => { assert.fail('Must not write invalid shelves'); });
+    assert.equal(result.status, 400);
+  }
+  assert.equal((await request({ role: 'admin' }, { action: 'save', payload: { objects: [shelf, { ...shelf, id: 'b', floor: 2 }] } })).status, 200);
+});

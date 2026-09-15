@@ -501,7 +501,7 @@ export function formatProductLocationLabel(location) {
         return '';
     }
 
-    return `Product located \u2192 Aisle ${normalizeAisle(location.aisle)} \u2022 Shelf ${location.shelfNumber} \u2022 Bin ${location.binNumber}`;
+    return `Floor ${location.floor || 1} → Aisle ${normalizeAisle(location.aisle)} → Shelf ${location.shelfNumber} → Layer ${location.layerNumber || 1} → Bin ${location.binNumber}`;
 }
 
 export function locationBelongsToShelf(location, shelf) {

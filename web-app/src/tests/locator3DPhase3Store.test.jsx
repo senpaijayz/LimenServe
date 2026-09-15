@@ -69,7 +69,7 @@ describe('3D Locator Phase 3 store behavior', () => {
 
         expect(useLocator3DStore.getState().activeFloor).toBe(2);
         expect(useLocator3DStore.getState().selectedObjectId).toBe('shelf-4-b');
-        expect(useLocator3DStore.getState().locatedProduct.locationLabel).toBe('Product located → Aisle C • Shelf 3 • Bin 4');
+        expect(useLocator3DStore.getState().locatedProduct.locationLabel).toBe('Floor 2 → Aisle C → Shelf 3 → Layer 1 → Bin 4');
     });
 
     it('requests camera centering for the selected object', () => {

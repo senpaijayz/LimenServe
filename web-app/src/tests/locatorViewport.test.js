@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { getFloorBounds, getOverviewCamera } from '../modules/locator3d/utils/locatorViewport';
+import { getFloorBounds, getObjectFitCamera, getOverviewCamera } from '../modules/locator3d/utils/locatorViewport';
 import { getShelfObjectByLocation, locationBelongsToShelf } from '../modules/locator3d/data/locatorScene';
 
 const floor = { id: 'floor', type: 'floor', floors: [1, 2], position: [10, 0, -5], dimensions: { width: 24, depth: 16, height: 4.5 } };
 
 describe('Room-aware locator camera', () => {
+    it('fits a selected shelf inside portrait and desktop views at its own elevation', () => {
+        const shelf = { position: [3, 5, 2], dimensions: { width: 6, height: 3, depth: 1 } };
+        for (const aspect of [0.5, 1, 1.8]) {
+            const target = getObjectFitCamera(shelf, aspect);
+            const distance = Math.hypot(...target.position.map((value, index) => value - target.lookAt[index]));
+            const halfFov = Math.min(23 * Math.PI / 180, Math.atan(Math.tan(23 * Math.PI / 180) * aspect));
+            expect(distance * Math.sin(halfFov)).toBeGreaterThan(Math.hypot(6, 3, 1) / 2);
+            expect(target.lookAt).toEqual([3, 6.5, 2]);
+        }
+    });
     it('keeps a resized room centred and fits further away on portrait screens', () => {
         const desktop = getOverviewCamera([floor], 1, 4.5, 1.8);
         const mobile = getOverviewCamera([floor], 1, 4.5, 0.5);

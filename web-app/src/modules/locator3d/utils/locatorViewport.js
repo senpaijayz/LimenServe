@@ -1,4 +1,19 @@
 // Shared by the camera and the floor plan so resized/rotated layouts stay in view.
+export function getObjectFitCamera(object, aspect = 1.5) {
+    if (!object) return null;
+    const width = Number(object.dimensions?.width || 1);
+    const depth = Number(object.dimensions?.depth || 1);
+    const height = Number(object.dimensions?.height || 1);
+    const radius = Math.hypot(width, depth, height) / 2 + 0.4;
+    const halfFov = Math.min(23 * Math.PI / 180, Math.atan(Math.tan(23 * Math.PI / 180) * Math.max(0.2, aspect)));
+    const distance = radius / Math.sin(halfFov) * 1.08;
+    const direction = [1, 0.7, 1];
+    const length = Math.hypot(...direction);
+    const [x = 0, y = 0, z = 0] = object.position || [];
+    const lookAt = [x, y + height / 2, z];
+    return { lookAt, position: lookAt.map((value, index) => value + direction[index] / length * distance) };
+}
+
 export function getFloorBounds(objects, activeFloor = 1) {
     const visible = objects.filter((object) => (
         object.floors?.includes(activeFloor) || Number(object.floor || 1) === activeFloor || object.type === 'stairs'

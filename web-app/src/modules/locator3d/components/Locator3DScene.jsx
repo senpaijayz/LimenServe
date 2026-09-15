@@ -15,8 +15,9 @@ import {
 import { useLocator3DStore } from '../store/useLocator3DStore';
 import { getLocatorQualityCapabilities, getLocatorQualityProfile } from '../utils/qualityTier';
 import { buildObstacleAwarePath } from '../utils/locatorPathfinding';
-import { getFloorBounds, getOverviewCamera } from '../utils/locatorViewport';
+import { getFloorBounds, getObjectFitCamera, getOverviewCamera } from '../utils/locatorViewport';
 import { getFloorSurface, rectanglePolygon, subtractFloorOpenings } from '../utils/stairOpening';
+import { createFrameSampler, sampleFrameQuality } from '../utils/frameQuality';
 
 const SELECTED_EDGE = '#0ea5e9';
 const SELECTED_EMISSIVE = '#38bdf8';
@@ -26,6 +27,7 @@ const LOCATED_EMISSIVE = '#fde047';
 const SHARED_FLOOR_TYPES = new Set(['floor']);
 const LocatorQualityContext = createContext(getLocatorQualityProfile('high'));
 const LocatorInteractionContext = createContext({ onShelfClick: null });
+const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
 
 const CAMERA_TARGETS = {
     1: {
@@ -54,17 +56,15 @@ function buildTopDownCameraTarget(activeFloor, floorHeight, sceneObjects, aspect
     };
 }
 
-function buildObjectCameraTarget(object, offset = [5.8, 3.6, 5.8]) {
+function buildObjectCameraTarget(object, aspect) {
     if (!object) {
         return null;
     }
 
-    const [x, y, z] = object.position;
-    const height = Number(object.dimensions?.height || 1);
-
+    const target = getObjectFitCamera(object, aspect);
     return {
-        lookAt: new THREE.Vector3(x, y + (height / 2), z),
-        position: new THREE.Vector3(x + offset[0], y + height + offset[1], z + offset[2]),
+        lookAt: new THREE.Vector3(...target.lookAt),
+        position: new THREE.Vector3(...target.position),
     };
 }
 
@@ -86,8 +86,7 @@ function Block({
     const active = selected || located;
 
     return (
-        <mesh castShadow receiveShadow={receiveShadow} position={position} rotation={rotation}>
-            <boxGeometry args={args} />
+        <mesh castShadow receiveShadow={receiveShadow} position={position} rotation={rotation} geometry={UNIT_BOX} scale={args}>
             <meshStandardMaterial
                 color={located ? '#fff7a8' : selected ? '#1e3a5f' : color}
                 emissive={located ? LOCATED_EMISSIVE : selected ? SELECTED_EMISSIVE : emissive}
@@ -198,12 +197,13 @@ function HighlightHalo({ object }) {
 }
 
 function ObjectInfoBadge({ object }) {
+    const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const productLocations = useLocator3DStore((state) => state.productLocations);
     const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
     const quality = useContext(LocatorQualityContext);
 
-    if (!quality.labels || isDesignMode || selectedObjectId !== object.id) {
+    if (!quality.labels || isDesignMode || selectedObjectId !== object.id || locatedProduct?.shelfObjectId === object.id) {
         return null;
     }
 
@@ -634,20 +634,45 @@ function ProductMarker({ highlighted, location, position }) {
     );
 }
 
+function InstancedShelfBins({ levels, positions, slotWidth, depth }) {
+    const mesh = useRef();
+    useEffect(() => {
+        if (!mesh.current?.setMatrixAt) return;
+        const matrix = new THREE.Matrix4();
+        const rotation = new THREE.Quaternion();
+        const size = new THREE.Vector3(Math.max(slotWidth * 0.72, 0.12), 0.12, 0.22);
+        let index = 0;
+        for (const level of levels) for (const [column, x] of positions.entries()) {
+            matrix.compose(new THREE.Vector3(x, level + 0.17, -depth / 3), rotation, size);
+            mesh.current.setMatrixAt(index, matrix);
+            mesh.current.setColorAt(index++, new THREE.Color(column % 2 ? '#60a5fa' : '#93c5fd'));
+        }
+        mesh.current.instanceMatrix.needsUpdate = true;
+        if (mesh.current.instanceColor) mesh.current.instanceColor.needsUpdate = true;
+        mesh.current.computeBoundingSphere();
+    }, [depth, levels, positions, slotWidth]);
+    return <instancedMesh ref={mesh} args={[UNIT_BOX, undefined, levels.length * positions.length]} castShadow receiveShadow>
+        <meshStandardMaterial roughness={0.56} metalness={0.1} />
+    </instancedMesh>;
+}
+
 function ShelfObject({ object, onTransformingChange }) {
     const productLocations = useLocator3DStore((state) => state.productLocations);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const quality = useContext(LocatorQualityContext);
+    const xrayMode = useLocator3DStore((state) => state.xrayMode);
+    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
+    const recentlyReceived = useLocator3DStore((state) => state.recentlyReceivedStock);
     const layers = Math.min(12, Math.max(1, Math.round(Number(object.layerCount ?? (object.type === 'shelf-4-layer' ? 4 : 2)))));
     const binCount = object.binCount ?? 6;
     const width = Number(object.dimensions?.width || 3.2);
     const depth = Number(object.dimensions?.depth || 0.9);
     const height = Number(object.dimensions?.height || (0.72 + layers * 0.46));
-    const shelfLevels = Array.from({ length: layers }, (_, index) => 0.26 + ((height - 0.48) / Math.max(1, layers - 1)) * index);
+    const shelfLevels = useMemo(() => Array.from({ length: layers }, (_, index) => 0.26 + ((height - 0.48) / Math.max(1, layers - 1)) * index), [height, layers]);
     const frameColor = '#4A5568';
     const accentColor = '#3182CE';
     const slotWidth = width / binCount;
-    const slotPositions = Array.from({ length: binCount }, (_, index) => (-width / 2) + slotWidth / 2 + index * slotWidth);
+    const slotPositions = useMemo(() => Array.from({ length: binCount }, (_, index) => (-width / 2) + slotWidth / 2 + index * slotWidth), [binCount, slotWidth, width]);
     const shelfLocations = productLocations.filter((location) => locationBelongsToShelf(location, object));
 
     return (
@@ -680,12 +705,12 @@ function ShelfObject({ object, onTransformingChange }) {
                                 position={[0, level, 0]}
                                 selected={selected}
                             />
-                            {quality.tier !== 'low' && slotPositions.map((x, index) => (
+                            {quality.tier !== 'low' && (selected || located || xrayMode) && slotPositions.map((x, index) => (
                                 <Block
                                     key={`${level}-${index}`}
                                     args={[Math.max(slotWidth * 0.72, 0.12), 0.12, 0.22]}
                                     color={index % 2 === 0 ? '#93c5fd' : '#60a5fa'}
-                                    located={locatedProduct?.shelfObjectId === object.id && Number(locatedProduct.binNumber) === index + 1}
+                                    located={locatedProduct?.shelfObjectId === object.id && Number(locatedProduct.binNumber) === index + 1 && shelfLevels[Number(locatedProduct.layerNumber || 1) - 1] === level}
                                     locked={locked}
                                     position={[x, level + 0.17, -depth / 3]}
                                     selected={selected}
@@ -710,10 +735,11 @@ function ShelfObject({ object, onTransformingChange }) {
                         position={[0, height + 0.14, 0]}
                         selected={selected}
                     />
-                    <Label position={[0, height + 0.38, depth / 2 + 0.18]} tone="floor">
+                    {quality.tier !== 'low' && !selected && !located && !xrayMode && <InstancedShelfBins key={`${layers}-${binCount}`} levels={shelfLevels} positions={slotPositions} slotWidth={slotWidth} depth={depth} />}
+                    {isDesignMode && <Label position={[0, height + 0.38, depth / 2 + 0.18]} tone="floor">
                         {`AISLE ${normalizeAisle(object.aisle)} · ${object.binCount || 0} BINS`}
-                    </Label>
-                    {shelfLocations.map((location, index) => {
+                    </Label>}
+                    {shelfLocations.filter((location) => isDesignMode || location.productId === locatedProduct?.productId || (recentlyReceived?.items?.length && useLocator3DStore.getState().isRecentlyReceivedProduct(location.productId || location.sku))).map((location, index) => {
                         const safeBin = Math.min(binCount, Math.max(1, Number(location.binNumber || 1)));
                         const savedLayer = Number(location.layerNumber || 0);
                         const markerLevel = savedLayer > 0
@@ -730,9 +756,9 @@ function ShelfObject({ object, onTransformingChange }) {
                         );
                     })}
                     <Block args={[width + 0.4, 0.18, depth + 0.22]} color="#111827" located={located} locked={locked} position={[0, 0.09, 0]} selected={selected} />
-                    <Label position={[0, height + 0.18, depth / 2 + 0.28]} rotation={[-0.5, 0, 0]} testId={`locator-label-${object.id}`}>
+                    {(isDesignMode || located || selected || quality.tier === 'high') && <Label position={[0, height + 0.18, depth / 2 + 0.28]} rotation={[-0.5, 0, 0]} testId={`locator-label-${object.id}`}>
                         {`Aisle ${object.aisle} Shelf ${object.shelfNumber}`}
-                    </Label>
+                    </Label>}
                 </>
             )}
         </TransformableObject>
@@ -1107,7 +1133,7 @@ function CameraRig({ controlsRef, isTransforming }) {
         if (cameraPresetRequest?.preset === 'selected') {
             const selectedObject = sceneObjects.find((object) => object.id === selectedObjectId)
                 ?? sceneObjects.find((object) => object.id === locatedProduct?.shelfObjectId);
-            const selectedTarget = buildObjectCameraTarget(selectedObject);
+            const selectedTarget = buildObjectCameraTarget(selectedObject, aspect);
 
             if (selectedTarget) {
                 return selectedTarget;
@@ -1115,6 +1141,8 @@ function CameraRig({ controlsRef, isTransforming }) {
         }
 
         if (locatedProduct?.targetPosition) {
+            const shelf = sceneObjects.find((object) => object.id === locatedProduct.shelfObjectId);
+            if (shelf) return buildObjectCameraTarget(shelf, aspect);
             const [x, y, z] = locatedProduct.targetPosition;
 
             return {
@@ -1126,7 +1154,7 @@ function CameraRig({ controlsRef, isTransforming }) {
         const focusedObject = cameraFocusRequest?.objectId
             ? sceneObjects.find((object) => object.id === cameraFocusRequest.objectId)
             : null;
-        const focusedTarget = buildObjectCameraTarget(focusedObject);
+        const focusedTarget = buildObjectCameraTarget(focusedObject, aspect);
 
         if (focusedTarget) {
             return focusedTarget;
@@ -1276,7 +1304,16 @@ class CanvasErrorBoundary extends Component {
     }
 }
 
-function SceneContents({ onContextLost, onShelfClick, quality }) {
+function MeasuredQuality({ quality, enabled, onDowngrade }) {
+    const sampler = useRef(createFrameSampler());
+    useFrame((_state, delta) => {
+        const next = sampleFrameQuality(sampler.current, delta, quality.tier, enabled && !document.hidden);
+        if (next) onDowngrade(next);
+    });
+    return null;
+}
+
+function SceneContents({ onContextLost, onShelfClick, quality, autoQuality, onDowngrade }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const floorHeight = useSceneFloorHeight();
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
@@ -1295,6 +1332,7 @@ function SceneContents({ onContextLost, onShelfClick, quality }) {
         <LocatorInteractionContext.Provider value={{ onShelfClick }}>
             <LocatorQualityContext.Provider value={quality}>
             <RenderScheduler />
+            <MeasuredQuality quality={quality} enabled={autoQuality} onDowngrade={onDowngrade} />
             <WebGLContextLossHandler onContextLost={onContextLost} />
             <color args={['#edf2f7']} attach="background" />
             <ambientLight intensity={0.7} />
@@ -1379,9 +1417,14 @@ export default function Locator3DScene({ onShelfClick = null }) {
     const clearSelection = useLocator3DStore((state) => state.clearSelection);
     const qualityPreference = useLocator3DStore((state) => state.qualityPreference);
     const [webglFailed, setWebglFailed] = useState(false);
+    const [measuredTier, setMeasuredTier] = useState(null);
     const quality = useMemo(
-        () => getLocatorQualityProfile(qualityPreference, getLocatorQualityCapabilities()),
-        [qualityPreference],
+        () => {
+            const base = getLocatorQualityProfile(qualityPreference, getLocatorQualityCapabilities());
+            const rank = { high: 2, medium: 1, low: 0 };
+            return qualityPreference === 'auto' && measuredTier && rank[measuredTier] < rank[base.tier] ? getLocatorQualityProfile(measuredTier) : base;
+        },
+        [qualityPreference, measuredTier],
     );
 
     if (webglFailed) {
@@ -1401,7 +1444,7 @@ export default function Locator3DScene({ onShelfClick = null }) {
                 style={{ touchAction: 'none' }}
             >
                 <Suspense fallback={null}>
-                    <SceneContents onContextLost={() => setWebglFailed(true)} onShelfClick={onShelfClick} quality={quality} />
+                    <SceneContents onContextLost={() => setWebglFailed(true)} onShelfClick={onShelfClick} quality={quality} autoQuality={qualityPreference === 'auto'} onDowngrade={setMeasuredTier} />
                 </Suspense>
             </Canvas>
         </CanvasErrorBoundary>

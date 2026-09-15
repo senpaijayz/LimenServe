@@ -194,6 +194,40 @@ Recommended production order:
 
 ### September 15, 2026 locator rollout update
 
+#### Locator priorities 4–7
+
+- The locating workflow shows a single readable **Floor → Aisle → Shelf → Layer
+  → Bin** result with **Fit Selection**. Fitting accounts for shelf dimensions
+  and portrait screens; from the floor plan it opens the fitted 3D view.
+- Design Mode's shelf inspector edits aisle and shelf number. Duplicate labels
+  within a floor/aisle are rejected by both the UI and protected API. Adding or
+  duplicating shelves allocates an unused number. Occupied-shelf deletion and
+  database assignment validation remain enforced.
+- Recovery uses `limen:locator3d:autosave:v2:<user>:<layout>` and records its base
+  revision. Another user's or layout's recovery is never offered. Older v1
+  snapshots are retained locally but not automatically adopted because their
+  owner is unknown. A revision mismatch is flagged for review. Browser recovery
+  is not a backup, and storage quota/private-mode failures can prevent it.
+- Repeated fixture boxes share geometry. Ordinary bins are instanced per shelf;
+  selected/x-ray bins retain individual rendering for interaction/highlighting.
+  Redundant labels and non-selected product markers are reduced; recently
+  received markers remain visible. A fixture-based browser check rendered 112
+  bins in four instanced batches. This is not an on-device FPS benchmark.
+- Auto quality starts from device capabilities and can step down after two
+  consecutive 45-frame windows below 28 FPS, with an eight-active-second
+  cooldown. Idle/hidden frames do not count. Manual quality stays under the
+  user's control; Auto does not repeatedly raise/lower quality during a session.
+- Per the owner's revised scope, this is a useful **3D store model**, not a
+  measured replica. Existing floor plans, shelf positions and stairs are kept;
+  physical measurement and staff trials are not claimed as completed.
+
+No additional SQL migration or environment setting is needed for priorities
+4–7. Deploy the tested main commit through the existing Render/Vercel Git
+integrations. A rollback may use the preceding normalized-adapter release;
+do not revert to legacy direct database writes. v2 browser recovery keys can
+remain in place during rollback. Actual iPhone frame-rate and signed-in
+production acceptance checks remain manual verification gaps.
+
 This update supersedes the older locator rollout status below. The current 3D
 editor and inventory location picker use the protected Render endpoint
 `POST /api/locator/command`, backed by the normalized `stockroom` hierarchy.

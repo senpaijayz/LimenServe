@@ -5,6 +5,7 @@ import { ToastProvider } from '../components/ui/Toast';
 import AuthContext from '../context/auth-context';
 import { resetLocator3DStore, useLocator3DStore } from '../modules/locator3d/store/useLocator3DStore';
 import { LOCATOR_SCENE_OBJECTS } from '../modules/locator3d/data/locatorScene';
+import { configureLocatorRecovery } from '../modules/locator3d/utils/locatorRecovery';
 
 vi.mock('../modules/locator3d/components/Locator3DScene', () => ({ default: () => <div data-testid="scene" /> }));
 vi.mock('../services/catalogApi', () => ({ getFullProductCatalog: vi.fn(async () => [{ id: 'part-1', name: 'Oil Filter', sku: 'OF-1' }]) }));
@@ -18,7 +19,7 @@ import { listStoreLayouts, loadStoreLayout, saveStoreLayout, setStoreLayoutPrior
 import Locator3DAdmin from '../modules/locator3d/pages/Locator3DAdmin';
 
 function mount(isAdmin = true) {
-    return render(<MemoryRouter><AuthContext.Provider value={{ isAdmin }}><ToastProvider><Locator3DAdmin /></ToastProvider></AuthContext.Provider></MemoryRouter>);
+    return render(<MemoryRouter><AuthContext.Provider value={{ isAdmin, user: { id: 'test-admin' } }}><ToastProvider><Locator3DAdmin /></ToastProvider></AuthContext.Provider></MemoryRouter>);
 }
 async function loaded() {
     await waitFor(() => expect(loadStoreLayout).toHaveBeenCalled());
@@ -29,6 +30,7 @@ describe('Stockroom workspace workflows', () => {
     beforeEach(() => {
         vi.resetAllMocks();
         resetLocator3DStore();
+        configureLocatorRecovery({ userId: 'test-admin', layoutId: 'layout-1', revision: 4 });
         listStoreLayouts.mockResolvedValue([{ layoutName: 'main-store' }, { layoutName: 'Workshop', isPriority: true }]);
         loadStoreLayout.mockImplementation(async (name) => ({
             id: 'layout-1', revision: 4, status: 'published', layoutName: name, layoutData: { objects: LOCATOR_SCENE_OBJECTS },

@@ -15,6 +15,18 @@ export function createLocatorRouter({ client = supabaseAdmin } = {}) {
     if (!['list', 'load'].includes(action) && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Only administrators can change the stockroom.' });
     }
+    if (action === 'save' && Array.isArray(payload.objects)) {
+      const identifiers = new Set();
+      for (const shelf of payload.objects.filter((object) => ['shelf', 'shelf-2-layer', 'shelf-4-layer', 'parts-cabinet'].includes(object?.type))) {
+        const aisle = String(shelf.aisle || '').replace(/^aisle\s+/i, '').trim().toUpperCase();
+        const number = Number(shelf.shelfNumber);
+        const key = `${Number(shelf.floor || 1)}:${aisle}:${number}`;
+        if (!aisle || aisle.length > 24 || !Number.isInteger(number) || number < 1 || number > 9999 || identifiers.has(key)) {
+          return res.status(400).json({ error: 'Each shelf needs a unique floor, aisle and shelf number (1–9999). Check duplicated shelf identifiers.' });
+        }
+        identifiers.add(key);
+      }
+    }
     try {
       const { data, error } = await client.rpc('limen_locator_command', {
         p_action: action,

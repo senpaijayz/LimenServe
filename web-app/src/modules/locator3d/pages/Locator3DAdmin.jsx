@@ -53,6 +53,7 @@ import {
     isShelfObject,
     locationBelongsToShelf,
     normalizeAisle,
+    formatProductLocationLabel,
 } from '../data/locatorScene';
 import {
     assignProductLocation,
@@ -63,7 +64,9 @@ import {
     saveStoreLayout,
     setStoreLayoutPriority,
 } from '../services/locator3DApi';
-import { getLocatorAutosave, useLocator3DStore } from '../store/useLocator3DStore';
+import { getLocatorAutosave, resetLocator3DStore, useLocator3DStore } from '../store/useLocator3DStore';
+import { configureLocatorRecovery, getRecoveryContext, writeLocatorRecovery } from '../utils/locatorRecovery';
+import { validateShelfIdentifiers } from '../utils/layoutValidation';
 
 const libraryIconMap = {
     Archive: Box,
@@ -108,14 +111,7 @@ function formatLocation(location) {
         return 'Location not assigned';
     }
 
-    const parts = [
-        location.floor ? 'Floor ' + location.floor : null,
-        location.aisle ? 'Aisle ' + normalizeAisle(location.aisle) : null,
-        location.shelfNumber ? 'Shelf ' + location.shelfNumber : null,
-        location.binNumber ? 'Bin ' + location.binNumber : null,
-    ].filter(Boolean);
-
-    return parts.join(' · ') || 'Location not assigned';
+    return formatProductLocationLabel(location);
 }
 
 function Button({ children, className = '', tone = 'secondary', type = 'button', ...props }) {
@@ -272,7 +268,7 @@ function ProductSearch({ isLoading, notice, onLocateProduct, productLocations, p
                 )}
             </div>
 
-            {notice.message && (
+            {notice.message && notice.tone !== 'success' && (
                 <p className={cx(
                     'mt-2 text-xs font-medium',
                     notice.tone === 'warning' ? 'text-amber-700' : notice.tone === 'success' ? 'text-emerald-700' : 'text-slate-500',
@@ -618,22 +614,25 @@ function FloorInfo() {
     );
 }
 
-function LocatedProductNote({ notice }) {
+function LocatedProductNote({ notice, onFit }) {
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
+    const focus = useLocator3DStore((state) => state.centerCameraOnSelected);
+    const clear = useLocator3DStore((state) => state.clearLocatedProduct);
 
     if (!locatedProduct) {
         return null;
     }
 
     return (
-        <div className="pointer-events-none absolute left-4 top-4 z-10 max-w-[min(320px,calc(100%-8rem))] rounded-xl border border-amber-200 bg-amber-50/95 px-3.5 py-3 shadow-sm backdrop-blur">
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
             <span className="flex items-start gap-2">
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                 <span className="min-w-0">
-                    <span className="block truncate text-xs font-bold text-amber-950">{locatedProduct.productName || 'Product located'}</span>
-                    <span className="mt-0.5 block truncate text-[11px] font-medium text-amber-700">{locatedProduct.locationLabel || notice.message}</span>
+                    <span className="block break-words text-sm font-bold text-amber-950">{locatedProduct.productName || 'Product located'}</span>
+                    <span className="mt-1 block text-sm font-medium text-amber-900">{locatedProduct.locationLabel || notice.message}</span>
                 </span>
             </span>
+            <div className="flex gap-2"><Button onClick={() => { onFit?.(); focus(); }}><Maximize2 className="h-4 w-4" />Fit Selection</Button><Button onClick={clear} aria-label="Clear located part"><X className="h-4 w-4" /></Button></div>
         </div>
     );
 }
@@ -915,9 +914,12 @@ function ShelfInspector({ onOpenAssignment, productLocations, products }) {
 }
 
 function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shelf }) {
+    const { warning } = useToast();
     const updateShelfProperties = useLocator3DStore((state) => state.updateShelfProperties);
     const [nameDraft, setNameDraft] = useState(shelf.name || '');
     const [descriptionDraft, setDescriptionDraft] = useState(shelf.description || '');
+    const [aisleDraft, setAisleDraft] = useState(shelf.aisle || '');
+    const [numberDraft, setNumberDraft] = useState(shelf.shelfNumber || 1);
 
     const assignedProducts = useMemo(() => {
         if (!shelf || !isShelfObject(shelf)) {
@@ -936,14 +938,19 @@ function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shel
 
     const layerCount = Math.max(1, Number(shelf.layerCount || 1));
     const saveDetails = () => {
+        const candidate = { ...shelf, aisle: normalizeAisle(aisleDraft), shelfNumber: Number(numberDraft) };
+        const issue = validateShelfIdentifiers(useLocator3DStore.getState().sceneObjects.map((object) => object.id === shelf.id ? candidate : object))[0];
+        if (issue) { warning(issue.message); return; }
         updateShelfProperties(shelf.id, {
+            aisle: candidate.aisle,
+            shelfNumber: candidate.shelfNumber,
             description: descriptionDraft,
             name: nameDraft,
         });
     };
 
     return (
-        <aside aria-label="Shelf inspector" className="pointer-events-auto absolute bottom-4 right-4 z-30 w-[min(360px,calc(100%-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-[0_20px_50px_rgba(15,23,42,0.22)] backdrop-blur">
+        <aside aria-label="Shelf inspector" className="pointer-events-auto absolute bottom-4 right-4 z-30 max-h-[calc(100%-2rem)] w-[min(360px,calc(100%-2rem))] overflow-y-auto rounded-2xl border border-slate-200 bg-white/95 shadow-[0_20px_50px_rgba(15,23,42,0.22)] backdrop-blur">
             <div className="border-b border-slate-100 bg-gradient-to-r from-blue-50 to-sky-50 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                     <div>
@@ -974,6 +981,10 @@ function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shel
                         />
                     </span>
                 </label>
+                <div className="grid grid-cols-2 gap-2">
+                    <label className="text-xs font-semibold text-slate-600">Aisle<input aria-label="Shelf aisle" className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-200 px-2" maxLength={24} value={aisleDraft} onChange={(event) => setAisleDraft(event.target.value)} /></label>
+                    <label className="text-xs font-semibold text-slate-600">Shelf number<input aria-label="Shelf number" className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-200 px-2" type="number" min="1" max="9999" step="1" value={numberDraft} onChange={(event) => setNumberDraft(event.target.value)} /></label>
+                </div>
                 <label className="block text-[10px] font-black uppercase tracking-[0.12em] text-slate-500" htmlFor="shelf-inspector-description">
                     Location description
                     <textarea
@@ -1283,10 +1294,20 @@ export default function Locator3DAdmin() {
     const saveInFlight = useRef(false);
     const loadSequence = useRef(0);
     const canEditLayout = Boolean(authContext?.isAdmin);
+    const recoveryUserId = authContext?.user?.id;
 
     useEffect(() => {
+        if (getRecoveryContext()?.userId !== recoveryUserId) resetLocator3DStore();
+        configureLocatorRecovery(null);
+        return () => configureLocatorRecovery(null);
+    }, [recoveryUserId]);
+
+    useEffect(() => {
+        const previous = getRecoveryContext();
+        configureLocatorRecovery(canEditLayout ? { userId: recoveryUserId, layoutId: currentLayout?.id, revision: currentLayout?.revision } : null);
+        if (previous?.userId === recoveryUserId && previous?.layoutId && currentLayout?.id && previous.layoutId !== currentLayout.id && useLocator3DStore.getState().hasUnsavedChanges) writeLocatorRecovery(useLocator3DStore.getState().sceneObjects);
         setAutosaveSnapshot(getLocatorAutosave());
-    }, []);
+    }, [canEditLayout, currentLayout?.id, currentLayout?.revision, recoveryUserId]);
 
     useEffect(() => {
         const onBeforeUnload = (event) => {
@@ -1306,6 +1327,8 @@ export default function Locator3DAdmin() {
             warning('Wait for the saved layout to finish loading before saving.');
             return false;
         }
+        const identifierIssue = validateShelfIdentifiers(sceneObjects)[0];
+        if (identifierIssue) { warning(identifierIssue.message); return false; }
         saveInFlight.current = true;
         const safeName = String(name || LOCATOR_LAYOUT_NAME).trim() || LOCATOR_LAYOUT_NAME;
         const priority = options.priority === true;
@@ -1414,8 +1437,7 @@ export default function Locator3DAdmin() {
             message: 'Located ' + details.name + ' · ' + formatLocation(mappedLocation),
             tone: 'success',
         });
-        success('Product located in the 3D stockroom.');
-    }, [locateProduct, productLocations, products, setSelectedProductForLocation, success, warning]);
+    }, [locateProduct, productLocations, products, setSelectedProductForLocation, warning]);
 
     const handleLoadLayout = useCallback(async (name = layoutName, discard = false, publishedOnly = false) => {
         const safeName = String(name || LOCATOR_LAYOUT_NAME).trim() || LOCATOR_LAYOUT_NAME;
@@ -1437,7 +1459,6 @@ export default function Locator3DAdmin() {
             if (savedLayout?.layoutData) {
                 setCurrentLayout(savedLayout);
                 loadLayoutData(savedLayout.layoutData);
-                markLayoutSaved();
                 setLayoutName(savedLayout.layoutName || safeName);
                 if (savedLayout.isPriority) {
                     setPriorityLayoutName(savedLayout.layoutName || safeName);
@@ -1700,6 +1721,8 @@ export default function Locator3DAdmin() {
                 }}
                 snapshot={autosaveSnapshot}
             />
+            {autosaveSnapshot && autosaveSnapshot.revision !== currentLayout?.revision && <p className="text-sm text-amber-800">This recovery copy is based on an older revision. Compare it with the saved design before publishing.</p>}
+            <LocatedProductNote notice={locationNotice} onFit={() => setViewMode('3d')} />
 
             <DesignToolbar
                     isSaving={isSavingLayout}
@@ -1723,7 +1746,7 @@ export default function Locator3DAdmin() {
                 {viewMode === '2d'
                     ? <StockroomFloorPlan onShelfClick={setAssignmentShelf} />
                     : <Locator3DScene onShelfClick={setAssignmentShelf} />}
-                {viewMode === '3d' && <><LocatedProductNote notice={locationNotice} /><FloorInfo /></>}
+                {viewMode === '3d' && <FloorInfo />}
                 <ViewportControls canvasShellRef={canvasShellRef} viewMode={viewMode} />
                 {isLoadingLayout && (
                     <div aria-live="polite" className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-slate-950/35 backdrop-blur-sm" role="status">
