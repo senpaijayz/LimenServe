@@ -52,7 +52,10 @@ describe('dashboard refresh feedback', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     expect(screen.getByRole('button', { name: 'Refreshing…' }).disabled).toBe(true);
-    expect(screen.getByRole('status').textContent).toContain('Refreshing analytics');
+    expect(screen.getByRole('status').textContent).toContain('Refreshing dashboard');
+    expect(screen.getByRole('status').textContent).toContain('Updating analytics');
+    expect(screen.getByRole('status').parentElement.classList.contains('fixed')).toBe(true);
+    expect(screen.getByRole('status').closest('[aria-busy]')?.getAttribute('aria-busy')).toBe('true');
 
     await act(async () => { refresh.resolve('refresh-run-id'); });
     expect(screen.getByRole('status').textContent).toContain('Loading the latest dashboard data');

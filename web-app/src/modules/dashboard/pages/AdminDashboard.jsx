@@ -18,7 +18,6 @@ import { useAuth } from '../../../context/useAuth';
 import { formatCurrency, formatNumber } from '../../../utils/formatters';
 import { getAnalyticsDashboardSnapshot, runFullAnalyticsRefresh } from '../../../services/analyticsApi';
 import { getDashboardOperationsSnapshot, summarizeDashboardOperations } from '../../../services/dashboardApi';
-import './adminDashboard.css';
 
 const SalesChart = lazy(() => import('../components/SalesChart'));
 const InventoryMovementLedger = lazy(() => import('../components/InventoryMovementLedger'));
@@ -145,7 +144,20 @@ const AdminDashboard = () => {
     const peakLeader = peakPeriods[0];
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6" aria-busy={refreshing}>
+            {refreshStage && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-primary-950/25 px-4 backdrop-blur-[2px]">
+                    <div role="status" aria-live="polite" className="w-full max-w-sm rounded-2xl border border-primary-200 bg-white px-6 py-8 text-center shadow-xl">
+                        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-800" aria-hidden="true">
+                            <RefreshCw className="h-7 w-7 animate-spin motion-reduce:animate-none" />
+                        </span>
+                        <p className="mt-5 text-lg font-semibold text-primary-950">Refreshing dashboard</p>
+                        <p className="mt-2 text-sm text-primary-600">
+                            {refreshStage === 'analytics' ? 'Updating analytics. This can take a moment.' : 'Loading the latest dashboard data…'}
+                        </p>
+                    </div>
+                </div>
+            )}
             <div className="border-b border-primary-200 pb-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
@@ -170,30 +182,20 @@ const AdminDashboard = () => {
                         )}
                     </div>
 
-                    <div className="min-w-0 space-y-2">
-                        <div className="flex flex-wrap gap-3">
-                            <Button
-                                variant="secondary"
-                                className="border-primary-200 bg-white text-primary-700 hover:bg-primary-50 disabled:!opacity-100"
-                                leftIcon={<RefreshCw className="w-4 h-4" />}
-                                isLoading={refreshing}
-                                loadingLabel="Refreshing…"
-                                onClick={handleAnalyticsRefresh}
-                            >
-                                Refresh
-                            </Button>
-                            <Link to="/reports" className="inline-flex items-center gap-2 rounded-lg bg-primary-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-900">
-                                <TrendingUp className="h-4 w-4" /> View reports
-                            </Link>
-                        </div>
-                        {refreshStage && (
-                            <div role="status" aria-live="polite" className="max-w-xs text-xs text-primary-600">
-                                <p>{refreshStage === 'analytics' ? 'Refreshing analytics… This can take a moment.' : 'Loading the latest dashboard data…'}</p>
-                                <div className="relative mt-2 h-1 overflow-hidden rounded-full bg-primary-100" aria-hidden="true">
-                                    <span className="dashboard-refresh-indicator absolute inset-y-0 left-0 w-1/3 rounded-full bg-primary-700" />
-                                </div>
-                            </div>
-                        )}
+                    <div className="flex flex-wrap gap-3">
+                        <Button
+                            variant="secondary"
+                            className="border-primary-200 bg-white text-primary-700 hover:bg-primary-50 disabled:!opacity-100"
+                            leftIcon={<RefreshCw className="w-4 h-4" />}
+                            isLoading={refreshing}
+                            loadingLabel="Refreshing…"
+                            onClick={handleAnalyticsRefresh}
+                        >
+                            Refresh
+                        </Button>
+                        <Link to="/reports" className="inline-flex items-center gap-2 rounded-lg bg-primary-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-900">
+                            <TrendingUp className="h-4 w-4" /> View reports
+                        </Link>
                     </div>
                 </div>
             </div>
