@@ -14,6 +14,8 @@
     "20260820_admin_reservation_customer_fields.sql",
     "20260828_versioned_pricelist_invariants.sql",
     "20260828_historical_sales_period_totals_invariants.sql",
-    "20260914_locator_workspace.sql"
+    "20260914_locator_workspace.sql",
+    "20260923_analytics_vehicle_make_conflict.sql",
+    "20260923_analytics_refresh_api_timeout.sql"
   ]
 }

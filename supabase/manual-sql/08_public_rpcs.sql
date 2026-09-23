@@ -61,6 +61,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public, app
+set statement_timeout = '60s'
 as $$
 begin
   if not app.is_admin() then

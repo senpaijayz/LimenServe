@@ -1034,11 +1034,12 @@ begin
   v_total := v_total + v_rows;
 
   insert into dw.dim_vehicle_model (source_model_name, make)
-  select distinct
+  select
     v.model_name,
-    coalesce(v.make, 'Mitsubishi')
+    min(coalesce(nullif(btrim(v.make), ''), 'Mitsubishi'))
   from app.vehicles v
   where coalesce(v.model_name, '') <> ''
+  group by v.model_name
   on conflict (source_model_name) do update
   set make = excluded.make;
   get diagnostics v_rows = row_count;
@@ -2081,6 +2082,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public, app
+set statement_timeout = '60s'
 as $$
 begin
   if not app.is_admin() then
