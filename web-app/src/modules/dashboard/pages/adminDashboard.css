@@ -1,0 +1,15 @@
+@keyframes dashboard-refresh-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(400%); }
+}
+
+.dashboard-refresh-indicator {
+  animation: dashboard-refresh-sweep 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-refresh-indicator {
+    animation: none;
+    width: 100%;
+  }
+}

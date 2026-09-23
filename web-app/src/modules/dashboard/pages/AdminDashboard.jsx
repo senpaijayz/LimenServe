@@ -18,6 +18,7 @@ import { useAuth } from '../../../context/useAuth';
 import { formatCurrency, formatNumber } from '../../../utils/formatters';
 import { getAnalyticsDashboardSnapshot, runFullAnalyticsRefresh } from '../../../services/analyticsApi';
 import { getDashboardOperationsSnapshot, summarizeDashboardOperations } from '../../../services/dashboardApi';
+import './adminDashboard.css';
 
 const SalesChart = lazy(() => import('../components/SalesChart'));
 const InventoryMovementLedger = lazy(() => import('../components/InventoryMovementLedger'));
@@ -52,6 +53,7 @@ const AdminDashboard = () => {
     const [operations, setOperations] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [refreshStage, setRefreshStage] = useState(null);
     const [error, setError] = useState('');
 
     const loadSnapshot = async ({ preserveCurrent = false } = {}) => {
@@ -114,15 +116,18 @@ const AdminDashboard = () => {
 
     const handleAnalyticsRefresh = async () => {
         setRefreshing(true);
+        setRefreshStage('analytics');
         setError('');
 
         try {
             await runFullAnalyticsRefresh('Manual refresh from dashboard');
+            setRefreshStage('dashboard');
             await loadSnapshot({ preserveCurrent: true });
         } catch (refreshError) {
             setError(refreshError.message || 'Unable to refresh analytics.');
         } finally {
             setRefreshing(false);
+            setRefreshStage(null);
         }
     };
 
@@ -165,19 +170,30 @@ const AdminDashboard = () => {
                         )}
                     </div>
 
-                    <div className="flex flex-wrap gap-3">
-                        <Button
-                            variant="secondary"
-                            className="border-primary-200 bg-white text-primary-700 hover:bg-primary-50"
-                            leftIcon={<RefreshCw className="w-4 h-4" />}
-                            isLoading={refreshing}
-                            onClick={handleAnalyticsRefresh}
-                        >
-                            Refresh
-                        </Button>
-                        <Link to="/reports" className="inline-flex items-center gap-2 rounded-lg bg-primary-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-900">
-                            <TrendingUp className="h-4 w-4" /> View reports
-                        </Link>
+                    <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap gap-3">
+                            <Button
+                                variant="secondary"
+                                className="border-primary-200 bg-white text-primary-700 hover:bg-primary-50 disabled:!opacity-100"
+                                leftIcon={<RefreshCw className="w-4 h-4" />}
+                                isLoading={refreshing}
+                                loadingLabel="Refreshing…"
+                                onClick={handleAnalyticsRefresh}
+                            >
+                                Refresh
+                            </Button>
+                            <Link to="/reports" className="inline-flex items-center gap-2 rounded-lg bg-primary-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-900">
+                                <TrendingUp className="h-4 w-4" /> View reports
+                            </Link>
+                        </div>
+                        {refreshStage && (
+                            <div role="status" aria-live="polite" className="max-w-xs text-xs text-primary-600">
+                                <p>{refreshStage === 'analytics' ? 'Refreshing analytics… This can take a moment.' : 'Loading the latest dashboard data…'}</p>
+                                <div className="relative mt-2 h-1 overflow-hidden rounded-full bg-primary-100" aria-hidden="true">
+                                    <span className="dashboard-refresh-indicator absolute inset-y-0 left-0 w-1/3 rounded-full bg-primary-700" />
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
