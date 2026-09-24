@@ -16,7 +16,7 @@ import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import { useAuth } from '../../../context/useAuth';
 import { formatCurrency, formatNumber } from '../../../utils/formatters';
-import { getAnalyticsDashboardSnapshot, runFullAnalyticsRefresh } from '../../../services/analyticsApi';
+import { getAnalyticsDashboardSnapshot } from '../../../services/analyticsApi';
 import { getDashboardOperationsSnapshot, summarizeDashboardOperations } from '../../../services/dashboardApi';
 
 const SalesChart = lazy(() => import('../components/SalesChart'));
@@ -52,7 +52,6 @@ const AdminDashboard = () => {
     const [operations, setOperations] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [refreshStage, setRefreshStage] = useState(null);
     const [error, setError] = useState('');
 
     const loadSnapshot = async ({ preserveCurrent = false } = {}) => {
@@ -113,20 +112,17 @@ const AdminDashboard = () => {
         };
     }, []);
 
-    const handleAnalyticsRefresh = async () => {
+    const handleDashboardRefresh = async () => {
+        if (loading || refreshing) return;
         setRefreshing(true);
-        setRefreshStage('analytics');
         setError('');
 
         try {
-            await runFullAnalyticsRefresh('Manual refresh from dashboard');
-            setRefreshStage('dashboard');
             await loadSnapshot({ preserveCurrent: true });
         } catch (refreshError) {
-            setError(refreshError.message || 'Unable to refresh analytics.');
+            setError(refreshError.message || 'Unable to refresh dashboard.');
         } finally {
             setRefreshing(false);
-            setRefreshStage(null);
         }
     };
 
@@ -145,7 +141,7 @@ const AdminDashboard = () => {
 
     return (
         <div className="space-y-6" aria-busy={refreshing}>
-            {refreshStage && (
+            {refreshing && (
                 <div className="fixed inset-0 z-[70] flex items-center justify-center bg-primary-950/25 px-4 backdrop-blur-[2px]">
                     <div role="status" aria-live="polite" className="w-full max-w-sm rounded-2xl border border-primary-200 bg-white px-6 py-8 text-center shadow-xl">
                         <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-800" aria-hidden="true">
@@ -153,7 +149,7 @@ const AdminDashboard = () => {
                         </span>
                         <p className="mt-5 text-lg font-semibold text-primary-950">Refreshing dashboard</p>
                         <p className="mt-2 text-sm text-primary-600">
-                            {refreshStage === 'analytics' ? 'Updating analytics. This can take a moment.' : 'Loading the latest dashboard data…'}
+                            Loading the latest dashboard data…
                         </p>
                     </div>
                 </div>
@@ -188,8 +184,10 @@ const AdminDashboard = () => {
                             className="border-primary-200 bg-white text-primary-700 hover:bg-primary-50 disabled:!opacity-100"
                             leftIcon={<RefreshCw className="w-4 h-4" />}
                             isLoading={refreshing}
+                            isDisabled={loading}
                             loadingLabel="Refreshing…"
-                            onClick={handleAnalyticsRefresh}
+                            onClick={handleDashboardRefresh}
+                            title="Reload dashboard data. Rebuild forecasts from Reports."
                         >
                             Refresh
                         </Button>
