@@ -69,8 +69,8 @@ test('already cancelled requests do not open a connection', async () => {
   assert.equal(f.calls.length, 0);
 });
 test('retains database revision conflicts and safely handles gateway failures', async () => {
-  const conflict = fixture({ status: 409, text: '{"code":"40001","message":"Reload"}' });
-  assert.equal((await conflict.client.rpc('limen_locator_command', args)).error.code, '40001');
+  const conflict = fixture({ status: 409, text: '{"code":"PT409","message":"Reload"}' });
+  assert.equal((await conflict.client.rpc('limen_locator_command', args)).error.code, 'PT409');
   const invalid = fixture({ status: 504, text: 'upstream request timeout' });
   assert.equal((await invalid.client.rpc('limen_locator_command', args)).error.code, 'LOCATOR_UPSTREAM_ERROR');
   const network = fixture({ failure: true });

@@ -44,7 +44,7 @@ export function createLocatorRouter({ client = locatorRpcClient } = {}) {
       }
       if (error) {
         if (String(error.code || '').startsWith('LOCATOR_') || error.code === '57014') return res.status(504).json({ error: 'The stockroom server did not confirm the result in time. Your edits are kept. Check the saved layout before retrying.', code: 'LOCATOR_SAVE_UNCONFIRMED' });
-        if (['40001', '23505'].includes(error.code)) return res.status(409).json({ error: 'This layout changed or a draft with this name already exists. Reload the saved layout before saving. Your local edits have been kept.' });
+        if (['PT409', '40001', '23505'].includes(error.code)) return res.status(409).json({ error: 'This layout changed or a draft with this name already exists. Load the saved draft before editing, or use Save As with a different name to keep your current edits.', code: 'LOCATOR_CONFLICT' });
         if (['22023', '22P02', '23503', '23514', '23502'].includes(error.code)) return res.status(400).json({ error: 'The layout or assignment is invalid. Check its shelves, layers, bins and product mappings.' });
         if (error.code === 'P0002') return res.status(404).json({ error: 'Layout or revision not found.' });
         if (error.code === '42501') return res.status(403).json({ error: 'This layout is not available for this operation.' });

@@ -326,6 +326,7 @@ function HeaderActions({
     layoutName,
     layoutOptions,
     onExitDesignMode,
+    onEnterDesignMode,
     onLoadLayout,
     onSaveLayout,
     onSetPriority,
@@ -369,12 +370,13 @@ function HeaderActions({
             </Button>
             {canEditLayout && (
                 <Button
+                    disabled={isSaving}
                     onClick={() => {
                         if (isDesignMode) {
                             onExitDesignMode();
                         } else {
                             onViewModeChange('3d');
-                            useLocator3DStore.getState().setDesignMode(true);
+                            onEnterDesignMode();
                         }
                     }}
                     tone={isDesignMode ? 'success' : 'primary'}
@@ -1283,6 +1285,7 @@ export default function Locator3DAdmin() {
     const [isSavingLayout, setIsSavingLayout] = useState(false);
     const [layoutName, setLayoutName] = useState(LOCATOR_LAYOUT_NAME);
     const [currentLayout, setCurrentLayout] = useState(null);
+    const [draftLayoutNames, setDraftLayoutNames] = useState([]);
     const [history, setHistory] = useState(null);
     const [layoutOptions, setLayoutOptions] = useState([LOCATOR_LAYOUT_NAME]);
     const [priorityLayoutName, setPriorityLayoutName] = useState('');
@@ -1565,6 +1568,38 @@ export default function Locator3DAdmin() {
         setPendingAction({ type: 'exit' });
     };
 
+    const enterDesignMode = async () => {
+        if (saveInFlight.current) return;
+        // Resume a known saved draft before editing the published model. Never
+        // replace recovered/local edits or silently overwrite a newer draft.
+        if (currentLayout?.status !== 'published' || hasUnsavedChanges
+            || !draftLayoutNames.includes(layoutName)) {
+            setDesignMode(true);
+            return;
+        }
+        if (isLoadingLayout) return;
+        const startingObjects = useLocator3DStore.getState().sceneObjects;
+        const sequence = ++loadSequence.current;
+        setIsLoadingLayout(true);
+        try {
+            const draft = await loadStoreLayout(layoutName);
+            if (sequence !== loadSequence.current) return;
+            if (startingObjects !== useLocator3DStore.getState().sceneObjects) {
+                warning('Your current edits have been kept. Use Save As to keep a separate copy.');
+            } else if (draft?.status === 'draft' && draft.layoutData) {
+                setCurrentLayout(draft);
+                loadLayoutData(draft.layoutData);
+                setProductLocations(draft.locations || []);
+                info('Resumed your saved draft. The published stockroom is unchanged.');
+            }
+            setDesignMode(true);
+        } catch (error) {
+            showError(error.message || 'Could not open the saved draft. Try Design Mode again.');
+        } finally {
+            if (sequence === loadSequence.current) setIsLoadingLayout(false);
+        }
+    };
+
     useEffect(() => {
         let active = true;
         const sequence = ++loadSequence.current;
@@ -1589,6 +1624,7 @@ export default function Locator3DAdmin() {
                 const priority = layouts.find((layout) => layout.isPriority)?.layoutName || '';
                 const initialName = priority || LOCATOR_LAYOUT_NAME;
                 setLayoutOptions([...new Set([LOCATOR_LAYOUT_NAME, ...layouts.map((layout) => layout.layoutName).filter(Boolean)])]);
+                setDraftLayoutNames(layouts.filter((layout) => layout.status === 'draft').map((layout) => layout.layoutName));
                 setPriorityLayoutName(priority);
                 const savedLayout = await loadStoreLayout(initialName, { publishedOnly: Boolean(priority) });
                 if (!active || sequence !== loadSequence.current) return;
@@ -1691,6 +1727,7 @@ export default function Locator3DAdmin() {
                 locationNotice={locationNotice}
                 onExitDesignMode={exitDesignMode}
                 onLoadLayout={(name) => void handleLoadLayout(name)}
+                onEnterDesignMode={() => void enterDesignMode()}
                 onLocateProduct={locateFromProduct}
                 onSaveLayout={(name, options) => void handleSaveLayout(name, options)}
                 viewMode={viewMode}

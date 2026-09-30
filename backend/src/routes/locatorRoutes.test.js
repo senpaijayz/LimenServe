@@ -45,9 +45,10 @@ test('invalid actions and payloads fail before database access', async () => {
 test('revision conflicts return 409 and never automatically retry', async () => {
   let calls = 0;
   const result = await request({ role: 'admin' }, { action: 'save', payload: { expectedRevision: 2 } }, async () => {
-    calls++; return { error: { code: '40001', message: 'private SQL details' } };
+    calls++; return { error: { code: 'PT409', message: 'private SQL details' } };
   });
   assert.equal(result.status, 409); assert.equal(calls, 1);
+  assert.equal(result.body.code, 'LOCATOR_CONFLICT');
   assert.doesNotMatch(result.body.error, /private SQL/);
 });
 test('database failures remain sanitized', async () => {

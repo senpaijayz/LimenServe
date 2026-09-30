@@ -46,6 +46,41 @@ describe('Stockroom workspace workflows', () => {
         expect(screen.getByText('Workshop')).toBeTruthy();
     });
 
+    it('resumes the existing draft before editing a published layout and saves its revision', async () => {
+        listStoreLayouts.mockResolvedValue([
+            { layoutName: 'Workshop', status: 'published', isPriority: true },
+            { layoutName: 'Workshop', status: 'draft' },
+        ]);
+        loadStoreLayout.mockResolvedValueOnce({
+            id: 'published', revision: 4, status: 'published', layoutName: 'Workshop',
+            layoutData: { objects: LOCATOR_SCENE_OBJECTS }, locations: [],
+        });
+        loadStoreLayout.mockResolvedValueOnce({
+            id: 'existing-draft', revision: 8, status: 'draft', layoutName: 'Workshop',
+            layoutData: { objects: LOCATOR_SCENE_OBJECTS }, locations: [],
+        });
+        mount(); await loaded();
+        fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
+        await screen.findByText('Resumed your saved draft. The published stockroom is unchanged.');
+        expect(loadStoreLayout).toHaveBeenLastCalledWith('Workshop');
+        act(() => useLocator3DStore.getState().addSceneObject('shelf'));
+        fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+        await waitFor(() => expect(saveStoreLayout).toHaveBeenCalledWith(expect.any(Array), 'Workshop', { layoutId: 'existing-draft', expectedRevision: 8 }));
+    });
+
+    it('does not replace local edits with an existing draft on entering design mode', async () => {
+        listStoreLayouts.mockResolvedValue([
+            { layoutName: 'Workshop', status: 'published', isPriority: true },
+            { layoutName: 'Workshop', status: 'draft' },
+        ]);
+        mount(); await loaded();
+        act(() => useLocator3DStore.getState().addSceneObject('shelf'));
+        const edited = useLocator3DStore.getState().sceneObjects;
+        fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
+        expect(useLocator3DStore.getState().sceneObjects).toBe(edited);
+        expect(loadStoreLayout).toHaveBeenCalledTimes(1);
+    });
+
     it('loads the model and allows saving while the catalog is still pending', async () => {
         let releaseCatalog;
         getFullProductCatalog.mockImplementationOnce(() => new Promise((resolve) => { releaseCatalog = resolve; }));

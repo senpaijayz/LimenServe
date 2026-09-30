@@ -41,7 +41,7 @@ begin
   begin
     perform public.limen_locator_command('save',jsonb_build_object('layoutId',a->>'id','expectedRevision',revision-1,'objects',objects));
     raise exception 'Stale revision accepted';
-  exception when serialization_failure then null;
+  exception when sqlstate 'PT409' then null;
   end;
   -- This fails after hierarchy upserts; all intermediate writes must roll back.
   begin
@@ -79,7 +79,7 @@ begin
   begin
     perform public.limen_locator_command('publish',jsonb_build_object('layoutId',a->>'id','expectedRevision',a->>'revision'));
     raise exception 'Draft published over newer product assignments';
-  exception when serialization_failure then null;
+  exception when sqlstate 'PT409' then null;
   end;
   if (select count(*) from stockroom.layouts where status='published')<>1 then raise exception 'Multiple published layouts'; end if;
   if not exists(select 1 from stockroom.layout_audit_history h where h.layout_id=(a->>'id')::uuid and h.revision=(a->>'revision')::bigint) then
