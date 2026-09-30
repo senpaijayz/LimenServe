@@ -1334,7 +1334,12 @@ export default function Locator3DAdmin() {
         const priority = options.priority === true;
         setIsSavingLayout(true);
         try {
-            let saved = await saveStoreLayout(sceneObjects, safeName, {
+            // A saved, unchanged draft can be acknowledged/published directly.
+            // Published layouts still require a new draft; save-as still writes.
+            const unchangedDraft = currentLayout?.status === 'draft'
+                && currentLayout.layoutName === safeName
+                && !hasUnsavedChanges;
+            let saved = unchangedDraft ? currentLayout : await saveStoreLayout(sceneObjects, safeName, {
                 layoutId: currentLayout?.id, expectedRevision: currentLayout?.revision,
             });
             setCurrentLayout(saved);
@@ -1365,7 +1370,7 @@ export default function Locator3DAdmin() {
             saveInFlight.current = false;
             setIsSavingLayout(false);
         }
-    }, [canEditLayout, currentLayout, isLoadingLayout, layoutName, markLayoutSaved, sceneObjects, setProductLocations, showError, success, warning]);
+    }, [canEditLayout, currentLayout, hasUnsavedChanges, isLoadingLayout, layoutName, markLayoutSaved, sceneObjects, setProductLocations, showError, success, warning]);
 
     const handleSetPriority = useCallback(async (name) => {
         if (!canEditLayout || saveInFlight.current) return;
@@ -1566,14 +1571,25 @@ export default function Locator3DAdmin() {
         const startingObjects = useLocator3DStore.getState().sceneObjects;
         setIsLoadingProducts(true);
         setIsLoadingLayout(true);
-        void Promise.all([listStoreLayouts(), getFullProductCatalog()])
-            .then(async ([layouts, catalogProducts]) => {
+        // Product lookup is independent of the model: slow/failed catalog requests
+        // must not block viewing, editing, or saving the stockroom.
+        let catalogProducts = [];
+        void getFullProductCatalog()
+            .then((result) => {
+                catalogProducts = result || [];
+                if (active) setProducts(catalogProducts);
+            })
+            .catch(() => {
+                if (active) showError('Product search is unavailable. The stockroom can still be viewed and edited. Reopen it to retry product loading.');
+            })
+            .finally(() => { if (active) setIsLoadingProducts(false); });
+        void listStoreLayouts()
+            .then(async (layouts) => {
                 if (!active || sequence !== loadSequence.current) return;
                 const priority = layouts.find((layout) => layout.isPriority)?.layoutName || '';
                 const initialName = priority || LOCATOR_LAYOUT_NAME;
                 setLayoutOptions([...new Set([LOCATOR_LAYOUT_NAME, ...layouts.map((layout) => layout.layoutName).filter(Boolean)])]);
                 setPriorityLayoutName(priority);
-                setProducts(catalogProducts || []);
                 const savedLayout = await loadStoreLayout(initialName, { publishedOnly: Boolean(priority) });
                 if (!active || sequence !== loadSequence.current) return;
                 const current = useLocator3DStore.getState();
@@ -1617,7 +1633,6 @@ export default function Locator3DAdmin() {
             })
             .finally(() => {
                 if (active) {
-                    setIsLoadingProducts(false);
                     if (sequence === loadSequence.current) setIsLoadingLayout(false);
                 }
             });

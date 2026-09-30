@@ -17,6 +17,7 @@ vi.mock('../modules/locator3d/services/locator3DApi', () => ({
 }));
 import { listStoreLayouts, loadStoreLayout, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
 import Locator3DAdmin from '../modules/locator3d/pages/Locator3DAdmin';
+import { getFullProductCatalog } from '../services/catalogApi';
 
 function mount(isAdmin = true) {
     return render(<MemoryRouter><AuthContext.Provider value={{ isAdmin, user: { id: 'test-admin' } }}><ToastProvider><Locator3DAdmin /></ToastProvider></AuthContext.Provider></MemoryRouter>);
@@ -43,6 +44,39 @@ describe('Stockroom workspace workflows', () => {
         mount(); await loaded();
         expect(loadStoreLayout).toHaveBeenCalledWith('Workshop', { publishedOnly: true });
         expect(screen.getByText('Workshop')).toBeTruthy();
+    });
+
+    it('loads the model and allows saving while the catalog is still pending', async () => {
+        let releaseCatalog;
+        getFullProductCatalog.mockImplementationOnce(() => new Promise((resolve) => { releaseCatalog = resolve; }));
+        mount(); await loaded();
+        expect(screen.getByText('Workshop')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
+        fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+        await waitFor(() => expect(saveStoreLayout).toHaveBeenCalledOnce());
+        await act(async () => releaseCatalog([]));
+    });
+
+    it('still loads the saved model when product lookup fails', async () => {
+        getFullProductCatalog.mockRejectedValueOnce(new Error('Catalog timeout'));
+        mount(); await loaded();
+        expect(screen.getByText('Workshop')).toBeTruthy();
+        expect(screen.getByText(/Product search is unavailable/)).toBeTruthy();
+    });
+
+    it('does not rewrite an unchanged saved draft, but saves new edits', async () => {
+        loadStoreLayout.mockResolvedValueOnce({
+            id: 'draft-1', revision: 7, status: 'draft', layoutName: 'Workshop',
+            layoutData: { objects: LOCATOR_SCENE_OBJECTS }, locations: [],
+        });
+        mount(); await loaded();
+        fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
+        fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+        await screen.findByText('Draft saved. Publish it when ready for staff.');
+        expect(saveStoreLayout).not.toHaveBeenCalled();
+        act(() => useLocator3DStore.getState().addSceneObject('shelf'));
+        fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+        await waitFor(() => expect(saveStoreLayout).toHaveBeenCalledOnce());
     });
 
     it('locates a product with the keyboard and closes results on Escape', async () => {

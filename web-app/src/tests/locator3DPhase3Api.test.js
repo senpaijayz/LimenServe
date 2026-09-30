@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../services/apiClient', () => ({ default: { post: vi.fn() } }));
 import api from '../services/apiClient';
-import { assignProductLocation, getProductLocations, loadStoreLayout, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
+import { assignProductLocation, getProductLocations, listStoreLayouts, loadStoreLayout, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
 const row = { id: 'layout-a', name: 'Workshop', store_id: 'store-a', revision: 5, status: 'published', metadata: { scene: { objects: [] }, locations: [{ productId: 'part-a', shelfObjectId: 'shelf-a', layoutId: 'layout-a' }] } };
 describe('normalized locator API', () => {
     beforeEach(() => { vi.resetAllMocks(); api.post.mockResolvedValue({ data: { result: row } }); });
     it('loads a layout and its mappings together', async () => {
         expect(await loadStoreLayout('Workshop')).toMatchObject({ id: 'layout-a', revision: 5, locations: row.metadata.locations });
         expect(api.post).toHaveBeenCalledWith('/locator/command', { action: 'load', payload: { name: 'Workshop' } });
+    });
+    it('maps compact menu summaries without needing full scene metadata', async () => {
+        api.post.mockResolvedValueOnce({ data: { result: [{ id: row.id, name: row.name, store_id: row.store_id, revision: row.revision, status: row.status }] } });
+        expect(await listStoreLayouts()).toEqual([expect.objectContaining({ id: row.id, layoutName: 'Workshop', revision: 5, isPriority: true })]);
     });
     it('sends the revision seen by the editor, not a cached newer revision', async () => {
         await saveStoreLayout([], 'Workshop', { layoutId: 'layout-a', expectedRevision: 3 });
