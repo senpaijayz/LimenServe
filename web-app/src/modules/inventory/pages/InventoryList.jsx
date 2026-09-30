@@ -441,7 +441,7 @@ const InventoryList = () => {
         return () => {
             active = false;
         };
-    }, [isAdmin]);
+    }, [isAdmin, refreshKey]);
 
     const refreshInventoryMeta = async () => {
         const [summary] = await Promise.all([
@@ -850,7 +850,7 @@ const InventoryList = () => {
                         <Dropdown
                             options={priceListVersions.map((version) => ({
                                 value: version.id,
-                                label: `${version.versionYear} price list${version.isActive ? ' · active' : ''}`,
+                                label: `${version.versionYear} · ${version.effectiveFrom} · revision ${version.revision ?? 1}${version.isActive ? ' · active' : ''}`,
                             }))}
                             value={selectedPriceListVersionId}
                             onChange={setSelectedPriceListVersionId}

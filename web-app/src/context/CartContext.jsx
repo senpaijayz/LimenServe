@@ -71,6 +71,17 @@ export function CartProvider({ children }) {
         });
     }, []);
 
+    // Refresh retail prices without removing quantities, services or discounts.
+    const refreshProductPrices = useCallback((prices) => {
+        const byId = new Map(prices.filter((row) => row.available && row.price != null).map((row) => [row.productId, Number(row.price)]));
+        setItems((current) => {
+            const updated = current.map((item) => item.lineType !== 'service' && byId.has(item.productId || item.id)
+                ? { ...item, price: byId.get(item.productId || item.id) } : item);
+            localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(updated));
+            return updated;
+        });
+    }, []);
+
     /**
      * Update item quantity
      */
@@ -143,6 +154,7 @@ export function CartProvider({ children }) {
         addItem,
         removeItem,
         updateQuantity,
+        refreshProductPrices,
         clearCart,
         isInCart,
         getItemQuantity,

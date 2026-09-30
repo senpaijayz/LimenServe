@@ -314,7 +314,7 @@ const PriceListManager = ({ onUpdated }) => {
                                     <div key={version.id} className="rounded-xl border border-primary-100 bg-primary-50 p-3">
                                         <div className="flex items-start justify-between gap-2">
                                             <div>
-                                                <p className="font-semibold text-primary-950">{version.versionYear} list</p>
+                                                <p className="font-semibold text-primary-950">{version.versionYear} · revision {version.revision ?? 1}</p>
                                                 <p className="mt-1 text-xs text-primary-500">{formatUploadCount(version.rowCount)} parts · effective {version.effectiveFrom}</p>
                                             </div>
                                             <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${version.isActive ? 'bg-emerald-100 text-emerald-700' : version.status === 'draft' ? 'bg-amber-100 text-amber-700' : 'bg-primary-100 text-primary-600'}`}>
@@ -330,7 +330,7 @@ const PriceListManager = ({ onUpdated }) => {
                                                 isLoading={activatingVersionId === version.id}
                                                 onClick={() => handleActivate(version)}
                                             >
-                                                Use this year
+                                                Activate this revision
                                             </Button>
                                         )}
                                     </div>

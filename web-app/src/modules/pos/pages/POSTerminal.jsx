@@ -13,6 +13,9 @@ import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import AddServiceModal from '../../../components/ui/AddServiceModal';
 import { createPosSale } from '../../../services/posApi';
 import SaleReceiptPreview from '../components/SaleReceiptPreview.jsx';
+import ProductPriceHistory from '../../inventory/components/ProductPriceHistory';
+import { getCurrentRetailPrices } from '../../../services/catalogApi';
+import { checkCartPrices } from '../utils/priceCheck';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import { buildProductBarcodeValue, getBarcodeLookupCandidates, productMatchesIdentifier } from '../../../utils/barcode';
 
@@ -65,7 +68,7 @@ function formatCatalogProduct(product) {
  */
 const POSTerminal = () => {
     const {
-        items, totals, addItem, removeItem, updateQuantity, clearCart,
+        items, totals, addItem, removeItem, updateQuantity, clearCart, refreshProductPrices,
         customerName, setCustomerName, discountPercent, setDiscountPercent
     } = useCart();
 
@@ -78,6 +81,7 @@ const POSTerminal = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showCameraScanner, setShowCameraScanner] = useState(false);
     const [largeBarcodeProduct, setLargeBarcodeProduct] = useState(null);
+    const [priceHistoryProduct, setPriceHistoryProduct] = useState(null);
     const [paymentAmount, setPaymentAmount] = useState('');
     const deferredSearchQuery = useDeferredValue(searchQuery);
     const [lastTransaction, setLastTransaction] = useState(null);
@@ -186,6 +190,18 @@ const POSTerminal = () => {
         setPaymentError('');
 
         try {
+            const productIds = [...new Set(items.filter((item) => item.lineType !== 'service' && item.sku !== 'SERVICE').map((item) => item.productId || item.id))];
+            const prices = productIds.length ? await getCurrentRetailPrices(productIds) : [];
+            const priceCheck = checkCartPrices(items, prices);
+            if (priceCheck.unavailable.length) {
+                setPaymentError(`No current selling price for ${priceCheck.unavailable.map((item) => item.sku || item.name).join(', ')}. Set a price in Products before selling; an old pricelist price is not automatically valid.`);
+                return;
+            }
+            if (priceCheck.changed.length) {
+                refreshProductPrices(prices);
+                setPaymentError('Selling prices changed. The cart now uses current prices. Review the new total and cash received, then confirm again. No sale has been submitted.');
+                return;
+            }
             const payload = {
                 customerName,
                 paymentMethod: 'cash',
@@ -326,6 +342,9 @@ const POSTerminal = () => {
                                         <ScanLine className="h-4 w-4" />
                                         Large barcode
                                     </button>
+                                    <button type="button" onClick={() => setPriceHistoryProduct(product)} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-lg border border-primary-200 text-xs font-semibold text-primary-600 hover:text-accent-blue">
+                                        Price history
+                                    </button>
                                 </div>
                             ))}
                         </div>
@@ -362,6 +381,10 @@ const POSTerminal = () => {
                     </div>
                 )}
             </div>
+
+            <Modal isOpen={Boolean(priceHistoryProduct)} onClose={() => setPriceHistoryProduct(null)} title={priceHistoryProduct ? `${priceHistoryProduct.name} · ${priceHistoryProduct.sku}` : 'Price history'} size="xl">
+                {priceHistoryProduct && <ProductPriceHistory key={priceHistoryProduct.id} productId={priceHistoryProduct.id} />}
+            </Modal>
 
             {/* Cart Sidebar */}
             <div className="flex max-h-[80dvh] w-full flex-col rounded-xl border border-primary-200 bg-white p-4 shadow-sm lg:sticky lg:top-20 lg:max-h-[calc(100dvh-7rem)] lg:w-96">

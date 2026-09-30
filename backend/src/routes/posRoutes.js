@@ -6,6 +6,7 @@ import { normalizeHistoricalAggregatePayload } from '../services/historicalSales
 const router = Router();
 
 function normalizePosError(error) {
+  if (error.code === 'PT409') error.statusCode = 409;
   const message = String(error?.message || '');
 
   if (

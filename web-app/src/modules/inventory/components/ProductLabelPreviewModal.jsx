@@ -4,6 +4,7 @@ import Modal from '../../../components/ui/Modal';
 import Button from '../../../components/ui/Button';
 import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import MitsubishiGenuinePartsLabel from './MitsubishiGenuinePartsLabel';
+import ProductPriceHistory from './ProductPriceHistory';
 import { printProductLabelNode } from '../utils/printProductLabel';
 import { formatDateTime, formatNumber } from '../../../utils/formatters';
 import { getProductPartNumber } from '../../../utils/barcode';
@@ -105,6 +106,7 @@ const ProductLabelPreviewModal = ({
             className="border border-primary-200 bg-[#f7f6f2] text-primary-950"
         >
             <div className="space-y-5">
+                {isOpen && <ProductPriceHistory key={product.id} productId={product.id} />}
                 <div
                     className="rounded-[28px] border border-primary-200"
                     style={{

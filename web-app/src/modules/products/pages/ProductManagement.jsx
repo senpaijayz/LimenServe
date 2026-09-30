@@ -8,6 +8,7 @@ import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import { useToast } from '../../../components/ui/Toast';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import MitsubishiGenuinePartsLabel from '../../inventory/components/MitsubishiGenuinePartsLabel';
+import ProductPriceHistory from '../../inventory/components/ProductPriceHistory';
 import {
   archiveCatalogProduct,
   createCatalogProduct,
@@ -599,6 +600,7 @@ export default function ProductManagement() {
       <Modal isOpen={Boolean(selectedProduct)} onClose={() => setSelectedProduct(null)} title={selectedProduct ? selectedProduct.name : 'Product Detail'} size="xl">
         {selectedProduct && (
           <div className="space-y-5">
+            <ProductPriceHistory key={selectedProduct.id} productId={selectedProduct.id} />
             <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
               <div className="h-[320px]">
                 <ProductLabelStage product={selectedProduct} quantity={selectedProduct.stock ?? selectedProduct.quantity ?? 0} size="compact" />

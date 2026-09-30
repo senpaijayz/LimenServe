@@ -730,6 +730,25 @@ export async function getRetailPriceListVersions() {
   }
 }
 
+export async function getProductPriceHistory(productId, signal) {
+  try {
+    const { data } = await apiClient.get(`/catalog/products/${encodeURIComponent(productId)}/price-history`, { signal });
+    return data;
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    extractApiError(error, 'Unable to load product price history.');
+  }
+}
+
+export async function getCurrentRetailPrices(productIds) {
+  try {
+    const { data } = await apiClient.post('/catalog/prices/quote', { productIds });
+    return data.prices ?? [];
+  } catch (error) {
+    extractApiError(error, 'Unable to verify current selling prices. No sale has been submitted.');
+  }
+}
+
 export async function getRetailPriceListVersionItems(versionId, params = {}) {
   try {
     const { data } = await apiClient.get(`/catalog/prices/versions/${encodeURIComponent(versionId)}/items`, {

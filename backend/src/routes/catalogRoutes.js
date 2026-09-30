@@ -9,11 +9,13 @@ import { callRpc } from '../services/supabaseRpc.js';
 import { receiveCatalogStock, receiveSupplierInvoiceStock, requireIdempotencyKey } from '../services/stockReceipt.js';
 import { parsePriceListActivation, parsePriceListVersionYear } from '../services/priceListVersionModel.js';
 import { selectByInChunks } from '../utils/supabaseBatchSelect.js';
+import { createPriceHistoryRouter } from './priceHistoryRoutes.js';
 import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
 const router = Router();
+router.use(createPriceHistoryRouter(supabaseAdmin));
 const invoiceUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -1155,76 +1157,11 @@ async function linkProductSupplier(productId, supplierId) {
   }
 }
 
-async function saveCurrentRetailPrice(productId, amount, businessDate, nowIso) {
-  const { data: currentPrice, error: currentPriceError } = await supabaseAdmin
-    .schema('catalog')
-    .from('product_prices')
-    .select('id, effective_from')
-    .eq('product_id', productId)
-    .eq('price_type', 'retail')
-    .eq('is_current', true)
-    .order('effective_from', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (currentPriceError) {
-    throw currentPriceError;
-  }
-
-  if (currentPrice?.effective_from === businessDate) {
-    const { error: updatePriceError } = await supabaseAdmin
-      .schema('catalog')
-      .from('product_prices')
-      .update({
-        amount,
-        currency: 'PHP',
-        effective_to: null,
-        business_date: businessDate,
-        updated_at: nowIso,
-      })
-      .eq('id', currentPrice.id);
-
-    if (updatePriceError) {
-      throw updatePriceError;
-    }
-
-    return;
-  }
-
-  const { error: closePriceError } = await supabaseAdmin
-    .schema('catalog')
-    .from('product_prices')
-    .update({
-      is_current: false,
-      effective_to: businessDate,
-      updated_at: nowIso,
-    })
-    .eq('product_id', productId)
-    .eq('price_type', 'retail')
-    .eq('is_current', true);
-
-  if (closePriceError) {
-    throw closePriceError;
-  }
-
-  const { error: priceError } = await supabaseAdmin
-    .schema('catalog')
-    .from('product_prices')
-    .insert({
-      product_id: productId,
-      price_type: 'retail',
-      amount,
-      currency: 'PHP',
-      effective_from: businessDate,
-      effective_to: null,
-      is_current: true,
-      business_date: businessDate,
-    });
-
-  if (priceError) {
-    throw priceError;
-  }
+async function saveCurrentRetailPrice(productId, amount, businessDate) {
+  const { error } = await supabaseAdmin.rpc('limen_set_retail_price', {
+    p_product_id: productId, p_amount: amount, p_business_date: businessDate,
+  });
+  if (error) throw error;
 }
 
 async function enrichCatalogProducts(products = []) {
@@ -4381,7 +4318,7 @@ router.get('/prices/versions', requireRole('admin'), async (_req, res, next) => 
     const { data: versions, error: versionsError } = await supabaseAdmin
       .schema('catalog')
       .from('pricelist_versions')
-      .select('id, price_type, version_year, effective_from, effective_to, status, is_active, source_filename, row_count, created_at, activated_at')
+      .select('id, price_type, version_year, revision, effective_from, effective_to, status, is_active, source_filename, row_count, created_at, activated_at')
       .eq('price_type', 'retail')
       .order('version_year', { ascending: false })
       .order('effective_from', { ascending: false });
@@ -4399,6 +4336,7 @@ router.get('/prices/versions', requireRole('admin'), async (_req, res, next) => 
         id: version.id,
         priceType: version.price_type,
         versionYear: Number(version.version_year),
+        revision: Number(version.revision ?? 1),
         effectiveFrom: version.effective_from,
         effectiveTo: version.effective_to,
         status: version.status,
