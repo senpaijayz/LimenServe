@@ -1772,8 +1772,8 @@ export default function Locator3DAdmin() {
                     </div>
                 )}
                 {isSavingLayout && (
-                    <div aria-live="polite" className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-slate-950/35 backdrop-blur-sm" role="status">
-                        <div className="flex items-center gap-3 rounded-2xl bg-white px-5 py-4 text-sm font-semibold text-slate-700 shadow-xl">
+                    <div aria-live="polite" className="pointer-events-none absolute left-3 top-3 z-40" role="status">
+                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">
                             <LoaderCircle className="h-5 w-5 animate-spin text-blue-600" />
                             Saving stockroom design…
                         </div>

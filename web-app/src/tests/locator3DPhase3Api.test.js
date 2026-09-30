@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-vi.mock('../services/apiClient', () => ({ default: { post: vi.fn() } }));
+vi.mock('../services/apiClient', () => ({ default: { post: vi.fn() }, STOCKROOM_API_TIMEOUT_MS: 15000 }));
 import api from '../services/apiClient';
 import { assignProductLocation, getProductLocations, listStoreLayouts, loadStoreLayout, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
 const row = { id: 'layout-a', name: 'Workshop', store_id: 'store-a', revision: 5, status: 'published', metadata: { scene: { objects: [] }, locations: [{ productId: 'part-a', shelfObjectId: 'shelf-a', layoutId: 'layout-a' }] } };
@@ -7,7 +7,7 @@ describe('normalized locator API', () => {
     beforeEach(() => { vi.resetAllMocks(); api.post.mockResolvedValue({ data: { result: row } }); });
     it('loads a layout and its mappings together', async () => {
         expect(await loadStoreLayout('Workshop')).toMatchObject({ id: 'layout-a', revision: 5, locations: row.metadata.locations });
-        expect(api.post).toHaveBeenCalledWith('/locator/command', { action: 'load', payload: { name: 'Workshop' } });
+        expect(api.post).toHaveBeenCalledWith('/locator/command', { action: 'load', payload: { name: 'Workshop' } }, { timeout: 15000 });
     });
     it('maps compact menu summaries without needing full scene metadata', async () => {
         api.post.mockResolvedValueOnce({ data: { result: [{ id: row.id, name: row.name, store_id: row.store_id, revision: row.revision, status: row.status }] } });
@@ -36,5 +36,24 @@ describe('normalized locator API', () => {
         api.post.mockRejectedValue({ response: { status: 409, data: { error: 'Reload before saving.' } } });
         await expect(saveStoreLayout([], 'Workshop')).rejects.toMatchObject({ status: 409, message: 'Reload before saving.' });
         expect(api.post).toHaveBeenCalledTimes(1);
+    });
+    it('confirms a committed save after an interrupted response without replaying it', async () => {
+        const objects = [{ id: 'shelf', position: [1, 0, 2] }];
+        api.post.mockRejectedValueOnce({ response: { status: 504, data: { code: 'LOCATOR_SAVE_UNCONFIRMED', error: 'Unconfirmed' } } });
+        api.post.mockResolvedValueOnce({ data: { result: { ...row, revision: 6, status: 'draft', metadata: { scene: { objects: [{ position: [1, 0, 2], id: 'shelf' }] }, locations: [] } } } });
+        expect(await saveStoreLayout(objects, 'Workshop', { layoutId: 'layout-a', expectedRevision: 5 })).toMatchObject({ revision: 6, status: 'draft' });
+        expect(api.post.mock.calls.map((call) => call[1].action)).toEqual(['save', 'load']);
+    });
+    it('does not falsely acknowledge a mismatched, old, or published snapshot', async () => {
+        for (const recovered of [
+            { ...row, status: 'draft', revision: 6, metadata: { scene: { objects: [{ id: 'other' }] } } },
+            { ...row, status: 'draft', revision: 5 },
+            { ...row, revision: 6 },
+        ]) {
+            api.post.mockRejectedValueOnce({ code: 'ECONNABORTED', message: 'Timeout' });
+            api.post.mockResolvedValueOnce({ data: { result: recovered } });
+            await expect(saveStoreLayout([], 'Workshop', { layoutId: 'layout-a', expectedRevision: 5 })).rejects.toMatchObject({ code: 'ECONNABORTED' });
+        }
+        expect(api.post.mock.calls.filter((call) => call[1].action === 'save')).toHaveLength(3);
     });
 });

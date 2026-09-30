@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { requireRole } from '../middleware/auth.js';
-import { supabaseAdmin } from '../config/supabase.js';
+import { locatorRpcClient } from '../services/locatorRpcClient.js';
 
 // Separate from the retired /api/stockroom API; never revive its write routes.
-export function createLocatorRouter({ client = supabaseAdmin } = {}) {
+export function createLocatorRouter({ client = locatorRpcClient } = {}) {
   const router = Router();
   router.use(requireRole('admin', 'stock_clerk', 'cashier', 'staff', 'viewer', 'mechanic'));
   router.post('/command', async (req, res, next) => {
@@ -27,13 +27,23 @@ export function createLocatorRouter({ client = supabaseAdmin } = {}) {
         identifiers.add(key);
       }
     }
+    const controller = new AbortController();
+    const signal = req.abortSignal ? AbortSignal.any([req.abortSignal, controller.signal]) : controller.signal;
+    const onClose = () => { if (!res.writableEnded) controller.abort(); };
+    res.once('close', onClose);
     try {
-      const { data, error } = await client.rpc('limen_locator_command', {
+      const { data, error, durationMs } = await client.rpc('limen_locator_command', {
         p_action: action,
         p_payload: { ...payload, allowDraft: req.user.role === 'admin' && payload.publishedOnly !== true },
         p_actor: req.user.id,
-      });
+      }, { signal });
+      if (res.destroyed || res.headersSent) return;
+      if (Number.isFinite(durationMs)) {
+        res.set('Server-Timing', `locator;dur=${durationMs.toFixed(1)}`);
+        req.log?.info?.('locator.command', { requestId: req.requestId, action, durationMs: Number(durationMs.toFixed(1)), outcome: error?.code || 'ok' });
+      }
       if (error) {
+        if (String(error.code || '').startsWith('LOCATOR_') || error.code === '57014') return res.status(504).json({ error: 'The stockroom server did not confirm the result in time. Your edits are kept. Check the saved layout before retrying.', code: 'LOCATOR_SAVE_UNCONFIRMED' });
         if (['40001', '23505'].includes(error.code)) return res.status(409).json({ error: 'This layout changed or a draft with this name already exists. Reload the saved layout before saving. Your local edits have been kept.' });
         if (['22023', '22P02', '23503', '23514', '23502'].includes(error.code)) return res.status(400).json({ error: 'The layout or assignment is invalid. Check its shelves, layers, bins and product mappings.' });
         if (error.code === 'P0002') return res.status(404).json({ error: 'Layout or revision not found.' });
@@ -42,7 +52,8 @@ export function createLocatorRouter({ client = supabaseAdmin } = {}) {
       }
       res.set('Cache-Control', 'no-store');
       return res.json({ result: data });
-    } catch (error) { return next(error); }
+    } catch (error) { if (!res.destroyed && !res.headersSent) return next(error); }
+    finally { res.removeListener('close', onClose); }
   });
   return router;
 }

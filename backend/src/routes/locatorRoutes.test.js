@@ -55,6 +55,19 @@ test('database failures remain sanitized', async () => {
   assert.equal(result.status, 500); assert.doesNotMatch(JSON.stringify(result.body), /secret/);
 });
 
+test('unconfirmed upstream results are bounded errors, never false successes or replayed writes', async () => {
+  let calls = 0;
+  const result = await request({ role: 'admin' }, { action: 'save' }, async (_name, _args, options) => {
+    calls++;
+    assert.ok(options.signal instanceof AbortSignal);
+    return { error: { code: 'LOCATOR_UPSTREAM_TIMEOUT', message: 'private server details' }, durationMs: 8000 };
+  });
+  assert.equal(result.status, 504);
+  assert.equal(result.body.code, 'LOCATOR_SAVE_UNCONFIRMED');
+  assert.match(result.body.error, /edits are kept/);
+  assert.equal(calls, 1);
+});
+
 test('duplicate or invalid shelf labels fail before writing; labels may repeat on different floors', async () => {
   const shelf = { id: 'a', type: 'shelf', floor: 1, aisle: 'A', shelfNumber: 1 };
   for (const second of [{ ...shelf, id: 'b', aisle: ' a ' }, { ...shelf, id: 'b', shelfNumber: -1 }, { ...shelf, id: 'b', aisle: '' }]) {
