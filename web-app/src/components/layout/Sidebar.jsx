@@ -14,7 +14,6 @@ import {
     ChevronLeft,
     LogOut,
     X,
-    ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../../context/useAuth';
 import { useTheme } from '../../context/ThemeContext';
@@ -32,7 +31,6 @@ const iconMap = {
     BarChart3,
     Users,
     Truck,
-    ClipboardList,
 };
 
 /**

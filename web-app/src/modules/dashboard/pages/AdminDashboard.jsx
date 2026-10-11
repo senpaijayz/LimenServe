@@ -3,7 +3,6 @@ import { Link } from 'react-router';
 import {
     DollarSign,
     AlertTriangle,
-    ClipboardList,
     Package,
     RefreshCw,
     ShoppingCart,
@@ -251,7 +250,6 @@ const AdminDashboard = () => {
                     <KPICard title="Sales Count" value={loading ? 'Loading...' : formatNumber(operationalSummary.todaySalesCount)} icon={<DollarSign className="h-6 w-6" />} accentColor="border-accent-blue" iconBg="bg-blue-50 text-accent-blue" />
                     <KPICard title="Inventory Value" value={loading ? 'Loading...' : formatCurrency(operationalSummary.inventoryValue)} icon={<Warehouse className="h-6 w-6" />} accentColor="border-indigo-500" iconBg="bg-indigo-50 text-indigo-600" />
                     <KPICard title="Open Service Orders" value={loading ? 'Loading...' : formatNumber(operationalSummary.openServiceOrderCount)} icon={<Wrench className="h-6 w-6" />} accentColor="border-amber-500" iconBg="bg-amber-50 text-amber-700" />
-                    <KPICard title="Pending Reservations" value={loading ? 'Loading...' : formatNumber(operationalSummary.pendingReservationCount)} icon={<ClipboardList className="h-6 w-6" />} accentColor="border-rose-500" iconBg="bg-rose-50 text-rose-600" />
                     <KPICard title="Active Quotations" value={loading ? 'Loading...' : formatNumber(operationalSummary.activeEstimateCount)} icon={<FileText className="h-6 w-6" />} accentColor="border-violet-500" iconBg="bg-violet-50 text-violet-600" />
                 </div>
             </div>
