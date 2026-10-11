@@ -116,8 +116,8 @@ export const NAV_ITEMS = {
     admin: [
         { path: '/products', label: 'Products', icon: 'Boxes', roles: [ROLES.ADMIN] },
         { path: '/suppliers', label: 'Suppliers', icon: 'Truck', roles: [ROLES.ADMIN] },
-        // Part Reservations is disabled for now. Uncomment the next line to restore the page, navigation item, and dashboard card.
-        // { path: '/reservations', label: 'Part Reservations', icon: 'ClipboardList', roles: [ROLES.ADMIN] },
+        // Comment this item to hide Part Reservations; remove the comment to show it again.
+        { path: '/reservations', label: 'Part Reservations', icon: 'ClipboardList', roles: [ROLES.ADMIN] },
         { path: '/quotation', label: 'Quotation', icon: 'FileText', roles: [ROLES.ADMIN] },
         { path: '/reports', label: 'Reports', icon: 'BarChart3', roles: [ROLES.ADMIN] },
         { path: '/users', label: 'User Management', icon: 'Users', roles: [ROLES.ADMIN] },
