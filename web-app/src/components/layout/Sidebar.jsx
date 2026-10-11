@@ -11,6 +11,7 @@ import {
     BarChart3,
     Users,
     Truck,
+    ClipboardList,
     ChevronLeft,
     LogOut,
     X,
@@ -31,6 +32,7 @@ const iconMap = {
     BarChart3,
     Users,
     Truck,
+    ClipboardList,
 };
 
 /**
