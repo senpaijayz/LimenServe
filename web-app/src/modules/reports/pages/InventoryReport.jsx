@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router';
 import { Archive, Boxes, ClipboardList, Download, PackageCheck, Printer, RefreshCw } from 'lucide-react';
 import Button from '../../../components/ui/Button';
@@ -410,9 +410,10 @@ export default function InventoryReport() {
         };
     });
     const [isExporting, setIsExporting] = useState(false);
+    const reportRequestRef = useRef(0);
 
     const filteredMovements = useMemo(
-        () => movements.filter((m) => isWithinDateFilters(m.createdAt, filters.startDate, filters.endDate) && matchesCategoryFilter(m, filters.category)),
+        () => movements.filter((m) => isWithinDateFilters(m.businessDate || m.createdAt, filters.startDate, filters.endDate) && matchesCategoryFilter(m, filters.category)),
         [filters.category, filters.endDate, filters.startDate, movements],
     );
     const partsInvoiceMovements = useMemo(() => filteredMovements.filter((m) => m.referenceType === 'supplier_invoice'), [filteredMovements]);
@@ -424,10 +425,12 @@ export default function InventoryReport() {
         return { movedQuantity, types };
     }, [filteredMovements]);
 
-    const loadReportData = async () => {
+    const loadReportData = useCallback(async () => {
+        const request = ++reportRequestRef.current;
         setLoading(true); setError('');
         try {
-            const [s, m, a, categories] = await Promise.all([getCatalogSummary(), getInventoryMovements(500), getArchivedCatalogProducts(20), getManagedCategories()]);
+            const [s, m, a, categories] = await Promise.all([getCatalogSummary(), getInventoryMovements(500, { startDate: filters.startDate, endDate: filters.endDate }), getArchivedCatalogProducts(20), getManagedCategories()]);
+            if (request !== reportRequestRef.current) return;
             setSummary(s); setMovements(m); setArchivedProducts(a);
             setCategoryOptions([
                 { value: '', label: 'All categories' },
@@ -438,11 +441,11 @@ export default function InventoryReport() {
                         label: category.name || category.label,
                     })),
             ]);
-        } catch (e) { setError(e.message || 'Unable to load inventory report data.'); }
-        finally { setLoading(false); }
-    };
+        } catch (e) { if (request !== reportRequestRef.current) return; setSummary(null); setMovements([]); setArchivedProducts([]); setError(e.message || 'Unable to load inventory report data.'); }
+        finally { if (request === reportRequestRef.current) setLoading(false); }
+    }, [filters.startDate, filters.endDate]);
 
-    useEffect(() => { void loadReportData(); }, []);
+    useEffect(() => { void loadReportData(); }, [loadReportData]);
 
     const handlePrint = useCallback(() => {
         setIsExporting(true);
@@ -494,7 +497,7 @@ export default function InventoryReport() {
                 <div className="flex flex-col gap-2 sm:flex-row">
                     <Button variant="secondary" leftIcon={<RefreshCw className="h-4 w-4" />} isLoading={loading} onClick={loadReportData}>Refresh</Button>
                     <Button variant="secondary" leftIcon={<Download className="h-4 w-4" />} onClick={() => exportMovementsCsv(filteredMovements)} disabled={filteredMovements.length === 0}>Export CSV</Button>
-                    <Button variant="primary" leftIcon={<Printer className="h-4 w-4" />} isLoading={isExporting} onClick={handlePrint}>Print Report</Button>
+                    <Button variant="primary" leftIcon={<Printer className="h-4 w-4" />} isLoading={isExporting} disabled={loading || Boolean(error)} onClick={handlePrint}>Print Report</Button>
                 </div>
             </div>
 
@@ -542,11 +545,12 @@ export default function InventoryReport() {
 
             {/* KPI Cards */}
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <KPICard title="Catalog Rows" value={formatNumber(summary?.totalProducts ?? 0)} icon={<Boxes className="h-6 w-6" />} />
-                <KPICard title="Unique Part Numbers" value={formatNumber(summary?.uniqueProducts ?? 0)} icon={<PackageCheck className="h-6 w-6" />} />
-                <KPICard title="Filtered Movements" value={formatNumber(filteredMovements.length)} icon={<ClipboardList className="h-6 w-6" />} />
-                <KPICard title="Archived Products" value={formatNumber(archivedProducts.length)} icon={<Archive className="h-6 w-6" />} />
+                <KPICard title="Catalog Rows" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(summary?.totalProducts ?? 0)} icon={<Boxes className="h-6 w-6" />} />
+                <KPICard title="Unique Part Numbers" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(summary?.uniqueProducts ?? 0)} icon={<PackageCheck className="h-6 w-6" />} />
+                <KPICard title="Loaded Movements" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(filteredMovements.length)} icon={<ClipboardList className="h-6 w-6" />} />
+                <KPICard title="Recent Archived Products" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(archivedProducts.length)} icon={<Archive className="h-6 w-6" />} />
             </div>
+            <p className="text-sm text-primary-500">Catalog counts describe current inventory, not the selected historical period. The movement ledger includes up to 500 recent entries in the selected business-date range; category filtering applies to these loaded entries. Archive preview includes up to 20 products. Exports use the same loaded records.</p>
 
             <Card title="Parts Invoice Stock-Ins" subtitle="Supplier invoice receipts are separated from normal Add Stock entries.">
                 {loading ? (

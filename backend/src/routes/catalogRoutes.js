@@ -4184,18 +4184,14 @@ router.get('/products/archived', requireRole('admin'), async (req, res, next) =>
 router.get('/stock/movements', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
     const limit = parsePositiveInteger(req.query.limit, 12, 500);
-    const { data: movements, error: movementsError } = await supabaseAdmin
-      .schema('catalog')
-      .from('inventory_movements')
+    let movementQuery = supabaseAdmin.schema('catalog').from('inventory_movements')
       .select('id, product_id, movement_type, quantity, reference_type, reference_id, notes, performed_by, business_date, created_at')
-      .order('created_at', { ascending: false })
-      .limit(limit);
+      .order('created_at', { ascending: false });
+    if (req.query.startDate) movementQuery = movementQuery.gte('business_date', req.query.startDate);
+    if (req.query.endDate) movementQuery = movementQuery.lte('business_date', req.query.endDate);
+    const { data: movements, error: movementsError } = await movementQuery.limit(limit);
 
     if (movementsError) {
-      if (isPrivateSchemaAccessError(movementsError)) {
-        res.json({ movements: [] });
-        return;
-      }
       throw movementsError;
     }
 
@@ -4212,10 +4208,6 @@ router.get('/stock/movements', requireRole('admin', 'stock_clerk'), async (req, 
     ]);
 
     if (productsError) {
-      if (isPrivateSchemaAccessError(productsError)) {
-        res.json({ movements: [] });
-        return;
-      }
       throw productsError;
     }
 

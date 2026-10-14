@@ -1,5 +1,14 @@
 import apiClient, { cachedApiGet, extractApiError } from './apiClient';
 
+export async function getRecordedSalesReport(params = {}) {
+  try {
+    const { data } = await apiClient.get('/analytics/reports/sales', { params });
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to load recorded sales.');
+  }
+}
+
 function isNetworkFailure(error) {
   return !error?.response;
 }

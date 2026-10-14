@@ -11,6 +11,21 @@ const dashboardCache = new Map();
 // server-side role boundary, including read-only routes.
 router.use(requireRole('admin'));
 
+router.get('/reports/sales', async (req, res, next) => {
+  try {
+    const report = await callRpc('get_recorded_sales_report', {
+      p_start_date: req.query.startDate || null,
+      p_end_date: req.query.endDate || null,
+      p_category: req.query.category || null,
+      p_granularity: req.query.granularity || 'month',
+    });
+    res.set('Cache-Control', 'no-store');
+    res.json(report);
+  } catch (error) {
+    next(error);
+  }
+});
+
 function getDashboardCacheKey(query = {}) {
   return JSON.stringify({
     startDate: query.startDate || null,

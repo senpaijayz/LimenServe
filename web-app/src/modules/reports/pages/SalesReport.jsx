@@ -7,11 +7,7 @@ import Card, { KPICard } from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
 import SalesChart from '../../dashboard/components/SalesChart';
 import {
-    getAnalyticsDashboardSnapshot,
-    getItemPeakPeriods,
-    getItemSalesTrend,
-    getTopSellingItems,
-    runFullAnalyticsRefresh,
+    getRecordedSalesReport,
 } from '../../../services/analyticsApi';
 import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
 import { getPosSaleDetail, listHistoricalSalesAggregates, listPosSales } from '../../../services/posApi';
@@ -29,6 +25,10 @@ function toReportNumber(value, fallback = 0) {
 
 function buildReportStamp(date = new Date()) {
     return date.toISOString().slice(0, 10);
+}
+
+function toBusinessDate(date = new Date()) {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
 
 function isDemoSale(sale) {
@@ -81,7 +81,7 @@ function buildPrintableSalesReport({
     peakPeriods,
     exportedSales,
     trendRevenue,
-    lowStockRiskCount,
+    productUnits,
 }) {
     const topLeader = topSellingItems[0];
     const peakLeader = peakPeriods[0];
@@ -93,7 +93,7 @@ function buildPrintableSalesReport({
         formatCurrency(toReportNumber(item.revenue)),
     ]);
     const trendRows = itemTrend.map((item) => [
-        item.period_label || item.period || item.bucket || item.month || item.sale_period || '',
+        item.label || item.period_start || '',
         formatNumber(toReportNumber(item.quantity ?? item.units)),
         formatCurrency(toReportNumber(item.revenue)),
     ]);
@@ -320,8 +320,9 @@ function buildPrintableSalesReport({
             <div class="kpi-card"><div class="label">Top Item</div><div class="value">${escapeHtml(topLeader?.product_name || 'N/A')}</div></div>
             <div class="kpi-card"><div class="label">Trend Revenue</div><div class="value">${escapeHtml(formatCurrency(trendRevenue))}</div></div>
             <div class="kpi-card"><div class="label">Peak Leader</div><div class="value">${escapeHtml(peakLeader?.product_name || 'N/A')}</div></div>
-            <div class="kpi-card"><div class="label">Low Stock Risks</div><div class="value">${escapeHtml(formatNumber(lowStockRiskCount))}</div></div>
+            <div class="kpi-card"><div class="label">Product Units Sold</div><div class="value">${escapeHtml(formatNumber(productUnits))}</div></div>
         </div>
+        <p>Completed, non-demo product sales only. Product revenue excludes labor and transaction-level discounts/tax. Historical period totals are recorded separately and are not included in item charts.</p>
 
         <section>
             <h2>Top-Selling Items</h2>
@@ -355,8 +356,8 @@ function buildPrintableSalesReport({
 const SalesReport = () => {
     const { isAdmin, user } = useAuth();
     const [filters, setFilters] = useState({
-        startDate: new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10),
-        endDate: new Date().toISOString().slice(0, 10),
+        startDate: `${toBusinessDate().slice(0, 4)}-01-01`,
+        endDate: toBusinessDate(),
         category: '',
         granularity: 'month',
     });
@@ -371,6 +372,8 @@ const SalesReport = () => {
     const [historyLoading, setHistoryLoading] = useState(true);
     const [historyError, setHistoryError] = useState('');
     const [historySearch, setHistorySearch] = useState('');
+    const [historyPage, setHistoryPage] = useState(1);
+    const [historyPagination, setHistoryPagination] = useState(null);
     const [selectedSale, setSelectedSale] = useState(null);
     const [loadingSaleDetail, setLoadingSaleDetail] = useState(false);
     const [isHistoricalEditorOpen, setIsHistoricalEditorOpen] = useState(false);
@@ -384,6 +387,8 @@ const SalesReport = () => {
     const [historySort, setHistorySort] = useState({ key: 'date', dir: 'desc' });
     const [categoryOptions, setCategoryOptions] = useState([{ value: '', label: 'All categories' }]);
     const activeSaleRequestRef = useRef(null);
+    const analyticsRequestRef = useRef(0);
+    const historyRequestRef = useRef(0);
 
     useEffect(() => {
         let active = true;
@@ -415,6 +420,7 @@ const SalesReport = () => {
     }, []);
 
     const loadAnalytics = useCallback(async () => {
+        const request = ++analyticsRequestRef.current;
         setLoading(true);
         setError('');
 
@@ -426,44 +432,51 @@ const SalesReport = () => {
                 granularity: filters.granularity,
             };
 
-            const [snapshot, items, trend, periods] = await Promise.all([
-                getAnalyticsDashboardSnapshot(params),
-                getTopSellingItems(params),
-                getItemSalesTrend(params),
-                getItemPeakPeriods(params),
-            ]);
-
+            const snapshot = await getRecordedSalesReport(params);
+            if (request !== analyticsRequestRef.current) return;
             setDashboardSnapshot(snapshot);
-            setTopSellingItems(items);
-            setItemTrend(trend);
-            setPeakPeriods(periods);
+            setTopSellingItems(snapshot.topSellingItems ?? []);
+            setItemTrend(snapshot.itemTrend ?? []);
+            setPeakPeriods(snapshot.peakPeriods ?? []);
         } catch (loadError) {
+            if (request !== analyticsRequestRef.current) return;
+            setDashboardSnapshot(null);
+            setTopSellingItems([]);
+            setItemTrend([]);
+            setPeakPeriods([]);
             setError(loadError.message || 'Unable to load analytics from Supabase.');
         } finally {
-            setLoading(false);
+            if (request === analyticsRequestRef.current) setLoading(false);
         }
     }, [filters.category, filters.endDate, filters.granularity, filters.startDate]);
 
     const loadSalesHistory = useCallback(async () => {
+        const request = ++historyRequestRef.current;
         setHistoryLoading(true);
         setHistoryError('');
 
         try {
-            const { sales } = await listPosSales({
+            const { sales, pagination } = await listPosSales({
                 startDate: filters.startDate,
                 endDate: filters.endDate,
                 search: historySearch || null,
                 limit: 20,
-                page: 1,
+                page: historyPage,
             });
-
+            if (request !== historyRequestRef.current) return;
             setSalesHistory(sales);
+            setHistoryPagination(pagination);
         } catch (loadError) {
+            if (request !== historyRequestRef.current) return;
+            setSalesHistory([]);
+            setHistoryPagination(null);
             setHistoryError(loadError.message || 'Unable to load sales history.');
         } finally {
-            setHistoryLoading(false);
+            if (request === historyRequestRef.current) setHistoryLoading(false);
         }
-    }, [filters.endDate, filters.startDate, historySearch]);
+    }, [filters.endDate, filters.startDate, historySearch, historyPage]);
+
+    useEffect(() => { setHistoryPage(1); }, [filters.startDate, filters.endDate, historySearch]);
 
     const loadHistoricalAggregates = useCallback(async () => {
         setAggregateLoading(true);
@@ -507,10 +520,7 @@ const SalesReport = () => {
         setError('');
 
         try {
-            await runFullAnalyticsRefresh('Manual refresh from reports page');
-            await loadAnalytics();
-            await loadSalesHistory();
-            await loadHistoricalAggregates();
+            await Promise.all([loadAnalytics(), loadSalesHistory(), loadHistoricalAggregates()]);
         } catch (refreshError) {
             setError(refreshError.message || 'Unable to refresh analytics.');
         } finally {
@@ -538,7 +548,7 @@ const SalesReport = () => {
     };
 
     const handleHistoricalSaved = async (saved) => {
-        await loadSalesHistory();
+        await Promise.all([loadSalesHistory(), loadAnalytics()]);
 
         if (saved?.saleId) {
             await handleOpenSale(saved.saleId);
@@ -564,18 +574,17 @@ const SalesReport = () => {
         });
         return summary;
     }, [historicalAggregates]);
-    const salesByCategory = useMemo(() => {
-        const grouped = topSellingItems.reduce((map, item) => {
-            const category = item.category || 'Uncategorized';
-            const existing = map.get(category) || { category, revenue: 0, quantity: 0 };
-            existing.revenue += Number(item.revenue ?? 0);
-            existing.quantity += Number(item.quantity ?? 0);
-            map.set(category, existing);
-            return map;
-        }, new Map());
-
-        return Array.from(grouped.values()).sort((left, right) => right.revenue - left.revenue);
-    }, [topSellingItems]);
+    const salesByCategory = dashboardSnapshot?.categories ?? [];
+    const chartTrend = useMemo(() => {
+        const grouped = new Map();
+        for (const row of itemTrend) {
+            const current = grouped.get(row.period_start) ?? { label: row.label, revenue: 0, quantity: 0 };
+            current.revenue += toReportNumber(row.revenue);
+            current.quantity += toReportNumber(row.quantity);
+            grouped.set(row.period_start, current);
+        }
+        return [...grouped.values()];
+    }, [itemTrend]);
     const sortedSalesHistory = useMemo(() => {
         const multiplier = historySort.dir === 'asc' ? 1 : -1;
         return [...salesHistory].sort((left, right) => {
@@ -606,7 +615,7 @@ const SalesReport = () => {
             let page = 1;
             let hasMore = true;
 
-            while (hasMore && page <= 20) {
+            while (hasMore && page <= 100) {
                 const { sales, pagination } = await listPosSales({
                     startDate: filters.startDate,
                     endDate: filters.endDate,
@@ -619,6 +628,7 @@ const SalesReport = () => {
                 hasMore = Boolean(pagination?.hasMore);
                 page += 1;
             }
+            if (hasMore) throw new Error('The ledger exceeds 10,000 records. Select a smaller date range before printing.');
 
             const generatedAt = new Date();
             const generatedBy = user?.fullName || user?.email || 'LimenServe user';
@@ -632,7 +642,7 @@ const SalesReport = () => {
                 peakPeriods,
                 exportedSales,
                 trendRevenue,
-                lowStockRiskCount: toReportNumber(dashboardSnapshot?.predictedLowStockRisk?.length),
+                productUnits: itemTrend.reduce((sum, row) => sum + toReportNumber(row.quantity), 0),
             });
 
             reportWindow.document.open();
@@ -655,7 +665,6 @@ const SalesReport = () => {
         trendRevenue,
         user?.email,
         user?.fullName,
-        dashboardSnapshot?.predictedLowStockRisk?.length,
     ]);
 
     return (
@@ -697,6 +706,7 @@ const SalesReport = () => {
                         leftIcon={<Download className="w-4 h-4" />}
                         isLoading={isExporting}
                         onClick={handleExport}
+                        disabled={loading || Boolean(error)}
                     >
                         Print PDF
                     </Button>
@@ -748,20 +758,21 @@ const SalesReport = () => {
             </Card>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <KPICard title="Top Selling Item" value={loading ? 'Loading...' : (topLeader?.product_name || 'N/A')} icon={<TrendingUp className="w-6 h-6" />} trend="up" trendValue={topLeader ? `${formatNumber(topLeader.quantity)} units` : 'No data'} />
-                <KPICard title="Item Trend Revenue" value={loading ? 'Loading...' : formatCurrency(trendRevenue)} icon={<Filter className="w-6 h-6" />} trend="up" trendValue={`${itemTrend.length} periods`} accentColor="border-indigo-500" iconBg="bg-indigo-50 text-indigo-600" />
-                <KPICard title="Peak Month Leader" value={loading ? 'Loading...' : (peakLeader?.product_name || 'N/A')} icon={<TrendingUp className="w-6 h-6" />} trend="up" trendValue={peakLeader?.peak_month ? new Date(peakLeader.peak_month).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' }) : 'No data'} accentColor="border-emerald-500" iconBg="bg-emerald-50 text-emerald-600" />
-                <KPICard title="Low Stock Risks" value={loading ? 'Loading...' : String((dashboardSnapshot?.predictedLowStockRisk || []).length)} icon={<AlertTriangle className="w-6 h-6" />} trend="down" trendValue="Forecast-based risk watch" accentColor="border-amber-500" iconBg="bg-amber-50 text-amber-600" />
+                <KPICard title="Top Selling Item" value={loading ? 'Loading...' : error ? 'Unavailable' : (topLeader?.product_name || 'No recorded sales')} icon={<TrendingUp className="w-6 h-6" />} />
+                <KPICard title="Product Sales Revenue" value={loading ? 'Loading...' : error ? 'Unavailable' : formatCurrency(trendRevenue)} icon={<Filter className="w-6 h-6" />} />
+                <KPICard title="Peak Month Leader" value={loading ? 'Loading...' : error ? 'Unavailable' : (peakLeader?.product_name || 'No recorded sales')} icon={<TrendingUp className="w-6 h-6" />} />
+                <KPICard title="Product Units Sold" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(itemTrend.reduce((sum, row) => sum + toReportNumber(row.quantity), 0))} icon={<Receipt className="w-6 h-6" />} />
             </div>
+            <p className="text-sm text-primary-500">Completed POS and encoded itemized sales only. Demo entries and cancelled sales are excluded. Product revenue excludes labor and transaction-level discounts/tax. Period totals below are separate records and are not added to item-level charts.{dashboardSnapshot?.generatedAt && ` Updated ${formatDateTime(dashboardSnapshot.generatedAt)}.`}</p>
 
             <Card
                 title="Historical Period Totals"
                 subtitle="Use this ledger for paper summaries that contain a day, month, or year total but no item breakdown."
-                headerAction={aggregateUnavailable ? <span className="text-xs font-semibold text-primary-500">Migration pending</span> : null}
+                headerAction={aggregateUnavailable ? <span className="text-xs font-semibold text-primary-500">Unavailable</span> : null}
             >
                 {aggregateUnavailable ? (
                     <div className="rounded-xl border border-dashed border-primary-200 bg-primary-50 px-4 py-5 text-sm text-primary-600">
-                        Period totals are ready after the historical-sales migration is applied. Itemized sales remain available now.
+                        Historical period totals could not be loaded. Retry Refresh; itemized sales are reported separately.
                     </div>
                 ) : (
                     <>
@@ -818,7 +829,7 @@ const SalesReport = () => {
                 )}
             </Card>
 
-            <SalesChart data={itemTrend} title="Item-Level Sales Trend" subtitle="Revenue and units sold over the selected period" />
+            <SalesChart data={chartTrend} title="Item-Level Sales Trend" subtitle="Recorded product-line revenue and units, grouped by period" />
 
             <Card title="Sales By Category" subtitle="Dedicated category revenue graph from the selected sales period.">
                 <div className="h-80">
@@ -1098,7 +1109,11 @@ const SalesReport = () => {
                 </div>
 
                 <div className="mt-4 flex flex-col gap-3 border-t border-primary-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Sort sales table</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Sort loaded page · Page {historyPage}{historyPagination ? ` of ${historyPagination.totalPages || 1}` : ''}</p>
+                    <div className="flex gap-2">
+                        <Button variant="secondary" disabled={historyLoading || historyPage === 1} onClick={() => setHistoryPage((page) => page - 1)}>Previous</Button>
+                        <Button variant="secondary" disabled={historyLoading || !historyPagination?.hasMore} onClick={() => setHistoryPage((page) => page + 1)}>Next</Button>
+                    </div>
                     <div className="grid gap-2 sm:grid-cols-[160px_140px]">
                         <select
                             className="input py-2.5 text-sm"
