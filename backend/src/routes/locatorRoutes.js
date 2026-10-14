@@ -43,6 +43,7 @@ export function createLocatorRouter({ client = locatorRpcClient } = {}) {
         req.log?.info?.('locator.command', { requestId: req.requestId, action, durationMs: Number(durationMs.toFixed(1)), outcome: error?.code || 'ok' });
       }
       if (error) {
+        if (error.code === 'PT410') return res.status(409).json({ error: 'A product in this shelf map was removed or replaced. Refresh the locator and select the current part before saving.', code: 'LOCATOR_PRODUCT_CHANGED' });
         if (String(error.code || '').startsWith('LOCATOR_') || error.code === '57014') return res.status(504).json({ error: 'The stockroom server did not confirm the result in time. Your edits are kept. Check the saved layout before retrying.', code: 'LOCATOR_SAVE_UNCONFIRMED' });
         if (['PT409', '40001', '23505'].includes(error.code)) return res.status(409).json({ error: 'This layout changed or a draft with this name already exists. Load the saved draft before editing, or use Save As with a different name to keep your current edits.', code: 'LOCATOR_CONFLICT' });
         if (['22023', '22P02', '23503', '23514', '23502'].includes(error.code)) return res.status(400).json({ error: 'The layout or assignment is invalid. Check its shelves, layers, bins and product mappings.' });

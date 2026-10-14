@@ -56,6 +56,14 @@ test('database failures remain sanitized', async () => {
   assert.equal(result.status, 500); assert.doesNotMatch(JSON.stringify(result.body), /secret/);
 });
 
+test('removed product mappings give actionable feedback without SQL details', async () => {
+  const result = await request({ role: 'admin' }, { action: 'assign' }, async () => ({ error: { code: 'PT410', message: 'private constraint details' } }));
+  assert.equal(result.status, 409);
+  assert.equal(result.body.code, 'LOCATOR_PRODUCT_CHANGED');
+  assert.match(result.body.error, /Refresh the locator/);
+  assert.doesNotMatch(result.body.error, /private/);
+});
+
 test('unconfirmed upstream results are bounded errors, never false successes or replayed writes', async () => {
   let calls = 0;
   const result = await request({ role: 'admin' }, { action: 'save' }, async (_name, _args, options) => {
