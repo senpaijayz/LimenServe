@@ -141,6 +141,20 @@ function main() {
   }
 
   const frozenSet = new Set(frozenFiles);
+  // Later historical files can also have legacy eight-digit versions. Keep
+  // their original identities, and pin each reviewed exception's SQL rather
+  // than accepting arbitrary legacy names or rewriting migration history.
+  const additionalLegacyFiles = policy.additionalLegacyFiles ?? {};
+  for (const [fileName, expectedHash] of Object.entries(additionalLegacyFiles)) {
+    if (!fileNames.includes(fileName)) {
+      errors.push(`Reviewed legacy migration is missing: ${fileName}`);
+      continue;
+    }
+    const contents = fs.readFileSync(path.join(migrationsDirectory, fileName), 'utf8').replace(/\r\n?/g, '\n');
+    const digest = crypto.createHash('sha256').update(contents).digest('hex');
+    if (digest !== expectedHash) errors.push(`Reviewed legacy migration changed: ${fileName}. Add a forward migration instead.`);
+    frozenSet.add(fileName);
+  }
   parsedMigrations
     .filter(({ fileName }) => !frozenSet.has(fileName))
     .forEach(({ fileName, version }) => {

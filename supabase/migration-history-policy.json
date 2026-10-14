@@ -4,6 +4,9 @@
   "remoteLedgersReconciled": false,
   "frozenThrough": "20260806184500",
   "frozenHistorySha256": "b4d6dee013669c11de276f188223b059636c51f36a1be4b72e82f8dc5d899579",
+  "additionalLegacyFiles": {
+    "20260822_000001_replace_retail_pricelist_rpc.sql": "3690e522a9b676954ffe97c6d3ea2196144d8b93279838739ed06854c7d995f3"
+  },
   "knownDuplicateVersions": {
     "20260316": 10,
     "20260318": 3,

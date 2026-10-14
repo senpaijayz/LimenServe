@@ -34,6 +34,8 @@ The optional remote-ledger input is JSON shaped as either an array or `{ "migrat
 
 The checked-in policy freezes the pre-Phase-2 files by SHA-256. New migrations must use a unique 14-digit UTC prefix later than the frozen cutoff. The policy deliberately records `cleanReplayReady: false` and `remoteLedgersReconciled: false`, so the default GitHub workflow performs safe consistency checks and skips its Docker database job rather than knowingly failing or pretending replay works.
 
+The pre-existing `20260822_000001_replace_retail_pricelist_rpc.sql` (introduced in Git commit `cef19f5`) is recorded separately in `additionalLegacyFiles` with its normalized SQL SHA-256. This preserves its original filename and contents while enforcing immutable history. This source-history exception does not claim remote ledger reconciliation or enable clean replay; every newly added migration still requires a unique 14-digit version.
+
 `config.toml` follows the Supabase CLI v2.113.0 configuration model and uses PostgreSQL 17, the current platform default. Confirm every hosted project's `SHOW server_version` result before marking reconciliation complete. Local seed loading is disabled because the existing seed is not yet a reviewed synthetic fixture.
 
 Useful commands:
