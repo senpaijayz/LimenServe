@@ -3,6 +3,7 @@ import { CheckCircle2, Download, FileSpreadsheet, History, RefreshCcw, Upload } 
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import Input from '../../../components/ui/Input';
+import { describePricelistResult } from '../utils/pricelistResult';
 import { useToast } from '../../../components/ui/Toast';
 import {
     activateRetailPriceListVersion,
@@ -134,7 +135,7 @@ const PriceListManager = ({ onUpdated }) => {
 
     const applyResult = (result) => {
         setLastResult(result);
-        success(`Price list ${result.versionYear ?? versionYear} ${result.isActive === false ? 'saved as a draft' : 'activated'}: ${formatUploadCount(result.changedCount ?? result.updatedCount)} changed, ${formatUploadCount(result.unchangedCount ?? 0)} already matched.`);
+        success(describePricelistResult(result));
         void loadVersions();
         onUpdated?.();
     };
@@ -146,8 +147,8 @@ const PriceListManager = ({ onUpdated }) => {
 
         setActivatingVersionId(version.id);
         try {
-            await activateRetailPriceListVersion(version.id);
-            success(`Price list ${version.versionYear} is now active in inventory and quotations.`);
+            const result = await activateRetailPriceListVersion(version.id);
+            success(`Price list ${version.versionYear} is now active. ${describePricelistResult(result)}`);
             await loadVersions();
             onUpdated?.();
         } catch (activateError) {
@@ -388,9 +389,9 @@ const PriceListManager = ({ onUpdated }) => {
                                 <div className="flex items-start gap-3">
                                     <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
                                     <div>
-                                        <p className="font-semibold text-emerald-950">{lastResult.isActive === false ? 'Price list draft saved' : 'Price list applied successfully'}</p>
+                                        <p className="font-semibold text-emerald-950">{lastResult.noOp ? 'Price list already up to date' : lastResult.isActive === false ? 'Price list draft saved' : 'Price list applied successfully'}</p>
                                         <p className="mt-1 text-emerald-700">
-                                            {formatUploadCount(lastResult.changedCount ?? lastResult.updatedCount)} changed or new prices, {formatUploadCount(lastResult.unchangedCount ?? 0)} already matched.
+                                            {describePricelistResult(lastResult)}
                                         </p>
                                     </div>
                                 </div>
