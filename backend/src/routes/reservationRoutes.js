@@ -29,7 +29,7 @@ const ALL_STATUSES = new Set([
   'rejected',
   'cancelled',
 ]);
-const ADMIN_ACTIONS = new Set(['approve', 'allocate', 'reject', 'cancel', 'complete', 'update']);
+const ADMIN_ACTIONS = new Set(['approve', 'allocate', 'reject', 'cancel', 'complete', 'update', 'archive', 'restore']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const publicReservationRateLimitStore = env.publicRateLimitStore === 'supabase'
@@ -94,7 +94,11 @@ function normalizeReservationError(error) {
     error.publicMessage = 'This customer already has an active reservation for a selected part, or this request was already recorded. Review the existing reservation before retrying.';
   }
 
-  if (error?.code === '42501') {
+  if (error?.code === 'PT404') {
+    error.statusCode = 404;
+  } else if (error?.code === 'PT400') {
+    error.statusCode = 400;
+  } else if (error?.code === '42501') {
     error.statusCode = 403;
   } else if (['23505', '23503', 'PT409'].includes(error?.code) || message.toLowerCase().includes('already exists')) {
     error.statusCode = 409;
@@ -145,6 +149,8 @@ function normalizeReservation(row = {}, { customers = new Map(), products = new 
     allocatedQuantity,
     remainingQuantity: Math.max(requestedQuantity - allocatedQuantity, 0),
     status: row.status,
+    archived: Boolean(row.archived_at),
+    archivedAt: row.archived_at ?? null,
     paymentStatus: row.payment_status || 'unpaid',
     customerNote: row.customer_note,
     adminNote: row.admin_note,
@@ -361,6 +367,11 @@ router.post('/', publicReservationRateLimiter, async (req, res, next) => {
 router.get('/', requireRole('admin'), async (req, res, next) => {
   try {
     const status = String(req.query.status || 'all').trim().toLowerCase();
+    const archive = String(req.query.archive || 'current').trim().toLowerCase();
+    if (!['current', 'archived', 'all'].includes(archive)) {
+      res.status(400).json({ error: 'Choose current or archived reservations.' });
+      return;
+    }
     const limit = parseLimit(req.query.limit);
     const offset = parseOffset(req.query.offset);
     const startDate = normalizeOptionalDate(req.query.startDate);
@@ -411,6 +422,8 @@ router.get('/', requireRole('admin'), async (req, res, next) => {
       .select('*', { count: 'exact' });
 
     if (status !== 'all') query = query.eq('status', status);
+    if (archive === 'current') query = query.is('archived_at', null);
+    if (archive === 'archived') query = query.not('archived_at', 'is', null);
     if (startDate) query = query.gte('requested_at', `${startDate}T00:00:00.000Z`);
     if (endDate) query = query.lt('requested_at', `${endDate}T23:59:59.999Z`);
     if (customerIds) query = query.in('customer_id', customerIds);
@@ -521,7 +534,12 @@ router.patch('/:reservationId', requireRole('admin'), async (req, res, next) => 
     } else if (action === 'complete') {
       res.status(409).json({ error: 'This reservation needs to be upgraded to a reservation order before checkout.' });
       return;
-    } else await callRpc('process_part_reservation', {
+    } else if (action === 'archive' || action === 'restore') await callRpc('set_part_reservation_archived', {
+      p_reservation_id: row.id,
+      p_actor_user_id: req.user.id,
+      p_archived: action === 'archive',
+    });
+    else await callRpc('process_part_reservation', {
       p_reservation_id: req.params.reservationId,
       p_action: action,
       p_actor_user_id: req.user.id,

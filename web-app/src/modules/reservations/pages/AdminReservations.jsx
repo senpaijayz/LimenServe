@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, Check, Clock3, Eye, Filter, Minus, Package, PackageCheck, Plus, RefreshCw, Trash2, X, XCircle } from 'lucide-react';
+import { AlertCircle, Archive, ArchiveRestore, Check, Clock3, Eye, Filter, Minus, Package, PackageCheck, Plus, RefreshCw, Trash2, X, XCircle } from 'lucide-react';
 import { validateReservationForm } from '../utils/reservationForm';
 import Button from '../../../components/ui/Button';
 import ConfirmDialog from '../../../components/ui/ConfirmDialog';
@@ -20,7 +20,7 @@ const STATUS_LABELS = {
   rejected: 'Rejected', cancelled: 'Cancelled',
 };
 
-const INITIAL_FILTERS = { status: 'all', customer: '', part: '', startDate: '', endDate: '' };
+const INITIAL_FILTERS = { status: 'all', archive: 'current', customer: '', part: '', startDate: '', endDate: '' };
 const EMPTY_FORM = { customerName: '', customerPhone: '', customerEmail: '', items: [], note: '', paymentStatus: 'unpaid' };
 
 export default function AdminReservations() {
@@ -134,7 +134,7 @@ export default function AdminReservations() {
         estimatedAvailableOn: availabilityDates[reservation.id] || reservation.estimatedAvailableOn || null,
       });
       await loadQueue();
-      success(updated.sale
+      success(action === 'archive' ? 'Reservation archived. You can find it in Archived.' : action === 'restore' ? 'Reservation restored. Its original status is unchanged.' : updated.sale
         ? `Reservation added to Sales: ${updated.sale.transactionNumber}. Total ${formatCurrency(updated.sale.totalAmount)}.`
         : `${reservation.reservationNumber} updated to ${STATUS_LABELS[updated.status] || updated.status}.`);
       return true;
@@ -148,6 +148,12 @@ export default function AdminReservations() {
 
   const requestConfirmation = (reservation, action) => {
     const copy = {
+      archive: {
+        title: 'Archive this reservation?',
+        message: 'This removes it from the current list. Its activity and linked sale stay saved, and you can restore it later.',
+        confirmLabel: 'Archive reservation',
+        confirmVariant: 'primary',
+      },
       complete: {
         title: 'Complete reservation?',
         message: `This will finalize ${reservation.reservationNumber} and consume its allocated inventory.`,
@@ -247,6 +253,10 @@ export default function AdminReservations() {
         </div>
       </header>
 
+      <div className="flex gap-1 border-b border-primary-200" aria-label="Reservation views">
+        {['current', 'archived'].map((view) => <button key={view} type="button" aria-pressed={appliedFilters.archive === view} className={`min-h-11 border-b-2 px-4 text-sm font-semibold ${appliedFilters.archive === view ? 'border-accent-primary text-accent-primary' : 'border-transparent text-primary-500 hover:text-primary-800'}`} onClick={() => { setFilters((current) => ({ ...current, archive: view })); setAppliedFilters((current) => ({ ...current, archive: view })); }}>{view === 'current' ? 'Current' : 'Archived'}</button>)}
+      </div>
+
       <form
         className="grid gap-3 rounded-2xl border border-primary-200 bg-white p-4 md:grid-cols-2 xl:grid-cols-6"
         onSubmit={(event) => { event.preventDefault(); setAppliedFilters(filters); }}
@@ -291,13 +301,15 @@ export default function AdminReservations() {
                 </div>
 
                 <div className="space-y-3">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-primary-500">Reliable availability date<input type="date" className="input mt-2" value={availabilityDates[reservation.id] ?? reservation.estimatedAvailableOn ?? ''} onChange={(event) => setAvailabilityDates((current) => ({ ...current, [reservation.id]: event.target.value }))} /></label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-primary-500">Reliable availability date<input disabled={reservation.archived} type="date" className="input mt-2" value={availabilityDates[reservation.id] ?? reservation.estimatedAvailableOn ?? ''} onChange={(event) => setAvailabilityDates((current) => ({ ...current, [reservation.id]: event.target.value }))} /></label>
                   <div className="flex flex-wrap gap-2">
                     {reservation.status === 'pending' && <Button size="sm" variant="approve" onClick={() => applyAction(reservation, 'approve')} isLoading={isProcessing(reservation, 'approve')} leftIcon={<Check className="h-4 w-4" />}>Approve</Button>}
                     {['approved', 'waiting_for_stock', 'partially_available'].includes(reservation.status) && <Button size="sm" variant="warning" onClick={() => applyAction(reservation, 'allocate')} isLoading={isProcessing(reservation, 'allocate')} leftIcon={<Clock3 className="h-4 w-4" />}>Allocate stock</Button>}
                     {reservation.isActive && <Button size="sm" variant="reject" onClick={() => requestConfirmation(reservation, 'reject')} isLoading={isProcessing(reservation, 'reject')} leftIcon={<XCircle className="h-4 w-4" />}>Reject</Button>}
                     {reservation.isActive && <Button size="sm" variant="cancel" onClick={() => requestConfirmation(reservation, 'cancel')} isLoading={isProcessing(reservation, 'cancel')}>Cancel</Button>}
-                    <Button size="sm" variant="edit" onClick={() => applyAction(reservation, 'update')} isLoading={isProcessing(reservation, 'update')}>Save date</Button>
+                    {!reservation.archived && <Button size="sm" variant="edit" onClick={() => applyAction(reservation, 'update')} isLoading={isProcessing(reservation, 'update')}>Save date</Button>}
+                    {!reservation.archived && ['completed', 'cancelled', 'rejected'].includes(reservation.status) && <Button size="sm" variant="secondary" disabled={Boolean(processing)} onClick={() => requestConfirmation(reservation, 'archive')} leftIcon={<Archive className="h-4 w-4" />}>Archive</Button>}
+                    {reservation.archived && <Button size="sm" variant="secondary" disabled={Boolean(processing)} isLoading={isProcessing(reservation, 'restore')} onClick={() => applyAction(reservation, 'restore')} leftIcon={<ArchiveRestore className="h-4 w-4" />}>Restore</Button>}
                     <Button size="sm" variant="ghost" onClick={() => showActivity(reservation)} isLoading={isProcessing(reservation, 'activity')} leftIcon={<Eye className="h-4 w-4" />}>Activity</Button>
                   </div>
                 </div>

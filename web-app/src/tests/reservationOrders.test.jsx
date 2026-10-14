@@ -18,6 +18,29 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('reservation orders', () => {
+  it('archives final reservations with confirmation, filters the archive, and restores without reopening fulfillment', async () => {
+    const final = { ...reservation, status: 'cancelled', isActive: false, order: null, archived: false };
+    api.listReservations.mockResolvedValue({ reservations: [final], total: 1 });
+    api.processReservation.mockResolvedValue({ ...final, archived: true });
+    render(<AdminReservations />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Archive', exact: true }));
+    expect(api.processReservation).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Archive reservation' }));
+    await waitFor(() => expect(api.processReservation).toHaveBeenCalledWith(final.id, expect.objectContaining({ action: 'archive' })));
+    api.listReservations.mockResolvedValue({ reservations: [{ ...final, archived: true }], total: 1 });
+    fireEvent.click(screen.getByRole('button', { name: 'Archived', exact: true }));
+    await waitFor(() => expect(api.listReservations).toHaveBeenLastCalledWith(expect.objectContaining({ archive: 'archived' })));
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore', exact: true }));
+    await waitFor(() => expect(api.processReservation).toHaveBeenLastCalledWith(final.id, expect.objectContaining({ action: 'restore' })));
+    expect(screen.queryByRole('button', { name: 'Approve', exact: true })).toBeNull();
+  });
+
+  it('does not offer Archive for an active reservation', async () => {
+    api.listReservations.mockResolvedValue({ reservations: [{ ...reservation, status: 'pending', order: null }], total: 1 });
+    render(<AdminReservations />);
+    await screen.findByRole('button', { name: 'Approve', exact: true });
+    expect(screen.queryByRole('button', { name: 'Archive', exact: true })).toBeNull();
+  });
   it('adds several parts, increments an existing part, totals them and sends only product ids and quantities', async () => {
     render(<AdminReservations />);
     fireEvent.click(screen.getByRole('button', { name: 'Reserve for customer' }));
