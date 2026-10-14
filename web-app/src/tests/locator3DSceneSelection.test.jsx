@@ -192,6 +192,8 @@ describe('Locator3DScene selection', () => {
             productId: 'product-1',
             productName: 'Oil Filter',
             shelfNumber: 2,
+            layerNumber: 2,
+            sku: 'OF-1',
         }]);
 
         render(<Locator2DFallback />);
@@ -200,5 +202,13 @@ describe('Locator3DScene selection', () => {
         expect(screen.getByRole('table')).toBeTruthy();
         expect(screen.getByText('Oil Filter')).toBeTruthy();
         expect(screen.getByText('2D stockroom fallback')).toBeTruthy();
+        expect(screen.getByRole('columnheader', { name: 'Layer' })).toBeTruthy();
+        expect(screen.getByText('OF-1')).toBeTruthy();
+    });
+    it('shows when the fallback list is limited instead of silently hiding mapped products', () => {
+        resetLocator3DStore();
+        useLocator3DStore.getState().setProductLocations(Array.from({ length: 55 }, (_, index) => ({ productId: `part-${index}`, productName: `Part ${index}`, floor: 1, layerNumber: 2, binNumber: 1 })));
+        render(<Locator2DFallback />);
+        expect(screen.getByText(/Showing 50 of 55 locations/)).toBeTruthy();
     });
 });

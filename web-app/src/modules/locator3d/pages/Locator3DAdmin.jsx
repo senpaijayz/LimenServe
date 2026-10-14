@@ -1032,12 +1032,18 @@ function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shel
     );
 }
 
-function ProductAssignmentModal({ canAssign = false, layoutContext, isOpen, onAssigned, onClose, products, shelf }) {
+function ProductAssignmentModal({ canAssign = false, layoutContext, mutationLock, isOpen, onAssigned, onClose, products, shelf }) {
     const [query, setQuery] = useState('');
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [binNumber, setBinNumber] = useState(1);
     const [layerNumber, setLayerNumber] = useState(1);
     const [isSaving, setIsSaving] = useState(false);
+    const assignmentInFlight = useRef(false);
+    const assignmentMounted = useRef(true);
+    useEffect(() => {
+        assignmentMounted.current = true;
+        return () => { assignmentMounted.current = false; };
+    }, []);
     const { error, success } = useToast();
     const productLocations = useLocator3DStore((state) => state.productLocations);
 
@@ -1048,9 +1054,10 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, isOpen, onAs
         const selected = useLocator3DStore.getState().selectedProductForLocation;
         setQuery(selected?.name || selected?.sku || '');
         setSelectedProduct(selected || null);
-        setBinNumber(1);
-        setLayerNumber(1);
-    }, [isOpen, shelf?.id]);
+        const existing = productLocations.find((location) => location.productId === selected?.id && locationBelongsToShelf(location, shelf));
+        setBinNumber(existing?.binNumber || 1);
+        setLayerNumber(existing?.layerNumber || 1);
+    }, [isOpen, shelf, productLocations]);
 
     const assignedProducts = useMemo(() => productLocations.filter((location) => locationBelongsToShelf(location, shelf)), [productLocations, shelf]);
 
@@ -1069,9 +1076,11 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, isOpen, onAs
     }, [products, query]);
 
     const saveAssignment = async () => {
-        if (!canAssign || !shelf || !selectedProduct || isSaving) {
+        if (!canAssign || !shelf || !selectedProduct || assignmentInFlight.current || mutationLock?.current) {
             return;
         }
+        assignmentInFlight.current = true;
+        if (mutationLock) mutationLock.current = true;
         setIsSaving(true);
         try {
             const location = await assignProductLocation({
@@ -1085,19 +1094,22 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, isOpen, onAs
                 shelfObjectId: shelf.id,
                 sku: selectedProduct.sku || '',
             }, layoutContext);
+            if (!assignmentMounted.current) return;
             useLocator3DStore.getState().upsertProductLocation(location);
             onAssigned?.(location);
             success('Product location saved.');
             onClose();
         } catch (saveError) {
-            error(saveError.message || 'Unable to save product location.');
+            if (assignmentMounted.current) error(saveError.message || 'Unable to save product location.');
         } finally {
-            setIsSaving(false);
+            assignmentInFlight.current = false;
+            if (mutationLock) mutationLock.current = false;
+            if (assignmentMounted.current) setIsSaving(false);
         }
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} size="md" title={shelf ? (canAssign ? 'Assign product to ' : 'Products in ') + shelf.name : 'Shelf products'}>
+        <Modal isOpen={isOpen} onClose={() => { if (!assignmentInFlight.current) onClose(); }} size="md" title={shelf ? (canAssign ? 'Assign product to ' : 'Products in ') + shelf.name : 'Shelf products'}>
             <div className="space-y-4">
                 <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3">
                     <p className="text-xs font-black text-blue-950">{shelf?.name || 'Shelf'}</p>
@@ -1113,6 +1125,7 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, isOpen, onAs
                     <input
                         className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-blue-400 focus:bg-white"
                         id="assignment-product"
+                        disabled={isSaving}
                         onChange={(event) => {
                             setQuery(event.target.value);
                             setSelectedProduct(null);
@@ -1126,9 +1139,13 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, isOpen, onAs
                                 <button
                                     className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2.5 text-left text-sm transition last:border-b-0 hover:bg-blue-50"
                                     key={product.id}
+                                    disabled={isSaving}
                                     onClick={() => {
                                         setSelectedProduct(product);
                                         setQuery(product.name || product.sku || '');
+                                        const existing = productLocations.find((location) => location.productId === product.id && locationBelongsToShelf(location, shelf));
+                                        setBinNumber(existing?.binNumber || 1);
+                                        setLayerNumber(existing?.layerNumber || 1);
                                     }}
                                     type="button"
                                 >
@@ -1144,6 +1161,7 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, isOpen, onAs
                     <select
                         className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-blue-400 focus:bg-white"
                         id="assignment-layer"
+                        disabled={isSaving}
                         onChange={(event) => setLayerNumber(Number(event.target.value))}
                         value={layerNumber}
                     >
@@ -1157,6 +1175,7 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, isOpen, onAs
                     <select
                         className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-blue-400 focus:bg-white"
                         id="assignment-bin"
+                        disabled={isSaving}
                         onChange={(event) => setBinNumber(Number(event.target.value))}
                         value={binNumber}
                     >
@@ -1178,7 +1197,7 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, isOpen, onAs
                     </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-1">
-                    <Button onClick={onClose}>Cancel</Button>
+                    <Button disabled={isSaving} onClick={onClose}>Cancel</Button>
                     {canAssign && <Button disabled={!selectedProduct || isSaving} onClick={() => void saveAssignment()} tone="primary">
                         <Save className="h-4 w-4" />
                         {isSaving ? 'Saving…' : 'Save location'}
@@ -1824,11 +1843,14 @@ export default function Locator3DAdmin() {
             <SummaryCards />
 
             <ProductAssignmentModal
-                canAssign={canEditLayout && !hasUnsavedChanges && Boolean(currentLayout?.id)}
+                canAssign={canEditLayout && !hasUnsavedChanges && !isLoadingLayout && !isSavingLayout && Boolean(currentLayout?.id)}
+                mutationLock={saveInFlight}
                 layoutContext={{ layoutId: currentLayout?.id, expectedRevision: currentLayout?.revision }}
                 isOpen={Boolean(assignmentShelf)}
                 onAssigned={(location) => {
-                    setCurrentLayout((layout) => ({ ...layout, revision: location.layoutRevision }));
+                    setCurrentLayout((layout) => ({ ...layout, revision: location.layoutRevision,
+                        locations: [...(layout?.locations || []).filter((item) => item.productId !== location.productId), location],
+                    }));
                     setLocationNotice({ message: 'Mapped ' + (location.productName || 'product') + ' · ' + formatLocation(location), tone: 'success' });
                 }}
                 onClose={() => setAssignmentShelf(null)}

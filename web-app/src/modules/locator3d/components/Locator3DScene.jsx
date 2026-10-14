@@ -1255,10 +1255,9 @@ export function Locator2DFallback({ message = 'The interactive 3D map is unavail
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const productLocations = useLocator3DStore((state) => state.productLocations);
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
-    const rows = productLocations
-        .filter((location) => Number(location.floor || 1) === activeFloor)
-        .slice(0, 50);
-    const shelfCount = sceneObjects.filter((object) => objectVisibleOnFloor(object, activeFloor) && isShelfObject(object) && object.type !== 'parts-cabinet').length;
+    const floorLocations = productLocations.filter((location) => Number(location.floor || 1) === activeFloor);
+    const rows = floorLocations.slice(0, 50);
+    const shelfCount = sceneObjects.filter((object) => objectVisibleOnFloor(object, activeFloor) && isShelfObject(object)).length;
 
     return (
         <section className="h-full overflow-auto bg-slate-950 p-5 text-slate-100" data-testid="locator-2d-fallback">
@@ -1271,15 +1270,16 @@ export function Locator2DFallback({ message = 'The interactive 3D map is unavail
                     <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3"><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Floor</span><strong>Floor {activeFloor}</strong></div>
                     <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3"><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Shelves</span><strong>{shelfCount}</strong></div>
                 </div>
-                <div className="overflow-hidden rounded-xl border border-white/10">
+                <div className="overflow-x-auto rounded-xl border border-white/10">
                     <table className="min-w-full text-left text-sm">
-                        <thead className="bg-white/[0.06] text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Product</th><th className="px-3 py-2">Aisle</th><th className="px-3 py-2">Shelf</th><th className="px-3 py-2">Bin</th></tr></thead>
+                        <thead className="bg-white/[0.06] text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Product</th><th className="px-3 py-2">Aisle</th><th className="px-3 py-2">Shelf</th><th className="px-3 py-2">Layer</th><th className="px-3 py-2">Bin</th></tr></thead>
                         <tbody>
-                            {rows.map((location) => <tr className="border-t border-white/10" key={`${location.productId}-${location.binNumber}`}><td className="px-3 py-2">{location.productName || location.sku || 'Unassigned product'}</td><td className="px-3 py-2">{normalizeAisle(location.aisle) || '-'}</td><td className="px-3 py-2">{location.shelfNumber || '-'}</td><td className="px-3 py-2">{location.binNumber || '-'}</td></tr>)}
-                            {rows.length === 0 && <tr><td className="px-3 py-5 text-slate-400" colSpan="4">No saved product locations on this floor.</td></tr>}
+                            {rows.map((location) => <tr className="border-t border-white/10" key={`${location.productId}-${location.binNumber}`}><td className="px-3 py-2">{location.productName || location.sku || 'Unassigned product'}{location.productName && location.sku && <span className="mt-1 block font-mono text-xs text-slate-400">{location.sku}</span>}</td><td className="px-3 py-2">{normalizeAisle(location.aisle) || '-'}</td><td className="px-3 py-2">{location.shelfNumber || '-'}</td><td className="px-3 py-2">{location.layerNumber || 1}</td><td className="px-3 py-2">{location.binNumber || '-'}</td></tr>)}
+                            {rows.length === 0 && <tr><td className="px-3 py-5 text-slate-400" colSpan="5">No saved product locations on this floor.</td></tr>}
                         </tbody>
                     </table>
                 </div>
+                {floorLocations.length > rows.length && <p className="text-xs text-slate-400">Showing {rows.length} of {floorLocations.length} locations on this floor. Use product search to find any other mapped part.</p>}
             </div>
         </section>
     );

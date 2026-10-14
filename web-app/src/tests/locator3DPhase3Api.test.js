@@ -32,6 +32,34 @@ describe('normalized locator API', () => {
         expect(await getProductLocations()).toEqual(row.metadata.locations);
         expect(api.post.mock.calls[0][1]).toEqual({ action: 'load', payload: { name: '', publishedOnly: true } });
     });
+    it('rejects assignment responses without the requested saved mapping', async () => {
+        for (const result of [null, { ...row, metadata: { locations: [] } }, { ...row, id: 'different-layout' },
+            { ...row, metadata: { locations: [{ productId: 'part-a', shelfObjectId: 'different-shelf' }] } }]) {
+            api.post.mockResolvedValueOnce({ data: { result } });
+            await expect(assignProductLocation({ productId: 'part-a', shelfObjectId: 'shelf-a' }, { layoutId: 'layout-a', expectedRevision: 4 })).rejects.toThrow(/did not confirm/);
+        }
+    });
+    it('confirms an interrupted assignment with an exact-layout read and never resubmits it', async () => {
+        const location = { productId: 'part-a', shelfObjectId: 'shelf-a', floor: 1, layerNumber: 2, binNumber: 3 };
+        api.post.mockRejectedValueOnce({ code: 'ECONNABORTED', message: 'Timeout' });
+        api.post.mockResolvedValueOnce({ data: { result: { ...row, revision: 6, metadata: { locations: [location] } } } });
+        expect(await assignProductLocation(location, { layoutId: 'layout-a', expectedRevision: 5 })).toMatchObject({ ...location, layoutRevision: 6 });
+        expect(api.post.mock.calls.map((call) => call[1].action)).toEqual(['assign', 'load']);
+        expect(api.post.mock.calls[1][1].payload.layoutId).toBe('layout-a');
+    });
+    it('does not confirm a stale assignment or a different bin after timeout', async () => {
+        const location = { productId: 'part-a', shelfObjectId: 'shelf-a', binNumber: 3 };
+        for (const result of [
+            { ...row, metadata: { locations: [location] } },
+            { ...row, revision: 6, metadata: { locations: [{ ...location, binNumber: 2 }] } },
+            { ...row, revision: 6, metadata: { locations: [{ productId: 'part-a', shelfObjectId: 'shelf-a' }] } },
+        ]) {
+            api.post.mockRejectedValueOnce({ code: 'ECONNABORTED', message: 'Timeout' });
+            api.post.mockResolvedValueOnce({ data: { result } });
+            await expect(assignProductLocation(location, { layoutId: 'layout-a', expectedRevision: 5 })).rejects.toMatchObject({ code: 'ECONNABORTED' });
+        }
+        expect(api.post.mock.calls.filter((call) => call[1].action === 'assign')).toHaveLength(3);
+    });
     it('retains conflicts for the caller without retrying the write', async () => {
         api.post.mockRejectedValue({ response: { status: 409, data: { error: 'Reload before saving.' } } });
         await expect(saveStoreLayout([], 'Workshop')).rejects.toMatchObject({ status: 409, message: 'Reload before saving.' });

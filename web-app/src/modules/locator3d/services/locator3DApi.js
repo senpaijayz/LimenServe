@@ -59,8 +59,26 @@ export async function assignProductLocation(location, context = {}) {
         if (!layout) throw new Error('Publish a stockroom layout before assigning products.');
         target = { layoutId: layout.id, expectedRevision: layout.revision };
     }
-    const saved = mapLayout(await command('assign', { ...target, location }));
-    return { ...saved.locations.find((item) => item.productId === location.productId), layoutRevision: saved.revision };
+    const confirmedLocation = (saved) => {
+        const item = saved?.locations.find((entry) => entry.productId === location.productId);
+        if (saved?.id !== target.layoutId || !Number.isFinite(saved.revision) || !item
+            || item.shelfObjectId !== location.shelfObjectId
+            || ['floor', 'layerNumber', 'binNumber'].some((key) => location[key] !== undefined && Number(item[key]) !== Number(location[key]))) return null;
+        return { ...item, layoutRevision: saved.revision };
+    };
+    try {
+        const result = confirmedLocation(mapLayout(await command('assign', { ...target, location })));
+        if (!result) throw new Error('The server did not confirm this product’s location. Reload the saved layout before retrying.');
+        return result;
+    } catch (error) {
+        if (!['LOCATOR_SAVE_UNCONFIRMED', 'ECONNABORTED', 'ERR_NETWORK'].includes(error.code)) throw error;
+        try {
+            const saved = await loadStoreLayout('', { layoutId: target.layoutId });
+            const result = confirmedLocation(saved);
+            if (result && saved.revision > target.expectedRevision) return result;
+        } catch { /* Keep the original error; never replay an unconfirmed write. */ }
+        throw error;
+    }
 }
 export async function getProductLocations(name = '', options = { publishedOnly: true }) {
     return (await loadStoreLayout(name, options))?.locations || [];

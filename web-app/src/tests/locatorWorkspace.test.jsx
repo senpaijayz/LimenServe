@@ -15,7 +15,7 @@ vi.mock('../modules/locator3d/services/locator3DApi', () => ({
     listStoreLayouts: vi.fn(), loadStoreLayout: vi.fn(), saveStoreLayout: vi.fn(), setStoreLayoutPriority: vi.fn(),
     getLayoutHistory: vi.fn(), restoreLayoutRevision: vi.fn(),
 }));
-import { listStoreLayouts, loadStoreLayout, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
+import { assignProductLocation, listStoreLayouts, loadStoreLayout, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
 import Locator3DAdmin from '../modules/locator3d/pages/Locator3DAdmin';
 import { getFullProductCatalog } from '../services/catalogApi';
 
@@ -112,6 +112,47 @@ describe('Stockroom workspace workflows', () => {
         act(() => useLocator3DStore.getState().addSceneObject('shelf'));
         fireEvent.keyDown(window, { key: 's', ctrlKey: true });
         await waitFor(() => expect(saveStoreLayout).toHaveBeenCalledOnce());
+    });
+    it('prefills an existing assignment and retains its new mapping when an unchanged draft is saved', async () => {
+        const initial = { productId: 'part-1', productName: 'Oil Filter', sku: 'OF-1', shelfObjectId: 'shelf-4-a', aisle: 'B', shelfNumber: 2, floor: 1, layerNumber: 2, binNumber: 4 };
+        loadStoreLayout.mockResolvedValueOnce({ id: 'draft-1', revision: 7, status: 'draft', layoutName: 'Workshop', layoutData: { objects: LOCATOR_SCENE_OBJECTS }, locations: [initial] });
+        assignProductLocation.mockImplementation(async (location) => ({ ...location, layoutRevision: 8 }));
+        mount(); await loaded();
+        fireEvent.click(screen.getByRole('button', { name: 'Top-down 2D floor view' }));
+        fireEvent.keyDown(screen.getByRole('button', { name: 'Aisle B 4-Layer Shelf' }), { key: 'Enter' });
+        const dialog = screen.getByRole('dialog');
+        fireEvent.change(within(dialog).getByLabelText('Product'), { target: { value: 'OF-1' } });
+        fireEvent.click(within(dialog).getByRole('button', { name: /Oil Filter.*OF-1/ }));
+        expect(within(dialog).getByLabelText('Layer').value).toBe('2');
+        expect(within(dialog).getByLabelText('Bin').value).toBe('4');
+        fireEvent.change(within(dialog).getByLabelText('Bin'), { target: { value: '3' } });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Save location' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
+        fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+        await screen.findByText('Draft saved. Publish it when ready for staff.');
+        expect(useLocator3DStore.getState().productLocations[0]).toMatchObject({ layerNumber: 2, binNumber: 3 });
+        expect(saveStoreLayout).not.toHaveBeenCalled();
+    });
+    it('prevents duplicate assignments and layout saves while assignment is in flight', async () => {
+        loadStoreLayout.mockResolvedValueOnce({ id: 'draft-1', revision: 7, status: 'draft', layoutName: 'Workshop', layoutData: { objects: LOCATOR_SCENE_OBJECTS }, locations: [] });
+        let finish;
+        assignProductLocation.mockImplementation((location) => new Promise((resolve) => { finish = () => resolve({ ...location, layoutRevision: 8 }); }));
+        mount(); await loaded();
+        fireEvent.click(screen.getByRole('button', { name: 'Top-down 2D floor view' }));
+        fireEvent.keyDown(screen.getByRole('button', { name: 'Aisle B 4-Layer Shelf' }), { key: 'Enter' });
+        const dialog = screen.getByRole('dialog');
+        fireEvent.change(within(dialog).getByLabelText('Product'), { target: { value: 'OF-1' } });
+        fireEvent.click(within(dialog).getByRole('button', { name: /Oil Filter.*OF-1/ }));
+        const save = within(dialog).getByRole('button', { name: 'Save location' });
+        fireEvent.click(save); fireEvent.click(save);
+        fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+        expect(assignProductLocation).toHaveBeenCalledOnce();
+        expect(saveStoreLayout).not.toHaveBeenCalled();
+        expect(within(dialog).getByLabelText('Bin').disabled).toBe(true);
+        expect(within(dialog).getByRole('button', { name: 'Cancel' }).disabled).toBe(true);
+        await act(async () => finish());
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     });
 
     it('locates a product with the keyboard and closes results on Escape', async () => {
