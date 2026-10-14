@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { isShelfObject, normalizeAisle } from '../data/locatorScene';
+import { getStairLayoutMetrics, isShelfObject, normalizeAisle } from '../data/locatorScene';
 import { useLocator3DStore } from '../store/useLocator3DStore';
 import { getFloorBounds } from '../utils/locatorViewport';
 
@@ -28,6 +28,7 @@ export default function StockroomFloorPlan({ onShelfClick }) {
                     const { width = 1, depth = 1 } = object.dimensions || {};
                     const shelf = isShelfObject(object);
                     const stairs = object.type === 'stairs';
+                    const stair = stairs ? getStairLayoutMetrics(object) : null;
                     const located = locatedProduct?.shelfObjectId === object.id;
                     const interactive = stairs || (shelf && Boolean(onShelfClick));
                     const label = stairs ? `Stairs to Floor ${activeFloor === 1 ? 2 : 1}` : object.name;
@@ -35,14 +36,15 @@ export default function StockroomFloorPlan({ onShelfClick }) {
                         <g key={object.id} role={interactive ? 'button' : undefined} tabIndex={interactive ? 0 : undefined}
                             aria-label={label} onClick={() => activate(object)}
                             onKeyDown={(event) => { if (interactive && ['Enter', ' '].includes(event.key)) { event.preventDefault(); activate(object); } }}
-                            className={interactive ? 'cursor-pointer outline-none [&:focus-visible>rect]:stroke-blue-600 [&:focus-visible>rect]:stroke-[0.2] [&:hover>rect]:brightness-95' : ''}
+                            className={interactive ? 'cursor-pointer outline-none [&:focus-visible>rect]:stroke-blue-600 [&:focus-visible>rect]:stroke-[0.2] [&:hover>rect]:brightness-95 [&:focus-visible>path]:stroke-blue-600 [&:focus-visible>path]:stroke-[0.2] [&:hover>path]:brightness-95' : ''}
                             transform={`translate(${x} ${z}) rotate(${-Number(object.rotation?.[1] || 0) * 180 / Math.PI})`}>
                             <title>{label}</title>
-                            <rect x={-width / 2} y={-depth / 2} width={width} height={depth} rx="0.1"
+                            {stairs ? <path data-testid="floor-plan-stair-footprint" fill="#fef3c7" stroke="#b45309" strokeWidth="0.07"
+                                d={`M ${-stair.overallWidth / 2} ${-stair.overallDepth / 2} H ${stair.overallWidth / 2} V ${stair.overallDepth / 2} H ${stair.overallWidth / 2 - stair.flightWidth} V ${-stair.overallDepth / 2 + stair.flightWidth} H ${-stair.overallWidth / 2} Z`} /> : <rect x={-width / 2} y={-depth / 2} width={width} height={depth} rx="0.1"
                                 fill={located ? '#fef08a' : shelf ? '#dbeafe' : stairs ? '#fef3c7' : '#e2e8f0'}
-                                stroke={located ? '#ca8a04' : shelf ? '#2563eb' : stairs ? '#b45309' : '#64748b'} strokeWidth={located ? 0.16 : 0.07} />
+                                stroke={located ? '#ca8a04' : shelf ? '#2563eb' : stairs ? '#b45309' : '#64748b'} strokeWidth={located ? 0.16 : 0.07} />}
                             {shelf && [-0.25, 0.25].map((offset) => <line key={offset} x1={width * offset} x2={width * offset} y1={-depth / 2} y2={depth / 2} stroke="#93c5fd" strokeWidth="0.04" />)}
-                            <text textAnchor="middle" dominantBaseline="central" fontSize={Math.min(0.36, depth * 0.42)} fontWeight="700" fill="#1e293b" pointerEvents="none">
+                            <text x={stair?.landingX || 0} y={stair?.landingZ || 0} textAnchor="middle" dominantBaseline="central" fontSize={Math.min(0.36, depth * 0.42)} fontWeight="700" fill="#1e293b" pointerEvents="none">
                                 {shelf ? `${normalizeAisle(object.aisle)}-${object.shelfNumber || ''}` : stairs ? (activeFloor === 1 ? 'UP ↑' : 'DOWN ↓') : object.type === 'counter-computer' ? 'COUNTER' : object.type === 'entrance-door' ? 'DOOR' : ''}
                             </text>
                         </g>

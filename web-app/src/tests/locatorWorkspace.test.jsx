@@ -119,6 +119,7 @@ describe('Stockroom workspace workflows', () => {
         assignProductLocation.mockImplementation(async (location) => ({ ...location, layoutRevision: 8 }));
         mount(); await loaded();
         fireEvent.click(screen.getByRole('button', { name: 'Top-down 2D floor view' }));
+        expect(screen.getByTestId('floor-plan-stair-footprint').tagName.toLowerCase()).toBe('path');
         fireEvent.keyDown(screen.getByRole('button', { name: 'Aisle B 4-Layer Shelf' }), { key: 'Enter' });
         const dialog = screen.getByRole('dialog');
         fireEvent.change(within(dialog).getByLabelText('Product'), { target: { value: 'OF-1' } });
