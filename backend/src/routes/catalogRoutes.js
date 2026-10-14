@@ -7,7 +7,7 @@ import { clearPublicResponseCache } from '../middleware/cache.js';
 import { analyzeSupplierInvoiceImage } from '../services/invoiceOcrService.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import { receiveCatalogStock, receiveSupplierInvoiceStock, requireIdempotencyKey } from '../services/stockReceipt.js';
-import { parsePriceListActivation, parsePriceListVersionYear } from '../services/priceListVersionModel.js';
+import { annotatePriceListImportError, parsePriceListActivation, parsePriceListVersionYear } from '../services/priceListVersionModel.js';
 import { selectByInChunks } from '../utils/supabaseBatchSelect.js';
 import { createPriceHistoryRouter } from './priceHistoryRoutes.js';
 import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
@@ -4541,6 +4541,7 @@ async function replaceRetailPrices(items, effectiveFrom, options = {}) {
 
   if (rpcError) {
     const message = String(rpcError.message || '').toLowerCase();
+    annotatePriceListImportError(rpcError);
     if (message.includes('function') && message.includes('does not exist')) {
       rpcError.statusCode = 503;
       rpcError.publicMessage = 'Apply the versioned price list migration before uploading a list.';

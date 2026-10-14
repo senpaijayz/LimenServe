@@ -1,3 +1,11 @@
+export function annotatePriceListImportError(error) {
+  if (error?.code === '57014') {
+    error.statusCode = 504;
+    error.publicMessage = 'The pricelist exceeded the processing time limit. This upload was rolled back; no products or prices from this attempt were saved.';
+  }
+  return error;
+}
+
 export function parsePriceListVersionYear(value, effectiveFrom) {
   const provided = String(value ?? '').trim();
   if (provided) {

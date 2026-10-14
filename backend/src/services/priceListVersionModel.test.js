@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { comparePriceListRows, parsePriceListActivation, parsePriceListVersionYear } from './priceListVersionModel.js';
+import { annotatePriceListImportError, comparePriceListRows, parsePriceListActivation, parsePriceListVersionYear } from './priceListVersionModel.js';
+import { getPublicErrorResponse } from '../middleware/errorHandling.js';
+
+test('explains atomic import timeouts without exposing SQL details', () => {
+  const response = getPublicErrorResponse(annotatePriceListImportError({code:'57014',message:'canceling statement inside private SQL'}));
+  assert.equal(response.statusCode,504);
+  assert.match(response.body.error,/upload was rolled back/);
+  assert.equal(response.body.error.includes('private SQL'),false);
+  const unknown = {code:'XX001',message:'private connection information'};
+  assert.equal(getPublicErrorResponse(annotatePriceListImportError(unknown)).statusCode,500);
+  assert.equal(unknown.publicMessage,undefined);
+});
 
 test('infers a price-list year from the effective date and rejects unsafe years', () => {
   assert.equal(parsePriceListVersionYear('', '2026-01-01'), 2026);

@@ -18,9 +18,13 @@ try {
     create table catalog.inventory_balances(product_id uuid primary key references catalog.products(id),on_hand numeric,reserved numeric,reorder_point numeric,reorder_quantity numeric,location jsonb,as_of_date date,business_date date);
   `);
   await db.exec(await read('20260828100000_versioned_retail_pricelists.sql'));
+  // Production uses the stricter original staging-table schema.
+  await db.exec('alter table catalog.pricelist_import_staging alter column source_sheet set not null');
   const revisions = await read('20260930161208_product_pricelist_history.sql');
   await db.exec(revisions.slice(0,revisions.indexOf('-- Small, indexed')));
   await db.exec(await read('20261014142101_skip_unchanged_pricelist_prices.sql'));
+  await db.exec(await read('20261014145239_optimize_large_pricelist_import.sql'));
+  await db.exec(await read('20261014145524_preserve_pricelist_source_sheet.sql'));
   const scalar = async (sql,params=[]) => (await db.query(sql,params)).rows[0];
   const upload = async (items,year=2026,date='2026-10-14',activate=true) => (await scalar('select public.import_retail_pricelist_version($1::jsonb,$2,$3,null,$4,null) result',[JSON.stringify(items),year,date,activate])).result;
   const activate = async (id) => (await scalar('select public.activate_retail_pricelist_version($1,null) result',[id])).result;
@@ -30,6 +34,7 @@ try {
   const first = await upload(initial);
   assert.equal(first.newProductsCount,2);
   assert.equal(first.priceRowsWritten,2);
+  assert.equal((await scalar('select count(*)::int count from catalog.pricelist_import_staging where source_sheet is null')).count,0);
   assert.equal(await rows(),2);
   const initialPrice = await scalar("select p.id,p.updated_at from catalog.product_prices p join catalog.products product on product.id=p.product_id where product.sku='A'");
   // Re-upload is a true no-op, with no duplicate snapshot or price row.

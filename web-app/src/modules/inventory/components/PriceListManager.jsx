@@ -204,7 +204,7 @@ const PriceListManager = ({ onUpdated }) => {
             setSelectedFile(null);
         } catch (submitError) {
             setUploadProgress(0);
-            setUploadPhase('Replacement did not finish. Your existing pricelist was kept.');
+            setUploadPhase(submitError.message || 'The pricelist update did not finish. Check saved lists before retrying.');
             error(submitError.message || 'Failed to upload the price list file.');
         } finally {
             setIsSubmitting(false);
