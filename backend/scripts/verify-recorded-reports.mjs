@@ -31,7 +31,39 @@ try {
   assert.deepEqual(empty.categories,[]);
   await assert.rejects(db.query(`select public.get_recorded_sales_report('2026-10-15','2026-10-14')`));
   await assert.rejects(db.query(`select public.get_recorded_sales_report(null,null,null,'invalid')`));
+  await db.exec(`
+    alter table catalog.products add column is_active boolean default true;
+    create table operations.services(id uuid,name text,is_active boolean);
+    alter table operations.sales_transaction_items add column service_id uuid;
+    create table catalog.product_prices(id uuid,product_id uuid,price_type text,is_current boolean,amount numeric);
+    create table catalog.inventory_balances(product_id uuid,on_hand numeric,reserved numeric);
+    insert into catalog.product_prices values ('66666666-6666-4666-8666-666666666666','11111111-1111-4111-8111-111111111111','retail',true,100);
+    insert into catalog.inventory_balances values ('11111111-1111-4111-8111-111111111111',5,3);
+  `);
+  await db.exec(await readFile(new URL('../../supabase/migrations/20261014123456_recorded_sales_forecast_snapshot.sql',import.meta.url),'utf8'));
+  const snapshot = async () => (await db.query(`select public.get_recorded_forecast_snapshot('2026-11-14') result`)).rows[0].result;
+  assert.equal((await snapshot()).forecastMetadata.productStatus,'insufficient_history');
+  const stock = (await db.query(`select public.limen_current_retail_prices(array['11111111-1111-4111-8111-111111111111'::uuid]) result`)).rows[0].result;
+  assert.equal(stock[0].availableStock,2);
+  assert.equal(stock[0].available,true);
+  await db.exec(`
+    insert into operations.sales_transactions values
+    ('77777777-7777-4777-8777-777777777777','completed','2026-09-14','2026-09-14','SALE-4',null,null),
+    ('88888888-8888-4888-8888-888888888888','completed','2026-08-14','2026-08-14','SALE-5',null,null);
+    insert into operations.sales_transaction_items(transaction_id,product_id,line_type,item_sku_snapshot,item_name_snapshot,quantity,line_total)
+    select id,'11111111-1111-4111-8111-111111111111','product','PART','Recorded part',2,100 from operations.sales_transactions where transaction_number in ('SALE-4','SALE-5');
+  `);
+  const forecast = await snapshot();
+  assert.equal(forecast.forecastMetadata.productStatus,'available');
+  assert.equal(forecast.topProductForecasts[0].predicted_quantity,1.33);
+  assert.equal(forecast.topProductForecasts[0].predicted_revenue,66.67);
+  assert.equal(forecast.topProductForecasts[0].target_month,'2026-12-01');
+  assert.equal(forecast.topServiceForecasts.length,0);
   await db.exec('set role anon');
   await assert.rejects(db.query('select public.get_recorded_sales_report()'));
+  await assert.rejects(db.query('select public.get_recorded_forecast_snapshot()'));
   console.log('Recorded report SQL passed: live totals, exact dates, demo/cancelled/labor exclusion, empty states, input validation, restricted access.');
+} catch (error) {
+  console.error(error.message);
+  process.exitCode = 1;
 } finally { await db.close(); }

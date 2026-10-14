@@ -1,0 +1,42 @@
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import POSTerminal from '../modules/pos/pages/POSTerminal';
+import { CartProvider } from '../context/CartContext';
+import { STORAGE_KEYS } from '../utils/constants';
+const api = vi.hoisted(() => ({ error:vi.fn(),success:vi.fn(),prices:vi.fn(),sale:vi.fn(),products:[] }));
+vi.mock('../hooks/useProductCatalog', () => ({ default:() => ({products:api.products,pagination:{page:1,totalPages:1,totalCount:1,pageSize:14},loading:false}) }));
+vi.mock('../hooks/useBarcodeScanner', () => ({default:vi.fn()}));
+vi.mock('../store/useDataStore', () => ({default:() => ({findProduct:vi.fn()})}));
+vi.mock('../components/ui/Toast', () => ({useToast:() => ({error:api.error,success:api.success})}));
+vi.mock('../services/catalogApi', () => ({getCurrentRetailPrices:api.prices}));
+vi.mock('../services/posApi', () => ({createPosSale:api.sale}));
+vi.mock('../components/ui/BarcodeDisplay', () => ({default:() => null}));
+vi.mock('../components/ui/LargeBarcodeModal', () => ({default:() => null}));
+vi.mock('../components/ui/CameraScannerModal', () => ({default:() => null}));
+vi.mock('../components/ui/AddServiceModal', () => ({default:() => null}));
+vi.mock('../modules/inventory/components/ProductPriceHistory', () => ({default:() => null}));
+vi.mock('../modules/pos/components/SaleReceiptPreview.jsx', () => ({default:() => null}));
+const part = {id:'p',name:'Thermostat',sku:'PART',price:100,stock:0,availableStock:0};
+const mount = () => render(<CartProvider><POSTerminal /></CartProvider>);
+beforeEach(() => {vi.clearAllMocks();window.localStorage.clear();api.products=[part];api.prices.mockResolvedValue([{productId:'p',price:100,available:true,availableStock:0}]);});
+afterEach(cleanup);
+it('warns immediately and does not add a zero-stock product', () => {
+ mount();fireEvent.click(screen.getByRole('button',{name:/Thermostat.*PART/}));
+ expect(api.error).toHaveBeenCalledWith(expect.stringContaining('out of stock'));
+ expect(screen.getByText('Cart is empty')).toBeTruthy();
+ expect(screen.getByRole('button',{name:'Process Payment'}).disabled).toBe(true);
+});
+it('caps the cart at unreserved availability instead of physical stock', () => {
+ api.products=[{...part,stock:8,availableStock:2}];mount();
+ const button=screen.getByRole('button',{name:/Thermostat.*PART/});
+ fireEvent.click(button);fireEvent.click(button);fireEvent.click(button);
+ expect(api.error).toHaveBeenCalledWith(expect.stringContaining('available quantity is already in the cart'));
+ expect(screen.getByRole('button',{name:'Increase Thermostat quantity'}).disabled).toBe(true);
+});
+it('blocks restored/stale carts before opening checkout and submits no sale', async () => {
+ window.localStorage.setItem(STORAGE_KEYS.CART,JSON.stringify([{id:'p',productId:'p',name:'Thermostat',sku:'PART',lineType:'product',quantity:1,maxQuantity:999,price:100}]));
+ mount();fireEvent.click(screen.getByRole('button',{name:'Process Payment'}));
+ await waitFor(() => expect(api.error).toHaveBeenCalledWith(expect.stringContaining('Insufficient or unconfirmed available stock')));
+ expect(screen.queryByText('Cash Checkout')).toBeNull();
+ expect(api.sale).not.toHaveBeenCalled();
+});

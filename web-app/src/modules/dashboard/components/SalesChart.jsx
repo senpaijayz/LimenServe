@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useMemo } from 'react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import Card from '../../../components/ui/Card';
+import MeasuredChart from '../../../components/ui/MeasuredChart';
 import { formatCurrency } from '../../../utils/formatters';
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -21,48 +22,28 @@ const SalesChart = ({
     title = 'Item Sales Trend',
     subtitle = 'Live item-level revenue over time',
 }) => {
-    const chartData = useMemo(() => data.map((point) => ({
-        label: point.label,
-        revenue: Number(point.revenue ?? 0),
-        quantity: Number(point.quantity ?? 0),
-    })), [data]);
-    const chartContainerRef = useRef(null);
-    const [chartReady, setChartReady] = useState(false);
-
-    useEffect(() => {
-        const element = chartContainerRef.current;
-        if (!element) {
-            return undefined;
+    const chartData = useMemo(() => {
+        const grouped = new Map();
+        for (const point of data) {
+            const key = point.period_start || point.label;
+            const row = grouped.get(key) || { label: point.label, revenue: 0, quantity: 0 };
+            row.revenue += Number(point.revenue ?? 0);
+            row.quantity += Number(point.quantity ?? 0);
+            grouped.set(key, row);
         }
-
-        const syncSize = () => {
-            setChartReady(element.offsetWidth > 0 && element.offsetHeight > 0);
-        };
-
-        syncSize();
-        if (typeof ResizeObserver === 'undefined') {
-            return undefined;
-        }
-
-        const observer = new ResizeObserver(syncSize);
-        observer.observe(element);
-        return () => observer.disconnect();
-    }, [chartData.length]);
+        return [...grouped.values()];
+    }, [data]);
 
     return (
         <Card title={title} subtitle={subtitle}>
-            <div ref={chartContainerRef} className="mt-4 h-[240px] min-h-[240px] min-w-0 sm:h-[320px] sm:min-h-[320px]">
+            <div className="mt-4 h-[240px] min-h-[240px] min-w-0 sm:h-[320px] sm:min-h-[320px]">
                 {chartData.length === 0 ? (
                     <div className="flex h-full items-center justify-center rounded-xl border border-primary-200 bg-primary-50 text-sm text-primary-500">
                         No item sales trend is available for the selected filters yet.
                     </div>
-                ) : !chartReady ? (
-                    <div className="flex h-full items-center justify-center rounded-xl border border-primary-200 bg-primary-50 text-sm text-primary-500" aria-label="Preparing sales chart">
-                        Preparing chart…
-                    </div>
                 ) : (
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={240}>
-                        <AreaChart data={chartData} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
+                    <MeasuredChart className="h-full min-w-0">{({width,height}) => (
+                        <AreaChart width={width} height={height} data={chartData} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3} />
@@ -76,7 +57,7 @@ const SalesChart = ({
                             <Area type="monotone" dataKey="revenue" stroke="#2563eb" strokeWidth={2} fill="url(#salesGradient)" />
                             <Area type="monotone" dataKey="quantity" stroke="#0f766e" strokeWidth={2} fillOpacity={0} />
                         </AreaChart>
-                    </ResponsiveContainer>
+                    )}</MeasuredChart>
                 )}
             </div>
         </Card>

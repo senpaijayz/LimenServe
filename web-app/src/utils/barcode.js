@@ -54,7 +54,20 @@ export function getBarcodeLookupCandidates(value) {
         normalizedValue,
         strippedValue,
         ...prefixStrippedValues,
+        ...getEquivalentRetailCodes(normalizedValue),
     ].filter(Boolean)));
+}
+
+function getEquivalentRetailCodes(value) {
+    // UPC-A and zero-prefixed EAN-13 encode the same symbol. Keep the scanned
+    // value first; only add the equivalent when its check digit is valid.
+    if (!/^\d{12,13}$/.test(value)) return [];
+    const digits = [...value].map(Number);
+    const check = digits.pop();
+    const sum = digits.reverse().reduce((total, digit, index) => total + digit * (index % 2 === 0 ? 3 : 1), 0);
+    if ((10 - sum % 10) % 10 !== check) return [];
+    if (value.length === 12) return [`0${value}`];
+    return value.startsWith('0') ? [value.slice(1)] : [];
 }
 
 export function getBarcodeLookupQueries(value) {
@@ -164,4 +177,15 @@ export function productMatchesIdentifier(product, identifier) {
         productIdentifiers.includes(candidate)
         || candidate === productId
     ));
+}
+
+export function findProductByIdentifier(products, identifier) {
+    const code = normalizeBarcodeToken(identifier);
+    if (!code) return null;
+    const exact = products.filter((product) => [...PART_NUMBER_FIELDS.map((field) => product?.[field]), product?.id, ...(Array.isArray(product?.identifiers) ? product.identifiers : [])]
+        .some((value) => value != null && normalizeBarcodeToken(value) === code));
+    if (exact.length) return exact.length === 1 ? exact[0] : null;
+    const matches = products.filter((product) => productMatchesIdentifier(product, code));
+    // Never guess between different parts sharing a legacy/retail alias.
+    return matches.length === 1 ? matches[0] : null;
 }

@@ -56,4 +56,10 @@ describe('normalized locator API', () => {
         }
         expect(api.post.mock.calls.filter((call) => call[1].action === 'save')).toHaveLength(3);
     });
+    it('never confirms an interrupted save using an identical draft in another store', async () => {
+        api.post.mockRejectedValueOnce({ code: 'ECONNABORTED', message: 'Timeout' });
+        api.post.mockResolvedValueOnce({ data: { result: { ...row, store_id: 'other-store', status: 'draft', revision: 6 } } });
+        await expect(saveStoreLayout([], 'Workshop', { storeId: 'store-a', layoutId: 'layout-a', expectedRevision: 5 })).rejects.toMatchObject({ code: 'ECONNABORTED' });
+        expect(api.post.mock.calls[1][1].payload.storeId).toBe('store-a');
+    });
 });

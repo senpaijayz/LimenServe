@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, Check, Printer, Wrench, Camera, ChevronLeft, ChevronRight, AlertTriangle, Calculator, WalletCards, ScanLine } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
@@ -16,8 +16,9 @@ import SaleReceiptPreview from '../components/SaleReceiptPreview.jsx';
 import ProductPriceHistory from '../../inventory/components/ProductPriceHistory';
 import { getCurrentRetailPrices } from '../../../services/catalogApi';
 import { checkCartPrices } from '../utils/priceCheck';
+import { getCartStockIssues } from '../utils/stockAvailability';
 import useProductCatalog from '../../../hooks/useProductCatalog';
-import { buildProductBarcodeValue, getBarcodeLookupCandidates, productMatchesIdentifier } from '../../../utils/barcode';
+import { buildProductBarcodeValue, getBarcodeLookupCandidates, findProductByIdentifier } from '../../../utils/barcode';
 
 const PAGE_SIZE = 14;
 
@@ -53,7 +54,8 @@ function formatCatalogProduct(product) {
         category: product.category,
         price: Number(product.price ?? 0),
         stock: Number(product.stock ?? 0),
-        quantity: Number(product.stock ?? 0),
+        quantity: Math.max(0, Number(product.availableStock ?? product.stock ?? 0)),
+        maxQuantity: Math.max(0, Number(product.availableStock ?? product.stock ?? 0)),
         status: product.status ?? 'in_stock',
         uom: product.uom ?? 'PC',
         brand: product.brand ?? 'Mitsubishi',
@@ -72,7 +74,7 @@ const POSTerminal = () => {
         customerName, setCustomerName, discountPercent, setDiscountPercent
     } = useCart();
 
-    const { success } = useToast();
+    const { success, error: showScanError } = useToast();
     const { findProduct } = useDataStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
@@ -87,6 +89,8 @@ const POSTerminal = () => {
     const [lastTransaction, setLastTransaction] = useState(null);
     const [paymentError, setPaymentError] = useState('');
     const [processingPayment, setProcessingPayment] = useState(false);
+    const [checkingStock, setCheckingStock] = useState(false);
+    const paymentLockRef = useRef(false);
     const {
         products,
         pagination,
@@ -112,13 +116,20 @@ const POSTerminal = () => {
 
     // Handle product click
     const handleProductClick = (product) => {
+        const quantityInCart = items.find((item) => item.id === product.id)?.quantity ?? 0;
+        if (!Number.isFinite(product.maxQuantity) || quantityInCart + 1 > product.maxQuantity) {
+            showScanError(`${product.name}: ${product.maxQuantity > 0 ? 'available quantity is already in the cart' : 'out of stock'}. Receive stock before selling this part.`);
+            return;
+        }
         addItem(product);
         success(`Added ${product.name} to cart`);
     };
 
     // Handle hardware barcode scanning
     useBarcodeScanner((barcode) => {
-        handleBarcodeScanned(barcode);
+        return handleBarcodeScanned(barcode).catch(() => {
+            showScanError('Unable to look up the scanned part. Check your connection and try again.');
+        });
     });
 
     // Handle camera scanning
@@ -130,8 +141,8 @@ const POSTerminal = () => {
         setSearchQuery(searchValue);
         setCurrentPage(1);
 
-        const localProduct = visibleProducts.find((product) => productMatchesIdentifier(product, barcode));
-        const product = localProduct || await findProduct(barcode);
+        const localProduct = findProductByIdentifier(visibleProducts, barcode);
+        const product = localProduct || await findProduct(barcode, { throwOnError: true });
 
         if (product) {
             setSearchQuery(product.sku || searchValue);
@@ -139,6 +150,7 @@ const POSTerminal = () => {
         } else {
             console.warn(`Barcode not found in inventory: ${barcode}`);
         }
+        return { found: Boolean(product) };
     };
 
     const handleAddService = (serviceItem) => {
@@ -158,10 +170,23 @@ const POSTerminal = () => {
     const rangeStart = pagination.totalCount === 0 ? 0 : (((pagination.page ?? currentPage) - 1) * (pagination.pageSize ?? PAGE_SIZE)) + 1;
     const rangeEnd = pagination.totalCount === 0 ? 0 : Math.min((pagination.page ?? currentPage) * (pagination.pageSize ?? PAGE_SIZE), pagination.totalCount ?? 0);
 
-    const openPaymentModal = () => {
-        setPaymentAmount('');
-        setPaymentError('');
-        setShowPaymentModal(true);
+    const openPaymentModal = async () => {
+        if (checkingStock) return;
+        setCheckingStock(true);
+        try {
+            const productIds = [...new Set(items.filter((item) => item.lineType !== 'service' && item.sku !== 'SERVICE').map((item) => item.productId || item.id))];
+            const rows = productIds.length ? await getCurrentRetailPrices(productIds) : [];
+            const unavailable = getCartStockIssues(items, rows);
+            if (unavailable.length) {
+                showScanError(`Insufficient or unconfirmed available stock: ${unavailable.map((item) => item.sku || item.name).join(', ')}. Update the cart before checkout.`);
+                return;
+            }
+            setPaymentAmount('');
+            setPaymentError('');
+            setShowPaymentModal(true);
+        } catch (error) {
+            showScanError(error.message || 'Unable to confirm stock. No sale has been submitted.');
+        } finally { setCheckingStock(false); }
     };
 
     const closePaymentModal = () => {
@@ -177,6 +202,7 @@ const POSTerminal = () => {
 
     // Handle payment
     const handlePayment = async () => {
+        if (paymentLockRef.current) return;
         if (!canCompletePayment) {
             if (items.length === 0) {
                 setPaymentError('Add at least one item before completing the sale.');
@@ -186,12 +212,18 @@ const POSTerminal = () => {
             return;
         }
 
+        paymentLockRef.current = true;
         setProcessingPayment(true);
         setPaymentError('');
 
         try {
             const productIds = [...new Set(items.filter((item) => item.lineType !== 'service' && item.sku !== 'SERVICE').map((item) => item.productId || item.id))];
             const prices = productIds.length ? await getCurrentRetailPrices(productIds) : [];
+            const stockIssues = getCartStockIssues(items, prices);
+            if (stockIssues.length) {
+                setPaymentError(`Available stock changed or could not be confirmed for ${stockIssues.map((item) => item.sku || item.name).join(', ')}. Close checkout and update the cart. No sale has been submitted.`);
+                return;
+            }
             const priceCheck = checkCartPrices(items, prices);
             if (priceCheck.unavailable.length) {
                 setPaymentError(`No current selling price for ${priceCheck.unavailable.map((item) => item.sku || item.name).join(', ')}. Set a price in Products before selling; an old pricelist price is not automatically valid.`);
@@ -241,6 +273,7 @@ const POSTerminal = () => {
         } catch (error) {
             setPaymentError(error.message || 'Failed to save the sale.');
         } finally {
+            paymentLockRef.current = false;
             setProcessingPayment(false);
         }
     };
@@ -326,6 +359,7 @@ const POSTerminal = () => {
                                         <p className="text-sm font-semibold text-primary-950 line-clamp-2 mb-1">
                                             {product.name}
                                         </p>
+                                        <p className={`text-xs font-medium ${product.maxQuantity > 0 ? 'text-primary-500' : 'text-accent-danger'}`}>{product.maxQuantity > 0 ? `${product.maxQuantity} available` : 'Out of stock'}</p>
                                         <p className="text-xs font-mono text-primary-500 mb-2">{product.sku}</p>
                                         <p className="text-lg font-bold text-accent-blue">
                                             {formatCurrency(product.price)}
@@ -444,6 +478,7 @@ const POSTerminal = () => {
                                     <span className="w-8 text-center font-bold text-primary-950">{item.quantity}</span>
                                     <button
                                         onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                        disabled={item.lineType !== 'service' && item.quantity >= item.maxQuantity}
                                         className="flex min-h-9 min-w-9 items-center justify-center rounded-md border border-primary-200 bg-white text-primary-600 shadow-sm transition-colors hover:bg-primary-50"
                                         aria-label={`Increase ${item.name} quantity`}
                                     >
@@ -510,7 +545,9 @@ const POSTerminal = () => {
                     size="lg"
                     fullWidth
                     className="mt-4"
-                    disabled={items.length === 0}
+                    disabled={items.length === 0 || checkingStock}
+                    isLoading={checkingStock}
+                    loadingLabel="Checking stock…"
                     onClick={openPaymentModal}
                     leftIcon={<CreditCard className="w-5 h-5" />}
                 >

@@ -3,6 +3,11 @@ import { motion as Motion, AnimatePresence, useReducedMotion } from 'framer-moti
 import { X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 
+// Scanner dialogs may be nested over stock receiving. Closing the scanner
+// must not unlock background scrolling while another dialog is still open.
+let openModalCount = 0;
+let previousBodyOverflow = '';
+
 /**
  * Modal Component
  * A centered overlay modal with backdrop blur
@@ -42,16 +47,17 @@ const Modal = ({
     useEffect(() => {
         if (isOpen) {
             document.addEventListener('keydown', handleEscape);
+            if (openModalCount++ === 0) previousBodyOverflow = document.body.style.overflow;
             document.body.style.overflow = 'hidden';
-            window.requestAnimationFrame(() => {
+            const focusFrame = window.requestAnimationFrame(() => {
                 modalRef.current?.focus();
             });
+            return () => {
+                window.cancelAnimationFrame(focusFrame);
+                document.removeEventListener('keydown', handleEscape);
+                if (--openModalCount === 0) document.body.style.overflow = previousBodyOverflow;
+            };
         }
-
-        return () => {
-            document.removeEventListener('keydown', handleEscape);
-            document.body.style.overflow = '';
-        };
     }, [isOpen, handleEscape]);
 
     // Handle backdrop click

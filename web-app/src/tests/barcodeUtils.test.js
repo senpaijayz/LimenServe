@@ -6,9 +6,17 @@ import {
     getProductPartNumber,
     getBarcodeLookupCandidates,
     productMatchesIdentifier,
+    findProductByIdentifier,
 } from '../utils/barcode';
 
 describe('barcode utilities', () => {
+    it('prefers the complete code over a legacy suffix alias and refuses ambiguous aliases', () => {
+        const products = [{ id: 'one', sku: 'MD094120' }, { id: 'two', sku: 'MD0941200001' }];
+        expect(findProductByIdentifier(products, 'MD0941200001')).toBe(products[1]);
+        expect(findProductByIdentifier(products, 'MD094120')).toBe(products[0]);
+        expect(findProductByIdentifier([{ sku: '012345678905' }], '0012345678905')?.sku).toBe('012345678905');
+        expect(findProductByIdentifier(products, 'PAMD0941200001')).toBeNull();
+    });
     it('builds new product barcode payloads from the part number only', () => {
         expect(PRODUCT_BARCODE_SUFFIX).toBe('0001');
         expect(buildProductBarcodeValue('MD972932')).toBe('MD972932');

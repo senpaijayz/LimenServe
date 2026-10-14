@@ -20,6 +20,18 @@ This workspace update requires no SQL or environment changes. Deploy the fronten
 
 The upstairs stairwell is derived from the landing/upper flight in floor-local coordinates, including stair rotation and size. Adjacent flooring remains solid; floor markings are clipped out of the opening. No saved-layout rewrite is required. Regression coverage is in `web-app/src/tests/stairOpening.test.js`, including 15°/45°/90° rotations, shifted floors, edge clipping, and ray-casting through the actual mesh.
 
+## Barcode scanner
+
+Camera scanning in POS, inventory, and stock receiving uses the shared scanner dialog. It prefers the rear camera, requests continuous autofocus when available, shows supported camera/torch controls, and includes photo and manual entry fallbacks. The preview stays rectangular on phones; landscape uses a two-column layout.
+
+Recognition uses pinned `zxing-wasm` 3.1.4 in an on-demand Web Worker (replacing `html5-qrcode` 2.3.8). The matching WASM binary is bundled and served by the app, not a CDN. Camera images are processed locally; only the validated identifier reaches the existing catalogue workflow. Supported formats: EAN-13, EAN-8, UPC-A, UPC-E, Code 128, Code 39, Code 93, ITF, Codabar, QR Code, Data Matrix, PDF417, and Aztec. QR/2D content must be a product identifier, not a URL or arbitrary text. Full codes and leading zeros are preserved; existing supplier-prefix/legacy-suffix lookup remains, with checksum-validated UPC-A/EAN-13 equivalents.
+
+Only one camera session may run. Live reads require two matching frames, pause while a result is processed, and close after a short success delay. A no-match result stays open. Closing, switching cameras, page hiding, or using a photo stops the camera and decoder. Unanswered permission requests time out; late permission grants release their tracks. No inventory is received or sale committed merely by scanning.
+
+Verification: `cd web-app`, `npm ci`, `npm run lint`, `npx vitest run`, `npm run build`. Decoder tests independently generate all 13 formats with development-only `bwip-js`; camera tests cover permission failures, duplicate callbacks, StrictMode, pending requests, cleanup, photos, switching, torch, and keyboard/manual fallback. See [scanner verification](web-app/SCANNER_VERIFICATION.md) for browser and physical-device checks. The build checks both the initial dependency graph and a separate 450 KiB gzip budget for the on-demand worker + WASM.
+
+Deployment needs only the frontend build, including `dist/assets/*.wasm`. No SQL, backend configuration, or new credentials are needed. Camera access requires HTTPS (localhost works for development). If a custom CSP is introduced, allow same-origin workers and WASM compilation via `script-src 'wasm-unsafe-eval'`; do not add broad `unsafe-eval` or remote decoder CDNs. Roll back the frontend deployment to restore the previous scanner; database contents are unchanged.
+
 ## Local setup
 
 Requirements: Node.js 22 and npm. Supabase CLI v2.113.0 plus Docker are required for the isolated database replay after the migration baseline is reconciled.

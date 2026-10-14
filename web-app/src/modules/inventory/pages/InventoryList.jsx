@@ -25,7 +25,7 @@ import {
 } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
-import { getPartNumberSearchSuggestions, getProductPartNumber, productMatchesIdentifier } from '../../../utils/barcode';
+import { getPartNumberSearchSuggestions, getProductPartNumber, findProductByIdentifier } from '../../../utils/barcode';
 import { isShelfObject, normalizeAisle } from '../../locator3d/data/locatorScene';
 import { assignProductLocation, loadStoreLayout } from '../../locator3d/services/locator3DApi';
 import { buildLocator3DUrl } from '../../locator3d/utils/locatorNavigation';
@@ -701,20 +701,20 @@ const InventoryList = () => {
             setSavingProductDetails(false);
         }
     };
-    const lookupAndPreviewProduct = async (identifier) => {
+    const lookupAndPreviewProduct = async (identifier, options) => {
         const trimmedIdentifier = String(identifier || '').trim();
         if (!trimmedIdentifier) {
             return;
         }
 
-        const visibleMatch = visibleProducts.find((product) => productMatchesIdentifier(product, trimmedIdentifier));
+        const visibleMatch = findProductByIdentifier(visibleProducts, trimmedIdentifier);
 
         if (visibleMatch) {
             openPreview(visibleMatch);
             return visibleMatch;
         }
 
-        const product = await findProduct(trimmedIdentifier);
+        const product = await findProduct(trimmedIdentifier, options);
         if (product) {
             openPreview(product);
             return product;
@@ -1129,11 +1129,11 @@ const InventoryList = () => {
                 onScan={async (barcode) => {
                     if (barcode) {
                         handleSearchQueryChange(barcode);
-                        success(`Scanned: ${barcode}`);
-                        const matchedProduct = await lookupAndPreviewProduct(barcode);
+                        const matchedProduct = await lookupAndPreviewProduct(barcode, { throwOnError: true });
                         if (matchedProduct) {
                             handleSearchQueryChange(getProductPartNumber(matchedProduct));
                         }
+                        return { found: Boolean(matchedProduct) };
                     }
                 }}
             />

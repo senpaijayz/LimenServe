@@ -39,6 +39,17 @@ describe('dashboard refresh feedback', () => {
 
   afterEach(() => cleanup());
 
+  it('does not present unsupported old warehouse forecasts as current predictions', async () => {
+    vi.mocked(getAnalyticsDashboardSnapshot).mockResolvedValue({
+      forecastMetadata: { generatedAt: '2026-10-14T12:00:00Z', productStatus: 'insufficient_history', targetMonth: '2026-11-01', historyStart: '2026-04-01', historyEnd: '2026-09-30' },
+      topProductForecasts: [], topServiceForecasts: [],
+    });
+    render(<MemoryRouter><AdminDashboard /></MemoryRouter>);
+    await screen.findAllByText('Insufficient history');
+    expect(screen.queryByText('₱9,973.00')).toBeNull();
+    expect(screen.getByText(/Recorded-sales snapshot/)).toBeTruthy();
+  });
+
   it('reloads dashboard data without rebuilding analytics', async () => {
     const reload = deferred();
     vi.mocked(getAnalyticsDashboardSnapshot)

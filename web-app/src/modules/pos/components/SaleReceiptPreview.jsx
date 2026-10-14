@@ -1,4 +1,6 @@
 import { formatCurrency, formatDateTime } from '../../../utils/formatters';
+import { useEffect, useState } from 'react';
+import { getPublicCmsSite } from '../../../services/cmsApi';
 
 const ReceiptRow = ({ label, value, strong = false, danger = false }) => (
     <div
@@ -18,6 +20,12 @@ const ReceiptRow = ({ label, value, strong = false, danger = false }) => (
 );
 
 const SaleReceiptPreview = ({ receipt, printId = 'pos-receipt' }) => {
+    const [business, setBusiness] = useState({});
+    useEffect(() => {
+        let active = true;
+        getPublicCmsSite().then((site) => { if (active) setBusiness(site.settings ?? {}); }).catch(() => { /* Never invent legal identifiers or contact details. */ });
+        return () => { active = false; };
+    }, []);
     if (!receipt) {
         return null;
     }
@@ -29,9 +37,9 @@ const SaleReceiptPreview = ({ receipt, printId = 'pos-receipt' }) => {
         <div className="receipt-preview" id={printId} style={{ fontFamily: 'Inter, Arial, sans-serif' }}>
             <div style={{ textAlign: 'center', borderBottom: '2px solid black', paddingBottom: '12px', marginBottom: '12px' }}>
                 <img src="/LogoLimen.jpg" alt="Limen Logo" style={{ height: '48px', margin: '0 auto 6px', display: 'block', filter: 'grayscale(1) contrast(1.3)' }} />
-                <h2 style={{ fontSize: '16px', fontWeight: '800', margin: 0, letterSpacing: '-0.5px' }}>LIMEN AUTO PARTS CENTER</h2>
-                <p style={{ fontSize: '11px', margin: '2px 0 0', color: '#555' }}>1308, 264 Epifanio de los Santos Ave, Pasay City, 1308 Metro Manila</p>
-                <p style={{ fontSize: '11px', margin: '1px 0 0', color: '#555' }}>Tel: (0915) 522 5629 | Landline: 02 8551 3518 | TIN: 000-123-456-000</p>
+                <h2 style={{ fontSize: '16px', fontWeight: '800', margin: 0, letterSpacing: '-0.5px' }}>{business.company_name || 'LIMEN AUTO PARTS CENTER'}</h2>
+                {business.address && <p style={{ fontSize: '11px', margin: '2px 0 0', color: '#555' }}>{business.address}</p>}
+                {(business.primary_phone || business.landline) && <p style={{ fontSize: '11px', margin: '1px 0 0', color: '#555' }}>{[business.primary_phone && `Tel: ${business.primary_phone}`, business.landline && `Landline: ${business.landline}`].filter(Boolean).join(' | ')}</p>}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', gap: '12px' }}>

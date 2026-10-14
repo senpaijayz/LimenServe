@@ -38,39 +38,56 @@ const normalizeInvoicePartNumber = (value = '') => String(value || '')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
 
-function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products }) {
+export function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products }) {
     const [query, setQuery] = useState(item.searchQuery || '');
     const [searching, setSearching] = useState(false);
     const [searchError, setSearchError] = useState('');
     const [showCamera, setShowCamera] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(true);
+    const lastSearch = useRef(null);
+    const updateRow = useRef(onUpdate);
+    useEffect(() => { updateRow.current = onUpdate; }, [onUpdate]);
+    useEffect(() => () => { lastSearch.current = null; }, []);
 
-    const doSearch = useCallback(async (q) => {
+    const doSearch = useCallback((q) => {
         const id = q.trim();
         if (!id) {
-            onUpdate(index, { product: null, searchQuery: q });
+            lastSearch.current = null;
+            updateRow.current(index, { product: null, searchQuery: q });
             setSearchError('');
-            return;
+            return Promise.resolve({ found: false });
         }
-
+        // The camera submits immediately; the typed-search debounce may fire
+        // afterwards. Share that lookup, and ignore results for superseded text.
+        if (lastSearch.current?.id === id && (lastSearch.current.pending || Date.now() - lastSearch.current.at < 2000)) return lastSearch.current.promise;
+        const request = { id, promise: null, pending: true, at: Date.now() };
+        lastSearch.current = request;
         setSearching(true);
-        try {
-            const found = await findProduct(id);
-            if (found) {
-                onUpdate(index, { product: found, searchQuery: q });
-                setSearchError('');
-            } else {
-                onUpdate(index, { product: null, searchQuery: q });
-                setSearchError('Part number not found');
+        request.promise = (async () => {
+            try {
+                const found = await findProduct(id, { throwOnError: true });
+                if (lastSearch.current !== request) return { found: false };
+                updateRow.current(index, { product: found || null, searchQuery: q });
+                setSearchError(found ? '' : 'Part number not found');
+                return { found: Boolean(found) };
+            } catch (error) {
+                if (lastSearch.current === request) {
+                    lastSearch.current = null;
+                    setSearchError('Unable to look up this part. Please try again.');
+                    setSearching(false);
+                }
+                throw error;
+            } finally {
+                request.pending = false;
+                if (lastSearch.current === request) setSearching(false);
             }
-        } finally {
-            setSearching(false);
-        }
-    }, [findProduct, index, onUpdate]);
+        })();
+        return request.promise;
+    }, [findProduct, index]);
 
     useEffect(() => {
         if (!query.trim()) return undefined;
-        const timer = setTimeout(() => doSearch(query), 400);
+        const timer = setTimeout(() => { void doSearch(query).catch(() => {}); }, 400);
         return () => clearTimeout(timer);
     }, [query, doSearch]);
 
@@ -104,6 +121,8 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products })
                         value={query}
                         onChange={(e) => {
                             const nextQuery = e.target.value;
+                            lastSearch.current = null;
+                            setSearching(false);
                             const nextNormalized = nextQuery.trim().toUpperCase();
                             setQuery(nextQuery);
                             setShowSuggestions(true);
@@ -130,6 +149,7 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products })
                                     type="button"
                                     onClick={() => {
                                         const partNumber = getProductPartNumber(product);
+                                        lastSearch.current = null;
                                         setQuery(partNumber);
                                         onUpdate(index, { product, searchQuery: partNumber });
                                         setSearchError('');
@@ -144,7 +164,7 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products })
                         </div>
                     )}
                 </div>
-                <Button variant="secondary" onClick={() => setShowCamera(true)} type="button" className="px-3">
+                <Button variant="secondary" onClick={() => setShowCamera(true)} type="button" className="px-3" aria-label="Scan product barcode">
                     <Camera className="w-4 h-4" />
                 </Button>
             </div>
@@ -184,7 +204,7 @@ function BulkItemRow({ item, index, onUpdate, onRemove, findProduct, products })
                 onScan={(code) => {
                     if (code) {
                         setQuery(code);
-                        doSearch(code);
+                        return doSearch(code);
                     }
                 }}
             />

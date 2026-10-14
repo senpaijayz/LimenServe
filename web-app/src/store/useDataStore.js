@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { getProductCatalog } from '../services/catalogApi';
-import { getBarcodeLookupQueries, productMatchesIdentifier } from '../utils/barcode';
+import { getBarcodeLookupQueries, findProductByIdentifier } from '../utils/barcode';
 
 const BOOTSTRAP_PAGE_SIZE = 100;
 const BACKGROUND_BATCH_SIZE = 4;
@@ -64,7 +64,7 @@ function findExactProductMatch(products, identifier) {
         return null;
     }
 
-    return products.find((product) => productMatchesIdentifier(product, identifier)) || null;
+    return findProductByIdentifier(products, identifier);
 }
 
 /**
@@ -160,7 +160,7 @@ const useDataStore = create((set, get) => ({
         return request;
     },
 
-    findProduct: async (identifier) => {
+    findProduct: async (identifier, { throwOnError = false } = {}) => {
         const exactMatch = findExactProductMatch(get().products, identifier);
         if (exactMatch) {
             return exactMatch;
@@ -201,6 +201,7 @@ const useDataStore = create((set, get) => ({
             return remoteMatch;
         } catch (error) {
             console.error('Failed to find product from Supabase:', error);
+            if (throwOnError) throw error;
             return null;
         }
     },

@@ -42,6 +42,9 @@ export function CartProvider({ children }) {
                 maxQuantity: product.maxQuantity ?? product.quantity ?? 999,
             };
 
+            if (lineType === 'product' && (normalizedItem.maxQuantity <= 0 || quantity <= 0)) return currentItems;
+            normalizedItem.quantity = Math.min(quantity, normalizedItem.maxQuantity);
+
             let newItems;
             if (existingIndex >= 0) {
                 // Update quantity if item exists

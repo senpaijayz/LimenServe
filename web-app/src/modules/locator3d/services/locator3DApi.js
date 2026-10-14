@@ -36,9 +36,10 @@ export async function saveStoreLayout(objects, name = LOCATOR_LAYOUT_NAME, conte
         // An interrupted response is not proof the transaction failed. Confirm
         // the exact snapshot using a read; never blindly submit the save again.
         try {
-            const saved = await loadStoreLayout(name);
+            const saved = await loadStoreLayout(name, context.storeId ? { storeId: context.storeId } : {});
             const newer = saved?.id !== context.layoutId || saved?.revision > context.expectedRevision;
             if (saved?.status === 'draft' && saved.layoutName === name && newer
+                && (!context.storeId || saved.storeId === context.storeId)
                 && snapshotKey(saved.layoutData?.objects) === snapshotKey(objects)) return saved;
         } catch { /* Preserve the original failure and all local edits. */ }
         throw error;

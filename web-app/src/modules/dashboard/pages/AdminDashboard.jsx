@@ -128,6 +128,8 @@ const AdminDashboard = () => {
     };
 
     const latestRefresh = snapshot?.latestRefresh;
+    const forecastMetadata = snapshot?.forecastMetadata;
+    const hasProductForecast = forecastMetadata?.productStatus === 'available';
     const topProductForecasts = snapshot?.topProductForecasts || [];
     const topServiceForecasts = snapshot?.topServiceForecasts || [];
     const topSellingItems = snapshot?.topSellingItems || [];
@@ -172,6 +174,7 @@ const AdminDashboard = () => {
                                 Last analytics refresh: {new Date(latestRefresh.endedAt).toLocaleString()}
                             </p>
                         )}
+                        {forecastMetadata?.generatedAt && <p className="mt-2 text-xs text-primary-500">Recorded-sales snapshot: {new Date(forecastMetadata.generatedAt).toLocaleString()}</p>}
                         {!isProfileReady && (
                             <p className="mt-2 text-xs text-primary-500">
                                 Loading your profile…
@@ -188,7 +191,7 @@ const AdminDashboard = () => {
                             isDisabled={loading}
                             loadingLabel="Refreshing…"
                             onClick={handleDashboardRefresh}
-                            title="Reload dashboard data. Rebuild forecasts from Reports."
+                            title="Reload live data and recalculate recorded-sales forecasts."
                         >
                             Refresh
                         </Button>
@@ -261,10 +264,12 @@ const AdminDashboard = () => {
                 <div>
                     <h2 className="text-base font-semibold text-primary-950">Sales outlook</h2>
                     <p className="mt-1 text-xs text-primary-500">Estimates based on recorded sales. Forecasts are not confirmed revenue.</p>
+                    <p className="mt-1 text-xs text-primary-500">Six-completed-month average, including months with no sales. Requires at least three active months and activity within the last three months. Demo sales and uncompleted service orders are excluded.</p>
+                    {forecastMetadata?.targetMonth && <p className="mt-1 text-xs text-primary-500">Target: {new Date(`${forecastMetadata.targetMonth}T12:00:00`).toLocaleDateString('en-PH', {month:'long',year:'numeric'})} · History: {forecastMetadata.historyStart} to {forecastMetadata.historyEnd}</p>}
                 </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <KPICard title="Predicted Revenue" value={loading ? 'Loading...' : formatCurrency(predictedRevenue)} icon={<DollarSign className="w-6 h-6" />} trend="up" trendValue={`${topProductForecasts.length} top products`} accentColor="border-accent-blue" iconBg="bg-blue-50 text-accent-blue" />
-                <KPICard title="Forecasted Units" value={loading ? 'Loading...' : formatNumber(forecastedProductCount)} icon={<Package className="w-6 h-6" />} trend="up" trendValue="Next month demand" accentColor="border-indigo-500" iconBg="bg-indigo-50 text-indigo-600" />
+                <KPICard title="Predicted Revenue" value={loading ? 'Loading...' : error ? 'Unavailable' : hasProductForecast ? formatCurrency(predictedRevenue) : 'Insufficient history'} icon={<DollarSign className="w-6 h-6" />} trendValue={hasProductForecast ? `${topProductForecasts.length} qualifying products` : 'No supported prediction yet'} />
+                <KPICard title="Forecasted Units" value={loading ? 'Loading...' : error ? 'Unavailable' : hasProductForecast ? formatNumber(forecastedProductCount) : 'Insufficient history'} icon={<Package className="w-6 h-6" />} trendValue="Next-month estimate, not confirmed demand" />
                 <KPICard title="Top Selling Items" value={loading ? 'Loading...' : formatNumber(topSellingItems.length)} icon={<TrendingUp className="w-6 h-6" />} trend="up" trendValue={topSellingLeader?.product_name || 'No item leader yet'} accentColor="border-emerald-500" iconBg="bg-emerald-50 text-emerald-600" />
             </div>
             </section>
@@ -295,7 +300,7 @@ const AdminDashboard = () => {
                             </div>
                             <div>
                                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary-400">Top Service Forecast</p>
-                                <p className="mt-1 font-semibold text-primary-950">{topServiceForecasts[0]?.service_name || 'No service forecast data yet'}</p>
+                                <p className="mt-1 font-semibold text-primary-950">{topServiceForecasts[0]?.service_name || 'Insufficient service sales history'}</p>
                                 {topServiceForecasts[0] && (
                                     <p className="text-sm text-primary-500">{formatNumber(topServiceForecasts[0].predicted_quantity)} projected jobs next month</p>
                                 )}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { BarChart, Bar, CartesianGrid, Tooltip, XAxis, YAxis } from 'recharts';
+import MeasuredChart from '../../../components/ui/MeasuredChart';
 import { AlertTriangle, CalendarRange, Download, FilePlus2, Filter, Receipt, RefreshCw, TrendingUp } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
@@ -834,15 +835,15 @@ const SalesReport = () => {
             <Card title="Sales By Category" subtitle="Dedicated category revenue graph from the selected sales period.">
                 <div className="h-80">
                     {salesByCategory.length > 0 ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={salesByCategory} margin={{ top: 12, right: 16, bottom: 32, left: 8 }}>
+                        <MeasuredChart>{({width,height}) => (
+                            <BarChart width={width} height={height} data={salesByCategory} margin={{ top: 12, right: 16, bottom: 32, left: 8 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                 <XAxis dataKey="category" angle={-18} textAnchor="end" height={72} interval={0} tick={{ fontSize: 11 }} />
                                 <YAxis tickFormatter={(value) => formatNumber(value)} width={72} />
                                 <Tooltip formatter={(value, name) => [name === 'revenue' ? formatCurrency(value) : formatNumber(value), name === 'revenue' ? 'Revenue' : 'Units']} />
                                 <Bar dataKey="revenue" fill="#1d4ed8" radius={[6, 6, 0, 0]} />
                             </BarChart>
-                        </ResponsiveContainer>
+                        )}</MeasuredChart>
                     ) : (
                         <div className="flex h-full items-center justify-center rounded-xl border border-primary-200 bg-primary-50 text-sm text-primary-500">
                             No category sales data matched the selected filters.

@@ -170,15 +170,7 @@ async function buildAnalyticsDashboardSnapshotFallback() {
 }
 
 async function loadAnalyticsDashboardSnapshot() {
-  try {
-    return await callRpc('get_analytics_dashboard_snapshot');
-  } catch (error) {
-    if (isMissingAnalyticsDependency(error, ['get_analytics_dashboard_snapshot', 'analytics_refresh_runs'])) {
-      return buildAnalyticsDashboardSnapshotFallback();
-    }
-
-    throw error;
-  }
+  return callRpc('get_recorded_forecast_snapshot');
 }
 
 router.get('/dashboard', async (req, res, next) => {
@@ -336,9 +328,8 @@ router.get('/refresh-runs', requireRole('admin'), async (req, res, next) => {
 
 router.get('/forecasts/products', async (req, res, next) => {
   try {
-    const forecasts = await callRpc('get_monthly_product_forecasts', {
-      target_month: req.query.targetMonth || null,
-    });
+    const snapshot = await callRpc('get_recorded_forecast_snapshot');
+    const forecasts = (snapshot?.topProductForecasts ?? []).filter((row) => !req.query.targetMonth || row.target_month === req.query.targetMonth);
 
     res.json({ forecasts: forecasts ?? [] });
   } catch (error) {
@@ -348,9 +339,8 @@ router.get('/forecasts/products', async (req, res, next) => {
 
 router.get('/forecasts/services', async (req, res, next) => {
   try {
-    const forecasts = await callRpc('get_monthly_service_forecasts', {
-      target_month: req.query.targetMonth || null,
-    });
+    const snapshot = await callRpc('get_recorded_forecast_snapshot');
+    const forecasts = (snapshot?.topServiceForecasts ?? []).filter((row) => !req.query.targetMonth || row.target_month === req.query.targetMonth);
 
     res.json({ forecasts: forecasts ?? [] });
   } catch (error) {

@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 import process from 'node:process';
@@ -22,6 +22,7 @@ const FORBIDDEN_INITIAL_CHUNKS = [
   /recharts/i,
   /analytics[-_]charts?/i,
   /html5[-_]qrcode/i,
+  /zxing|barcodeDecoder|CameraScannerModal/i,
   /(?:^|[-_])scanner(?:[-_]|$)/i,
   /locator3d/i,
 ];
@@ -121,6 +122,20 @@ async function main() {
   }
 
   const measurements = [`initial ${initialKiB.toFixed(1)} KiB gzip`];
+  // Workers/WASM are emitted assets, not static manifest imports. Budget the
+  // reader explicitly and ensure the initial graph doesn't reference it.
+  const scannerAssets = (await readdir(path.join(distDirectory, 'assets')))
+    .filter((file) => /^(barcodeDecoder\.worker-.*\.js|zxing_reader-.*\.wasm)$/.test(file));
+  if (scannerAssets.length !== 2) failures.push('Expected one scanner worker and its matching WASM reader.');
+  let scannerBytes = 0;
+  for (const asset of scannerAssets) scannerBytes += gzipSync(await readFile(path.join(distDirectory, 'assets', asset))).byteLength;
+  const scannerKiB = toKiB(scannerBytes);
+  measurements.push(`on-demand scanner engine ${scannerKiB.toFixed(1)} KiB gzip`);
+  if (scannerKiB > 450) failures.push(`Scanner worker + WASM exceed 450 KiB gzip (${scannerKiB.toFixed(1)}).`);
+  for (const entryName of initialClosure) {
+    const text = await readFile(path.join(distDirectory, getEntry(manifest, entryName).file), 'utf8');
+    if (scannerAssets.some((asset) => text.includes(asset))) failures.push(`Initial entry ${entryName} references scanner engine assets.`);
+  }
   for (const route of ROUTE_BUDGETS) {
     const routeClosure = collectStaticClosure(manifest, route.entry);
     const routeWithInitial = new Set([...initialClosure, ...routeClosure]);
