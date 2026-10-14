@@ -87,9 +87,13 @@ try {
     const { inspectPricelistUpload } = await import('./inspect-pricelist-upload.mjs');
     const items = await inspectPricelistUpload(process.env.PRICELIST_TEST_FILE);
     const uniqueParts = new Set(items.map(item => item.sku)).size;
+    console.log(`Testing actual workbook: ${items.length} parsed rows.`);
     const imported = await upload(items,2026,'2026-04-01');
+    console.log('Actual workbook import finished; verifying repeat upload and activation.');
     assert.equal(imported.newProductsCount,uniqueParts);
     assert.equal((await scalar('select count(*)::int count from catalog.pricelist_import_staging')).count,uniqueParts);
+    // Mirror production table statistics after a bulk import in this empty fixture.
+    await db.exec('analyze catalog.products; analyze catalog.product_prices; analyze catalog.pricelist_version_items; analyze catalog.inventory_balances; analyze catalog.pricelist_import_staging');
     const priceCount = await rows();
     assert.equal((await upload(items,2026,'2026-04-01')).noOp,true);
     assert.equal(await rows(),priceCount);
