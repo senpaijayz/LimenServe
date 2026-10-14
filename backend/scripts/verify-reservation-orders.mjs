@@ -72,6 +72,16 @@ try {
   // Backfill coverage: preserve an existing cancelled line and its identity.
   await db.exec(`insert into operations.customers(id,name,phone) values ('55555555-5555-4555-8555-555555555555','Legacy Customer','09170000000'); insert into operations.part_reservations(reservation_number,customer_id,product_id,requested_quantity,status) values ('PR-LEGACY','55555555-5555-4555-8555-555555555555','${product1}',1,'cancelled'); alter table operations.part_reservations add column payment_status text default 'unpaid' not null;`);
   await db.exec(await read('20261014105041_reservation_orders_and_active_product_guard.sql'));
+  await db.exec(await read('20261014140440_specific_product_archive_notification.sql'));
+  // Isolated archive notifications must name only actual blockers.
+  await db.exec('begin');
+  await db.exec(`insert into operations.service_orders(id,status) values ('77777777-7777-4777-8777-777777777777','pending'); insert into operations.service_order_items(id,service_order_id,product_id) values ('88888888-8888-4888-8888-888888888888','77777777-7777-4777-8777-777777777777','${product2}');`);
+  await assert.rejects(() => db.exec(`update catalog.products set is_active=false where id='${product2}'`), {message:'IN_USE: Cannot archive this product: open service order. Complete or cancel the service order first.'});
+  await db.exec('rollback');
+  await db.exec('begin');
+  await db.exec(`update catalog.inventory_balances set reserved=1 where product_id='${product2}'`);
+  await assert.rejects(() => db.exec(`update catalog.products set is_active=false where id='${product2}'`), {message:'IN_USE: Cannot archive this product: allocated stock. Release the allocated stock through its linked transaction first.'});
+  await db.exec('rollback');
   const scalar = async (sql, params = []) => (await db.query(sql, params)).rows[0];
   assert.equal((await scalar("select count(*)::int count from operations.part_reservations where reservation_number='PR-LEGACY' and reservation_order_id is not null")).count, 1);
   const items = [{ productId: product1, quantity: 2 }, { productId: product2, quantity: 1 }];
@@ -83,10 +93,11 @@ try {
   assert.equal((await scalar('select count(*)::int count from operations.part_reservation_orders')).count, 2);
   await assert.rejects(() => create('09171234568', '66666666-6666-4666-8666-666666666666', [items[0], items[0]]), /Add each part once/);
   await assert.rejects(() => create('09171234568', '66666666-6666-4666-8666-666666666666', [{ productId: product1, quantity: 'invalid' }]), /whole-number/);
-  await assert.rejects(() => db.exec(`update catalog.products set is_active=false where id='${product1}'`), /active reservation/);
+  await assert.rejects(() => db.exec(`update catalog.products set is_active=false where id='${product1}'`), {message:'IN_USE: Cannot archive this product: active part reservation. Complete or cancel the reservation first.'});
   const complete = (total = 400, cash = 500) => scalar('select public.complete_admin_part_reservation_order($1,$2,$3,$4,$5) result', [order.reservations[0].id, admin, 'cash', cash, total]);
   await assert.rejects(() => complete(), /fully allocated/);
   for (const line of order.reservations) await db.query("select public.process_part_reservation($1,'approve',$2)", [line.id, admin]);
+  await assert.rejects(() => db.exec(`update catalog.products set is_active=false where id='${product1}'`), {message:'IN_USE: Cannot archive this product: active part reservation; allocated stock. Complete or cancel the reservation first. Release the allocated stock through its linked transaction first.'});
   const summary = (await scalar('select public.reservation_order_summaries($1::uuid[]) result', [[order.order.id]])).result[0];
   assert.equal(summary.partCount, 2);
   assert.equal(summary.readyForCheckout, true);
