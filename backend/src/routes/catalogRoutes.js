@@ -785,7 +785,7 @@ function summarizePackagePricing(items = []) {
   };
 }
 
-function invalidateProductCatalogCache() {
+export function invalidateProductCatalogCache() {
   productCatalogCache = {
     data: null,
     fetchedAt: 0,
@@ -3258,14 +3258,16 @@ router.delete('/suppliers/:supplierId', requireRole('admin'), async (req, res, n
       return;
     }
 
-    const { error: unlinkError } = await supabaseAdmin
+    const { data: supplierLinks, error: linkError } = await supabaseAdmin
       .schema('catalog')
       .from('product_supplier_links')
-      .delete()
-      .eq('supplier_id', supplierId);
+      .select('product_id')
+      .eq('supplier_id', supplierId).limit(1);
 
-    if (unlinkError && !isPrivateSchemaAccessError(unlinkError) && !String(unlinkError.message || '').includes('product_supplier_links')) {
-      throw unlinkError;
+    if (linkError) throw linkError;
+    if (supplierLinks?.length) {
+      res.status(409).json({ error: 'This supplier is linked to products. Update those product suppliers before deleting it.' });
+      return;
     }
 
     const { error } = await supabaseAdmin.schema('catalog').from('suppliers').delete().eq('id', supplierId);
@@ -3362,6 +3364,12 @@ router.patch('/categories/:categoryId', requireRole('admin'), async (req, res, n
 router.delete('/categories/:categoryId', requireRole('admin'), async (req, res, next) => {
   try {
     const categoryId = String(req.params.categoryId || '').trim();
+    const { data: category, error: categoryError } = await supabaseAdmin.schema('catalog').from('categories').select('name').eq('id', categoryId).maybeSingle();
+    if (categoryError) throw categoryError;
+    if (!category) { res.status(404).json({ error: 'Category was not found.' }); return; }
+    const { data: products, error: productsError } = await supabaseAdmin.schema('catalog').from('products').select('id').eq('category', category.name).limit(1);
+    if (productsError) throw productsError;
+    if (products?.length) { res.status(409).json({ error: 'This category is used by products. Reassign those products before deleting it.' }); return; }
     const { error } = await supabaseAdmin.schema('catalog').from('categories').delete().eq('id', categoryId);
     if (error) {
       throw error;

@@ -16,6 +16,14 @@ test('sanitizes unexpected server errors while retaining the request ID', () => 
   });
 });
 
+test('returns actionable dependency conflicts without exposing constraint details', () => {
+  assert.equal(getPublicErrorResponse({ code: '23503', message: 'IN_USE: This supplier has receiving history.' }).statusCode, 409);
+  assert.equal(getPublicErrorResponse({ code: '23503', message: 'IN_USE: This supplier has receiving history.' }).body.error, 'This supplier has receiving history.');
+  const response = getPublicErrorResponse({ code: '23503', message: 'violates private_constraint on internal_table' });
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.body.error.includes('private_constraint'), false);
+});
+
 test('preserves explicit client-safe messages and normalizes invalid JSON errors', () => {
   const conflict = new Error('That idempotency key is already in use.');
   conflict.statusCode = 409;

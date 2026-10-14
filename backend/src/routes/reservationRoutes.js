@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { env } from '../config/env.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireRole } from '../middleware/auth.js';
-import { clearPublicResponseCache } from '../middleware/cache.js';
+import { invalidateProductCatalogCache } from './catalogRoutes.js';
 import { getDefaultRateLimitKey } from '../middleware/rateLimit.js';
 import {
   createInMemoryRateLimitStore,
@@ -90,13 +90,17 @@ function requireUuidParam(value, label = 'identifier') {
 
 function normalizeReservationError(error) {
   const message = String(error?.message || '');
+  if (error?.code === '23505') {
+    error.publicMessage = 'This customer already has an active reservation for a selected part, or this request was already recorded. Review the existing reservation before retrying.';
+  }
 
   if (error?.code === '42501') {
     error.statusCode = 403;
-  } else if (error?.code === '23505' || message.toLowerCase().includes('already exists')) {
+  } else if (['23505', '23503', 'PT409'].includes(error?.code) || message.toLowerCase().includes('already exists')) {
     error.statusCode = 409;
   } else if (
-    message.includes('required')
+    error?.code === 'P0001'
+    || message.includes('required')
     || message.includes('must be')
     || message.includes('Only ')
     || message.includes('Unsupported')
@@ -111,7 +115,7 @@ function normalizeReservationError(error) {
   return error;
 }
 
-function normalizeReservation(row = {}, { customers = new Map(), products = new Map() } = {}) {
+function normalizeReservation(row = {}, { customers = new Map(), products = new Map(), orders = new Map() } = {}) {
   const customer = customers.get(row.customer_id) ?? null;
   const product = products.get(row.product_id) ?? null;
   const requestedQuantity = Number(row.requested_quantity ?? 0);
@@ -120,6 +124,9 @@ function normalizeReservation(row = {}, { customers = new Map(), products = new 
   return {
     id: row.id,
     reservationNumber: row.reservation_number,
+    order: orders.get(row.reservation_order_id) ?? null,
+    unitPrice: row.unit_price_snapshot == null ? null : Number(row.unit_price_snapshot),
+    lineTotal: row.line_total == null ? null : Number(row.line_total),
     customerId: row.customer_id,
     customer: customer ? {
       id: customer.id,
@@ -157,9 +164,10 @@ function normalizeReservation(row = {}, { customers = new Map(), products = new 
 }
 
 async function enrichReservations(rows = []) {
+  const orderIds = [...new Set(rows.map((row) => row.reservation_order_id).filter(Boolean))];
   const customerIds = [...new Set(rows.map((row) => row.customer_id).filter(Boolean))];
   const productIds = [...new Set(rows.map((row) => row.product_id).filter(Boolean))];
-  const [customerResult, productResult] = await Promise.all([
+  const [customerResult, productResult, orderSummaries] = await Promise.all([
     customerIds.length
       ? supabaseAdmin
         .schema('operations')
@@ -174,14 +182,17 @@ async function enrichReservations(rows = []) {
         .select('id, sku, name, status')
         .in('id', productIds)
       : Promise.resolve({ data: [], error: null }),
+    orderIds.length ? callRpc('reservation_order_summaries', { p_order_ids: orderIds }) : Promise.resolve([]),
   ]);
 
   if (customerResult.error) throw customerResult.error;
   if (productResult.error) throw productResult.error;
+  const orders = new Map((orderSummaries ?? []).map((order) => [order.id, { ...order, estimatedTotal: Number(order.estimatedTotal), partCount: Number(order.partCount) }]));
 
   const related = {
     customers: new Map((customerResult.data ?? []).map((row) => [row.id, row])),
     products: new Map((productResult.data ?? []).map((row) => [row.id, row])),
+    orders,
   };
 
   return rows.map((row) => normalizeReservation(row, related));
@@ -254,10 +265,9 @@ router.post('/admin', requireRole('admin'), async (req, res, next) => {
       return;
     }
 
-    const result = await callRpc('create_admin_part_reservation', {
+    const result = await callRpc('create_admin_part_reservation_order', {
       p_actor_user_id: req.user.id,
-      p_product_id: parsed.productId,
-      p_requested_quantity: parsed.quantity,
+      p_items: parsed.items,
       p_request_key: parsed.requestKey,
       p_customer_name: parsed.customerName,
       p_customer_phone: parsed.customerPhone,
@@ -265,14 +275,13 @@ router.post('/admin', requireRole('admin'), async (req, res, next) => {
       p_customer_note: parsed.customerNote,
       p_payment_status: parsed.paymentStatus,
     });
-    const reservationId = result?.reservation?.id;
-    const reservation = reservationId
-      ? await getReservationResponse(reservationId, true)
-      : result?.reservation;
+    const reservations = await enrichReservations(result?.reservations ?? []);
 
-    clearPublicResponseCache(['catalog-products', 'recommendations']);
+    invalidateProductCatalogCache();
     res.status(result?.idempotentReplay ? 200 : 201).json({
-      reservation,
+      reservation: reservations[0] ?? null,
+      reservations,
+      order: result?.order,
       idempotentReplay: Boolean(result?.idempotentReplay),
     });
   } catch (error) {
@@ -423,6 +432,41 @@ router.get('/', requireRole('admin'), async (req, res, next) => {
   }
 });
 
+router.get('/:reservationId/checkout', requireRole('admin'), async (req, res, next) => {
+  try {
+    requireUuidParam(req.params.reservationId);
+    const row = await getReservationRow(req.params.reservationId);
+    if (!row?.reservation_order_id) {
+      res.status(409).json({ error: 'A reservation order is required for checkout.' });
+      return;
+    }
+    const { data: lines, error } = await supabaseAdmin.schema('operations').from('part_reservations')
+      .select('*').eq('reservation_order_id', row.reservation_order_id).order('product_id');
+    if (error) throw error;
+    const reservations = await enrichReservations(lines ?? []);
+    const order = reservations[0]?.order;
+    if (!order?.readyForCheckout) {
+      res.status(409).json({ error: 'All remaining parts must be fully allocated before checkout.' });
+      return;
+    }
+    const activeLines = reservations.filter((line) => !['cancelled', 'rejected'].includes(line.status));
+    const prices = await callRpc('limen_current_retail_prices', { p_product_ids: activeLines.map((line) => line.productId) });
+    const priceMap = new Map((prices ?? []).map((price) => [price.productId, price]));
+    if (activeLines.some((line) => !priceMap.get(line.productId)?.available)) {
+      res.status(409).json({ error: 'A reserved part has no current selling price. Review the pricelist before checkout.' });
+      return;
+    }
+    const items = activeLines.map((line) => ({
+      ...line,
+      unitPrice: Number(priceMap.get(line.productId).price),
+      lineTotal: Math.round(Number(priceMap.get(line.productId).price) * line.requestedQuantity * 100) / 100,
+    }));
+    res.json({ order, items, total: Math.round(items.reduce((sum, line) => sum + line.lineTotal, 0) * 100) / 100 });
+  } catch (error) {
+    next(normalizeReservationError(error));
+  }
+});
+
 router.get('/:reservationId', requireRole('admin'), async (req, res, next) => {
   try {
     requireUuidParam(req.params.reservationId);
@@ -454,17 +498,40 @@ router.patch('/:reservationId', requireRole('admin'), async (req, res, next) => 
       return;
     }
 
-    await callRpc('process_part_reservation', {
+    const row = await getReservationRow(req.params.reservationId);
+    if (!row) {
+      res.status(404).json({ error: 'Reservation was not found.' });
+      return;
+    }
+    let sale = null;
+    if (action === 'complete' && row.reservation_order_id) {
+      const cashReceived = Number(req.body?.cashReceived ?? 0);
+      const expectedTotal = Number(req.body?.expectedTotal);
+      if (!['cash', 'gcash', 'bank_transfer'].includes(req.body?.paymentMethod) || !Number.isFinite(cashReceived) || cashReceived < 0 || !Number.isFinite(expectedTotal) || expectedTotal < 0) {
+        res.status(400).json({ error: 'Choose a payment method and review the checkout total.' });
+        return;
+      }
+      sale = await callRpc('complete_admin_part_reservation_order', {
+        p_reservation_id: row.id,
+        p_actor_user_id: req.user.id,
+        p_payment_method: req.body.paymentMethod,
+        p_cash_received: cashReceived,
+        p_expected_total: expectedTotal,
+      });
+    } else if (action === 'complete') {
+      res.status(409).json({ error: 'This reservation needs to be upgraded to a reservation order before checkout.' });
+      return;
+    } else await callRpc('process_part_reservation', {
       p_reservation_id: req.params.reservationId,
       p_action: action,
       p_actor_user_id: req.user.id,
       p_admin_note: String(req.body?.note || '').trim().slice(0, 1000) || null,
       p_estimated_available_on: estimatedAvailableOn,
     });
-    clearPublicResponseCache(['catalog-products', 'recommendations']);
+    invalidateProductCatalogCache();
 
     const reservation = await getReservationResponse(req.params.reservationId, true);
-    res.json({ reservation });
+    res.json({ reservation, sale });
   } catch (error) {
     next(normalizeReservationError(error));
   }

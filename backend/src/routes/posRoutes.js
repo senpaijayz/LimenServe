@@ -21,6 +21,7 @@ function normalizePosError(error) {
     message.includes('missing service') ||
     message.includes('Manual service lines must include') ||
     message.includes('Insufficient stock') ||
+    message.includes('Insufficient unreserved stock') ||
     message.includes('Historical sales require') ||
     message.includes('Historical totals require') ||
     message.includes('Historical period total') ||

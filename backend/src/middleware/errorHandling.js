@@ -6,6 +6,7 @@ const GENERIC_SERVER_MESSAGES = new Map([
 ]);
 
 function normalizeStatusCode(error) {
+  if (['PT409', '23503'].includes(error?.code)) return 409;
   const candidate = Number(error?.statusCode || error?.status);
   return Number.isInteger(candidate) && candidate >= 400 && candidate <= 599 ? candidate : 500;
 }
@@ -26,6 +27,10 @@ export function getPublicErrorResponse(error, requestId) {
 
   if (error?.type === 'entity.parse.failed') {
     message = 'Invalid JSON request body.';
+  } else if (error?.code === '23503') {
+    message = String(error.message || '').startsWith('IN_USE:')
+      ? sanitizeMessage(error.message.slice(7), 'This record is in use and cannot be removed.')
+      : 'This record is linked to other records and cannot be removed. Update or finish the linked records first.';
   } else if (error?.publicMessage) {
     message = sanitizeMessage(error.publicMessage, 'Request failed.');
   } else if (statusCode < 500 || error?.expose === true) {

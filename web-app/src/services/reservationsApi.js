@@ -32,8 +32,17 @@ export async function processReservation(reservationId, payload) {
   try {
     const { data } = await apiClient.patch(`/reservations/${reservationId}`, payload);
     void invalidateCatalogClientCaches();
-    return data.reservation;
+    return { ...data.reservation, sale: data.sale ?? null };
   } catch (error) {
     extractApiError(error, 'Failed to update the reservation.');
+  }
+}
+
+export async function getReservationCheckout(reservationId) {
+  try {
+    const { data } = await apiClient.get(`/reservations/${reservationId}/checkout`);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Failed to prepare reservation checkout.');
   }
 }

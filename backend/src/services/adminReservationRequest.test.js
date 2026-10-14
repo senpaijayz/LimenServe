@@ -18,6 +18,7 @@ test('normalizes a valid admin reservation request', () => {
   }), {
     ok: true,
     productId: PRODUCT_ID,
+    items: [{ productId: PRODUCT_ID, quantity: 3 }],
     requestKey: REQUEST_KEY,
     customerName: 'Jane Customer',
     customerPhone: '09171234567',
@@ -26,6 +27,17 @@ test('normalizes a valid admin reservation request', () => {
     customerNote: 'Hold for Friday.',
     paymentStatus: 'paid',
   });
+});
+
+test('accepts multiple parts and validates every line independently', () => {
+  const valid = { customerName: 'Jane Customer', customerPhone: '09171234567', requestKey: REQUEST_KEY,
+    items: [{ productId: PRODUCT_ID, quantity: '2' }, { productId: 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA', quantity: 1 }] };
+  const result = parseAdminReservationRequest(valid);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.items, [{ productId: PRODUCT_ID, quantity: 2 }, { productId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', quantity: 1 }]);
+  for (const items of [[], [{ productId: PRODUCT_ID, quantity: 0 }], [{ productId: PRODUCT_ID, quantity: 1000 }], [...valid.items, { productId: PRODUCT_ID, quantity: 1 }], [valid.items[0], { productId: 'bad', quantity: 1 }], [valid.items[0], { productId: valid.items[1].productId, quantity: 1.5 }]]) {
+    assert.equal(parseAdminReservationRequest({ ...valid, items }).ok, false);
+  }
 });
 
 test('generates an idempotency key when omitted', () => {

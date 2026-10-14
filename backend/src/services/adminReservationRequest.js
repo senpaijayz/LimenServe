@@ -11,16 +11,23 @@ function text(value, maxLength) {
 }
 
 export function parseAdminReservationRequest(body = {}, requestKeyFactory = randomUUID) {
-  const productId = text(body.productId, 64);
+  if (!body || typeof body !== 'object' || (body.items !== undefined && !Array.isArray(body.items))) {
+    return { ok: false, statusCode: 400, error: ADMIN_RESERVATION_INVALID_MESSAGE };
+  }
+  const rawItems = Array.isArray(body.items) ? body.items : [{ productId: body.productId, quantity: body.quantity }];
+  const items = rawItems.map((item) => ({ productId: text(item?.productId, 64).toLowerCase(), quantity: Number(item?.quantity) }));
+  const productId = items[0]?.productId;
   const requestKey = text(body.requestKey, 64) || requestKeyFactory();
   const customerName = text(body.customerName, 120);
   const customerPhone = normalizePhilippinePhoneNumber(body.customerPhone);
   const customerEmail = text(body.customerEmail, 160).toLowerCase();
   const customerNote = text(body.note, 1000);
   const paymentStatus = text(body.paymentStatus, 20).toLowerCase() || 'unpaid';
-  const quantity = Number(body.quantity);
+  const quantity = items[0]?.quantity;
 
-  if (!UUID_PATTERN.test(productId)
+  if (items.length < 1 || items.length > 50
+    || items.some((item, index) => !['number', 'string'].includes(typeof rawItems[index]?.quantity) || !UUID_PATTERN.test(item.productId) || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 999)
+    || new Set(items.map((item) => item.productId)).size !== items.length
     || !UUID_PATTERN.test(requestKey)
     || customerName.length < 2
     || !customerPhone
@@ -35,6 +42,7 @@ export function parseAdminReservationRequest(body = {}, requestKeyFactory = rand
   return {
     ok: true,
     productId,
+    items,
     requestKey,
     customerName,
     customerPhone,
