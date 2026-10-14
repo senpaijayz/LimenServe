@@ -25,6 +25,12 @@ try {
   await db.exec(await read('20261014142101_skip_unchanged_pricelist_prices.sql'));
   await db.exec(await read('20261014145239_optimize_large_pricelist_import.sql'));
   await db.exec(await read('20261014145524_preserve_pricelist_source_sheet.sql'));
+  await db.exec(await read('20261014150609_safe_pricelist_projection_refresh.sql'));
+  for (const signature of ['public.import_retail_pricelist_version(jsonb,integer,date,text,boolean,uuid)','public.activate_retail_pricelist_version(uuid,uuid)']) {
+    const definition = (await db.query('select pg_get_functiondef($1::regprocedure) definition',[signature])).rows[0].definition;
+    assert.doesNotMatch(definition,/delete from catalog\.pricelist_import_staging\s*;/i);
+    assert.match(definition,/delete from catalog\.pricelist_import_staging where id is not null;/i);
+  }
   const scalar = async (sql,params=[]) => (await db.query(sql,params)).rows[0];
   const upload = async (items,year=2026,date='2026-10-14',activate=true) => (await scalar('select public.import_retail_pricelist_version($1::jsonb,$2,$3,null,$4,null) result',[JSON.stringify(items),year,date,activate])).result;
   const activate = async (id) => (await scalar('select public.activate_retail_pricelist_version($1,null) result',[id])).result;
@@ -77,5 +83,18 @@ try {
   assert.equal(await rows(),7);
   assert.equal((await scalar("select has_function_privilege('anon','catalog.sync_retail_pricelist_prices(uuid,date)','EXECUTE') allowed")).allowed,false);
   assert.equal((await scalar("select has_function_privilege('authenticated','public.import_retail_pricelist_version(jsonb,integer,date,text,boolean,uuid)','EXECUTE') allowed")).allowed,false);
+  if (process.env.PRICELIST_TEST_FILE) {
+    const { inspectPricelistUpload } = await import('./inspect-pricelist-upload.mjs');
+    const items = await inspectPricelistUpload(process.env.PRICELIST_TEST_FILE);
+    const uniqueParts = new Set(items.map(item => item.sku)).size;
+    const imported = await upload(items,2026,'2026-04-01');
+    assert.equal(imported.newProductsCount,uniqueParts);
+    assert.equal((await scalar('select count(*)::int count from catalog.pricelist_import_staging')).count,uniqueParts);
+    const priceCount = await rows();
+    assert.equal((await upload(items,2026,'2026-04-01')).noOp,true);
+    assert.equal(await rows(),priceCount);
+    assert.equal((await activate(imported.versionId)).priceRowsWritten,0);
+    console.log(`PASS: actual workbook import, duplicate handling, repeat upload and activation (${items.length} rows; ${uniqueParts} unique parts).`);
+  }
   console.log('PASS: unchanged imports/activation, same-date no-op, yearly snapshots, changed prices, new products, draft activation, omitted parts, stock preservation, and restricted function grants.');
 } finally { await db.close(); }
