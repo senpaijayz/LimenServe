@@ -52,6 +52,23 @@ test('generates an idempotency key when omitted', () => {
   assert.equal(result.requestKey, REQUEST_KEY);
 });
 
+test('explains the specific invalid detail without asking users for technical keys', () => {
+  const valid = { customerName: 'Jane', customerPhone: '09171234567', productId: PRODUCT_ID, quantity: 1, requestKey: REQUEST_KEY };
+  for (const [change, message] of [
+    [{ customerName: 'j' }, /name.*2 characters/],
+    [{ customerPhone: 'bad' }, /valid phone/],
+    [{ customerEmail: 'bad' }, /email address/],
+    [{ items: [] }, /at least one part/],
+    [{ quantity: 1.5 }, /quantity for part 1.*whole number/],
+    [{ requestKey: 'bad' }, /Close the form/],
+  ]) {
+    const result = parseAdminReservationRequest({ ...valid, ...change });
+    assert.equal(result.ok, false);
+    assert.match(result.error, message);
+    assert.doesNotMatch(result.error, /request key/);
+  }
+});
+
 test('rejects invalid ids, fractional quantities, and oversized notes', () => {
   const result = parseAdminReservationRequest({
     productId: PRODUCT_ID,

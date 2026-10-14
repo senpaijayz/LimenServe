@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, Clock3, Eye, Filter, PackageCheck, Plus, RefreshCw, X, XCircle } from 'lucide-react';
+import { AlertCircle, Check, Clock3, Eye, Filter, Minus, Package, PackageCheck, Plus, RefreshCw, Trash2, X, XCircle } from 'lucide-react';
+import { validateReservationForm } from '../utils/reservationForm';
 import Button from '../../../components/ui/Button';
 import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import { useToast } from '../../../components/ui/Toast';
@@ -44,6 +45,9 @@ export default function AdminReservations() {
   const [productOptions, setProductOptions] = useState([]);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [validationShown, setValidationShown] = useState(false);
+  const formErrors = validationShown ? validateReservationForm(createForm) : {};
+  const updateQuantity = (productId, quantity) => setCreateForm((current) => ({ ...current, items: current.items.map((item) => item.productId === productId ? { ...item, quantity } : item) }));
 
   useEffect(() => {
     if (!createOpen) return undefined;
@@ -63,6 +67,7 @@ export default function AdminReservations() {
     if (submitLock.current) return;
     setCreateOpen(false);
     setCreateError('');
+    setValidationShown(false);
     setCreateForm(EMPTY_FORM);
     createRequestKey.current = null;
     setProductOptions([]);
@@ -72,8 +77,11 @@ export default function AdminReservations() {
   const submitCreate = async (event) => {
     event.preventDefault();
     if (submitLock.current) return;
-    if (!createForm.customerName || !createForm.customerPhone || createForm.items.length === 0) {
-      setCreateError('Enter the customer contact details and add at least one part.');
+    setValidationShown(true);
+    const errors = validateReservationForm(createForm);
+    if (Object.keys(errors).length) {
+      setCreateError('');
+      event.currentTarget.querySelector(`[name="${Object.keys(errors)[0]}"]`)?.focus();
       return;
     }
 
@@ -316,30 +324,38 @@ export default function AdminReservations() {
 
       {createOpen && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="create-reservation-title" onClick={closeCreate}>
-          <form className="modal max-w-2xl" onSubmit={submitCreate} onClick={(event) => event.stopPropagation()}>
+          <form className="modal max-w-2xl" noValidate onSubmit={submitCreate} onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <div><p className="text-xs font-bold uppercase tracking-wider text-accent-primary">Staff action</p><h2 id="create-reservation-title" className="modal-title">Reserve parts for a customer</h2></div>
               <button type="button" className="btn btn-ghost btn-icon" onClick={closeCreate} aria-label="Close reservation form"><X className="h-5 w-5" /></button>
             </div>
             <div className="modal-body space-y-5">
               <p className="text-sm text-primary-600">Add the customer's parts and quantities. Each part starts pending; checkout records the available order as one sale.</p>
-              {createError && <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">{createError}</div>}
+              {createError && <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800" role="alert"><AlertCircle className="mt-0.5 h-5 w-5 shrink-0" /><div><p className="font-semibold">We couldn’t create the reservation</p><p className="mt-1">{createError}</p></div></div>}
+              {Object.keys(formErrors).length > 0 && <p role="alert" className="flex items-center gap-2 text-sm text-red-700"><AlertCircle className="h-4 w-4 shrink-0" />Please check the highlighted details below.</p>}
               <div className="grid gap-4 md:grid-cols-2">
-                <label className="text-sm font-semibold text-primary-700">Customer name<input required className="input mt-2" value={createForm.customerName} onChange={(event) => setCreateForm((current) => ({ ...current, customerName: event.target.value }))} placeholder="Full name" /></label>
-                <label className="text-sm font-semibold text-primary-700">Phone<input required type="tel" className="input mt-2" value={createForm.customerPhone} onChange={(event) => setCreateForm((current) => ({ ...current, customerPhone: event.target.value }))} placeholder="09XX XXX XXXX" /></label>
-                <label className="text-sm font-semibold text-primary-700">Email<span className="ml-1 font-normal text-primary-500">(optional)</span><input type="email" className="input mt-2" value={createForm.customerEmail} onChange={(event) => setCreateForm((current) => ({ ...current, customerEmail: event.target.value }))} placeholder="customer@example.com" /></label>
+                <div><label className="text-sm font-semibold text-primary-700" htmlFor="reservation-customer-name">Customer name</label><input id="reservation-customer-name" name="customerName" required disabled={createLoading} aria-invalid={Boolean(formErrors.customerName)} aria-describedby={formErrors.customerName ? 'reservation-name-error' : undefined} className={`input mt-2 ${formErrors.customerName ? 'border-red-400' : ''}`} value={createForm.customerName} onChange={(event) => setCreateForm((current) => ({ ...current, customerName: event.target.value }))} placeholder="Full name" />{formErrors.customerName && <p id="reservation-name-error" className="mt-2 text-xs text-red-700">{formErrors.customerName}</p>}</div>
+                <div><label className="text-sm font-semibold text-primary-700" htmlFor="reservation-phone">Phone</label><input id="reservation-phone" name="customerPhone" required disabled={createLoading} type="tel" aria-invalid={Boolean(formErrors.customerPhone)} aria-describedby={formErrors.customerPhone ? 'reservation-phone-error' : undefined} className={`input mt-2 ${formErrors.customerPhone ? 'border-red-400' : ''}`} value={createForm.customerPhone} onChange={(event) => setCreateForm((current) => ({ ...current, customerPhone: event.target.value }))} placeholder="09XX XXX XXXX" />{formErrors.customerPhone && <p id="reservation-phone-error" className="mt-2 text-xs text-red-700">{formErrors.customerPhone}</p>}</div>
+                <div><label className="text-sm font-semibold text-primary-700" htmlFor="reservation-email">Email<span className="ml-1 font-normal text-primary-500">(optional)</span></label><input id="reservation-email" name="customerEmail" disabled={createLoading} type="email" aria-invalid={Boolean(formErrors.customerEmail)} aria-describedby={formErrors.customerEmail ? 'reservation-email-error' : undefined} className={`input mt-2 ${formErrors.customerEmail ? 'border-red-400' : ''}`} value={createForm.customerEmail} onChange={(event) => setCreateForm((current) => ({ ...current, customerEmail: event.target.value }))} placeholder="customer@example.com" />{formErrors.customerEmail && <p id="reservation-email-error" className="mt-2 text-xs text-red-700">{formErrors.customerEmail}</p>}</div>
                 <label className="text-sm font-semibold text-primary-700">Payment status<select className="input mt-2" value={createForm.paymentStatus} onChange={(event) => setCreateForm((current) => ({ ...current, paymentStatus: event.target.value }))}><option value="unpaid">Unpaid</option><option value="partial">Partially paid</option><option value="paid">Paid</option></select></label>
                 <div className="text-sm font-semibold text-primary-700 md:col-span-2">
                   <label htmlFor="reservation-part-search">Search parts</label>
-                  <input id="reservation-part-search" className="input mt-2" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Type a part name or number" />
+                  <input id="reservation-part-search" name="items" aria-invalid={Boolean(formErrors.items)} aria-describedby={formErrors.items ? 'reservation-parts-error' : undefined} className={`input mt-2 ${formErrors.items ? 'border-red-400' : ''}`} value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Type a part name or number" />
+                  {formErrors.items && <p id="reservation-parts-error" className="mt-2 text-xs font-normal text-red-700">{formErrors.items}</p>}
                   <div className="mt-2 max-h-48 space-y-1 overflow-y-auto" aria-label="Matching parts">
                     {productOptions.slice(0, 8).map((product) => <button key={product.id} type="button" disabled={createLoading || createForm.items.length >= 50} className="flex w-full items-center justify-between gap-3 rounded-lg border border-primary-200 bg-white px-3 py-3 text-left text-sm hover:border-accent-blue" onClick={() => addPart(product)}><span>{product.name || 'Unnamed part'}<span className="block font-mono text-xs text-primary-500">{product.sku} · {formatCurrency(product.price)}</span></span><Plus className="h-4 w-4 shrink-0" aria-hidden="true" /><span className="sr-only">Add part</span></button>)}
                   </div>
                 </div>
                 <div className="space-y-3 md:col-span-2" aria-label="Reserved parts">
-                  {createForm.items.map((item) => <div key={item.productId} className="grid grid-cols-[1fr_5rem_2.5rem] items-center gap-3 border-b border-primary-100 pb-3"><div><p className="text-sm font-semibold">{item.name}</p><p className="font-mono text-xs text-primary-500">{item.sku}</p><p className="mt-1 text-sm">{formatCurrency(item.price)} each · {formatCurrency(item.price * Number(item.quantity || 0))}</p></div><label className="text-xs text-primary-600">Quantity<input required min="1" max="999" step="1" type="number" disabled={createLoading} className="input mt-1" value={item.quantity} onChange={(event) => setCreateForm((current) => ({ ...current, items: current.items.map((line) => line.productId === item.productId ? { ...line, quantity: event.target.value } : line) }))} /></label><button type="button" disabled={createLoading} aria-label={`Remove ${item.name}`} className="btn btn-ghost btn-icon" onClick={() => setCreateForm((current) => ({ ...current, items: current.items.filter((line) => line.productId !== item.productId) }))}><X className="h-4 w-4" /></button></div>)}
-                  <div className="flex items-center justify-between text-base font-semibold"><span>{createForm.items.length} part(s) · Estimated total</span><span aria-live="polite">{formatCurrency(estimateTotal)}</span></div>
-                  <p className="text-xs text-primary-500">The server confirms prices when you create the reservation. Current selling prices are reviewed again at checkout.</p>
+                  <div className="flex items-center justify-between"><h3 className="text-sm font-semibold text-primary-900">Selected parts</h3><span className="text-xs text-primary-500">{createForm.items.length} of 50 parts</span></div>
+                  {!createForm.items.length && <div className="flex items-center gap-3 rounded-xl border border-dashed border-primary-300 px-4 py-5 text-sm text-primary-500"><Package className="h-5 w-5 shrink-0" /><p>No parts selected yet. Search above and tap + to add a part.</p></div>}
+                  {createForm.items.map((item) => <div key={item.productId} className={`rounded-xl border bg-white p-4 ${formErrors[`quantity-${item.productId}`] ? 'border-red-300' : 'border-primary-200'}`}>
+                    <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="break-words text-sm font-semibold text-primary-900">{item.name}</p><p className="mt-1 font-mono text-xs text-primary-500">{item.sku}</p><p className="mt-2 text-xs text-primary-600">{formatCurrency(item.price)} per part</p></div><button type="button" disabled={createLoading} aria-label={`Remove ${item.name}`} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-primary-500 transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:ring-2 focus-visible:ring-accent-primary" onClick={() => setCreateForm((current) => ({ ...current, items: current.items.filter((line) => line.productId !== item.productId) }))}><Trash2 className="h-4 w-4" /></button></div>
+                    <div className="mt-4 flex flex-wrap items-end justify-between gap-4"><div><label htmlFor={`reservation-quantity-${item.productId}`} className="mb-1.5 block text-xs font-medium text-primary-600">Quantity</label><div className="flex h-11 overflow-hidden rounded-lg border border-primary-200"><button type="button" disabled={createLoading || Number(item.quantity) <= 1} aria-label={`Decrease quantity for ${item.name}`} className="flex min-w-11 items-center justify-center bg-primary-50 text-primary-700 hover:bg-primary-100 disabled:opacity-40" onClick={() => updateQuantity(item.productId, Math.max(1, Number(item.quantity || 1) - 1))}><Minus className="h-4 w-4" /></button><input id={`reservation-quantity-${item.productId}`} name={`quantity-${item.productId}`} aria-invalid={Boolean(formErrors[`quantity-${item.productId}`])} aria-describedby={formErrors[`quantity-${item.productId}`] ? `quantity-error-${item.productId}` : undefined} required min="1" max="999" step="1" type="number" inputMode="numeric" disabled={createLoading} className="w-16 min-w-0 border-x border-primary-200 bg-white text-center text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-accent-primary" value={item.quantity} onChange={(event) => updateQuantity(item.productId, event.target.value)} /><button type="button" disabled={createLoading || Number(item.quantity) >= 999} aria-label={`Increase quantity for ${item.name}`} className="flex min-w-11 items-center justify-center bg-primary-50 text-primary-700 hover:bg-primary-100 disabled:opacity-40" onClick={() => updateQuantity(item.productId, Math.min(999, Number(item.quantity || 0) + 1))}><Plus className="h-4 w-4" /></button></div></div><div className="text-right"><p className="text-xs text-primary-500">Line total</p><p className="mt-1 text-base font-semibold tabular-nums text-primary-900">{formatCurrency(item.price * Number(item.quantity || 0))}</p></div></div>
+                    {formErrors[`quantity-${item.productId}`] && <p id={`quantity-error-${item.productId}`} className="mt-2 text-xs text-red-700">{formErrors[`quantity-${item.productId}`]}</p>}
+                  </div>)}
+                  <div className="flex items-center justify-between gap-4 rounded-xl bg-primary-50 px-4 py-4"><div><p className="text-sm font-semibold text-primary-900">Estimated total</p><p className="mt-1 text-xs text-primary-500">{createForm.items.length} selected {createForm.items.length === 1 ? 'part' : 'parts'}</p></div><span className="text-xl font-bold tabular-nums text-primary-900" aria-live="polite">{formatCurrency(estimateTotal)}</span></div>
+                  <p className="text-xs leading-relaxed text-primary-500">Prices are confirmed when you create the reservation and checked again at checkout.</p>
                 </div>
                 <label className="text-sm font-semibold text-primary-700 md:col-span-2">Internal note<span className="ml-1 font-normal text-primary-500">(optional)</span><textarea className="input mt-2 min-h-24" maxLength="1000" value={createForm.note} onChange={(event) => setCreateForm((current) => ({ ...current, note: event.target.value }))} placeholder="Why is this part being held?" /></label>
               </div>

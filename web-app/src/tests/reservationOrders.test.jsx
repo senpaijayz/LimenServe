@@ -28,10 +28,35 @@ describe('reservation orders', () => {
     fireEvent.click(thermostat);
     fireEvent.click(screen.getByRole('button', { name: /Lock cylinder.*Add part/ }));
     expect(screen.getAllByLabelText('Quantity').map((input) => input.value)).toEqual(['2', '1']);
-    expect(screen.getByText('2 part(s) · Estimated total').parentElement.textContent).toContain('400.00');
+    expect(screen.getByText('Estimated total').parentElement.parentElement.textContent).toContain('400.00');
     fireEvent.click(screen.getByRole('button', { name: 'Create reservation' }));
     await waitFor(() => expect(api.createAdminReservation).toHaveBeenCalledTimes(1));
     expect(api.createAdminReservation.mock.calls[0][0].items).toEqual([{ productId: 'part-1', quantity: 2 }, { productId: 'part-2', quantity: 1 }]);
+  });
+
+  it('highlights only the missing or invalid fields and clears feedback as they are corrected', async () => {
+    render(<AdminReservations />);
+    fireEvent.click(screen.getByRole('button', { name: 'Reserve for customer' }));
+    fireEvent.change(screen.getByLabelText('Customer name'), { target: { value: 'j' } });
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '09171234567' } });
+    fireEvent.click(await screen.findByRole('button', { name: /Thermostat.*Add part/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create reservation' }));
+    expect(screen.getByText(/name using at least 2 characters/)).toBeTruthy();
+    expect(screen.getByLabelText('Customer name').getAttribute('aria-invalid')).toBe('true');
+    expect(screen.queryByText(/valid phone number/)).toBeNull();
+    expect(api.createAdminReservation).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Customer name'), { target: { value: 'Jane' } });
+    expect(screen.queryByText(/name using at least 2 characters/)).toBeNull();
+    fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '1.5' } });
+    expect(screen.getByText('Use a whole number from 1 to 999.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Increase quantity for Thermostat' }));
+    expect(screen.getByLabelText('Quantity').value).toBe('2');
+    fireEvent.click(screen.getByRole('button', { name: 'Decrease quantity for Thermostat' }));
+    expect(screen.getByLabelText('Quantity').value).toBe('1');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Thermostat' }));
+    expect(screen.getByText(/No parts selected yet/)).toBeTruthy();
+    expect(screen.getByText(/Choose at least one part/)).toBeTruthy();
   });
 
   it('uses current prices and requires cash covering the whole order before posting a sale', async () => {

@@ -3,7 +3,7 @@ import { normalizePhilippinePhoneNumber } from './publicEstimateLookup.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export const ADMIN_RESERVATION_INVALID_MESSAGE = 'Enter a customer name, valid phone, part, whole-number quantity, and request key.';
+export const ADMIN_RESERVATION_INVALID_MESSAGE = 'Please check the customer details and selected parts, then try again.';
 
 function text(value, maxLength) {
   if (typeof value !== 'string') return '';
@@ -25,19 +25,18 @@ export function parseAdminReservationRequest(body = {}, requestKeyFactory = rand
   const paymentStatus = text(body.paymentStatus, 20).toLowerCase() || 'unpaid';
   const quantity = items[0]?.quantity;
 
-  if (items.length < 1 || items.length > 50
-    || items.some((item, index) => !['number', 'string'].includes(typeof rawItems[index]?.quantity) || !UUID_PATTERN.test(item.productId) || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 999)
-    || new Set(items.map((item) => item.productId)).size !== items.length
-    || !UUID_PATTERN.test(requestKey)
-    || customerName.length < 2
-    || !customerPhone
-    || (customerEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail))
-    || !['unpaid', 'partial', 'paid'].includes(paymentStatus)
-    || !Number.isInteger(quantity)
-    || quantity < 1
-    || quantity > 999) {
-    return { ok: false, statusCode: 400, error: ADMIN_RESERVATION_INVALID_MESSAGE };
-  }
+  const invalid = (error) => ({ ok: false, statusCode: 400, error });
+  if (customerName.length < 2) return invalid('Enter the customer’s name using at least 2 characters.');
+  if (!customerPhone) return invalid('Enter a valid phone number, such as 0917 123 4567.');
+  if (customerEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail)) return invalid('Check the email address, or leave it blank if it is not needed.');
+  if (items.length < 1) return invalid('Add at least one part to this reservation.');
+  if (items.length > 50) return invalid('You can reserve up to 50 different parts in one order.');
+  const invalidQuantity = items.findIndex((item, index) => !['number', 'string'].includes(typeof rawItems[index]?.quantity) || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 999);
+  if (invalidQuantity >= 0) return invalid(`Check the quantity for part ${invalidQuantity + 1}. Use a whole number from 1 to 999.`);
+  if (items.some((item) => !UUID_PATTERN.test(item.productId))) return invalid('One of the selected parts could not be identified. Remove it and select it again.');
+  if (new Set(items.map((item) => item.productId)).size !== items.length) return invalid('A part is selected more than once. Combine its quantities into one line.');
+  if (!UUID_PATTERN.test(requestKey)) return invalid('This reservation session could not be verified. Close the form and open it again.');
+  if (!['unpaid', 'partial', 'paid'].includes(paymentStatus)) return invalid('Choose a valid payment status.');
 
   return {
     ok: true,
