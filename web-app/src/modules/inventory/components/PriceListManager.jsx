@@ -173,7 +173,7 @@ const PriceListManager = ({ onUpdated }) => {
         submitEvent.preventDefault();
 
         if (!selectedFile) {
-            error('Choose an Excel or CSV price list first, then click Apply New Pricelist.');
+            error('Choose an Excel or CSV price list first, then click Update Pricelist.');
             return;
         }
 
@@ -218,13 +218,13 @@ const PriceListManager = ({ onUpdated }) => {
                 leftIcon={<FileSpreadsheet className="w-4 h-4" />}
                 onClick={handleOpen}
             >
-                Replace Price List
+                Update Pricelist
             </Button>
 
             <Modal
                 isOpen={isOpen}
                 onClose={handleClose}
-                title="Bulk Price List Update"
+                title="Update Pricelist"
                 size="xl"
             >
                 <form onSubmit={handleSubmit} className="space-y-5">
@@ -356,7 +356,7 @@ const PriceListManager = ({ onUpdated }) => {
                             </div>
                         ) : (
                             <p className="mt-2 text-sm text-primary-500">
-                                No file selected yet. Choose the Excel or CSV file, then click Apply New Pricelist.
+                                No file selected yet. Choose the Excel or CSV file, then click Update Pricelist.
                             </p>
                         )}
                     </div>
@@ -484,7 +484,7 @@ const PriceListManager = ({ onUpdated }) => {
                             isLoading={isSubmitting}
                             leftIcon={<RefreshCcw className="w-4 h-4" />}
                         >
-                            Apply New Pricelist
+                            Update Pricelist
                         </Button>
                     </div>
                 </form>
