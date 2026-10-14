@@ -41,13 +41,21 @@ describe('dashboard refresh feedback', () => {
 
   it('does not present unsupported old warehouse forecasts as current predictions', async () => {
     vi.mocked(getAnalyticsDashboardSnapshot).mockResolvedValue({
-      forecastMetadata: { generatedAt: '2026-10-14T12:00:00Z', productStatus: 'insufficient_history', targetMonth: '2026-11-01', historyStart: '2026-04-01', historyEnd: '2026-09-30' },
+      forecastMetadata: { source:'completed_recorded_sales', generatedAt: '2026-10-14T12:00:00Z', productStatus: 'insufficient_history', targetMonth: '2026-11-01', historyStart: '2026-04-01', historyEnd: '2026-09-30' },
       topProductForecasts: [], topServiceForecasts: [],
     });
     render(<MemoryRouter><AdminDashboard /></MemoryRouter>);
     await screen.findAllByText('Insufficient history');
     expect(screen.queryByText('₱9,973.00')).toBeNull();
     expect(screen.getByText(/Recorded-sales snapshot/)).toBeTruthy();
+  });
+
+  it('rejects legacy forecast arrays without verified recorded-sales provenance', async () => {
+    vi.mocked(getAnalyticsDashboardSnapshot).mockResolvedValue({topProductForecasts:[{predicted_revenue:9973,predicted_quantity:5.8}],topServiceForecasts:[{service_name:'Legacy demo forecast'}]});
+    render(<MemoryRouter><AdminDashboard /></MemoryRouter>);
+    await screen.findByText(/Current forecast data could not be confirmed/);
+    expect(screen.queryByText('₱9,973.00')).toBeNull();
+    expect(screen.queryByText('Legacy demo forecast')).toBeNull();
   });
 
   it('reloads dashboard data without rebuilding analytics', async () => {

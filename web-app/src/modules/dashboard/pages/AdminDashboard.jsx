@@ -129,9 +129,10 @@ const AdminDashboard = () => {
 
     const latestRefresh = snapshot?.latestRefresh;
     const forecastMetadata = snapshot?.forecastMetadata;
-    const hasProductForecast = forecastMetadata?.productStatus === 'available';
-    const topProductForecasts = snapshot?.topProductForecasts || [];
-    const topServiceForecasts = snapshot?.topServiceForecasts || [];
+    const forecastSourceVerified = forecastMetadata?.source === 'completed_recorded_sales';
+    const hasProductForecast = forecastSourceVerified && forecastMetadata?.productStatus === 'available';
+    const topProductForecasts = forecastSourceVerified ? (snapshot?.topProductForecasts || []) : [];
+    const topServiceForecasts = forecastSourceVerified ? (snapshot?.topServiceForecasts || []) : [];
     const topSellingItems = snapshot?.topSellingItems || [];
     const itemTrend = snapshot?.itemTrend || [];
     const peakPeriods = snapshot?.peakPeriods || [];
@@ -266,10 +267,11 @@ const AdminDashboard = () => {
                     <p className="mt-1 text-xs text-primary-500">Estimates based on recorded sales. Forecasts are not confirmed revenue.</p>
                     <p className="mt-1 text-xs text-primary-500">Six-completed-month average, including months with no sales. Requires at least three active months and activity within the last three months. Demo sales and uncompleted service orders are excluded.</p>
                     {forecastMetadata?.targetMonth && <p className="mt-1 text-xs text-primary-500">Target: {new Date(`${forecastMetadata.targetMonth}T12:00:00`).toLocaleDateString('en-PH', {month:'long',year:'numeric'})} · History: {forecastMetadata.historyStart} to {forecastMetadata.historyEnd}</p>}
+                    {!loading && !forecastSourceVerified && <p role="note" className="mt-2 text-sm text-amber-700">Current forecast data could not be confirmed. Recorded sales remain available.</p>}
                 </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <KPICard title="Predicted Revenue" value={loading ? 'Loading...' : error ? 'Unavailable' : hasProductForecast ? formatCurrency(predictedRevenue) : 'Insufficient history'} icon={<DollarSign className="w-6 h-6" />} trendValue={hasProductForecast ? `${topProductForecasts.length} qualifying products` : 'No supported prediction yet'} />
-                <KPICard title="Forecasted Units" value={loading ? 'Loading...' : error ? 'Unavailable' : hasProductForecast ? formatNumber(forecastedProductCount) : 'Insufficient history'} icon={<Package className="w-6 h-6" />} trendValue="Next-month estimate, not confirmed demand" />
+                <KPICard title="Predicted Revenue" value={loading ? 'Loading...' : error || !forecastSourceVerified ? 'Unavailable' : hasProductForecast ? formatCurrency(predictedRevenue) : 'Insufficient history'} icon={<DollarSign className="w-6 h-6" />} trendValue={hasProductForecast ? `${topProductForecasts.length} qualifying products` : 'No supported prediction yet'} />
+                <KPICard title="Forecasted Units" value={loading ? 'Loading...' : error || !forecastSourceVerified ? 'Unavailable' : hasProductForecast ? formatNumber(forecastedProductCount) : 'Insufficient history'} icon={<Package className="w-6 h-6" />} trendValue="Next-month estimate, not confirmed demand" />
                 <KPICard title="Top Selling Items" value={loading ? 'Loading...' : formatNumber(topSellingItems.length)} icon={<TrendingUp className="w-6 h-6" />} trend="up" trendValue={topSellingLeader?.product_name || 'No item leader yet'} accentColor="border-emerald-500" iconBg="bg-emerald-50 text-emerald-600" />
             </div>
             </section>
