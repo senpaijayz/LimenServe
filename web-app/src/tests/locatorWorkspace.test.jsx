@@ -120,6 +120,9 @@ describe('Stockroom workspace workflows', () => {
         mount(); await loaded();
         fireEvent.click(screen.getByRole('button', { name: 'Top-down 2D floor view' }));
         expect(screen.getByTestId('floor-plan-stair-footprint').tagName.toLowerCase()).toBe('path');
+        const stairMarker = screen.getByTestId('floor-plan-stair-footprint').parentElement;
+        const shelfMarker = screen.getByRole('button', { name: 'Aisle B 4-Layer Shelf' });
+        expect(stairMarker.compareDocumentPosition(shelfMarker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         fireEvent.keyDown(screen.getByRole('button', { name: 'Aisle B 4-Layer Shelf' }), { key: 'Enter' });
         const dialog = screen.getByRole('dialog');
         fireEvent.change(within(dialog).getByLabelText('Product'), { target: { value: 'OF-1' } });
