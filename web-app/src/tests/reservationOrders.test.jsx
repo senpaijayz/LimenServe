@@ -28,7 +28,7 @@ describe('reservation orders', () => {
     fireEvent.click(thermostat);
     fireEvent.click(screen.getByRole('button', { name: /Lock cylinder.*Add part/ }));
     expect(screen.getAllByLabelText('Quantity').map((input) => input.value)).toEqual(['2', '1']);
-    expect(screen.getByText('Estimated total').parentElement.parentElement.textContent).toContain('400.00');
+    expect(screen.getByText('Estimated total').parentElement.textContent).toContain('400.00');
     fireEvent.click(screen.getByRole('button', { name: 'Create reservation' }));
     await waitFor(() => expect(api.createAdminReservation).toHaveBeenCalledTimes(1));
     expect(api.createAdminReservation.mock.calls[0][0].items).toEqual([{ productId: 'part-1', quantity: 2 }, { productId: 'part-2', quantity: 1 }]);
