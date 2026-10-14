@@ -4082,6 +4082,26 @@ router.patch('/products/:productId/archive', requireRole('admin'), async (req, r
   }
 });
 
+router.delete('/products/:productId', requireRole('admin'), async (req, res, next) => {
+  try {
+    const productId = String(req.params.productId || '').trim();
+    const confirmSku = String(req.body?.confirmSku || '').trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId) || !confirmSku) {
+      res.status(400).json({ error: 'Select an archived product and confirm its part number.' });
+      return;
+    }
+    const result = await callRpc('delete_archived_catalog_product', {
+      p_product_id: productId, p_actor_user_id: req.user.id, p_confirm_sku: confirmSku,
+    });
+    if (!result?.deleted) {
+      res.status(result?.reason === 'not_found' ? 404 : 409).json({ error: 'The archived product was not found. Refresh the list.' });
+      return;
+    }
+    invalidateProductCatalogCache();
+    res.json(result);
+  } catch (error) { next(error); }
+});
+
 router.get('/products/archived', requireRole('admin'), async (req, res, next) => {
   try {
     const limit = parsePositiveInteger(req.query.limit, 250, 250);
@@ -4116,7 +4136,7 @@ router.get('/products/archived', requireRole('admin'), async (req, res, next) =>
         ? supabaseAdmin
           .schema('catalog')
           .from('inventory_balances')
-          .select('product_id, on_hand')
+          .select('product_id, on_hand, reserved')
           .in('product_id', productIds)
         : Promise.resolve({ data: [], error: null }),
     ]);
@@ -4139,6 +4159,7 @@ router.get('/products/archived', requireRole('admin'), async (req, res, next) =>
 
     const priceMap = new Map((prices ?? []).map((price) => [price.product_id, Number(price.amount ?? 0)]));
     const balanceMap = new Map((balances ?? []).map((balance) => [balance.product_id, Number(balance.on_hand ?? 0)]));
+    const reservedMap = new Map((balances ?? []).map((balance) => [balance.product_id, Number(balance.reserved ?? 0)]));
 
     res.json({
       products: (products ?? []).map((product) => ({
@@ -4151,6 +4172,7 @@ router.get('/products/archived', requireRole('admin'), async (req, res, next) =>
         uom: product.uom,
         price: priceMap.get(product.id) ?? 0,
         stock: balanceMap.get(product.id) ?? 0,
+        reserved: reservedMap.get(product.id) ?? 0,
         archivedAt: product.updated_at,
       })),
     });

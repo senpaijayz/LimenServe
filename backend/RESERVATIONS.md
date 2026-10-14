@@ -22,7 +22,13 @@ Blocked actions return an HTTP 409 with an explanation, rather than a generic se
 
 The migration `supabase/migrations/20261014105041_reservation_orders_and_active_product_guard.sql` was applied to the hosted Supabase database on October 14, 2026. Deploy the backend and frontend together. The migration groups existing reservations into one-part orders and keeps their identities, statuses, timestamps, and event history. All new tables have RLS and restricted access. The new checkout and creation RPCs are callable only by the backend service role and verify administrator authorization.
 
-The new website code has not yet been deployed. Coordinate deployment so the older stock-only completion screen is replaced by order checkout. The database now rejects the previous stock-only completion action and directs callers to order checkout.
+The matching backend and frontend use order checkout. The database rejects the previous stock-only completion action and directs callers to order checkout.
+
+## Archived product deletion
+
+`20261014110716_delete_unused_archived_products.sql` adds an administrator-only deletion function. Archived Products shows **Delete permanently** with an explicit confirmation. Stock, reservation/sales/quotation/service history, receiving records, active locations, configured recommendations, and linked processing records block deletion. The server verifies the selected part number before deleting. An archive/restore audit entry alone does not block an otherwise unused product.
+
+Eligible deletion removes product-owned prices, images, supplier links, empty stock metadata, and its current catalog staging entry in one transaction. Historical pricelist entries retain their SKU and price. Deployment enables the action without automatically deleting any products.
 
 ## Verification
 

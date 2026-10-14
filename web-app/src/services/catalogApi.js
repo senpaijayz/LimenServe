@@ -698,6 +698,16 @@ export async function getArchivedCatalogProducts(limit = 250) {
   }
 }
 
+export async function deleteArchivedCatalogProduct(productId, confirmSku) {
+  try {
+    const { data } = await apiClient.delete(`/catalog/products/${productId}`, { data: { confirmSku } });
+    clearProductCatalogCaches();
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Failed to delete the archived product.');
+  }
+}
+
 export async function getServiceCatalog() {
   try {
     const cacheKey = buildRequestKey('service-catalog');

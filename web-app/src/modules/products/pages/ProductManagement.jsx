@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArchiveRestore, Edit2, LayoutGrid, List, Package, Plus, RefreshCw, Save, Search, ScanLine, Trash2 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
+import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import { useToast } from '../../../components/ui/Toast';
 import useProductCatalog from '../../../hooks/useProductCatalog';
@@ -12,6 +13,7 @@ import ProductPriceHistory from '../../inventory/components/ProductPriceHistory'
 import {
   archiveCatalogProduct,
   createCatalogProduct,
+  deleteArchivedCatalogProduct,
   getArchivedCatalogProducts,
   getCatalogProductByPartNumber,
   getManagedCategories,
@@ -131,6 +133,9 @@ export default function ProductManagement() {
   const [archivedProducts, setArchivedProducts] = useState([]);
   const [archivedLoading, setArchivedLoading] = useState(false);
   const [restoringProductId, setRestoringProductId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingProductId, setDeletingProductId] = useState(null);
+  const deleteLock = useRef(false);
   const [viewMode, setViewMode] = useState('grid');
 
   const { products, categories, pagination, loading, error } = useProductCatalog({
@@ -323,6 +328,27 @@ export default function ProductManagement() {
     }
   };
 
+  const confirmDeleteArchived = async () => {
+    if (!deleteTarget?.id || deleteLock.current) return;
+    deleteLock.current = true;
+    setDeletingProductId(deleteTarget.id);
+    try {
+      await deleteArchivedCatalogProduct(deleteTarget.id, deleteTarget.sku);
+      setArchivedProducts((current) => current.filter((item) => item.id !== deleteTarget.id));
+      if (selectedProduct?.id === deleteTarget.id) setSelectedProduct(null);
+      void invalidateProductCatalog(queryClient);
+      setRefreshKey((value) => value + 1);
+      setDeleteTarget(null);
+      success('Archived product permanently deleted.');
+    } catch (deleteError) {
+      showError(deleteError.message || 'Unable to delete the archived product.');
+      setDeleteTarget(null);
+    } finally {
+      deleteLock.current = false;
+      setDeletingProductId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 rounded-2xl border border-primary-200 bg-white p-6 shadow-sm lg:flex-row lg:items-center lg:justify-between">
@@ -481,7 +507,7 @@ export default function ProductManagement() {
 
       <Card
         title="Archived Products"
-        subtitle="Products removed from the active pricelist stay here for audit and restoration. Showing the 250 most recently archived items."
+        subtitle="Restore archived products or permanently delete unused ones. Products with stock or linked records are protected. Showing the 250 most recently archived items."
         headerAction={(
           <Button variant="outline" size="sm" leftIcon={<RefreshCw className="h-4 w-4" />} isLoading={archivedLoading} onClick={refreshArchivedProducts}>
             Refresh
@@ -514,15 +540,20 @@ export default function ProductManagement() {
                   className="mt-4 w-full"
                   leftIcon={<ArchiveRestore className="h-4 w-4" />}
                   isLoading={restoringProductId === product.id}
+                  disabled={Boolean(deletingProductId)}
                   onClick={() => void handleRestore(product)}
                 >
                   Restore
                 </Button>
+                <Button variant="danger" className="mt-2 w-full" leftIcon={<Trash2 className="h-4 w-4" />} disabled={Boolean(restoringProductId) || Boolean(deletingProductId) || Number(product.stock || 0) !== 0 || Number(product.reserved || 0) !== 0} onClick={() => setDeleteTarget(product)}>Delete permanently</Button>
+                {(Number(product.stock || 0) !== 0 || Number(product.reserved || 0) !== 0) && <p className="mt-2 text-xs text-primary-500">Deletion is blocked while stock or reserved quantities remain.</p>}
               </div>
             ))}
           </div>
         )}
       </Card>
+
+      <ConfirmDialog isOpen={Boolean(deleteTarget)} title="Delete archived product?" message={`Permanently delete "${deleteTarget?.name || ''}" (${deleteTarget?.sku || ''})? Its product details, selling prices, images, and supplier links will be removed. This cannot be undone. Products used by other records cannot be deleted.`} confirmLabel="Delete permanently" confirmVariant="danger" isLoading={Boolean(deletingProductId)} onConfirm={confirmDeleteArchived} onClose={() => { if (!deleteLock.current) setDeleteTarget(null); }} />
 
       <Modal isOpen={isModalOpen} onClose={closeModal} title={editingProduct ? 'Edit Product' : 'Register New Product'} size="xl">
         <form onSubmit={handleSave} className="space-y-5" noValidate>

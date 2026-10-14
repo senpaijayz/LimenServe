@@ -31,10 +31,10 @@ try {
     create function operations.generate_document_number(prefix text) returns text language sql as $$ select prefix || '-' || gen_random_uuid()::text $$;
     create table operations.customers(id uuid primary key default gen_random_uuid(), user_id uuid, customer_type text, name text, phone text, email text, metadata jsonb default '{}', business_date date, created_at timestamptz default now(), updated_at timestamptz default now());
     create table catalog.products(id uuid primary key default gen_random_uuid(), sku text, name text, category text, status text default 'in_stock', is_active boolean default true, updated_at timestamptz default now());
-    create table catalog.product_prices(id uuid primary key default gen_random_uuid(), product_id uuid references catalog.products(id), price_type text default 'retail', amount numeric(12,2), is_current boolean default true, created_at timestamptz default now());
+    create table catalog.product_prices(id uuid primary key default gen_random_uuid(), product_id uuid references catalog.products(id) on delete cascade, price_type text default 'retail', amount numeric(12,2), is_current boolean default true, created_at timestamptz default now());
     create unique index current_retail on catalog.product_prices(product_id) where is_current and price_type='retail';
-    create table catalog.inventory_balances(product_id uuid primary key references catalog.products(id), on_hand numeric default 0, reserved numeric default 0, reorder_point numeric default 0, reorder_quantity numeric default 0, location jsonb, as_of_date date, business_date date, updated_at timestamptz default now(), check(on_hand>=0 and reserved>=0 and reserved<=on_hand));
-    create table catalog.inventory_movements(id uuid primary key default gen_random_uuid(), product_id uuid, movement_type text, quantity numeric, reference_type text, reference_id uuid, notes text, performed_by uuid, business_date date);
+    create table catalog.inventory_balances(product_id uuid primary key references catalog.products(id) on delete cascade, on_hand numeric default 0, reserved numeric default 0, reorder_point numeric default 0, reorder_quantity numeric default 0, location jsonb, as_of_date date, business_date date, updated_at timestamptz default now(), check(on_hand>=0 and reserved>=0 and reserved<=on_hand));
+    create table catalog.inventory_movements(id uuid primary key default gen_random_uuid(), product_id uuid references catalog.products(id) on delete cascade, movement_type text, quantity numeric, reference_type text, reference_id uuid, notes text, performed_by uuid, business_date date);
     create table operations.sales_transactions(id uuid primary key default gen_random_uuid(), transaction_number text, estimate_id uuid, customer_id uuid, processed_by uuid, payment_method text, status text, subtotal numeric, discount_total numeric, tax_total numeric, total_amount numeric, cash_received numeric, change_due numeric, customer_name_snapshot text, business_date date);
     create table operations.sales_transaction_items(id uuid primary key default gen_random_uuid(), transaction_id uuid, line_type text, product_id uuid, service_id uuid, quantity numeric, unit_price numeric, line_total numeric, business_date date, item_name_snapshot text, item_sku_snapshot text);
     create table operations.estimates(id uuid primary key, status text);
@@ -137,5 +137,44 @@ try {
   assert.equal((await scalar("select count(*)::int count from operations.part_reservations where reservation_number='PR-OLD-CALLER' and reservation_order_id is not null")).count, 1);
   const legacyId = (await scalar("select id from operations.part_reservations where reservation_number='PR-OLD-CALLER'")).id;
   await assert.rejects(() => db.query("select public.process_part_reservation($1,'complete',$2)", [legacyId, admin]), /order checkout/);
-  console.log('PASS: PostgreSQL migration, grouped totals, backfill, dependency guards, allocation, reserved-stock protection, changed-price rejection, sale-failure rollback, cancellation, atomic sale, replay, and legacy compatibility.');
+  // Archived-product deletion: execute the actual forward migration with
+  // dependency fixture tables and preserve real transaction safeguards.
+  await db.exec(`
+    create schema cms; create schema reco;
+    create table catalog.stock_receipt_items(product_id uuid);
+    alter table catalog.stock_receiving_logs add column product_id uuid;
+    create table public.product_locations(product_id uuid);
+    create table stockroom.items(product_id uuid primary key references catalog.products(id) on delete cascade);
+    create table cms.featured_catalog_items(product_id uuid);
+    create table cms.recommendation_package_items(product_id uuid);
+    create table cms.recommendation_packages(anchor_product_id uuid);
+    create table reco.product_recommendation_package_items(product_id uuid);
+    create table reco.product_recommendation_packages(anchor_product_id uuid);
+    create table reco.quote_recommendation_rules(anchor_product_id uuid,related_product_id uuid);
+    create table catalog.ocr_scan_items(product_id uuid);
+    create table catalog.ocr_pending_products(approved_product_id uuid);
+    create table reco.upsell_interactions(product_id uuid,recommended_product_id uuid);
+    create table catalog.pricelist_import_staging(sku text);
+  `);
+  await db.exec(await read('20261014110716_delete_unused_archived_products.sql'));
+  const unusedId = '88888888-8888-4888-8888-888888888888';
+  await db.exec(`insert into catalog.products(id,sku,name,is_active) values ('${unusedId}','UNUSED','Unused test product',true); insert into catalog.product_prices(product_id,amount) values ('${unusedId}',25); insert into catalog.inventory_balances(product_id,on_hand) values ('${unusedId}',0); insert into catalog.pricelist_import_staging values ('UNUSED');`);
+  const deleteUnused = (sku = 'UNUSED', actor = admin) => db.query('select public.delete_archived_catalog_product($1,$2,$3) result', [unusedId,actor,sku]);
+  await assert.rejects(() => deleteUnused(), /Archive this product/);
+  await db.exec(`update catalog.products set is_active=false where id='${unusedId}'; insert into catalog.inventory_movements(product_id,movement_type,quantity,reference_type) values ('${unusedId}','adjustment',0,'product_archive');`);
+  await assert.rejects(() => deleteUnused('WRONG'), /selected product changed/);
+  await assert.rejects(() => deleteUnused('UNUSED',key), /Administrator permission/);
+  await db.exec(`update catalog.inventory_balances set on_hand=1 where product_id='${unusedId}'`);
+  await assert.rejects(() => deleteUnused(), /stock or reserved quantities/);
+  assert.equal((await scalar("select count(*)::int count from catalog.pricelist_import_staging where sku='UNUSED'")).count, 1);
+  await db.exec(`update catalog.inventory_balances set on_hand=0 where product_id='${unusedId}'; insert into cms.featured_catalog_items values ('${unusedId}')`);
+  await assert.rejects(() => deleteUnused(), /configured product recommendations/);
+  await db.exec(`delete from cms.featured_catalog_items where product_id='${unusedId}'`);
+  assert.equal((await deleteUnused()).rows[0].result.deleted, true);
+  assert.equal((await scalar('select count(*)::int count from catalog.products where id=$1',[unusedId])).count, 0);
+  assert.equal((await scalar("select count(*)::int count from catalog.pricelist_import_staging where sku='UNUSED'")).count, 0);
+  assert.equal((await scalar('select count(*)::int count from catalog.product_prices where product_id=$1',[unusedId])).count, 0);
+  await db.exec(`update catalog.products set is_active=false where id='${product1}'`);
+  await assert.rejects(() => db.query('select public.delete_archived_catalog_product($1,$2,$3)',[product1,admin,'PART-1']), /reservation history|sales history/);
+  console.log('PASS: PostgreSQL migrations, grouped totals, backfill, dependency guards, allocation, reserved-stock protection, changed-price rejection, sale-failure rollback, cancellation, atomic sale, replay, legacy compatibility, and safe archived-product deletion.');
 } finally { await db.close(); }
