@@ -10,7 +10,6 @@ import { CartProvider } from './context/CartContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { queryClient } from './lib/queryClient';
 import { recordRouteLoad } from './observability/performance';
-import { FEATURE_FLAGS } from './utils/constants';
 
 const LoginPage = lazy(() => import('./modules/auth/pages/LoginPage'));
 const AdminDashboard = lazy(() => import('./modules/dashboard/pages/AdminDashboard'));
@@ -26,7 +25,6 @@ const InventoryReport = lazy(() => import('./modules/reports/pages/InventoryRepo
 const UserManagement = lazy(() => import('./modules/users/pages/UserManagement'));
 const CmsAdmin = lazy(() => import('./modules/cms/pages/CmsAdmin'));
 const Locator3DAdmin = lazy(() => import('./modules/locator3d/pages/Locator3DAdmin'));
-const AdminReservations = lazy(() => import('./modules/reservations/pages/AdminReservations'));
 
 const PublicHome = lazy(() => import('./modules/public/pages/PublicHome'));
 const PublicCatalog = lazy(() => import('./modules/public/pages/PublicCatalog'));
@@ -114,7 +112,7 @@ function App() {
                   <Route path="/users" element={renderRoute(UserManagement, <WorkspaceRouteFallback title="Loading user management" />)} />
                   <Route path="/cms" element={renderRoute(CmsAdmin, <WorkspaceRouteFallback title="Loading CMS workspace" />)} />
                   <Route path="/locator-3d" element={renderRoute(Locator3DAdmin, <WorkspaceRouteFallback title="Loading 3D locator" />)} />
-                  <Route path="/reservations" element={FEATURE_FLAGS.partReservations ? renderRoute(AdminReservations, <WorkspaceRouteFallback title="Loading part reservations" />) : <Navigate to="/dashboard" replace />} />
+                  <Route path="/reservations/*" element={<Navigate to="/dashboard" replace />} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />

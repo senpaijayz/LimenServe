@@ -53,6 +53,17 @@ function appEnvironment(overrides = {}) {
   };
 }
 
+test('retired reservation endpoints reject reads and writes without invoking reservation workflows', async () => {
+  const app = createApp({ runtimeEnv: appEnvironment(), applicationLogger: createTestLogger() });
+  await withServer(app, async (baseUrl) => {
+    for (const [method, path] of [['GET', ''], ['POST', '/admin'], ['PATCH', '/old-id'], ['GET', '/old-id/checkout']]) {
+      const response = await fetch(`${baseUrl}/api/reservations${path}`, { method });
+      assert.equal(response.status, 410);
+      assert.equal((await response.json()).code, 'FEATURE_REMOVED');
+    }
+  });
+});
+
 test('health and CORS error responses include request IDs and defensive headers', async () => {
   const lifecycle = createRuntimeState();
   lifecycle.markReady();

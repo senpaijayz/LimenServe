@@ -116,19 +116,12 @@ export const NAV_ITEMS = {
     admin: [
         { path: '/products', label: 'Products', icon: 'Boxes', roles: [ROLES.ADMIN] },
         { path: '/suppliers', label: 'Suppliers', icon: 'Truck', roles: [ROLES.ADMIN] },
-        // Comment this item to hide Part Reservations; remove the comment to show it again.
-        { path: '/reservations', label: 'Part Reservations', icon: 'ClipboardList', roles: [ROLES.ADMIN] },
         { path: '/quotation', label: 'Quotation', icon: 'FileText', roles: [ROLES.ADMIN] },
         { path: '/reports', label: 'Reports', icon: 'BarChart3', roles: [ROLES.ADMIN] },
         { path: '/users', label: 'User Management', icon: 'Users', roles: [ROLES.ADMIN] },
         { path: '/cms', label: 'Content CMS', icon: 'FileText', roles: [ROLES.ADMIN] },
         { path: '/locator-3d', label: '3D Locator', icon: 'Box', roles: [ROLES.ADMIN, ROLES.STOCK_CLERK] },
     ],
-};
-
-// Derive visibility from the navigation entry so one comment controls the feature consistently.
-export const FEATURE_FLAGS = {
-    partReservations: NAV_ITEMS.admin.some((item) => item.path === '/reservations'),
 };
 
 // Stockroom Configuration

@@ -100,7 +100,7 @@ const supportedVehicles = ['Montero Sport', 'Triton', 'Xforce', 'Xpander', 'Mira
 const startHereSteps = [
     { title: 'Find your part', description: 'Search by part number, name, or vehicle model in the catalog.', href: '/catalog', icon: Search },
     { title: 'Check fitment', description: 'Choose your vehicle to see compatible parts and service packages.', href: '/catalog', icon: CarFront },
-    { title: 'Get help or a quote', description: 'Send a quote request or reserve an unavailable part after signing in.', href: '/estimate', icon: PackageCheck },
+    { title: 'Get help or a quote', description: 'Send a quote request for the parts or services you need.', href: '/estimate', icon: PackageCheck },
 ];
 
 function getCmsSection(page, sectionType, sectionKey = '') {

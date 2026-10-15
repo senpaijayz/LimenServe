@@ -249,7 +249,7 @@ function createHomePageDraft() {
           items: [
             { title: 'Find your part', description: 'Search by part number, name, or vehicle model in the catalog.', href: '/catalog' },
             { title: 'Check fitment', description: 'Choose your vehicle to see compatible parts and service packages.', href: '/catalog' },
-            { title: 'Get help or a quote', description: 'Send a quote request or reserve an unavailable part after signing in.', href: '/estimate' },
+            { title: 'Get help or a quote', description: 'Send a quote request for the parts or services you need.', href: '/estimate' },
           ],
         },
       },
@@ -1290,10 +1290,6 @@ function CmsOverview({ pageCount, catalogSummary, estimates, notifications, onRe
             <Link to="/quotation" className="rounded-2xl border border-primary-200 bg-primary-50 p-4 transition hover:border-accent-primary hover:bg-white">
               <p className="font-semibold text-primary-950">Review estimates</p>
               <p className="mt-1 text-sm text-primary-500">Open requests, add parts or services, and save a quote.</p>
-            </Link>
-            <Link to="/reservations" className="rounded-2xl border border-primary-200 bg-primary-50 p-4 transition hover:border-accent-primary hover:bg-white">
-              <p className="font-semibold text-primary-950">Reserve a part</p>
-              <p className="mt-1 text-sm text-primary-500">Create and manage customer reservations from the admin workspace.</p>
             </Link>
           </div>
         </div>

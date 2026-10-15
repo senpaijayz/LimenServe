@@ -27,7 +27,6 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import partsMappingRoutes from './routes/partsMappingRoutes.js';
 import posRoutes from './routes/posRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
-import reservationRoutes from './routes/reservationRoutes.js';
 import serviceOrderRoutes from './routes/serviceOrderRoutes.js';
 import stockroomRoutes from './routes/stockroomRoutes.js';
 import locatorRoutes from './routes/locatorRoutes.js';
@@ -142,7 +141,11 @@ export function createApp({
   app.use('/api/estimates', estimateRoutes);
   app.use('/api/mechanics', mechanicsRoutes);
   app.use('/api/notifications', notificationRoutes);
-  app.use('/api/reservations', reservationRoutes);
+  // Retire all reservation endpoints, including writes from older cached clients.
+  // Historical records remain intact for inventory and sales audit trails.
+  app.use('/api/reservations', (_req, res) => {
+    res.status(410).json({ error: 'Part reservations are no longer available.', code: 'FEATURE_REMOVED' });
+  });
   app.use('/api/service-orders', serviceOrderRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/inventory/stockroom', inventoryStockroomRoutes);
