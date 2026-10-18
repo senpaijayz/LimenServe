@@ -29,11 +29,16 @@ vi.mock('../lib/inventoryClassifier', () => ({
   },
 }));
 
-import { getCatalogProductByPartNumber } from '../services/catalogApi';
+import { getCatalogProductByPartNumber, getProductCatalog } from '../services/catalogApi';
 
 describe('catalog product part-number lookup', () => {
   beforeEach(() => {
     apiClientMock.get.mockReset();
+  });
+
+  it('does not load an older fallback catalogue for estimate requests when the network is unavailable', async () => {
+    apiClientMock.get.mockRejectedValue(new Error('Network unavailable'));
+    await expect(getProductCatalog({ source: 'estimate', q: 'T-SHIRT' })).rejects.toThrow('Failed to load product catalog.');
   });
 
   it('loads an exact existing product by encoded part number', async () => {

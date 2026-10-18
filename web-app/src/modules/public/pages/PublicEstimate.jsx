@@ -376,7 +376,7 @@ const PublicEstimate = () => {
         sortBy,
         vehicleModel: vehicle.model,
         vehicleYear: vehicle.year,
-        source: 'staging',
+        source: 'estimate',
         includeCategories: false,
     });
     const { services: availableServices, loading: servicesLoading, error: servicesError } = useServiceCatalog();
@@ -1630,7 +1630,7 @@ const PublicEstimate = () => {
                                         </div>
                                         <div>
                                             <h3 className="text-xl font-display font-semibold text-primary-950">{hasVehicle ? `Genuine Parts for ${vehicle.displayLabel}` : 'Genuine Parts Pricelist'}</h3>
-                                            <p className="text-sm text-primary-500">{hasVehicle ? 'Showing vehicle-aware parts results and smart bundle anchors from the live Mitsubishi pricelist.' : 'Showing 12 priced items at a time from the current pricelist.'}</p>
+                                            <p className="text-sm text-primary-500">{hasVehicle ? 'Automotive parts listed for this vehicle and general-use automotive items from the active pricelist. Confirm fitment with the shop.' : 'Showing automotive parts from the active pricelist. Merchandise is not included.'}</p>
                                             <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary-400">Click a part to add it and reveal its Good / Better / Best bundle options.</p>
                                         </div>
                                     </div>

@@ -421,7 +421,9 @@ export async function getProductCatalog(params = {}) {
       };
     });
   } catch (error) {
-    if (isNetworkFailure(error)) {
+    // The estimate must never substitute a bundled/older catalogue when the
+    // active pricelist cannot be verified by the server.
+    if (isNetworkFailure(error) && params.source !== 'estimate') {
       return getFallbackCatalog(params);
     }
     extractApiError(error, 'Failed to load product catalog.');

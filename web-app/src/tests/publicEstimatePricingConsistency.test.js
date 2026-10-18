@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 import {
   buildEstimatePayload,
@@ -10,6 +11,12 @@ import { getAppliedBundleDisplaySummaries, getAppliedBundleSummaries } from '../
 const PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('public estimate pricing consistency', () => {
+  it('browses the dedicated estimate pricelist scope rather than the full inventory', () => {
+    const source = readFileSync('src/modules/public/pages/PublicEstimate.jsx', 'utf8');
+    expect(source).toContain("source: 'estimate'");
+    expect(source).not.toContain("source: 'staging'");
+    expect(source).toContain('Merchandise is not included.');
+  });
   it('shows and submits catalogue pricing for an unverifiable synthetic bundle item', () => {
     const pricing = normalizePublicRecommendationPricing({
       recommendationRuleId: `vehicle-part-${PRODUCT_ID}`,

@@ -10,6 +10,7 @@ import { receiveCatalogStock, receiveSupplierInvoiceStock, requireIdempotencyKey
 import { annotatePriceListImportError, parsePriceListActivation, parsePriceListVersionYear } from '../services/priceListVersionModel.js';
 import { selectByInChunks } from '../utils/supabaseBatchSelect.js';
 import { createPriceHistoryRouter } from './priceHistoryRoutes.js';
+import { applyEstimatePricelistScope, getActiveEstimatePricelist } from '../services/estimatePricelistScope.js';
 import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
@@ -2831,7 +2832,10 @@ function applyVehiclePricelistCandidateFilters(query, { vehicleContext } = {}) {
   return query.or(modelPatterns.join(','));
 }
 
-async function fetchVehiclePricelistCatalog({ searchQuery = '', selectedCategory = 'all', sortBy = 'name-asc', vehicleContext, enrichInventory = false }) {
+async function fetchVehiclePricelistCatalog({ searchQuery = '', selectedCategory = 'all', sortBy = 'name-asc', vehicleContext, enrichInventory = false, estimateScope = null }) {
+  if (estimateScope && !estimateScope.versionId) {
+    return { sourceAvailable: true, scopedProducts: [], categoryScopedProducts: [] };
+  }
   let query = supabaseAdmin
     .schema('catalog')
     .from('pricelist_import_staging')
@@ -2855,6 +2859,7 @@ async function fetchVehiclePricelistCatalog({ searchQuery = '', selectedCategory
       classification_tokens
     `);
 
+  if (estimateScope) query = applyEstimatePricelistScope(query, estimateScope.versionId);
   query = searchLooksLikePartNumber(searchQuery)
     ? applyPricelistCatalogFilters(query, { searchQuery, selectedCategory: 'all' })
     : applyVehiclePricelistCandidateFilters(query, { vehicleContext });
@@ -2862,6 +2867,7 @@ async function fetchVehiclePricelistCatalog({ searchQuery = '', selectedCategory
 
   const { data, error } = await query;
   if (error) {
+    if (estimateScope) throw error;
     const message = String(error.message || '');
     if (message.includes('pricelist_import_staging') || message.includes('does not exist') || isPrivateSchemaAccessError(error)) {
       return null;
@@ -2890,7 +2896,10 @@ async function fetchVehiclePricelistCatalog({ searchQuery = '', selectedCategory
   };
 }
 
-async function fetchPricelistCatalogPage({ page, pageSize, searchQuery = '', selectedCategory = 'all', sortBy = 'name-asc' }) {
+async function fetchPricelistCatalogPage({ page, pageSize, searchQuery = '', selectedCategory = 'all', sortBy = 'name-asc', estimateScope = null }) {
+  if (estimateScope && !estimateScope.versionId) {
+    return { sourceAvailable: true, products: [], totalCount: 0 };
+  }
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
   let query = supabaseAdmin
@@ -2916,12 +2925,14 @@ async function fetchPricelistCatalogPage({ page, pageSize, searchQuery = '', sel
       classification_tokens
     `, { count: 'exact' });
 
+  if (estimateScope) query = applyEstimatePricelistScope(query, estimateScope.versionId);
   query = applyPricelistCatalogFilters(query, { searchQuery, selectedCategory });
   query = applyPricelistCatalogSort(query, sortBy).range(from, to);
 
   const { data, error, count } = await query;
 
   if (error) {
+    if (estimateScope) throw error;
     const message = String(error.message || '');
     if (message.includes('pricelist_import_staging') || message.includes('does not exist') || isPrivateSchemaAccessError(error)) {
       return null;
@@ -3392,7 +3403,10 @@ router.get('/products', async (req, res, next) => {
     const vehicleModel = String(req.query.vehicleModel || '').trim();
     const vehicleYear = String(req.query.vehicleYear || '').trim();
     const includeCategories = String(req.query.includeCategories || 'true').trim().toLowerCase() !== 'false';
-    const useStagingCatalog = String(req.query.source || '').trim().toLowerCase() === 'staging';
+    const source = String(req.query.source || '').trim().toLowerCase();
+    const estimateOnly = source === 'estimate';
+    const useStagingCatalog = source === 'staging' || estimateOnly;
+    const estimateScope = estimateOnly ? await getActiveEstimatePricelist(supabaseAdmin) : null;
     const vehicleContext = vehicleModel
       ? buildVehicleFilterContext({
         vehicleModel,
@@ -3409,6 +3423,7 @@ router.get('/products', async (req, res, next) => {
       const [catalogPage, categoryRows] = await Promise.all([
         useStagingCatalog
           ? fetchPricelistCatalogPage({
+            estimateScope,
             page,
             pageSize,
             searchQuery,
@@ -3458,6 +3473,7 @@ router.get('/products', async (req, res, next) => {
 
       if (useStagingCatalog) {
         const vehiclePricelist = await fetchVehiclePricelistCatalog({
+          estimateScope,
           searchQuery,
           selectedCategory,
           sortBy,
@@ -3471,7 +3487,7 @@ router.get('/products', async (req, res, next) => {
         }
       }
 
-      if (!useStagingCatalog || (scopedProducts.length === 0 && !searchQuery)) {
+      if (!useStagingCatalog || (!estimateOnly && scopedProducts.length === 0 && !searchQuery)) {
         const catalog = await getCachedProductCatalog();
         const scopedCatalog = splitVehicleScopedCatalogProducts(catalog, {
           searchQuery,
