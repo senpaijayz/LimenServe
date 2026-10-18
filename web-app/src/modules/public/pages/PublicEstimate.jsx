@@ -1630,7 +1630,7 @@ const PublicEstimate = () => {
                                         </div>
                                         <div>
                                             <h3 className="text-xl font-display font-semibold text-primary-950">{hasVehicle ? `Genuine Parts for ${vehicle.displayLabel}` : 'Genuine Parts Pricelist'}</h3>
-                                            <p className="text-sm text-primary-500">{hasVehicle ? 'Parts and automotive consumables from the active pricelist. Confirm vehicle fitment with the shop.' : 'Showing automotive parts from the active pricelist. Merchandise is not included.'}</p>
+                                            <p className="text-sm text-primary-500">{hasVehicle ? 'Car parts from the active pricelist. Confirm vehicle fitment with the shop.' : 'Showing car parts from the active pricelist. Merchandise is not included.'}</p>
                                             <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary-400">Click a part to add it and reveal its Good / Better / Best bundle options.</p>
                                         </div>
                                     </div>

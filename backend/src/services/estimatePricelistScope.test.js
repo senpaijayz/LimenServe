@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createClient } from '@supabase/supabase-js';
 import { readFile } from 'node:fs/promises';
-import { applyEstimatePricelistScope, getActiveEstimatePricelist, isEstimatePricelistPart, NON_PART_NAME_PATTERN, NON_PART_LABEL_PATTERN } from './estimatePricelistScope.js';
+import { applyEstimatePricelistScope, getActiveEstimatePricelist, isEstimatePricelistPart, NON_PART_NAME_PATTERN, NON_PART_LABEL_PATTERN, GENERAL_MODEL_PATTERN, CAR_PART_NAME_PATTERN, SERVICE_TOOL_SKU_PATTERN } from './estimatePricelistScope.js';
 
-test('excludes mislabeled merchandise while retaining real automotive caps, jackets, and consumables', () => {
+test('excludes merchandise and workshop supplies while retaining car components', () => {
   for (const name of ['2024 AXCR T-SHIRT SIZE 2XL', 'T SHIRT SIZE M', '2024 POLO SHIRT (BLACK)', '2024 RALLIART SPORT UMBREL', '2024 AXCR FOLDABLE UMBRELL', 'TUMBLER', 'LANYARD']) {
     assert.equal(isEstimatePricelistPart({ name, price: 100, model_name: 'VARIOUS' }), false, name);
   }
@@ -13,10 +13,28 @@ test('excludes mislabeled merchandise while retaining real automotive caps, jack
       assert.equal(isEstimatePricelistPart({ name: 'Promotional item', price: 100, [field]: label }), false, field + label);
     }
   }
-  for (const name of ['CAP ASSY,RADIATOR', 'WATER JACKET', 'MANUAL TRANSMISSION', 'INSTRUMENT CLUSTER', 'OIL FILTER', 'BRAKE PAD', 'SANDPAPER', '2K ELASTIC ADDITIVE']) {
+  for (const name of ['CAP ASSY,RADIATOR', 'WATER JACKET', 'MANUAL TRANSMISSION', 'INSTRUMENT CLUSTER', 'OIL FILTER', 'BRAKE PAD', 'BOLT,ABS CONTROL EQUIP', 'SEAT BELT', 'AIR CLEANER HOUSING']) {
     assert.equal(isEstimatePricelistPart({ name, price: 100, model_name: 'VARIOUS', category: null }), true, name);
   }
   assert.equal(isEstimatePricelistPart({ name: 'Oil filter', price: 0 }), false);
+});
+
+test('removes paint, tools, and unidentifiable VARIOUS entries without banning automotive sockets or tool-box covers', () => {
+  for (const name of ['#1500 RIKEN CP38 (SANDPAPER)', '2K ELASTIC ADDITIVE', '3M PERFECT-IT FOAM POLISHING PAD GLAZE(B', 'ACRYLIC THINNER', 'WRENCH,OIL FILTER', 'INSTALLER,BEARING', 'A,REMOVER,GARNISH', 'BRAKE TOOL SET', 'DRIVE SOCKET 10MM', 'UNIDENTIFIED ITEM', 'ENGINE OIL 4L', 'SANDING MAT\'L MIRKA OSP 1', 'AUTOSURFACER RAPID LIGHT GREY', 'ATF, TRANSMISSION OIL SP III', 'SUPER HYPOID GEAR OIL', 'BRAKE FLUID']) {
+    assert.equal(isEstimatePricelistPart({ name, price: 100, model_name: 'VARIOUS' }), false, name);
+  }
+  assert.equal(isEstimatePricelistPart({ name: 'ACTIVATOR WB', price: 100, model_name: 'PAINT MATERIAL' }), false);
+  assert.equal(isEstimatePricelistPart({ name: 'SOCKET,LAMP', price: 100, model_name: 'L300' }), true);
+  assert.equal(isEstimatePricelistPart({ name: 'COVER,TOOL BOX', price: 100, model_name: 'L300' }), true);
+  assert.equal(isEstimatePricelistPart({ name: 'Oil filter', price: 100, model_name: null }), true);
+  assert.equal(isEstimatePricelistPart({ name: 'Unidentified item', price: 100, model_name: null }), false);
+  assert.equal(isEstimatePricelistPart({ name: 'BRAKE FLUID RESERVOIR', price: 100, model_name: 'VARIOUS' }), true);
+  assert.equal(isEstimatePricelistPart({ sku: 'MB992190', name: 'ADAPTER SET, RAD CAP', price: 100, model_name: 'VARIOUS' }), false);
+  assert.equal(isEstimatePricelistPart({ sku: 'MD998332V', name: 'HOSE ADAPTOR', price: 100, model_name: 'VARIOUS' }), false);
+  assert.equal(isEstimatePricelistPart({ sku: 'MD997110', name: 'GASKET KIT', price: 100, model_name: 'L300' }), true);
+  assert.equal(isEstimatePricelistPart({ name: 'PUMP,PRIMER', price: 100, model_name: 'L300' }), true);
+  assert.equal(isEstimatePricelistPart({ name: 'KOS KEY CASE', price: 100, model_name: 'VARIOUS' }), false);
+  assert.equal(isEstimatePricelistPart({ name: 'TIRE PANDO C', price: 100, model_name: 'VARIOUS' }), false);
 });
 
 test('sends active version and merchandise filters to the database before pagination and counting', async () => {
@@ -32,6 +50,7 @@ test('sends active version and merchandise filters to the database before pagina
   for (const field of ['model_name', 'category', 'source_category']) {
     assert.ok(requested.searchParams.getAll('or').includes(`(${field}.is.null,${field}.not.imatch."${NON_PART_LABEL_PATTERN}")`));
   }
+  assert.ok(requested.searchParams.getAll('or').includes(`(model_name.not.imatch."${GENERAL_MODEL_PATTERN}",and(name.imatch."${CAR_PART_NAME_PATTERN}",or(sku.is.null,sku.not.imatch."${SERVICE_TOOL_SKU_PATTERN}")))`));
   assert.equal(requested.searchParams.get('limit'), '8');
   assert.throws(() => applyEstimatePricelistScope(null, null), /active price list/);
 });
