@@ -17,7 +17,9 @@ export function applyEstimatePricelistScope(query, versionId) {
     .not('name', 'imatch', NON_PART_NAME_PATTERN);
   for (const field of ['model_name', 'category', 'source_category']) {
     // Keep unclassified automotive parts; NOT alone would discard SQL NULLs.
-    scoped = scoped.or(`${field}.is.null,${field}.not.imatch.${NON_PART_LABEL_PATTERN}`);
+    // Quote the regex inside PostgREST's logic expression. Otherwise its
+    // parentheses are parsed as logic delimiters and truncate the pattern.
+    scoped = scoped.or(`${field}.is.null,${field}.not.imatch."${NON_PART_LABEL_PATTERN}"`);
   }
   return scoped;
 }

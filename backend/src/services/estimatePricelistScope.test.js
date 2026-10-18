@@ -30,7 +30,7 @@ test('sends active version and merchandise filters to the database before pagina
   assert.equal(requested.searchParams.get('price'), 'gt.0');
   assert.equal(requested.searchParams.get('name'), `not.imatch.${NON_PART_NAME_PATTERN}`);
   for (const field of ['model_name', 'category', 'source_category']) {
-    assert.ok(requested.searchParams.getAll('or').includes(`(${field}.is.null,${field}.not.imatch.${NON_PART_LABEL_PATTERN})`));
+    assert.ok(requested.searchParams.getAll('or').includes(`(${field}.is.null,${field}.not.imatch."${NON_PART_LABEL_PATTERN}")`));
   }
   assert.equal(requested.searchParams.get('limit'), '8');
   assert.throws(() => applyEstimatePricelistScope(null, null), /active price list/);
