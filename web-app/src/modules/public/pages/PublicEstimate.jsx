@@ -1623,20 +1623,20 @@ const PublicEstimate = () => {
 
                             {estimatePhase === 'catalog' && (
                             <div className="surface p-4 sm:p-5">
-                                <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                                <div className="mb-4 flex flex-col gap-4">
                                     <div className="flex items-start gap-3">
                                         <div className="w-10 h-10 rounded-lg bg-accent-primary/5 border border-accent-primary/20 flex items-center justify-center">
                                             <Package className="w-5 h-5 text-accent-primary" />
                                         </div>
                                         <div>
                                             <h3 className="text-xl font-display font-semibold text-primary-950">{hasVehicle ? `Genuine Parts for ${vehicle.displayLabel}` : 'Genuine Parts Pricelist'}</h3>
-                                            <p className="text-sm text-primary-500">{hasVehicle ? 'Automotive parts listed for this vehicle and general-use automotive items from the active pricelist. Confirm fitment with the shop.' : 'Showing automotive parts from the active pricelist. Merchandise is not included.'}</p>
+                                            <p className="text-sm text-primary-500">{hasVehicle ? 'Parts and automotive consumables from the active pricelist. Confirm vehicle fitment with the shop.' : 'Showing automotive parts from the active pricelist. Merchandise is not included.'}</p>
                                             <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary-400">Click a part to add it and reveal its Good / Better / Best bundle options.</p>
                                         </div>
                                     </div>
 
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                        <div className="relative w-full sm:w-72">
+                                        <div className="relative w-full sm:flex-1">
                                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-500" />
                                             <input
                                                 type="text"
@@ -1664,7 +1664,7 @@ const PublicEstimate = () => {
                                                 </div>
                                             )}
                                         </div>
-                                        <div className="relative min-w-[220px]">
+                                        <div className="relative min-w-[220px] sm:w-56 sm:shrink-0">
                                             <ArrowUpDown className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
                                             <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
                                             <select
