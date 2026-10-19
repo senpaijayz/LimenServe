@@ -93,6 +93,18 @@ function getProductStock(product = {}) {
     return Number.isFinite(numericValue) ? numericValue : 0;
 }
 
+function getProductPartNumber(product = {}) {
+    return String(
+        product.sku
+        || product.materialCode
+        || product.material_code
+        || product.partNumber
+        || product.part_number
+        || product.partCode
+        || '',
+    ).trim();
+}
+
 function resolveProductDetails({ catalogProducts = [], fallbackProduct = null, location = null, productId = '', productName = '', productSku = '' }) {
     const matched = catalogProducts.find((product) => String(product.id) === String(productId)) ?? fallbackProduct ?? {};
 
@@ -213,7 +225,7 @@ function ProductSearch({ isLoading, notice, onLocateProduct, productLocations, p
     }, [normalizedQuery, searchIndex]);
 
     const chooseResult = (result) => {
-        setQuery(result.product.name || result.product.sku || '');
+        setQuery(getProductPartNumber(result.product) || result.product.name || '');
         setIsOpen(false);
         onLocateProduct(result.product);
     };
@@ -229,7 +241,7 @@ function ProductSearch({ isLoading, notice, onLocateProduct, productLocations, p
                     aria-expanded={isOpen && Boolean(query.trim())}
                     aria-autocomplete="list"
                     aria-activedescendant={isOpen && activeIndex >= 0 && results[activeIndex] ? `locator-result-${activeIndex}` : undefined}
-                    aria-label="Search products, material codes, shelves, or barcodes"
+                    aria-label="Search by part number, name, shelf, or barcode"
                     className="h-12 w-full min-w-0 rounded-xl border border-slate-200 bg-white pl-11 pr-11 text-sm font-medium text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
                     onChange={(event) => {
                         setQuery(event.target.value);
@@ -249,7 +261,7 @@ function ProductSearch({ isLoading, notice, onLocateProduct, productLocations, p
                         }
                     }}
                     onFocus={() => setIsOpen(true)}
-                    placeholder="Find a part by name, code or barcode…"
+                    placeholder="Find a part by part number, name, or barcode…"
                     role="combobox"
                     value={query}
                 />
@@ -295,8 +307,8 @@ function ProductSearch({ isLoading, notice, onLocateProduct, productLocations, p
                                 type="button"
                             >
                                 <span className="min-w-0">
-                                    <span className="block truncate text-sm font-bold text-slate-900">{result.product.name || 'Unnamed product'}</span>
-                                    <span className="mt-1 block truncate font-mono text-xs text-slate-500">{result.product.sku || result.product.materialCode || 'No SKU'}</span>
+                                    <span className="block truncate font-mono text-sm font-bold text-slate-950">{getProductPartNumber(result.product) || 'No part number'}</span>
+                                    <span className="mt-1 block truncate text-xs font-medium text-slate-600">{result.product.name || 'Unnamed product'}</span>
                                 </span>
                                 <span className={cx(
                                     'max-w-full truncate rounded-full px-2.5 py-1 text-[11px] font-semibold sm:max-w-[54%]',
@@ -1052,7 +1064,7 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, mutationLock
             return;
         }
         const selected = useLocator3DStore.getState().selectedProductForLocation;
-        setQuery(selected?.name || selected?.sku || '');
+        setQuery(getProductPartNumber(selected || {}) || selected?.name || '');
         setSelectedProduct(selected || null);
         const existing = productLocations.find((location) => location.productId === selected?.id && locationBelongsToShelf(location, shelf));
         setBinNumber(existing?.binNumber || 1);
@@ -1130,7 +1142,7 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, mutationLock
                             setQuery(event.target.value);
                             setSelectedProduct(null);
                         }}
-                        placeholder="Search name, SKU, or material code"
+                        placeholder="Search by part number or name"
                         value={query}
                     />
                     {results.length > 0 && !selectedProduct && (
@@ -1142,15 +1154,17 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, mutationLock
                                     disabled={isSaving}
                                     onClick={() => {
                                         setSelectedProduct(product);
-                                        setQuery(product.name || product.sku || '');
+                                        setQuery(getProductPartNumber(product) || product.name || '');
                                         const existing = productLocations.find((location) => location.productId === product.id && locationBelongsToShelf(location, shelf));
                                         setBinNumber(existing?.binNumber || 1);
                                         setLayerNumber(existing?.layerNumber || 1);
                                     }}
                                     type="button"
                                 >
-                                    <span className="min-w-0 truncate font-semibold text-slate-800">{product.name || 'Unnamed product'}</span>
-                                    <span className="shrink-0 font-mono text-xs text-slate-500">{product.sku || 'No SKU'}</span>
+                                    <span className="min-w-0">
+                                        <span className="block truncate font-mono text-xs font-bold text-slate-900">{getProductPartNumber(product) || 'No part number'}</span>
+                                        <span className="mt-0.5 block truncate text-xs text-slate-600">{product.name || 'Unnamed product'}</span>
+                                    </span>
                                 </button>
                             ))}
                         </div>

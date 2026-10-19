@@ -86,7 +86,7 @@ describe('3D Locator rebuild', () => {
         expect(screen.queryByText('Located Products')).toBeNull();
         expect(screen.queryByText('Product Location')).toBeNull();
 
-        const search = screen.getByRole('combobox', { name: 'Search products, material codes, shelves, or barcodes' });
+        const search = screen.getByRole('combobox', { name: 'Search by part number, name, shelf, or barcode' });
         fireEvent.change(search, { target: { value: 'Oil Filter' } });
         fireEvent.click(await screen.findByRole('button', { name: 'Locate Oil Filter' }));
 

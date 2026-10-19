@@ -870,7 +870,7 @@ const QuoteBuilder = () => {
                         </div>
                     </Card>
 
-                    <Card title="Select Mitsubishi Parts" subtitle="Search the imported Supabase catalog and click a part to add it to the quote.">
+                    <Card title="Select Mitsubishi Parts" subtitle="Find a part by number, name, or model, then select it to add it to your quote.">
                         <div className="relative mb-4">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                             <input

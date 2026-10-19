@@ -77,7 +77,7 @@ describe('3D Locator foundation', () => {
 
         expect(screen.getByRole('heading', { name: '3D Stockroom' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Design Mode' })).toBeTruthy();
-        expect(screen.getByRole('combobox', { name: 'Search products, material codes, shelves, or barcodes' })).toBeTruthy();
+        expect(screen.getByRole('combobox', { name: 'Search by part number, name, shelf, or barcode' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Floor 1' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Floor 2' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Top-down 2D floor view' })).toBeTruthy();

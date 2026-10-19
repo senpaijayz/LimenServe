@@ -126,7 +126,7 @@ describe('Stockroom workspace workflows', () => {
         fireEvent.keyDown(screen.getByRole('button', { name: 'Aisle B 4-Layer Shelf' }), { key: 'Enter' });
         const dialog = screen.getByRole('dialog');
         fireEvent.change(within(dialog).getByLabelText('Product'), { target: { value: 'OF-1' } });
-        fireEvent.click(within(dialog).getByRole('button', { name: /Oil Filter.*OF-1/ }));
+        fireEvent.click(within(dialog).getByRole('button', { name: /OF-1.*Oil Filter/ }));
         expect(within(dialog).getByLabelText('Layer').value).toBe('2');
         expect(within(dialog).getByLabelText('Bin').value).toBe('4');
         fireEvent.change(within(dialog).getByLabelText('Bin'), { target: { value: '3' } });
@@ -147,7 +147,7 @@ describe('Stockroom workspace workflows', () => {
         fireEvent.keyDown(screen.getByRole('button', { name: 'Aisle B 4-Layer Shelf' }), { key: 'Enter' });
         const dialog = screen.getByRole('dialog');
         fireEvent.change(within(dialog).getByLabelText('Product'), { target: { value: 'OF-1' } });
-        fireEvent.click(within(dialog).getByRole('button', { name: /Oil Filter.*OF-1/ }));
+        fireEvent.click(within(dialog).getByRole('button', { name: /OF-1.*Oil Filter/ }));
         const save = within(dialog).getByRole('button', { name: 'Save location' });
         fireEvent.click(save); fireEvent.click(save);
         fireEvent.keyDown(window, { key: 's', ctrlKey: true });
@@ -161,12 +161,14 @@ describe('Stockroom workspace workflows', () => {
 
     it('locates a product with the keyboard and closes results on Escape', async () => {
         mount(); await loaded();
-        const input = screen.getByRole('combobox', { name: /Search products/ });
+        const input = screen.getByRole('combobox', { name: /Search by part number/ });
         fireEvent.change(input, { target: { value: 'OF-1' } });
-        await screen.findByRole('button', { name: 'Locate Oil Filter' });
+        const result = await screen.findByRole('button', { name: 'Locate Oil Filter' });
+        expect(result.textContent.indexOf('OF-1')).toBeLessThan(result.textContent.indexOf('Oil Filter'));
         fireEvent.keyDown(input, { key: 'ArrowDown' });
         fireEvent.keyDown(input, { key: 'Enter' });
         expect(useLocator3DStore.getState().locatedProduct?.productId).toBe('part-1');
+        expect(input.value).toBe('OF-1');
         fireEvent.focus(input);
         fireEvent.keyDown(input, { key: 'Escape' });
         expect(screen.queryByRole('listbox')).toBeNull();
