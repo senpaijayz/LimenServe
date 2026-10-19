@@ -12,6 +12,8 @@ export const NON_PART_NAME_PATTERN = [
     'testers?', 'jigs?', 'mandrels?', 'reamers?', 'taps', 'dies', 'press(es)?',
     'masking', 'respirators?', 'adhesives?', 'sealants?', 'degreasers?', '2k',
     'key[ -]+case', 'tire[ -]+pando',
+    '(workshop|service|repair|owner[s]?[ -]*|instruction)[ -]+manuals?',
+    'parts[ -]+catalog(ue)?s?', 'technical[ -]+publications?',
   ]),
   'drive[ -]+(socket|extension)',
   'socket[ -]+adapt[eo]r',
