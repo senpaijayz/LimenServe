@@ -92,7 +92,7 @@ const ProductCard = memo(({ product, onEdit, onDelete, onLocate, onSelect }) => 
                         <h3 className="font-semibold text-primary-950 line-clamp-2 mb-1">
                             {product.name}
                         </h3>
-                        <p className="text-xs font-mono text-primary-500">{getProductPartNumber(product)}</p>
+                        <p className="text-xs font-mono font-semibold text-primary-900">{getProductPartNumber(product)}</p>
                     </div>
 
                     <div className="flex items-baseline gap-2">

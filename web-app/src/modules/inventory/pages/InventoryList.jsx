@@ -811,7 +811,10 @@ const InventoryList = () => {
                                         className="flex w-full flex-col px-3 py-2 text-left transition hover:bg-primary-50"
                                     >
                                         <span className="truncate text-sm font-semibold text-primary-950">{product.name}</span>
-                                        <span className="font-mono text-xs text-primary-500">{getProductPartNumber(product) || 'No part number'} · Stock: {formatNumber(product.quantity ?? product.stock ?? 0)}</span>
+                                        <span className="text-xs text-primary-500">
+                                            <span className="font-mono font-semibold text-primary-900">{getProductPartNumber(product) || 'No part number'}</span>
+                                            {' · Stock: '}{formatNumber(product.quantity ?? product.stock ?? 0)}
+                                        </span>
                                     </button>
                                 ))}
                             </div>
@@ -982,7 +985,7 @@ const InventoryList = () => {
                                         onClick={() => openPreview(product)}
                                     >
                                         <td className="font-bold text-primary-950 border-b border-primary-100 py-3">{product.name}</td>
-                                        <td className="font-mono text-sm text-primary-500 border-b border-primary-100 py-3">{getProductPartNumber(product)}</td>
+                                        <td className="font-mono text-sm font-semibold text-primary-900 border-b border-primary-100 py-3">{getProductPartNumber(product)}</td>
                                         <td className="border-b border-primary-100 py-3 text-primary-700">{product.category}</td>
                                         <td className="text-right border-b border-primary-100 py-3 font-semibold text-accent-blue">{formatCurrency(product.price)}</td>
                                         {selectedPriceListVersionId && (
