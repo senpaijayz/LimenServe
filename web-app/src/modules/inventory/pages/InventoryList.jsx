@@ -985,7 +985,9 @@ const InventoryList = () => {
                                         onClick={() => openPreview(product)}
                                     >
                                         <td className="font-bold text-primary-950 border-b border-primary-100 py-3">{product.name}</td>
-                                        <td className="font-mono text-sm font-semibold text-primary-900 border-b border-primary-100 py-3">{getProductPartNumber(product)}</td>
+                                        <td className="border-b border-primary-100 py-3">
+                                            <span className="font-mono text-sm font-semibold text-primary-900">{getProductPartNumber(product)}</span>
+                                        </td>
                                         <td className="border-b border-primary-100 py-3 text-primary-700">{product.category}</td>
                                         <td className="text-right border-b border-primary-100 py-3 font-semibold text-accent-blue">{formatCurrency(product.price)}</td>
                                         {selectedPriceListVersionId && (
