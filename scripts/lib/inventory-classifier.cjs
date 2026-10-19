@@ -1,4 +1,4 @@
-const CLASSIFIER_VERSION = '2026-05-22-v2';
+const CLASSIFIER_VERSION = '2026-10-19-v3';
 
 const OPERATIONAL_CATEGORIES = [
   'Brakes & Suspension',
@@ -369,6 +369,25 @@ const CATEGORY_RULES = [
   },
 ];
 
+// Specific component context takes precedence over broad words such as kit,
+// protector, cap and cleaner. Use the part name, not a vehicle model or a
+// previous category label, as evidence for these rules.
+const PART_CONTEXT_RULES = [
+  ['workshop-supplies', 'Tools & Consumables', /\b(wrench|spanner|installer|puller|remover|tester|screwdriver|ratchet|sander|sandpaper|thinner|degreaser|polish|brake cleaner|parts cleaner)\b|\bcleaner\b.*\b(brake|parts)\b/],
+  ['electrical-component', 'Electrical & Lighting', /\b(sensor|switch|relay|harness|wiring|solenoid|ecu|actuator|capacitor|control unit)\b/],
+  ['air-cleaner', 'Filters & Fluids', /\b(air cleaner|air filter|oil filter|fuel filter|cabin filter|pollen filter)\b/],
+  ['service-fluid', 'Filters & Fluids', /\b(engine oil|motor oil|gear oil|transmission oil|atf|mtf|brake fluid|coolant|grease|lubricant)\b/, /\b(filter|pump|cap|reservoir|pipe|hose|cooler|seal|gasket|tank|housing)\b/],
+  ['clutch-cvt', 'Transmission & Drivetrain', /\b(clutch|cvt|transmission|transaxle|propeller shaft|drive shaft|differential|flywheel|a t|m t|t m)\b/],
+  ['seat-interior', 'Interior & Trim', /\b(seats?|console|dashboard|instrument panel|floor mats?|carpet|cargo tray|sunvisor|sun visor|room mirror)\b|\bmirror\b.*\broom\b/],
+  ['cooling-component', 'Cooling & A/C', /\b(radiator|thermostat|water pump|coolant|condenser|evaporator|heater|intercooler|a c|aircon)\b/],
+  ['steering-pump', 'Brakes & Suspension', /\b(p s|power steering|pwr strg|strg)\b.*\b(pump|pulley|hose|rack|gear)\b|\b(pump|pulley|hose|rack|gear)\b.*\b(p s|power steering|pwr strg|strg)\b/],
+  ['braking-component', 'Brakes & Suspension', /\b(brake|caliper|strut|shock|stabilizer|ball joint|tie rod|rack end|spindle)\b/],
+  ['belt-drive', 'Engine & Ignition', /\b(belt|pulley|tensioner|idler)\b/],
+  ['engine-pump', 'Engine & Ignition', /\b(fuel|oil)\b.*\bpump\b|\bpump\b.*\b(fuel|oil)\b/],
+  ['exhaust-component', 'Engine & Ignition', /\b(muffler|muff finisher|exhaust|catalytic|catalyst)\b/],
+  ['body-component', 'Body & Exterior', /\b(bumper|hood|bonnet|fender|tailgate|grille|windshield|wheelhouse|door|latch|hinge|apron)\b/],
+];
+
 const PCC_HINTS = {
 };
 
@@ -383,7 +402,9 @@ function normalizeSku(value) {
 function normalizeText(value) {
   return normalizeWhitespace(value)
     .toLowerCase()
-    .replace(/[.,/()\-_:;+[\]{}]/g, ' ');
+    .replace(/[.,/()\-_:;+[\]{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function uniqueTokens(tokens = []) {
@@ -430,19 +451,25 @@ function buildSearchText(item = {}) {
 
 function getKeywordMatch(searchText) {
   let bestMatch = null;
+  let generalMatch = null;
+  const hasKeyword = (token) => ` ${searchText} `.includes(` ${normalizeText(token)} `);
 
   for (const rule of CATEGORY_RULES) {
-    const matchedTokens = rule.keywords.filter((token) => searchText.includes(normalizeText(token)));
+    const matchedTokens = uniqueTokens(rule.keywords.map(normalizeText)).filter(hasKeyword);
     if (matchedTokens.length === 0) {
       continue;
     }
 
-    const hasNegative = (rule.negativeKeywords || []).some((token) => searchText.includes(normalizeText(token)));
+    const hasNegative = (rule.negativeKeywords || []).some(hasKeyword);
     if (hasNegative) {
       continue;
     }
 
     const score = matchedTokens.reduce((total, token) => total + token.length, 0);
+    if (rule.category === 'General Parts & Accessories') {
+      generalMatch = { category: rule.category, ruleKey: rule.ruleKey, matchedTokens, score, priority: rule.priority };
+      continue;
+    }
     if (!bestMatch || score > bestMatch.score || (score === bestMatch.score && rule.priority < bestMatch.priority)) {
       bestMatch = {
         category: rule.category,
@@ -454,7 +481,7 @@ function getKeywordMatch(searchText) {
     }
   }
 
-  return bestMatch;
+  return bestMatch || generalMatch;
 }
 
 function classifyInventoryItem(item = {}) {
@@ -489,6 +516,24 @@ function classifyInventoryItem(item = {}) {
         strategy: 'sku_prefix_override',
         ruleKey: prefixOverride.ruleKey,
         matchedTokens: [prefixOverride.prefix],
+        pcc: pcc || null,
+      },
+    };
+  }
+
+  const partName = normalizeText(item.name);
+  for (const [key, category, pattern, exclude] of PART_CONTEXT_RULES) {
+    const match = pattern.exec(partName);
+    if (!match || exclude?.test(partName)) continue;
+    return {
+      category,
+      sourceCategory,
+      trace: {
+        version: CLASSIFIER_VERSION,
+        confidence: 'high',
+        strategy: 'part_context',
+        ruleKey: `context:${key}`,
+        matchedTokens: [match[0]],
         pcc: pcc || null,
       },
     };
