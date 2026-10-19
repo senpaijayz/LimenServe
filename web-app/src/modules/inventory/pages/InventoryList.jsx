@@ -363,6 +363,7 @@ const InventoryList = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [selectedStockFilter, setSelectedStockFilter] = useState('all');
+    const [selectedSortBy, setSelectedSortBy] = useState('stock-desc');
     const [viewMode, setViewMode] = useState('grid');
     const [showAddModal, setShowAddModal] = useState(false);
     const [showCameraScanner, setShowCameraScanner] = useState(false);
@@ -391,7 +392,8 @@ const InventoryList = () => {
         pageSize: PAGE_SIZE,
         searchQuery,
         selectedCategory,
-        sortBy: 'stock-desc',
+        sortBy: selectedSortBy,
+        stockFilter: selectedStockFilter,
         refreshKey,
     });
 
@@ -507,21 +509,20 @@ const InventoryList = () => {
             { value: 'high', label: 'Strong Stock' },
             { value: 'medium', label: 'Standard Stock' },
             { value: 'low', label: 'Low Stock' },
-            { value: 'out', label: 'Out of Stock' },
+            { value: 'out', label: 'No Stock' },
         ];
     }, []);
 
-    const filteredProducts = useMemo(() => (
-        pricedProducts.filter((product) => {
-            const matchesStock = selectedStockFilter === 'all'
-                || (selectedStockFilter === 'available' && product.quantity > 0)
-                || (selectedStockFilter === 'out' && product.quantity <= 0)
-                || (selectedStockFilter === 'low' && product.quantity > 0 && product.quantity <= 5)
-                || (selectedStockFilter === 'medium' && product.quantity >= 6 && product.quantity <= 20)
-                || (selectedStockFilter === 'high' && product.quantity > 20);
-            return matchesStock;
-        })
-    ), [pricedProducts, selectedStockFilter]);
+    const inventorySortOptions = useMemo(() => ([
+        { value: 'stock-desc', label: 'Stock: High to Low' },
+        { value: 'price-asc', label: 'Price: Low to High' },
+        { value: 'price-desc', label: 'Price: High to Low' },
+        { value: 'stock-asc', label: 'Stock: Low to High' },
+        { value: 'name-asc', label: 'Name: A to Z' },
+        { value: 'name-desc', label: 'Name: Z to A' },
+    ]), []);
+
+    const filteredProducts = pricedProducts;
 
     const sortedProducts = useMemo(() => {
         if (!sortConfig.key || !sortConfig.dir) return filteredProducts;
@@ -595,6 +596,12 @@ const InventoryList = () => {
 
     const handleStockFilterChange = useCallback((value) => {
         setSelectedStockFilter(value);
+        setCurrentPage(1);
+    }, []);
+
+    const handleSortByChange = useCallback((value) => {
+        setSelectedSortBy(value);
+        setSortConfig({ key: null, dir: null });
         setCurrentPage(1);
     }, []);
 
@@ -848,6 +855,14 @@ const InventoryList = () => {
                     />
                 </div>
 
+                <div className="flex-shrink-0 w-48">
+                    <Dropdown
+                        options={inventorySortOptions}
+                        value={selectedSortBy}
+                        onChange={handleSortByChange}
+                    />
+                </div>
+
                 {isAdmin && priceListVersions.length > 0 && (
                     <div className="flex-shrink-0 w-52">
                         <Dropdown
@@ -935,7 +950,7 @@ const InventoryList = () => {
                     animate={{ opacity: 1 }}
                     className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
                 >
-                    {filteredProducts.map((product) => (
+                    {sortedProducts.map((product) => (
                         <ProductCard
                             key={product.catalogEntryId || product.id}
                             product={product}

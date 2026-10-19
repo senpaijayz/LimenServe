@@ -2640,14 +2640,15 @@ async function getOptionalPackageRecommendationRows(productId, vehicleModelId, p
   }
 }
 
-async function fetchProductCatalogPage({ page, pageSize, searchQuery = null, selectedCategory = 'all', sortBy = 'name-asc' }) {
+async function fetchProductCatalogPage({ page, pageSize, searchQuery = null, selectedCategory = 'all', sortBy = 'name-asc', stockFilter = 'all' }) {
   try {
-    return await callRpc('get_product_catalog_page', {
+    return await callRpc('get_inventory_catalog_page', {
       p_page: page,
       p_page_size: pageSize,
       p_search: searchQuery || null,
       p_category: selectedCategory,
       p_sort_by: sortBy,
+      p_stock_filter: stockFilter,
     });
   } catch (error) {
     // Older/staging databases may not yet have the paging RPC. Keep catalog
@@ -2656,7 +2657,7 @@ async function fetchProductCatalogPage({ page, pageSize, searchQuery = null, sel
     const code = String(error?.code || '');
     const message = String(error?.message || '').toLowerCase();
     const missingRpc = ['42883', 'PGRST202', 'PGRST204', '42P01', '42702', '42703', '42804'].includes(code)
-      || message.includes('get_product_catalog_page')
+      || message.includes('get_inventory_catalog_page')
       || message.includes('schema cache');
     if (!missingRpc) throw error;
 
@@ -2664,10 +2665,16 @@ async function fetchProductCatalogPage({ page, pageSize, searchQuery = null, sel
     const normalizedSearch = normalizePostgrestSearchTerm(searchQuery);
     const filtered = (catalog || []).filter((product) => {
       if (selectedCategory && selectedCategory !== 'all' && product.category !== selectedCategory) return false;
-      if (!normalizedSearch) return true;
-      const needle = normalizedSearch.toLowerCase();
-      return [product.sku, product.name, product.model_name, product.source_category]
-        .some((value) => String(value || '').toLowerCase().includes(needle));
+      const matchesSearch = !normalizedSearch || [product.sku, product.name, product.model_name, product.source_category]
+        .some((value) => String(value || '').toLowerCase().includes(normalizedSearch.toLowerCase()));
+      const stock = Number(product.stock ?? product.quantity ?? 0);
+      const matchesStock = stockFilter === 'all'
+        || (stockFilter === 'available' && stock > 0)
+        || (stockFilter === 'out' && stock <= 0)
+        || (stockFilter === 'low' && stock > 0 && stock <= 5)
+        || (stockFilter === 'medium' && stock >= 6 && stock <= 20)
+        || (stockFilter === 'high' && stock > 20);
+      return matchesSearch && matchesStock;
     });
     const sorted = sortCatalogProducts(filtered, sortBy);
     const start = (Math.max(page, 1) - 1) * pageSize;
@@ -3401,6 +3408,9 @@ router.get('/products', async (req, res, next) => {
     const searchQuery = String(req.query.q || '').trim();
     const selectedCategory = String(req.query.category || 'all');
     const sortBy = String(req.query.sortBy || 'name-asc');
+    const requestedStockFilter = String(req.query.stockFilter || 'all');
+    const validStockFilters = new Set(['all', 'available', 'high', 'medium', 'low', 'out']);
+    const stockFilter = validStockFilters.has(requestedStockFilter) ? requestedStockFilter : 'all';
     const vehicleModel = String(req.query.vehicleModel || '').trim();
     const vehicleYear = String(req.query.vehicleYear || '').trim();
     const includeCategories = String(req.query.includeCategories || 'true').trim().toLowerCase() !== 'false';
@@ -3437,6 +3447,7 @@ router.get('/products', async (req, res, next) => {
             searchQuery,
             selectedCategory,
             sortBy,
+            stockFilter,
           }),
         includeCategories
           ? fetchProductCatalogCategories({ searchQuery })

@@ -241,6 +241,16 @@ function sortFallbackProducts(items, sortBy) {
   const sorted = [...items];
 
   sorted.sort((left, right) => {
+    if (sortBy === 'stock-asc') {
+      return Number(left.stock ?? left.quantity ?? 0) - Number(right.stock ?? right.quantity ?? 0)
+        || String(left.name || '').localeCompare(String(right.name || ''));
+    }
+
+    if (sortBy === 'stock-desc') {
+      return Number(right.stock ?? right.quantity ?? 0) - Number(left.stock ?? left.quantity ?? 0)
+        || String(left.name || '').localeCompare(String(right.name || ''));
+    }
+
     if (sortBy === 'price-asc') {
       return Number(left.price ?? 0) - Number(right.price ?? 0);
     }
@@ -281,6 +291,7 @@ async function getFallbackCatalog(params = {}) {
   const pageSize = Number(params.pageSize) || 12;
   const searchQuery = normalizeText(params.q);
   const selectedCategory = normalizeText(params.category || 'all');
+  const selectedStockFilter = normalizeText(params.stockFilter || 'all');
   const selectedVehicleModel = normalizeText(params.vehicleModel);
   const selectedVehicleYear = normalizeText(params.vehicleYear);
   const fallbackCatalog = await loadFallbackCatalogSource();
@@ -296,7 +307,15 @@ async function getFallbackCatalog(params = {}) {
     const matchesCategory = selectedCategory === 'all' || normalizeText(product.category) === selectedCategory;
     const matchesVehicle = catalogProductMatchesVehicle(product, selectedVehicleModel, selectedVehicleYear);
 
-    return matchesSearch && matchesCategory && matchesVehicle;
+    const stock = Number(product.stock ?? product.quantity ?? 0);
+    const matchesStock = selectedStockFilter === 'all'
+      || (selectedStockFilter === 'available' && stock > 0)
+      || (selectedStockFilter === 'out' && stock <= 0)
+      || (selectedStockFilter === 'low' && stock > 0 && stock <= 5)
+      || (selectedStockFilter === 'medium' && stock >= 6 && stock <= 20)
+      || (selectedStockFilter === 'high' && stock > 20);
+
+    return matchesSearch && matchesCategory && matchesVehicle && matchesStock;
   });
 
   const sortedProducts = sortFallbackProducts(filteredProducts, params.sortBy);
