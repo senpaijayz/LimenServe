@@ -36,6 +36,8 @@ test('removes paint, tools, and unidentifiable VARIOUS entries without banning a
   assert.equal(isEstimatePricelistPart({ name: 'KOS KEY CASE', price: 100, model_name: 'VARIOUS' }), false);
   assert.equal(isEstimatePricelistPart({ name: 'TIRE PANDO C', price: 100, model_name: 'VARIOUS' }), false);
   assert.equal(isEstimatePricelistPart({ name: '20MY L300 WORKSHOP MANUAL', price: 4081, model_name: 'L300' }), false);
+  assert.equal(isEstimatePricelistPart({ name: "OWNER'S  MANUAL", price: 100, model_name: 'MONTERO' }), false);
+  assert.equal(isEstimatePricelistPart({ name: 'BOOK CATALOG 2013 CY1A MODEL', price: 100, model_name: 'CY1A' }), false);
   assert.equal(isEstimatePricelistPart({ name: 'MANUAL TRANSMISSION', price: 100, model_name: 'L300' }), true);
 });
 
