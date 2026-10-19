@@ -17,4 +17,12 @@ describe('retired part reservations', () => {
     expect(source('../services/dashboardApi.js')).not.toContain('reservationsApi');
     expect(source('../modules/dashboard/pages/AdminDashboard.jsx')).not.toContain('Pending Reservations');
   });
+
+  it('does not show old reservation movements in stock history or public stock details', () => {
+    expect(source('../modules/inventory/pages/InventoryLogs.jsx')).not.toContain("reservation: 'Reservation'");
+    expect(source('../modules/products/pages/ProductManagement.jsx')).not.toContain("reservation: 'Reserved'");
+    expect(source('../modules/dashboard/components/InventoryMovementLedger.jsx')).not.toContain("reservation: 'Reservation'");
+    expect(source('../modules/reports/pages/InventoryReport.jsx')).not.toContain("reservation: 'Reservation'");
+    expect(source('../modules/public/components/PublicCatalogView.jsx')).not.toContain('reservedStock');
+  });
 });

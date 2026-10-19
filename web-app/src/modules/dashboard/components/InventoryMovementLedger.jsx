@@ -9,7 +9,6 @@ const MOVEMENT_LABELS = {
     stock_in: 'Stock In',
     stock_out: 'Stock Out',
     adjustment: 'Adjustment',
-    reservation: 'Reservation',
     release: 'Release',
     sale: 'Sale',
     service_usage: 'Service Usage',

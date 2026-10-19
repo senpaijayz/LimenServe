@@ -9,7 +9,7 @@ import { useAuth } from '../../../context/useAuth';
 
 const MOVEMENT_LABELS = {
     stock_in: 'Stock In', stock_out: 'Stock Out', adjustment: 'Adjustment',
-    reservation: 'Reservation', release: 'Release', sale: 'Sale', service_usage: 'Service Usage',
+    release: 'Release', sale: 'Sale', service_usage: 'Service Usage',
 };
 
 const REFERENCE_LABELS = {

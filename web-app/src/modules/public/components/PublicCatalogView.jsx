@@ -199,7 +199,6 @@ const PublicCatalogView = () => {
     category: product.category,
     price: Number(product.price ?? 0),
     physicalStock: Number(product.physicalStock ?? product.stock ?? 0),
-    reservedStock: Number(product.reservedStock ?? 0),
     availableStock: Number(product.availableStock ?? product.stock ?? 0),
     inStock: Number(product.availableStock ?? product.stock ?? 0) > 0,
     model: product.model || 'Universal',
@@ -736,7 +735,6 @@ const PublicCatalogView = () => {
                     <p className="mb-2 line-clamp-2 text-sm leading-relaxed text-primary-600">{selectedProduct.description} Designed to meet exact specifications and ensure optimal performance for your vehicle.</p>
                     <div className={`mb-3 rounded-xl border px-4 py-3 text-sm ${selectedProduct.inStock ? 'border-blue-100 bg-blue-50 text-blue-900' : 'border-red-200 bg-red-50 text-red-900'}`}>
                       <strong>{selectedProduct.availableStock} unit{selectedProduct.availableStock === 1 ? '' : 's'} available</strong>
-                      {selectedProduct.reservedStock > 0 && <span> · {selectedProduct.reservedStock} reserved</span>}
                     </div>
 
                     <div className="mb-2">

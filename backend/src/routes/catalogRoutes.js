@@ -898,10 +898,9 @@ function mapCatalogRow(row) {
     ? storedClassification
     : runtimeClassification.trace;
   const physicalStock = Number(row.on_hand ?? row.physicalStock ?? row.stock ?? 0);
-  const reservedStock = Math.max(Number(row.reserved ?? row.reservedStock ?? 0), 0);
-  const availableStock = Math.max(Number(
-    row.available_stock ?? row.availableStock ?? physicalStock - reservedStock,
-  ), 0);
+  // Reservations have been retired; on-hand stock is the sellable quantity.
+  const reservedStock = 0;
+  const availableStock = Math.max(physicalStock, 0);
 
   return {
     id: row.id,
@@ -1009,9 +1008,9 @@ async function getProductByPartNumber(partNumber) {
     category: product.category,
     source_category: product.source_category,
     price: Number(price?.amount ?? 0),
-    stock: Math.max(Number(balance?.on_hand ?? 0) - Number(balance?.reserved ?? 0), 0),
+    stock: Math.max(Number(balance?.on_hand ?? 0), 0),
     on_hand: Number(balance?.on_hand ?? 0),
-    reserved: Number(balance?.reserved ?? 0),
+    reserved: 0,
     status: product.status,
     uom: product.uom,
     brand: product.brand,
@@ -1192,10 +1191,9 @@ async function enrichCatalogProducts(products = []) {
     if (!product) return;
 
     const physicalStock = Number(balance.on_hand ?? 0);
-    const reservedStock = Math.max(Number(balance.reserved ?? 0), 0);
-    const availableStock = Math.max(physicalStock - reservedStock, 0);
+    const availableStock = Math.max(physicalStock, 0);
     product.physicalStock = physicalStock;
-    product.reservedStock = reservedStock;
+    product.reservedStock = 0;
     product.availableStock = availableStock;
     product.stock = availableStock;
     product.status = availableStock <= 0
@@ -1356,18 +1354,10 @@ async function enrichPricelistCatalogProducts(products = []) {
       brand: catalogProduct?.brand || product.brand,
       uom: product.uom || catalogProduct?.uom || 'PC',
       status: product.status || catalogProduct?.status || 'out_of_stock',
-      stock: Math.max(
-        Number(balance?.on_hand ?? product.physicalStock ?? product.stock ?? 0)
-          - Number(balance?.reserved ?? product.reservedStock ?? 0),
-        0,
-      ),
+      stock: Math.max(Number(balance?.on_hand ?? product.physicalStock ?? product.stock ?? 0), 0),
       physicalStock: Number(balance?.on_hand ?? product.physicalStock ?? product.stock ?? 0),
-      reservedStock: Number(balance?.reserved ?? product.reservedStock ?? 0),
-      availableStock: Math.max(
-        Number(balance?.on_hand ?? product.physicalStock ?? product.stock ?? 0)
-          - Number(balance?.reserved ?? product.reservedStock ?? 0),
-        0,
-      ),
+      reservedStock: 0,
+      availableStock: Math.max(Number(balance?.on_hand ?? product.physicalStock ?? product.stock ?? 0), 0),
       createdAt: catalogProduct?.created_at ?? product.createdAt ?? null,
       dateAdded: product.dateAdded ?? catalogProduct?.created_at ?? null,
       location: balance?.location ?? product.location ?? {},
@@ -3593,6 +3583,7 @@ router.get('/products/:productId/stock-history', requireRole('admin', 'stock_cle
       .from('inventory_movements')
       .select('id, product_id, movement_type, quantity, reference_type, reference_id, notes, performed_by, business_date, created_at')
       .eq('product_id', productId)
+      .neq('movement_type', 'reservation')
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -4187,8 +4178,6 @@ router.get('/products/archived', requireRole('admin'), async (req, res, next) =>
 
     const priceMap = new Map((prices ?? []).map((price) => [price.product_id, Number(price.amount ?? 0)]));
     const balanceMap = new Map((balances ?? []).map((balance) => [balance.product_id, Number(balance.on_hand ?? 0)]));
-    const reservedMap = new Map((balances ?? []).map((balance) => [balance.product_id, Number(balance.reserved ?? 0)]));
-
     res.json({
       products: (products ?? []).map((product) => ({
         id: product.id,
@@ -4200,7 +4189,7 @@ router.get('/products/archived', requireRole('admin'), async (req, res, next) =>
         uom: product.uom,
         price: priceMap.get(product.id) ?? 0,
         stock: balanceMap.get(product.id) ?? 0,
-        reserved: reservedMap.get(product.id) ?? 0,
+        reserved: 0,
         archivedAt: product.updated_at,
       })),
     });
@@ -4214,6 +4203,7 @@ router.get('/stock/movements', requireRole('admin', 'stock_clerk'), async (req, 
     const limit = parsePositiveInteger(req.query.limit, 12, 500);
     let movementQuery = supabaseAdmin.schema('catalog').from('inventory_movements')
       .select('id, product_id, movement_type, quantity, reference_type, reference_id, notes, performed_by, business_date, created_at')
+      .neq('movement_type', 'reservation')
       .order('created_at', { ascending: false });
     if (req.query.startDate) movementQuery = movementQuery.gte('business_date', req.query.startDate);
     if (req.query.endDate) movementQuery = movementQuery.lte('business_date', req.query.endDate);

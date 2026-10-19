@@ -59,12 +59,11 @@ const MOVEMENT_LABELS = {
     sale: 'Sold',
     service_usage: 'Used in service',
     adjustment: 'Stock adjusted',
-    reservation: 'Reserved',
     release: 'Released',
 };
 
 function isStockIncrease(entry = {}) {
-    if (['sale', 'stock_out', 'service_usage', 'reservation'].includes(entry.movementType)) {
+    if (['sale', 'stock_out', 'service_usage'].includes(entry.movementType)) {
         return false;
     }
     return entry.movementType === 'stock_in' || Number(entry.quantity ?? 0) > 0;
