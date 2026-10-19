@@ -1627,11 +1627,11 @@ const PublicEstimate = () => {
                                     ? 'Retrieve and print a saved quote'
                                     : ESTIMATE_PHASES.find((phase) => phase.id === estimatePhase)?.label || 'Estimate flow'}
                             </h2>
-                            <p className="mt-2 text-sm text-primary-500">
-                                {mode === 'retrieve'
-                                    ? 'Quote retrieval is separate from quote creation to keep this screen simple.'
-                                    : ESTIMATE_PHASES.find((phase) => phase.id === estimatePhase)?.description}
-                            </p>
+                            {mode !== 'retrieve' && (
+                                <p className="mt-2 text-sm text-primary-500">
+                                    {ESTIMATE_PHASES.find((phase) => phase.id === estimatePhase)?.description}
+                                </p>
+                            )}
                         </div>
                         {mode === 'estimate' ? (
                             <div className="grid w-full gap-2 rounded-[26px] border border-primary-200 bg-white/80 p-2 shadow-sm lg:max-w-[760px] lg:grid-cols-3">
@@ -1659,7 +1659,7 @@ const PublicEstimate = () => {
                             </div>
                         ) : (
                             <div className="flex flex-wrap items-center gap-3">
-                                <PhaseBackButton onClick={goToModeChoice} label="Change Flow" />
+                                <PhaseBackButton onClick={goToModeChoice} label="Back" />
                             </div>
                         )}
                     </div>
