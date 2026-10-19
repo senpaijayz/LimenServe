@@ -105,6 +105,12 @@ function getProductPartNumber(product = {}) {
     ).trim();
 }
 
+function formatLocatedProductLabel(location, product) {
+    const partNumber = getProductPartNumber(product || {}) || getProductPartNumber(location || {});
+    const name = String(product?.name || location?.productName || '').trim();
+    return partNumber && name ? `${partNumber} (${name})` : partNumber || name || 'Unnamed product';
+}
+
 function resolveProductDetails({ catalogProducts = [], fallbackProduct = null, location = null, productId = '', productName = '', productSku = '' }) {
     const matched = catalogProducts.find((product) => String(product.id) === String(productId)) ?? fallbackProduct ?? {};
 
@@ -1026,7 +1032,7 @@ function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shel
                     <div className="mt-2 max-h-36 space-y-1.5 overflow-y-auto">
                         {assignedProducts.map((location) => (
                             <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2" key={location.productId}>
-                                <p className="truncate text-xs font-bold text-slate-800">{location.productName || location.product?.name || location.sku || 'Unnamed product'}</p>
+                                <p className="truncate text-xs font-bold text-slate-800">{formatLocatedProductLabel(location, location.product)}</p>
                                 <p className="mt-1 text-[10px] font-semibold text-slate-500">
                                     Layer {location.displayLayer} · Bin {location.binNumber || '-'} · Floor {location.floor || shelf.floor || 1} · Aisle {normalizeAisle(location.aisle || shelf.aisle) || '-'}
                                 </p>
@@ -1204,7 +1210,7 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, mutationLock
                     <div className="mt-2 space-y-1.5">
                         {assignedProducts.map((location) => (
                             <p className="text-xs font-semibold text-slate-600" key={location.productId}>
-                                {location.productName || location.sku || 'Unnamed product'} · Layer {location.layerNumber || 1} · Bin {location.binNumber || '-'}
+                                {formatLocatedProductLabel(location, products.find((product) => String(product.id) === String(location.productId)))} · Layer {location.layerNumber || 1} · Bin {location.binNumber || '-'}
                             </p>
                         ))}
                         {!assignedProducts.length && <p className="text-xs text-slate-400">No products assigned yet.</p>}

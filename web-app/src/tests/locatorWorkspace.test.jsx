@@ -189,7 +189,7 @@ describe('Stockroom workspace workflows', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Top-down 2D floor view' }));
         fireEvent.keyDown(screen.getByRole('button', { name: 'Aisle B 4-Layer Shelf' }), { key: 'Enter' });
         const dialog = screen.getByRole('dialog');
-        expect(within(dialog).getByText(/Oil Filter/)).toBeTruthy();
+        expect(await within(dialog).findByText(/OF-1 \(Oil Filter\)/)).toBeTruthy();
         expect(within(dialog).queryByRole('button', { name: 'Save location' })).toBeNull();
         expect(useLocator3DStore.getState().selectedObjectId).toBeNull();
         fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
