@@ -1,7 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { annotatePriceListImportError, comparePriceListRows, parsePriceListActivation, parsePriceListVersionYear } from './priceListVersionModel.js';
+import { annotatePriceListImportError, classifyPriceListItem, comparePriceListRows, parsePriceListActivation, parsePriceListVersionYear } from './priceListVersionModel.js';
 import { getPublicErrorResponse } from '../middleware/errorHandling.js';
+
+test('uploads without a category column persist a specific category and classification trace', () => {
+  const item = {sku:'MD094120',name:'THERMOSTAT',model:'VARIOUS',price:1624,sourceCategory:null};
+  const result = classifyPriceListItem(item);
+  assert.equal(result.category,'Cooling & A/C');
+  assert.equal(result.classificationVersion,'2026-10-19-v3');
+  assert.equal(result.classificationStrategy,'part_context');
+  assert.deepEqual(result.classificationTokens,['thermostat']);
+  assert.equal(result.price,item.price);
+  assert.equal(result.sku,item.sku);
+  assert.equal(result.sourceCategory,null);
+  assert.equal(item.category,undefined);
+});
+
+test('ambiguous upload items retain General Parts without fabricating component data', () => {
+  const result=classifyPriceListItem({sku:'PMS-10',name:'PMS KIT NO. 10',price:100});
+  assert.equal(result.category,'General Parts & Accessories');
+  assert.equal(result.price,100);
+});
 
 test('explains atomic import timeouts without exposing SQL details', () => {
   const response = getPublicErrorResponse(annotatePriceListImportError({code:'57014',message:'canceling statement inside private SQL'}));

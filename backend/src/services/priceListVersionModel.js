@@ -1,3 +1,24 @@
+import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
+
+// Persist the same category used by the catalog UI before the atomic import.
+// Workbooks often have no category column; leaving it empty collapses filters
+// into General Parts even when the product name identifies a specific system.
+export function classifyPriceListItem(item) {
+  const classification = inventoryClassifier.classifyInventoryItem({
+    ...item,
+    model_name: item.model,
+  });
+  return {
+    ...item,
+    category: classification.category,
+    classificationVersion: classification.trace.version,
+    classificationConfidence: classification.trace.confidence,
+    classificationStrategy: classification.trace.strategy,
+    classificationRuleKey: classification.trace.ruleKey,
+    classificationTokens: classification.trace.matchedTokens,
+  };
+}
+
 export function annotatePriceListImportError(error) {
   if (error?.code === '57014') {
     error.statusCode = 504;

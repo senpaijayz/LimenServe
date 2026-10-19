@@ -7,7 +7,7 @@ import { clearPublicResponseCache } from '../middleware/cache.js';
 import { analyzeSupplierInvoiceImage } from '../services/invoiceOcrService.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import { receiveCatalogStock, receiveSupplierInvoiceStock, requireIdempotencyKey } from '../services/stockReceipt.js';
-import { annotatePriceListImportError, parsePriceListActivation, parsePriceListVersionYear } from '../services/priceListVersionModel.js';
+import { annotatePriceListImportError, classifyPriceListItem, parsePriceListActivation, parsePriceListVersionYear } from '../services/priceListVersionModel.js';
 import { selectByInChunks } from '../utils/supabaseBatchSelect.js';
 import { createPriceHistoryRouter } from './priceHistoryRoutes.js';
 import { applyEstimatePricelistScope, getActiveEstimatePricelist } from '../services/estimatePricelistScope.js';
@@ -285,7 +285,8 @@ function normalizePriceListItems(items = []) {
         sourceCategory: normalizeOptionalText(item?.sourceCategory || item?.category, 140),
       };
     })
-    .filter((item) => item.sku && item.price !== null);
+    .filter((item) => item.sku && item.price !== null)
+    .map(classifyPriceListItem);
 }
 
 function decodeXmlEntities(value = '') {
