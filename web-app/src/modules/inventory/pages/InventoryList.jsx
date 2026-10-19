@@ -496,7 +496,7 @@ const InventoryList = () => {
     const categories = useMemo(() => (
         catalogCategories.map((category) => ({
             value: category.value,
-            label: `${category.label} (${formatNumber(category.count ?? 0)})`,
+            label: category.label,
         }))
     ), [catalogCategories]);
 

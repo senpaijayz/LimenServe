@@ -399,7 +399,7 @@ const PublicCatalogView = () => {
                   >
                     {categories.map((category) => (
                       <option key={category.value} value={category.value}>
-                        {category.label}{Number.isFinite(Number(category.count)) ? ` (${category.count})` : ''}
+                        {category.label}
                       </option>
                     ))}
                   </select>
