@@ -1,4 +1,4 @@
-const ESTIMATE_NUMBER_PATTERN = /^EST-[A-Z0-9]+(?:-[A-Z0-9]+)*$/;
+const ESTIMATE_NUMBER_PATTERN = /^(?:EST-[A-Z0-9]+(?:-[A-Z0-9]+)*|Q-\d{9,27})$/;
 const PHONE_INPUT_PATTERN = /^[+\d().\-\s]+$/;
 
 export const PUBLIC_ESTIMATE_INPUT_REQUIRED_MESSAGE = 'Quote number and phone number are required.';

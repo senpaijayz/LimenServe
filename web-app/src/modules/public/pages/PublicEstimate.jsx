@@ -10,6 +10,7 @@ import usePublicVehicleSelection from '../../../hooks/usePublicVehicleSelection'
 import useVehiclePackages from '../../../hooks/useVehiclePackages';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
+import { useToast } from '../../../components/ui/Toast';
 import { createEstimate, lookupPublicEstimate, revisePublicEstimate } from '../../../services/estimatesApi';
 import ProductPackageSuggestions from '../components/ProductPackageSuggestions';
 import PublicQuoteLookupCard from '../components/PublicQuoteLookupCard';
@@ -29,14 +30,14 @@ const SORT_OPTIONS = [
 const MODE_OPTIONS = [
     {
         id: 'estimate',
-        label: 'Build Estimate',
-        description: 'Pick parts, add services, and build a draft quotation.',
+        label: 'Get a Quote',
+        description: 'Choose parts and services to see your estimated total.',
         icon: Calculator,
     },
     {
         id: 'retrieve',
-        label: 'Retrieve Quote',
-        description: 'Find a saved quotation and open a printable preview.',
+        label: 'Find a Quote',
+        description: 'Look up a quote you created earlier.',
         icon: Search,
     },
 ];
@@ -65,7 +66,11 @@ const ESTIMATE_PHASES = [
 const DESKTOP_DOCK_QUERY = '(min-width: 768px)';
 
 const QUOTE_VALID_DAYS = 30;
+const LOCAL_QUOTE_HISTORY_KEY = 'limen.publicQuoteHistory.v1';
+const LOCAL_QUOTE_RETENTION_MS = QUOTE_VALID_DAYS * 24 * 60 * 60 * 1000;
+const MAX_LOCAL_QUOTES = 20;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PUBLIC_QUOTE_NUMBER_PATTERN = /^Q-\d{9,27}$/;
 
 const formatPrintDate = (value) => {
     if (!value) {
@@ -111,6 +116,60 @@ const addDaysAsIsoDate = (days) => {
 };
 
 const isUuid = (value) => UUID_PATTERN.test(String(value || ''));
+
+const readLocalQuoteHistory = () => {
+    if (typeof window === 'undefined') return [];
+
+    try {
+        const parsed = JSON.parse(window.localStorage.getItem(LOCAL_QUOTE_HISTORY_KEY) || '[]');
+        if (!Array.isArray(parsed)) return [];
+
+        const now = Date.now();
+        const recentQuotes = parsed.filter((quote) => (
+            quote
+            && typeof quote.estimateNumber === 'string'
+            && (PUBLIC_QUOTE_NUMBER_PATTERN.test(quote.estimateNumber) || /^EST-[A-Z0-9-]+$/i.test(quote.estimateNumber))
+            && Number.isFinite(Number(quote.expiresAt))
+            && Number(quote.expiresAt) > now
+        )).slice(0, MAX_LOCAL_QUOTES);
+
+        if (recentQuotes.length !== parsed.length) {
+            window.localStorage.setItem(LOCAL_QUOTE_HISTORY_KEY, JSON.stringify(recentQuotes));
+        }
+
+        return recentQuotes;
+    } catch {
+        return [];
+    }
+};
+
+const saveLocalQuoteHistory = (quote) => {
+    if (typeof window === 'undefined') return readLocalQuoteHistory();
+
+    const estimateNumber = quote?.estimate?.estimate_number;
+    if (!estimateNumber || (!PUBLIC_QUOTE_NUMBER_PATTERN.test(estimateNumber) && !/^EST-[A-Z0-9-]+$/i.test(estimateNumber))) {
+        return readLocalQuoteHistory();
+    }
+
+    const now = Date.now();
+    const entry = {
+        estimateNumber,
+        issuedAt: quote.estimate.issued_at || quote.estimate.created_at || new Date(now).toISOString(),
+        expiresAt: now + LOCAL_QUOTE_RETENTION_MS,
+        total: Number(quote.estimate.grand_total ?? 0),
+        itemCount: Array.isArray(quote.items) ? quote.items.length : 0,
+        vehicle: quote.vehicle?.model_name || quote.vehicle?.model || '',
+    };
+
+    try {
+        const history = readLocalQuoteHistory().filter((savedQuote) => savedQuote.estimateNumber !== estimateNumber);
+        const nextHistory = [entry, ...history].slice(0, MAX_LOCAL_QUOTES);
+        window.localStorage.setItem(LOCAL_QUOTE_HISTORY_KEY, JSON.stringify(nextHistory));
+        return nextHistory;
+    } catch {
+        return readLocalQuoteHistory();
+    }
+};
 
 // Exported for the display-vs-submission pricing regression test.
 // eslint-disable-next-line react-refresh/only-export-components
@@ -319,6 +378,7 @@ function getIncomingPartSearch(searchParams) {
 
 const PublicEstimate = () => {
     const [searchParams] = useSearchParams();
+    const { loading: showToastLoading, updateToast } = useToast();
     const incomingPartSearch = getIncomingPartSearch(searchParams);
     const packageShelfRef = useRef(null);
     const addedBundleKeysRef = useRef(new Set());
@@ -345,6 +405,7 @@ const PublicEstimate = () => {
     const [lookupLoading, setLookupLoading] = useState(false);
     const [lookupError, setLookupError] = useState('');
     const [retrievedQuote, setRetrievedQuote] = useState(null);
+    const [localQuoteHistory, setLocalQuoteHistory] = useState(readLocalQuoteHistory);
     const [savedDraftQuote, setSavedDraftQuote] = useState(null);
     const [savedQuoteEditToken, setSavedQuoteEditToken] = useState('');
     const [quoteHasChanges, setQuoteHasChanges] = useState(false);
@@ -357,6 +418,23 @@ const PublicEstimate = () => {
 
         return window.matchMedia(DESKTOP_DOCK_QUERY).matches;
     });
+
+    useEffect(() => {
+        const refreshQuoteHistory = () => setLocalQuoteHistory(readLocalQuoteHistory());
+        window.addEventListener('storage', refreshQuoteHistory);
+
+        const nextExpiry = localQuoteHistory.length > 0
+            ? Math.min(...localQuoteHistory.map((quote) => Number(quote.expiresAt)))
+            : null;
+        const expiryTimer = nextExpiry === null
+            ? null
+            : window.setTimeout(refreshQuoteHistory, Math.max(0, nextExpiry - Date.now() + 50));
+
+        return () => {
+            window.removeEventListener('storage', refreshQuoteHistory);
+            if (expiryTimer !== null) window.clearTimeout(expiryTimer);
+        };
+    }, [localQuoteHistory]);
 
     const markSavedQuoteDirty = () => {
         if (savedDraftQuote?.estimate?.estimate_number) {
@@ -776,16 +854,33 @@ const PublicEstimate = () => {
 
         setLookupLoading(true);
         setLookupError('');
+        const toastId = showToastLoading('Looking for your quote...');
 
         try {
             const estimate = await lookupPublicEstimate(lookupEstimateNumber, lookupPhone);
             setRetrievedQuote(estimate);
+            updateToast(toastId, {
+                title: 'Quote found',
+                message: 'Your quote is ready to review.',
+                type: 'success',
+            });
         } catch (lookupFailure) {
             setRetrievedQuote(null);
-            setLookupError(lookupFailure.message || 'Unable to retrieve quotation.');
+            const message = lookupFailure.message || 'We could not find a matching quote. Check the number and phone and try again.';
+            setLookupError(message);
+            updateToast(toastId, { title: 'Quote not found', message, type: 'error' });
         } finally {
             setLookupLoading(false);
         }
+    };
+
+    const selectRecentQuote = (estimateNumber) => {
+        setWorkflowStage('active');
+        setMode('retrieve');
+        setLookupEstimateNumber(estimateNumber);
+        setLookupPhone('');
+        setRetrievedQuote(null);
+        setLookupError('');
     };
 
     const saveDraftQuote = async () => {
@@ -827,6 +922,7 @@ const PublicEstimate = () => {
 
         setSavingQuote(true);
         setSaveError('');
+        const toastId = showToastLoading(existingQuoteNumber ? 'Saving your quote...' : 'Creating your quote...');
 
         try {
             const response = existingQuoteNumber
@@ -841,6 +937,8 @@ const PublicEstimate = () => {
             }
 
             setSavedDraftQuote(persistedQuote);
+            const recentQuotes = saveLocalQuoteHistory(persistedQuote);
+            setLocalQuoteHistory(recentQuotes);
             if (!existingQuoteNumber) {
                 setSavedQuoteEditToken(response?.editToken || '');
                 if (!response?.editToken) {
@@ -848,9 +946,16 @@ const PublicEstimate = () => {
                 }
             }
             setQuoteHasChanges(false);
+            updateToast(toastId, {
+                title: existingQuoteNumber ? 'Quote updated' : 'Quote created',
+                message: `${persistedQuote.estimate.estimate_number} is saved in Recent Quotes on this device for 30 days.`,
+                type: 'success',
+            });
             return persistedQuote;
         } catch (saveFailure) {
-            setSaveError(saveFailure.message || 'Unable to save quotation.');
+            const message = saveFailure.message || 'We could not save your quote. Please try again.';
+            setSaveError(message);
+            updateToast(toastId, { title: 'Quote not saved', message, type: 'error' });
             return null;
         } finally {
             setSavingQuote(false);
@@ -955,8 +1060,8 @@ const PublicEstimate = () => {
             : quoteHasChanges && savedDraftQuote?.estimate?.estimate_number
                 ? `Editing ${savedDraftQuote.estimate.estimate_number}. Save changes to keep the same quote number.`
             : savedDraftQuote?.estimate?.estimate_number
-                ? 'Quotation saved. Use the quote number and verified phone number to retrieve it later.'
-                : 'Confirm the final draft, or go back to add more parts and compare better package options.';
+                ? 'Your quote is saved. Find its number in Recent Quotes on this device.'
+                : 'Review your selections, or go back to add parts and services.';
 
     const summaryPanelClassName = isDesktopDock
         ? 'fixed inset-y-6 right-6 z-50 flex w-[440px] min-h-0 flex-col overflow-hidden rounded-[30px] border border-primary-200 bg-primary-50 shadow-[0_32px_90px_rgba(15,23,42,0.18)] print:hidden'
@@ -1007,7 +1112,7 @@ const PublicEstimate = () => {
                     <div className="rounded-[24px] border border-accent-success/25 bg-accent-success/10 p-4">
                         <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-accent-success">Quote created</p>
                         <p className="mt-2 text-2xl font-display font-bold text-primary-950">{quoteNumber}</p>
-                        <p className="mt-2 text-sm text-primary-600">Stored in Supabase. Retrieval requires this quote number and the phone number used to create it.</p>
+                        <p className="mt-2 text-sm text-primary-600">Keep this number. It is also saved in Recent Quotes on this device for 30 days.</p>
                     </div>
                 )}
 
@@ -1289,8 +1394,8 @@ const PublicEstimate = () => {
                             <Sparkles className="h-5 w-5" />
                         </div>
                         <div>
-                            <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-primary-400">Quote confidence</p>
-                            <h4 className="text-lg font-display font-semibold text-primary-950">Live catalog pricing</h4>
+                            <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-primary-400">Quote</p>
+                            <h4 className="text-lg font-display font-semibold text-primary-950">Current pricing</h4>
                         </div>
                     </div>
                     <div className="mt-5 grid gap-3 text-sm">
@@ -1399,9 +1504,9 @@ const PublicEstimate = () => {
                         </h1>
                         <p className="mt-4 text-lg text-primary-600 max-w-2xl">
                             {workflowStage === 'choice'
-                                ? 'Start a polished customer quotation or retrieve an existing quote with its number and verified phone.'
+                                ? 'Get a parts and service estimate, or find a quote you created earlier.'
                                 : mode === 'retrieve'
-                                    ? 'Look up a saved quotation and open a printable copy for the customer.'
+                                    ? 'Enter your quote number and the phone number used when it was created.'
                                     : estimatePhase === 'summary'
                                         ? 'Confirm customer details, selected parts, service labor, recommendations, and totals before generating the quote number.'
                                         : 'A guided quote builder for Mitsubishi parts, service labor, and smart bundle recommendations.'}
@@ -1446,7 +1551,11 @@ const PublicEstimate = () => {
                                                     <span className="mt-6 block text-lg font-semibold text-primary-950">{option.label}</span>
                                                     <span className="mt-2 block max-w-[28rem] text-sm leading-6 text-primary-500">{option.description}</span>
                                                     <span className="mt-5 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-accent-primary">
-                                                        {isBuild ? 'Start a new quote' : 'Open saved quote'}
+                                                        {isBuild
+                                                            ? 'Start a new quote'
+                                                            : localQuoteHistory.length > 0
+                                                                ? `${localQuoteHistory.length} recent on this device`
+                                                                : 'Find a saved quote'}
                                                         <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                                                     </span>
                                                 </span>
@@ -1476,8 +1585,29 @@ const PublicEstimate = () => {
                                     ))}
                                 </div>
                                 <div className="mt-7 rounded-2xl border border-primary-200 bg-primary-50 p-4 text-xs leading-5 text-primary-600">
-                                    Your quote is based on the current catalogue and can be retrieved later with its quote number and verified phone.
+                                    Your quote uses current prices. Recent quotes stay on this device for 30 days.
                                 </div>
+                                {localQuoteHistory.length > 0 && (
+                                    <div className="mt-6 border-t border-primary-100 pt-5">
+                                        <h4 className="text-sm font-semibold text-primary-950">Recent quotes</h4>
+                                        <div className="mt-3 space-y-2">
+                                            {localQuoteHistory.slice(0, 3).map((quote) => (
+                                                <button
+                                                    key={quote.estimateNumber}
+                                                    type="button"
+                                                    onClick={() => selectRecentQuote(quote.estimateNumber)}
+                                                    className="flex w-full items-center justify-between gap-3 rounded-xl border border-primary-200 bg-white px-3 py-3 text-left transition hover:border-accent-primary/40 hover:bg-primary-50"
+                                                >
+                                                    <span className="min-w-0">
+                                                        <span className="block truncate font-mono text-xs font-semibold text-primary-950">{quote.estimateNumber}</span>
+                                                        <span className="mt-1 block text-[0.7rem] text-primary-500">{formatPrintDate(quote.issuedAt)} · {formatCurrency(quote.total)}</span>
+                                                    </span>
+                                                    <ChevronRight className="h-4 w-4 shrink-0 text-primary-400" />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </aside>
                         </div>
                     ) : (
@@ -1539,6 +1669,8 @@ const PublicEstimate = () => {
                         error={lookupError}
                         result={retrievedQuote}
                         onPreviewPrint={() => openPreview('retrieved')}
+                        recentQuotes={localQuoteHistory}
+                        onUseRecentQuote={selectRecentQuote}
                     />
                 ) : (
                     <div className={estimatePhase === 'details'
@@ -1957,7 +2089,7 @@ const PublicEstimate = () => {
                                             <div className="rounded-[24px] border border-accent-success/30 bg-accent-success/10 p-4 shadow-sm">
                                                 <span className="text-[0.68rem] font-bold uppercase tracking-[0.24em] text-accent-success">Quote created</span>
                                                 <p className="mt-2 text-2xl font-display font-bold text-primary-950">{savedDraftQuote.estimate.estimate_number}</p>
-                                                <p className="mt-2 text-sm text-primary-600">This quote is stored in Supabase and can be retrieved with this quote number and the verified phone number.</p>
+                                                <p className="mt-2 text-sm text-primary-600">Keep this number. You can find it in Recent Quotes on this device for 30 days.</p>
                                             </div>
                                         )}
 

@@ -52,6 +52,8 @@ const PublicQuoteLookupCard = ({
     error,
     result,
     onPreviewPrint,
+    recentQuotes = [],
+    onUseRecentQuote,
 }) => {
     const items = result?.items ?? [];
     const customerName = result?.customer?.name || 'Walk-in Customer';
@@ -116,6 +118,35 @@ const PublicQuoteLookupCard = ({
             {error && (
                 <div className="mt-4 rounded-xl border border-accent-danger/20 bg-accent-danger/5 p-4 text-sm text-accent-danger">
                     {error}
+                </div>
+            )}
+
+            {recentQuotes.length > 0 && (
+                <div className="mt-6 rounded-2xl border border-primary-200 bg-primary-50/50 p-4 sm:p-5">
+                    <div className="mb-4">
+                        <h3 className="text-base font-semibold text-primary-950">Recent quotes</h3>
+                        <p className="mt-1 text-sm text-primary-600">Saved in this browser for 30 days. Enter the phone number used for a quote to open it.</p>
+                    </div>
+                    <div className="space-y-3">
+                        {recentQuotes.map((quote) => (
+                            <article key={quote.estimateNumber} className="flex flex-col gap-3 rounded-xl border border-primary-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0">
+                                    <p className="font-mono text-sm font-semibold text-primary-950">{quote.estimateNumber}</p>
+                                    <p className="mt-1 text-xs text-primary-500">
+                                        {formatLookupDate(quote.issuedAt)}
+                                        {quote.vehicle ? ` · ${quote.vehicle}` : ''}
+                                        {` · ${quote.itemCount} item${quote.itemCount === 1 ? '' : 's'}`}
+                                    </p>
+                                </div>
+                                <div className="flex items-center justify-between gap-4 sm:justify-end">
+                                    <span className="font-semibold tabular-nums text-primary-950">{formatCurrency(quote.total)}</span>
+                                    <Button variant="secondary" onClick={() => onUseRecentQuote?.(quote.estimateNumber)} className="shrink-0">
+                                        Use quote number
+                                    </Button>
+                                </div>
+                            </article>
+                        ))}
+                    </div>
                 </div>
             )}
 
