@@ -35,6 +35,14 @@ describe('PublicQuoteLookupCard', () => {
         expect(controls.className).toContain('lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]');
     });
 
+    it('keeps the recent quotes section visible when this browser has no saved quotes', () => {
+        render(<PublicQuoteLookupCard {...createProps()} />);
+
+        expect(screen.getByRole('heading', { name: 'Recent quotes' })).toBeTruthy();
+        expect(screen.getByText('No recent quotes are saved in this browser yet.')).toBeTruthy();
+        expect(screen.getByText('Quotes created on this device will appear here for 30 days.')).toBeTruthy();
+    });
+
     it('forwards phone edits to its controlled input callback', () => {
         const onPhoneChange = vi.fn();
         render(<PublicQuoteLookupCard {...createProps({ onPhoneChange })} />);

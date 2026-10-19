@@ -133,12 +133,16 @@ const PublicQuoteLookupCard = ({
                 </div>
             )}
 
-            {recentQuotes.length > 0 && (
-                <div className="mt-6 rounded-2xl border border-primary-200 bg-primary-50/50 p-4 sm:p-5">
-                    <div className="mb-4">
-                        <h3 className="text-base font-semibold text-primary-950">Recent quotes</h3>
-                        <p className="mt-1 text-sm text-primary-600">Saved in this browser for 30 days. Enter the phone number used for a quote to open it.</p>
-                    </div>
+            <div className="mt-6 rounded-2xl border border-primary-200 bg-primary-50/50 p-4 sm:p-5">
+                <div className="mb-4">
+                    <h3 className="text-base font-semibold text-primary-950">Recent quotes</h3>
+                    <p className="mt-1 text-sm text-primary-600">
+                        {recentQuotes.length > 0
+                            ? 'Saved in this browser for 30 days. Enter the phone number used for a quote to open it.'
+                            : 'Quotes created on this device will appear here for 30 days.'}
+                    </p>
+                </div>
+                {recentQuotes.length > 0 ? (
                     <div className="space-y-3">
                         {recentQuotes.map((quote) => (
                             <article key={quote.estimateNumber} className="flex flex-col gap-3 rounded-xl border border-primary-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -159,8 +163,12 @@ const PublicQuoteLookupCard = ({
                             </article>
                         ))}
                     </div>
-                </div>
-            )}
+                ) : (
+                    <p className="rounded-xl border border-dashed border-primary-200 bg-white/70 px-4 py-5 text-sm text-primary-500">
+                        No recent quotes are saved in this browser yet.
+                    </p>
+                )}
+            </div>
 
             {result && (
                 <div className="mt-6 rounded-[28px] border border-primary-200 bg-white p-5 shadow-sm md:p-6">
