@@ -212,7 +212,7 @@ function normalizeCustomer(customer) {
   }) || 'Walk-in Customer';
   const phone = normalizePhilippinePhoneNumber(value.phone);
   if (!phone) {
-    invalid('customer.phone must be a Philippine phone number.');
+    invalid('customer.phone must be an 11-digit Philippine mobile number starting with 09.');
   }
 
   if (value.metadata !== undefined) {

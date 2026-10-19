@@ -1,8 +1,8 @@
 const ESTIMATE_NUMBER_PATTERN = /^(?:EST-[A-Z0-9]+(?:-[A-Z0-9]+)*|Q-\d{9,27})$/;
-const PHONE_INPUT_PATTERN = /^[+\d().\-\s]+$/;
+const PHONE_INPUT_PATTERN = /^[\d().\-\s]+$/;
 
 export const PUBLIC_ESTIMATE_INPUT_REQUIRED_MESSAGE = 'Quote number and phone number are required.';
-export const PUBLIC_ESTIMATE_INPUT_INVALID_MESSAGE = 'Enter a valid quote number and Philippine phone number.';
+export const PUBLIC_ESTIMATE_INPUT_INVALID_MESSAGE = 'Enter a valid quote number and an 11-digit Philippine mobile number starting with 09.';
 export const PUBLIC_ESTIMATE_NOT_FOUND_MESSAGE = 'No matching active quote was found.';
 
 function hasText(value) {
@@ -45,14 +45,8 @@ export function normalizePhilippinePhoneNumber(value) {
     return null;
   }
 
-  let digits = input.replace(/\D/g, '');
-  if (digits.startsWith('0063')) {
-    digits = `0${digits.slice(4)}`;
-  } else if (digits.startsWith('63')) {
-    digits = `0${digits.slice(2)}`;
-  }
-
-  return /^0\d{9,10}$/.test(digits) ? digits : null;
+  const digits = input.replace(/\D/g, '');
+  return /^09\d{9}$/.test(digits) ? digits : null;
 }
 
 export function parsePublicEstimateLookupInput(body) {

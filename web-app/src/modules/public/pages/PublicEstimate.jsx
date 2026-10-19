@@ -3,7 +3,7 @@ import { motion as Motion } from 'framer-motion';
 import { useSearchParams } from 'react-router';
 import { Search, Plus, Minus, Calculator, Printer, Pencil, User, Phone, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
-import { normalizePhilippinePhoneNumber } from '../../../utils/phone';
+import { normalizePhilippinePhoneNumber, sanitizePhilippineMobileInput } from '../../../utils/phone';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
 import usePublicVehicleSelection from '../../../hooks/usePublicVehicleSelection';
@@ -846,9 +846,17 @@ const PublicEstimate = () => {
     const printableQuote = printSource === 'retrieved' ? retrievedPrintableQuote : savedDraftPrintableQuote;
 
     const handleLookupQuote = async () => {
-        if (!lookupEstimateNumber.trim() || !lookupPhone.trim()) {
+        if (!lookupEstimateNumber.trim()) {
             setRetrievedQuote(null);
             setLookupError('Enter both the quote number and the phone number used for the quote.');
+            return;
+        }
+
+        if (!normalizePhilippinePhoneNumber(lookupPhone)) {
+            setRetrievedQuote(null);
+            setLookupError(lookupPhone.trim()
+                ? 'Enter an 11-digit Philippine mobile number starting with 09.'
+                : 'Enter both the quote number and the phone number used for the quote.');
             return;
         }
 
@@ -1697,16 +1705,16 @@ const PublicEstimate = () => {
                                         <label htmlFor="public-estimate-phone" className="block text-sm font-semibold text-primary-700 mb-2">Phone Number</label>
                                         <div className="relative">
                                             <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
-                                            <input id="public-estimate-phone" type="tel" inputMode="tel" autoComplete="tel" required aria-describedby="public-estimate-phone-help" aria-invalid={Boolean(customerPhone.trim()) && !normalizedCustomerPhone} value={customerPhone} onChange={(event) => {
+                                            <input id="public-estimate-phone" type="tel" inputMode="numeric" autoComplete="tel" maxLength={11} required aria-describedby="public-estimate-phone-help" aria-invalid={Boolean(customerPhone.trim()) && !normalizedCustomerPhone} value={customerPhone} onChange={(event) => {
                                                 markSavedQuoteDirty();
                                                 setSaveError('');
-                                                setCustomerPhone(event.target.value);
-                                            }} placeholder="09XX XXX XXXX" className="input pl-10 py-2.5 text-sm" />
+                                                setCustomerPhone(sanitizePhilippineMobileInput(event.target.value));
+                                            }} placeholder="09XXXXXXXXX" className="input pl-10 py-2.5 text-sm" />
                                         </div>
                                         <p id="public-estimate-phone-help" className={`mt-2 text-xs ${customerPhone.trim() && !normalizedCustomerPhone ? 'text-accent-danger' : 'text-primary-500'}`}>
                                             {customerPhone.trim() && !normalizedCustomerPhone
-                                                ? 'Enter a valid Philippine mobile or landline number.'
-                                                : 'Required to securely retrieve the saved quote.'}
+                                                ? (customerPhone.startsWith('09') ? 'Enter all 11 digits of the phone number.' : 'Philippine mobile numbers must start with 09.')
+                                                : 'Enter 11 digits starting with 09. Required to securely retrieve the saved quote.'}
                                         </p>
                                     </div>
                                 </div>

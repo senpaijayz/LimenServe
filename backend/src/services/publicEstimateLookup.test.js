@@ -128,7 +128,7 @@ test('rejects malformed lookup input without calling the RPC', async () => {
   assert.deepEqual(response.body, { error: PUBLIC_ESTIMATE_INPUT_INVALID_MESSAGE });
 });
 
-test('normalizes quote numbers and Philippine phone numbers before lookup', async () => {
+test('normalizes quote numbers and validates local Philippine mobile numbers before lookup', async () => {
   let rpcCall = null;
   const handler = createPublicEstimateLookupHandler({
     rpc: async (name, params) => {
@@ -139,12 +139,14 @@ test('normalizes quote numbers and Philippine phone numbers before lookup', asyn
 
   const { response } = await invokeHandler(handler, {
     estimateNumber: '  est-demo-202510-a  ',
-    phone: '+63 (917) 000-0001',
+    phone: '0917 000-0001',
   });
 
   assert.equal(normalizePublicEstimateNumber(' est-20260801000000000 '), 'EST-20260801000000000');
   assert.equal(normalizePhilippinePhoneNumber('0917 000 0001'), '09170000001');
-  assert.equal(normalizePhilippinePhoneNumber('0063 917 000 0001'), '09170000001');
+  assert.equal(normalizePhilippinePhoneNumber('+63 917 000 0001'), null);
+  assert.equal(normalizePhilippinePhoneNumber('19170000001'), null);
+  assert.equal(normalizePhilippinePhoneNumber('0917000001'), null);
   assert.deepEqual(rpcCall, {
     name: 'lookup_public_estimate',
     params: {

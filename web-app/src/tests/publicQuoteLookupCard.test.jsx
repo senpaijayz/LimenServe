@@ -26,7 +26,9 @@ describe('PublicQuoteLookupCard', () => {
 
         expect(quoteInput.required).toBe(true);
         expect(phoneInput.required).toBe(true);
-        expect(phoneInput.getAttribute('inputmode')).toBe('tel');
+        expect(phoneInput.getAttribute('inputmode')).toBe('numeric');
+        expect(phoneInput.maxLength).toBe(11);
+        expect(phoneInput.placeholder).toBe('09XXXXXXXXX');
         expect(lookupButton.disabled).toBe(true);
         expect(lookupButton.className).toContain('w-full');
         expect(controls.className).toContain('min-w-0');
@@ -38,10 +40,18 @@ describe('PublicQuoteLookupCard', () => {
         render(<PublicQuoteLookupCard {...createProps({ onPhoneChange })} />);
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Phone number used for quote' }), {
-            target: { value: '+63 917 123 4567' },
+            target: { value: '09 17-123 4567' },
         });
 
-        expect(onPhoneChange).toHaveBeenCalledWith('+63 917 123 4567');
+        expect(onPhoneChange).toHaveBeenCalledWith('09171234567');
+    });
+
+    it('shows the required 09 prefix and disables retrieval for invalid phone input', () => {
+        render(<PublicQuoteLookupCard {...createProps({ estimateNumber: 'EST-2026-100', phone: '19171234567' })} />);
+
+        expect(screen.getByText('Philippine mobile numbers must start with 09.')).toBeTruthy();
+        expect(screen.getByRole('textbox', { name: 'Phone number used for quote' }).getAttribute('aria-invalid')).toBe('true');
+        expect(screen.getByRole('button', { name: 'Retrieve Quote' }).disabled).toBe(true);
     });
 
     it('submits from the keyboard only when quote number and phone are present', () => {

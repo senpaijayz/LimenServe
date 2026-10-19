@@ -1,6 +1,7 @@
 import { Car, Printer, Search, User } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import { formatCurrency } from '../../../utils/formatters';
+import { normalizePhilippinePhoneNumber, sanitizePhilippineMobileInput } from '../../../utils/phone';
 
 const formatLookupDate = (value) => {
     if (!value) {
@@ -58,6 +59,10 @@ const PublicQuoteLookupCard = ({
     const items = result?.items ?? [];
     const customerName = result?.customer?.name || 'Walk-in Customer';
     const vehicleSummary = formatVehicleSummary(result?.vehicle);
+    const validPhone = normalizePhilippinePhoneNumber(phone);
+    const phoneMessage = phone && !validPhone
+        ? (phone.startsWith('09') ? 'Enter all 11 digits of the phone number.' : 'Philippine mobile numbers must start with 09.')
+        : 'Use an 11-digit Philippine mobile number starting with 09.';
 
     return (
         <div className="surface min-w-0 p-4 sm:p-6 md:p-8">
@@ -76,7 +81,7 @@ const PublicQuoteLookupCard = ({
                         value={estimateNumber}
                         onChange={(event) => onEstimateNumberChange(event.target.value)}
                         onKeyDown={(event) => {
-                            if (event.key === 'Enter' && estimateNumber.trim() && phone.trim()) {
+                            if (event.key === 'Enter' && estimateNumber.trim() && validPhone) {
                                 onLookup();
                             }
                         }}
@@ -88,25 +93,28 @@ const PublicQuoteLookupCard = ({
                     />
                     <input
                         type="tel"
-                        inputMode="tel"
+                        inputMode="numeric"
                         autoComplete="tel"
                         value={phone}
-                        onChange={(event) => onPhoneChange(event.target.value)}
+                        maxLength={11}
+                        onChange={(event) => onPhoneChange(sanitizePhilippineMobileInput(event.target.value))}
                         onKeyDown={(event) => {
-                            if (event.key === 'Enter' && estimateNumber.trim() && phone.trim()) {
+                            if (event.key === 'Enter' && estimateNumber.trim() && validPhone) {
                                 onLookup();
                             }
                         }}
                         aria-label="Phone number used for quote"
-                        placeholder="Phone number used for quote"
+                        placeholder="09XXXXXXXXX"
+                        aria-describedby="quote-lookup-phone-help"
+                        aria-invalid={Boolean(phone) && !validPhone}
                         required
-                        className="input min-w-0 w-full py-2.5 text-sm"
+                        className={`input min-w-0 w-full py-2.5 text-sm ${phone && !validPhone ? 'border-accent-danger focus:border-accent-danger' : ''}`}
                     />
                     <Button
                         variant="secondary"
                         onClick={onLookup}
                         isLoading={loading}
-                        isDisabled={!estimateNumber.trim() || !phone.trim()}
+                        isDisabled={!estimateNumber.trim() || !validPhone}
                         leftIcon={<Search className="w-4 h-4" />}
                         className="w-full md:col-span-2 lg:col-span-1 lg:w-auto"
                     >
@@ -114,6 +122,10 @@ const PublicQuoteLookupCard = ({
                     </Button>
                 </div>
             </div>
+
+            <p id="quote-lookup-phone-help" className={`mt-2 text-xs ${phone && !validPhone ? 'text-accent-danger' : 'text-primary-500'}`}>
+                {phoneMessage}
+            </p>
 
             {error && (
                 <div className="mt-4 rounded-xl border border-accent-danger/20 bg-accent-danger/5 p-4 text-sm text-accent-danger">

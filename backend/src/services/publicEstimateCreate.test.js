@@ -21,7 +21,7 @@ function validPayload() {
     customer: {
       customer_type: 'walk_in',
       name: '  Customer Name  ',
-      phone: '+63 (917) 123-4567',
+      phone: '0917 123-4567',
       metadata: { source: 'public_estimate_page' },
     },
     vehicle: {
@@ -223,9 +223,18 @@ test('requires and normalizes a Philippine phone number', () => {
   assert.equal(invalid.error, PUBLIC_ESTIMATE_CREATE_INVALID_MESSAGE);
   assert.match(invalid.reason, /phone/i);
 
-  payload.customer.phone = '0063 917 123 4567';
+  payload.customer.phone = '0917 123 4567';
   const valid = parsePublicEstimateCreateInput(payload, { now: NOW });
   assert.equal(valid.payload.customer.phone, '09171234567');
+
+  payload.customer.phone = '+63 917 123 4567';
+  const international = parsePublicEstimateCreateInput(payload, { now: NOW });
+  assert.equal(international.ok, false);
+  assert.match(international.reason, /starting with 09/i);
+
+  payload.customer.phone = '19171234567';
+  const wrongPrefix = parsePublicEstimateCreateInput(payload, { now: NOW });
+  assert.equal(wrongPrefix.ok, false);
 });
 
 test('rejects unknown or privileged fields at every public DTO boundary', () => {
@@ -560,14 +569,14 @@ test('phone rate-limit keys normalize equivalent numbers and isolate invalid inp
     ip: '192.0.2.1',
     body: { customer: { phone: '0917 123 4567' } },
   });
-  const international = getPublicEstimatePhoneRateLimitKey({
+  const formattedLocal = getPublicEstimatePhoneRateLimitKey({
     ip: '198.51.100.1',
-    body: { customer: { phone: '+63 (917) 123-4567' } },
+    body: { customer: { phone: '0917-123-4567' } },
   });
   const invalidOne = getPublicEstimatePhoneRateLimitKey({ ip: '192.0.2.1', body: {} });
   const invalidTwo = getPublicEstimatePhoneRateLimitKey({ ip: '198.51.100.1', body: {} });
 
-  assert.equal(local, international);
+  assert.equal(local, formattedLocal);
   assert.match(local, /^phone:[0-9a-f]{64}$/);
   assert.equal(invalidOne, 'invalid:192.0.2.1');
   assert.equal(invalidTwo, 'invalid:198.51.100.1');
