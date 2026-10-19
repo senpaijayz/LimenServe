@@ -409,7 +409,34 @@
   }
 }
 
+.pos-item {
+  position: relative;
+  padding: 12px;
+  border: 1px solid var(--primary-300);
+  border-radius: 14px;
+  background: #fff;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.pos-item:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgb(30 58 138 / 12%);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pos-item:hover {
+    z-index: 1;
+    border-color: var(--accent-primary);
+    box-shadow: 0 8px 20px -8px rgb(15 23 42 / 24%);
+    transform: translateY(-2px) scale(1.015);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .pos-item:hover {
+    transform: none;
+  }
+
   *,
   *::before,
   *::after {
