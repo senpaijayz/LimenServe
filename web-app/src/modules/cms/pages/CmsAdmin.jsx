@@ -1935,8 +1935,8 @@ export default function CmsAdmin() {
                          onClick={() => handleSelectPage(page.slug)}
                         className="min-w-0 p-4 text-left"
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="truncate font-semibold text-primary-950">{page.title}</span>
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="break-words font-semibold text-primary-950">{page.title}</span>
                           <StatusBadge status={page.status} />
                         </div>
                         <p className="mt-2 text-xs text-primary-500">/{page.slug} - {page.sectionCount ?? 0} sections</p>
@@ -2158,8 +2158,8 @@ export default function CmsAdmin() {
                   <div key={item.id || index} className="rounded-2xl border border-primary-200 bg-white p-3 shadow-sm">
                     {navigationEditIndex !== index ? (
                       <div className="flex flex-wrap items-center gap-3">
-                        <button type="button" onClick={() => setNavigationEditIndex(index)} className="min-h-12 min-w-0 flex-1 rounded-xl px-2 text-left hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue">
-                          <span className="block truncate font-semibold text-primary-950">{item.label || 'Untitled link'}</span>
+                        <button type="button" onClick={() => setNavigationEditIndex(index)} className="min-h-12 min-w-0 basis-full flex-1 rounded-xl px-2 text-left hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue sm:basis-auto">
+                          <span className="block break-words font-semibold text-primary-950">{item.label || 'Untitled link'}</span>
                           <span className="mt-1 block break-all text-xs text-primary-500">{item.href}</span>
                         </button>
                         <StatusBadge status={item.status} />

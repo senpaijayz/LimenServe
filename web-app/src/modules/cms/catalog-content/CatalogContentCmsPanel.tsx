@@ -487,7 +487,7 @@ export default function CatalogContentCmsPanel({ onUnsavedChange = noop }: { onU
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-primary-200 bg-primary-50 p-2" role="tablist" aria-label="Website catalog content">
         <button type="button" role="tab" aria-selected={activeView === 'featured'} onClick={() => handleViewChange('featured')} className={`min-h-11 flex-1 rounded-xl px-4 text-sm font-semibold sm:flex-none ${activeView === 'featured' ? 'bg-primary-950 text-white' : 'text-primary-700 hover:bg-white'}`}>Featured Products <span className="ml-1 text-xs opacity-75">{featuredItems.length}</span></button>
         <button type="button" role="tab" aria-selected={activeView === 'packages'} onClick={() => handleViewChange('packages')} className={`min-h-11 flex-1 rounded-xl px-4 text-sm font-semibold sm:flex-none ${activeView === 'packages' ? 'bg-primary-950 text-white' : 'text-primary-700 hover:bg-white'}`}>Recommendation Packages <span className="ml-1 text-xs opacity-75">{packages.length}</span></button>
-        {hasUnsavedChanges && <span className="px-2 text-xs font-semibold text-amber-700">Unsaved changes</span>}
+        {hasUnsavedChanges && <span className="w-full px-2 text-center text-xs font-semibold text-amber-700 sm:w-auto sm:text-left">Unsaved changes</span>}
       </div>
       {activeView === 'featured' && (
       <section className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
