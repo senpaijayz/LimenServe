@@ -14,7 +14,7 @@ vi.mock('recharts', () => {
  const Wrapper = ({ children }) => <div>{children}</div>;
  return { ResponsiveContainer: Wrapper, BarChart: Wrapper, Bar: () => null, CartesianGrid: () => null, Tooltip: () => null, XAxis: () => null, YAxis: () => null };
 });
-const report = { generatedAt: '2026-10-14T00:00:00Z', topSellingItems: [{ product_id: 'one', product_name: 'Recorded thermostat', quantity: 2, revenue: 100 }], peakPeriods: [], categories: [], itemTrend: [
+const report = { generatedAt: '2026-10-14T00:00:00Z', topSellingItems: [{ product_id: 'one', sku: 'DP010374', product_name: 'Recorded thermostat', quantity: 2, revenue: 100 }], peakPeriods: [], categories: [], itemTrend: [
  { period_start: '2026-10-01', label: 'Oct 2026', revenue: 100, quantity: 2 },
  { period_start: '2026-10-01', label: 'Oct 2026', revenue: 50, quantity: 1 },
 ] };
@@ -23,19 +23,20 @@ afterEach(cleanup);
 const mount = () => render(<MemoryRouter><SalesReport /></MemoryRouter>);
 it('shows database results and groups product rows into one chart point per period without fake trends', async () => {
  mount();
- await screen.findAllByText('Recorded thermostat');
+ await screen.findAllByText('DP010374 (Recorded thermostat)');
  expect(screen.getByTestId('trend').textContent).toContain('"revenue":150');
  expect(screen.getByTestId('trend').textContent).toContain('"quantity":3');
  expect(screen.queryByText('vs last period')).toBeNull();
- expect(screen.getByText(/Completed POS and encoded itemized sales only/)).toBeTruthy();
+ expect(screen.getByText(/These figures use completed sales that list each part/)).toBeTruthy();
+ expect(screen.queryByText(/Demo entries/)).toBeNull();
 });
 it('refreshes directly from recorded sales and shows unavailable rather than invented zeroes after failure', async () => {
  mount();
- await screen.findAllByText('Recorded thermostat');
+ await screen.findAllByText('DP010374 (Recorded thermostat)');
  api.report.mockRejectedValue(new Error('Database unavailable'));
  fireEvent.click(screen.getByRole('button', { name: 'Refresh Analytics' }));
  await screen.findByText('Database unavailable');
- expect(screen.queryByText('Recorded thermostat')).toBeNull();
+ expect(screen.queryByText('DP010374 (Recorded thermostat)')).toBeNull();
  expect(screen.getAllByText('Unavailable')).toHaveLength(4);
  await waitFor(() => expect(api.report).toHaveBeenCalledTimes(2));
  expect(screen.getByRole('button', { name: 'Print PDF' }).disabled).toBe(true);

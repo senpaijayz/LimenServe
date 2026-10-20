@@ -6,6 +6,7 @@ import Card, { KPICard } from '../../../components/ui/Card';
 import { getArchivedCatalogProducts, getCatalogSummary, getInventoryMovements, getManagedCategories } from '../../../services/catalogApi';
 import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
 import { useAuth } from '../../../context/useAuth';
+import formatReportProductName from '../utils/formatReportProductName.js';
 
 const MOVEMENT_LABELS = {
     stock_in: 'Stock In', stock_out: 'Stock Out', adjustment: 'Adjustment',
@@ -116,8 +117,7 @@ function buildPrintableInventoryReport({
 
     const movementRows = movements.map((m, idx) => [
         String(idx + 1),
-        m.productName || '',
-        m.sku || 'No part number',
+        formatReportProductName(m),
         getMovementActionLabel(m),
         formatNumber(m.quantity),
         getReferenceLabel(m.referenceType) || '-',
@@ -130,8 +130,7 @@ function buildPrintableInventoryReport({
         .filter((m) => m.referenceType === 'supplier_invoice')
         .map((m, idx) => [
             String(idx + 1),
-            m.productName || '',
-            m.sku || 'No part number',
+            formatReportProductName(m),
             formatNumber(m.quantity),
             m.notes || '-',
             m.performedBy || 'System',
@@ -139,8 +138,7 @@ function buildPrintableInventoryReport({
         ]);
 
     const archivedRows = archivedProducts.map((p) => [
-        p.name || '',
-        p.sku || 'No part number',
+        formatReportProductName(p),
         p.category || '—',
         formatNumber(p.stock ?? 0),
         formatCurrency(p.price ?? 0),
@@ -351,31 +349,31 @@ function buildPrintableInventoryReport({
         </header>
 
         <div class="kpi-grid">
-            <div class="kpi-card"><div class="label">Catalog Products</div><div class="value">${escapeHtml(formatNumber(summary?.totalProducts ?? 0))}</div></div>
+            <div class="kpi-card"><div class="label">Products Listed</div><div class="value">${escapeHtml(formatNumber(summary?.totalProducts ?? 0))}</div></div>
             <div class="kpi-card"><div class="label">Unique Part Numbers</div><div class="value">${escapeHtml(formatNumber(summary?.uniqueProducts ?? 0))}</div></div>
             <div class="kpi-card"><div class="label">Active Prices</div><div class="value">${escapeHtml(formatNumber(summary?.currentPrices ?? 0))}</div></div>
-            <div class="kpi-card"><div class="label">Movement Records</div><div class="value">${escapeHtml(formatNumber(movements.length))}</div></div>
+            <div class="kpi-card"><div class="label">Stock Changes</div><div class="value">${escapeHtml(formatNumber(movements.length))}</div></div>
             <div class="kpi-card"><div class="label">Total Stock In</div><div class="value green">+${escapeHtml(formatNumber(stockInQty))}</div></div>
             <div class="kpi-card"><div class="label">Total Stock Out</div><div class="value red">${escapeHtml(formatNumber(stockOutQty))}</div></div>
         </div>
 
         <section>
-            <h2>Inventory Movement Ledger</h2>
+            <h2>Stock Changes</h2>
             <div class="section-sub">${escapeHtml(formatNumber(movements.length))} records · ${escapeHtml(formatNumber(uniqueProducts))} products · ${escapeHtml(formatNumber(movedQty))} units moved</div>
-            ${renderReportTable(['#', 'Product', 'Part Number', 'Action', 'Qty', 'Reference', 'Performed By', 'Date', 'Notes'], movementRows, 'No inventory movement records found for this period.')}
+            ${renderReportTable(['#', 'Part Number (Product Name)', 'Action', 'Qty', 'Reference', 'Performed By', 'Date', 'Notes'], movementRows, 'No stock changes found for these dates.')}
         </section>
 
         <section>
-            <h2>Parts Invoice Stock-Ins</h2>
-            <div class="section-sub">Supplier invoice receipts are separated from normal Add Stock entries for audit review.</div>
-            ${renderReportTable(['#', 'Product', 'Part Number', 'Qty', 'Invoice Details', 'Performed By', 'Date'], partsInvoiceRows, 'No parts invoice stock-ins found for this period.')}
+            <h2>Parts Added from Invoices</h2>
+            <div class="section-sub">Parts added from supplier invoices are listed here. Other stock additions are in the movement list above.</div>
+            ${renderReportTable(['#', 'Part Number (Product Name)', 'Qty', 'Invoice Details', 'Performed By', 'Date'], partsInvoiceRows, 'No parts were added from invoices during these dates.')}
         </section>
 
         ${archivedProducts.length > 0 ? `
         <section>
             <h2>Archived Products</h2>
-            <div class="section-sub">${escapeHtml(String(archivedProducts.length))} products removed from active catalog</div>
-            ${renderReportTable(['Product', 'Part Number', 'Category', 'Qty', 'Price', 'Archived'], archivedRows)}
+            <div class="section-sub">${escapeHtml(String(archivedProducts.length))} products hidden from the current product list</div>
+            ${renderReportTable(['Part Number (Product Name)', 'Category', 'Qty', 'Price', 'Archived'], archivedRows)}
         </section>
         ` : ''}
 
@@ -386,7 +384,7 @@ function buildPrintableInventoryReport({
         </div>
 
         <div class="footer-note">
-            This report is generated from LimenServe inventory movement records and should be reconciled with physical stock counts during audit.
+            Compare this report with the parts on your shelves to check that the stock numbers are correct.
         </div>
     </main>
 </body>
@@ -491,7 +489,7 @@ export default function InventoryReport() {
                     <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-blue">Inventory Reports</p>
                     <h2 className="mt-2 text-2xl font-display font-bold text-primary-950">Inventory Summary & Audit</h2>
                     <p className="mt-1 max-w-3xl text-sm text-primary-500">
-                        Live catalog totals, movement ledger, and archived-product visibility with printable report.
+                        Check the parts you have now, see when stock changed, and review archived products. You can print this report.
                     </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
@@ -508,16 +506,16 @@ export default function InventoryReport() {
                 <Link to="/reports/sales" className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm transition hover:border-accent-blue/40 hover:shadow-md">
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-500">Switch Report</p>
                     <p className="mt-1 text-lg font-display font-bold text-primary-950">Sales Analytics</p>
-                    <p className="mt-1 text-sm text-primary-600">Revenue, item movement, encoded historical sales, and printable sales reports.</p>
+                    <p className="mt-1 text-sm text-primary-600">Review parts sold, sales totals, and past receipts. You can print the report.</p>
                 </Link>
                 <div className="rounded-2xl border border-accent-blue/30 bg-accent-blue/10 p-4">
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent-blue">Current Report</p>
                     <p className="mt-1 text-lg font-display font-bold text-primary-950">Inventory Summary</p>
-                    <p className="mt-1 text-sm text-primary-600">Catalog totals, movement ledger, archived items, and inventory audit.</p>
+                    <p className="mt-1 text-sm text-primary-600">Check current stock, stock changes, and archived products.</p>
                 </div>
             </div>
 
-            <Card title="Report Filters" subtitle="Narrow inventory movement and stock-in summaries by period and category.">
+            <Card title="Report Filters" subtitle="Choose dates and a category to see the stock changes you need.">
                 <div className="grid gap-4 md:grid-cols-3">
                     <input
                         type="date"
@@ -545,18 +543,18 @@ export default function InventoryReport() {
 
             {/* KPI Cards */}
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <KPICard title="Catalog Rows" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(summary?.totalProducts ?? 0)} icon={<Boxes className="h-6 w-6" />} />
+                <KPICard title="Products Listed" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(summary?.totalProducts ?? 0)} icon={<Boxes className="h-6 w-6" />} />
                 <KPICard title="Unique Part Numbers" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(summary?.uniqueProducts ?? 0)} icon={<PackageCheck className="h-6 w-6" />} />
-                <KPICard title="Loaded Movements" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(filteredMovements.length)} icon={<ClipboardList className="h-6 w-6" />} />
-                <KPICard title="Recent Archived Products" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(archivedProducts.length)} icon={<Archive className="h-6 w-6" />} />
+                <KPICard title="Stock Changes Shown" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(filteredMovements.length)} icon={<ClipboardList className="h-6 w-6" />} />
+                <KPICard title="Archived Products Shown" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(archivedProducts.length)} icon={<Archive className="h-6 w-6" />} />
             </div>
-            <p className="text-sm text-primary-500">Catalog counts describe current inventory, not the selected historical period. The movement ledger includes up to 500 recent entries in the selected business-date range; category filtering applies to these loaded entries. Archive preview includes up to 20 products. Exports use the same loaded records.</p>
+            <p className="text-sm text-primary-500">The product counts show what is in your catalog now. Changing the dates does not change these counts. The dates and category filter the stock changes below. You can see up to 500 changes and 20 archived products. The printout includes these records; the CSV contains the stock changes.</p>
 
-            <Card title="Parts Invoice Stock-Ins" subtitle="Supplier invoice receipts are separated from normal Add Stock entries.">
+            <Card title="Parts Added from Invoices" subtitle="See parts added using a supplier invoice. Other stock additions appear in the stock changes below.">
                 {loading ? (
                     <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">Loading...</div>
                 ) : partsInvoiceMovements.length === 0 ? (
-                    <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">No parts invoice stock-ins in selected range.</div>
+                    <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">No parts were added from invoices during these dates.</div>
                 ) : (
                     <div className="overflow-x-auto rounded-2xl border border-primary-200">
                         <table className="min-w-full divide-y divide-primary-100 bg-white text-sm">
@@ -572,8 +570,7 @@ export default function InventoryReport() {
                                 {partsInvoiceMovements.slice(0, 12).map((m) => (
                                     <tr key={m.id} className="hover:bg-blue-50/50">
                                         <td className="px-4 py-3">
-                                            <p className="font-bold text-primary-950">{m.productName}</p>
-                                            <p className="font-mono text-xs text-primary-500">{m.sku || 'No part number'}</p>
+                                            <p className="font-bold text-primary-950">{formatReportProductName(m)}</p>
                                         </td>
                                         <td className="px-4 py-3 text-right font-bold text-primary-950">+{formatNumber(m.quantity)}</td>
                                         <td className="px-4 py-3 text-primary-600">{m.notes || 'Parts Invoice'}</td>
@@ -588,11 +585,11 @@ export default function InventoryReport() {
 
             {/* Quick movement preview */}
             <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
-                <Card title="Recent Inventory Movements" subtitle={`Total moved: ${formatNumber(movementStats.movedQuantity)} across ${formatNumber(movementStats.types)} action types.`}>
+                <Card title="Recent Inventory Movements" subtitle={`See when parts were added, sold, or adjusted. ${formatNumber(movementStats.movedQuantity)} parts moved across ${formatNumber(movementStats.types)} types of changes.`}>
                     {loading ? (
                         <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">Loading...</div>
                     ) : filteredMovements.length === 0 ? (
-                        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">No movement records in selected range.</div>
+                        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">No stock changes were found for these dates.</div>
                     ) : (
                         <div className="overflow-x-auto rounded-2xl border border-primary-200">
                             <table className="min-w-full divide-y divide-primary-100 bg-white text-sm">
@@ -609,8 +606,7 @@ export default function InventoryReport() {
                                     {filteredMovements.slice(0, 12).map((m) => (
                                         <tr key={m.id} className="hover:bg-primary-50/60">
                                             <td className="px-4 py-3">
-                                                <p className="font-bold text-primary-950">{m.productName}</p>
-                                                <p className="font-mono text-xs text-primary-500">{m.sku || 'No part number'}</p>
+                                                <p className="font-bold text-primary-950">{formatReportProductName(m)}</p>
                                             </td>
                                             <td className="px-4 py-3">
                                                 <span className={`inline-block rounded-full border px-2 py-0.5 text-xs font-bold ${MOVEMENT_COLORS[m.movementType] || 'bg-primary-50 text-primary-600 border-primary-200'}`}>
@@ -636,7 +632,7 @@ export default function InventoryReport() {
                     )}
                 </Card>
 
-                <Card title="Archived Products" subtitle="Products hidden from active selling flows.">
+                <Card title="Archived Products" subtitle="These products are no longer shown for sale, but you can still review them here.">
                     {loading ? (
                         <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-8 text-center text-sm text-primary-500">Loading...</div>
                     ) : archivedProducts.length === 0 ? (
@@ -647,8 +643,7 @@ export default function InventoryReport() {
                                 <div key={p.id} className="rounded-2xl border border-primary-200 bg-white p-4">
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
-                                            <p className="truncate text-sm font-bold text-primary-950">{p.name}</p>
-                                            <p className="mt-1 font-mono text-xs text-primary-500">{p.sku || 'No part number'}</p>
+                                            <p className="break-words text-sm font-bold text-primary-950">{formatReportProductName(p)}</p>
                                         </div>
                                         <p className="text-sm font-bold text-accent-blue">{formatCurrency(p.price ?? 0)}</p>
                                     </div>

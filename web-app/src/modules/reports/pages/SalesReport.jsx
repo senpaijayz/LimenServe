@@ -18,6 +18,7 @@ import { useAuth } from '../../../context/useAuth';
 import SaleReceiptPreview from '../../pos/components/SaleReceiptPreview.jsx';
 import HistoricalSaleEditorModal from '../components/HistoricalSaleEditorModal.jsx';
 import HistoricalAggregateEditorModal from '../components/HistoricalAggregateEditorModal.jsx';
+import formatReportProductName from '../utils/formatReportProductName.js';
 
 function toReportNumber(value, fallback = 0) {
     const parsed = Number(value);
@@ -87,8 +88,7 @@ function buildPrintableSalesReport({
     const topLeader = topSellingItems[0];
     const peakLeader = peakPeriods[0];
     const topItemRows = topSellingItems.map((item) => [
-        item.product_name || '',
-        item.sku || '',
+        formatReportProductName(item),
         item.category || '',
         formatNumber(toReportNumber(item.quantity)),
         formatCurrency(toReportNumber(item.revenue)),
@@ -99,8 +99,7 @@ function buildPrintableSalesReport({
         formatCurrency(toReportNumber(item.revenue)),
     ]);
     const peakRows = peakPeriods.map((item) => [
-        item.product_name || '',
-        item.sku || '',
+        formatReportProductName(item),
         item.peak_month ? new Date(item.peak_month).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' }) : '',
         formatNumber(toReportNumber(item.peak_quantity)),
         formatCurrency(toReportNumber(item.peak_revenue)),
@@ -318,30 +317,30 @@ function buildPrintableSalesReport({
         </div>
 
         <div class="kpi-grid">
-            <div class="kpi-card"><div class="label">Top Item</div><div class="value">${escapeHtml(topLeader?.product_name || 'N/A')}</div></div>
-            <div class="kpi-card"><div class="label">Trend Revenue</div><div class="value">${escapeHtml(formatCurrency(trendRevenue))}</div></div>
-            <div class="kpi-card"><div class="label">Peak Leader</div><div class="value">${escapeHtml(peakLeader?.product_name || 'N/A')}</div></div>
-            <div class="kpi-card"><div class="label">Product Units Sold</div><div class="value">${escapeHtml(formatNumber(productUnits))}</div></div>
+            <div class="kpi-card"><div class="label">Best Selling Part</div><div class="value">${escapeHtml(topLeader ? formatReportProductName(topLeader) : 'No recorded sales')}</div></div>
+            <div class="kpi-card"><div class="label">Parts Sales Amount</div><div class="value">${escapeHtml(formatCurrency(trendRevenue))}</div></div>
+            <div class="kpi-card"><div class="label">Top Part in a Month</div><div class="value">${escapeHtml(peakLeader ? formatReportProductName(peakLeader) : 'No recorded sales')}</div></div>
+            <div class="kpi-card"><div class="label">Parts Sold</div><div class="value">${escapeHtml(formatNumber(productUnits))}</div></div>
         </div>
-        <p>Completed, non-demo product sales only. Product revenue excludes labor and transaction-level discounts/tax. Historical period totals are recorded separately and are not included in item charts.</p>
+        <p>These part figures come from completed sales that list each part. The parts amount does not include labor or discounts and tax applied to the whole sale. Sales entered as one total are kept separately and do not change these part totals.</p>
 
         <section>
             <h2>Top-Selling Items</h2>
-            ${renderReportTable(['Product', 'Part Number', 'Category', 'Units', 'Revenue'], topItemRows)}
+            ${renderReportTable(['Part Number (Product Name)', 'Category', 'Units', 'Revenue'], topItemRows)}
         </section>
 
         <section>
-            <h2>Item Sales Trend</h2>
+            <h2>Parts Sales Over Time</h2>
             ${renderReportTable(['Period', 'Units', 'Revenue'], trendRows)}
         </section>
 
         <section>
-            <h2>Peak Periods</h2>
-            ${renderReportTable(['Product', 'Part Number', 'Peak Month', 'Peak Units', 'Peak Revenue'], peakRows)}
+            <h2>Best Month for Each Part</h2>
+            ${renderReportTable(['Part Number (Product Name)', 'Peak Month', 'Peak Units', 'Peak Revenue'], peakRows)}
         </section>
 
         <section>
-            <h2>Sales Ledger</h2>
+            <h2>Sales History</h2>
             ${renderReportTable(['Receipt', 'Date / Time', 'Customer', 'Cashier', 'Source', 'Items', 'Payment', 'Status', 'Original Reference', 'Total'], ledgerRows)}
         </section>
 
@@ -673,7 +672,7 @@ const SalesReport = () => {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h1 className="text-2xl font-display font-bold text-primary-950">Item Sales Analytics Report</h1>
-                    <p className="mt-1 text-primary-500">Track top-selling Mitsubishi parts, identify peak periods, and review item-level sales trends.</p>
+                    <p className="mt-1 text-primary-500">See which parts sold most, how much they earned, and when sales were highest.</p>
                 </div>
 
                 <div className="flex flex-wrap gap-3">
@@ -718,7 +717,7 @@ const SalesReport = () => {
                 <div className="rounded-2xl border border-accent-blue/30 bg-accent-blue/10 p-4">
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent-blue">Current Report</p>
                     <p className="mt-1 text-lg font-display font-bold text-primary-950">Sales Analytics</p>
-                    <p className="mt-1 text-sm text-primary-600">Revenue, item movement, encoded historical sales, and printable sales reports.</p>
+                    <p className="mt-1 text-sm text-primary-600">Review parts sold, sales totals, and past receipts. You can print this report.</p>
                 </div>
                 <Link
                     to="/reports/inventory"
@@ -726,7 +725,7 @@ const SalesReport = () => {
                 >
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-500">Switch Report</p>
                     <p className="mt-1 text-lg font-display font-bold text-primary-950">Inventory Summary</p>
-                    <p className="mt-1 text-sm text-primary-600">Catalog totals, movement ledger, archived items, and inventory audit PDF.</p>
+                    <p className="mt-1 text-sm text-primary-600">Check current stock, stock changes, and archived products.</p>
                 </Link>
             </div>
 
@@ -742,7 +741,7 @@ const SalesReport = () => {
                 </Card>
             )}
 
-            <Card title="Report Filters" subtitle="Narrow the period, category, and trend granularity.">
+            <Card title="Report Filters" subtitle="Choose dates and a category, then show sales by day or month.">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <input type="date" value={filters.startDate} onChange={(e) => setFilters((current) => ({ ...current, startDate: e.target.value }))} className="input py-2.5 text-sm" />
                     <input type="date" value={filters.endDate} onChange={(e) => setFilters((current) => ({ ...current, endDate: e.target.value }))} className="input py-2.5 text-sm" />
@@ -759,21 +758,21 @@ const SalesReport = () => {
             </Card>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <KPICard title="Top Selling Item" value={loading ? 'Loading...' : error ? 'Unavailable' : (topLeader?.product_name || 'No recorded sales')} icon={<TrendingUp className="w-6 h-6" />} />
-                <KPICard title="Product Sales Revenue" value={loading ? 'Loading...' : error ? 'Unavailable' : formatCurrency(trendRevenue)} icon={<Filter className="w-6 h-6" />} />
-                <KPICard title="Peak Month Leader" value={loading ? 'Loading...' : error ? 'Unavailable' : (peakLeader?.product_name || 'No recorded sales')} icon={<TrendingUp className="w-6 h-6" />} />
-                <KPICard title="Product Units Sold" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(itemTrend.reduce((sum, row) => sum + toReportNumber(row.quantity), 0))} icon={<Receipt className="w-6 h-6" />} />
+                <KPICard title="Best Selling Part" value={loading ? 'Loading...' : error ? 'Unavailable' : topLeader ? <span className="text-lg lg:text-xl">{formatReportProductName(topLeader)}</span> : 'No recorded sales'} icon={<TrendingUp className="w-6 h-6" />} />
+                <KPICard title="Parts Sales Amount" value={loading ? 'Loading...' : error ? 'Unavailable' : formatCurrency(trendRevenue)} icon={<Filter className="w-6 h-6" />} />
+                <KPICard title="Top Part in a Month" value={loading ? 'Loading...' : error ? 'Unavailable' : peakLeader ? <span className="text-lg lg:text-xl">{formatReportProductName(peakLeader)}</span> : 'No recorded sales'} icon={<TrendingUp className="w-6 h-6" />} />
+                <KPICard title="Parts Sold" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(itemTrend.reduce((sum, row) => sum + toReportNumber(row.quantity), 0))} icon={<Receipt className="w-6 h-6" />} />
             </div>
-            <p className="text-sm text-primary-500">Completed POS and encoded itemized sales only. Demo entries and cancelled sales are excluded. Product revenue excludes labor and transaction-level discounts/tax. Period totals below are separate records and are not added to item-level charts.{dashboardSnapshot?.generatedAt && ` Updated ${formatDateTime(dashboardSnapshot.generatedAt)}.`}</p>
+            <p className="text-sm text-primary-500">These figures use completed sales that list each part. The parts amount does not include labor or discounts and tax applied to the whole sale. Sales entered as one total appear below and do not change the part charts.{dashboardSnapshot?.generatedAt && ` Updated ${formatDateTime(dashboardSnapshot.generatedAt)}.`}</p>
 
             <Card
-                title="Historical Period Totals"
-                subtitle="Use this ledger for paper summaries that contain a day, month, or year total but no item breakdown."
+                title="Sales Entered as One Total"
+                subtitle="Past sales entered as one daily, monthly, or yearly total appear here. They cannot appear in the part charts because no individual parts were listed."
                 headerAction={aggregateUnavailable ? <span className="text-xs font-semibold text-primary-500">Unavailable</span> : null}
             >
                 {aggregateUnavailable ? (
                     <div className="rounded-xl border border-dashed border-primary-200 bg-primary-50 px-4 py-5 text-sm text-primary-600">
-                        Historical period totals could not be loaded. Retry Refresh; itemized sales are reported separately.
+                        Past sales totals could not be loaded. Select Refresh to try again. Sales with individual parts still appear elsewhere on this page.
                     </div>
                 ) : (
                     <>
@@ -830,9 +829,9 @@ const SalesReport = () => {
                 )}
             </Card>
 
-            <SalesChart data={chartTrend} title="Item-Level Sales Trend" subtitle="Recorded product-line revenue and units, grouped by period" />
+            <SalesChart data={chartTrend} title="Parts Sales Over Time" subtitle="See how many parts sold and how much they earned each day or month." />
 
-            <Card title="Sales By Category" subtitle="Dedicated category revenue graph from the selected sales period.">
+            <Card title="Sales By Category" subtitle="Compare the amount earned from parts in each category during the dates you chose.">
                 <div className="h-80">
                     {salesByCategory.length > 0 ? (
                         <MeasuredChart>{({width,height}) => (
@@ -853,17 +852,16 @@ const SalesReport = () => {
             </Card>
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                <Card title="Top-Selling Items" subtitle="Best performing items in the selected time frame">
+                <Card title="Top-Selling Items" subtitle="See which parts sold the most during the dates you chose.">
                     <div className="grid gap-3 md:hidden">
                         {topSellingItems.map((item) => (
                             <div key={item.product_id} className="rounded-xl border border-primary-200 bg-white px-4 py-3">
                                 <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                        <p className="font-semibold text-primary-950">{item.product_name}</p>
-                                        <p className="text-xs font-mono text-primary-500">{item.sku}</p>
+                                    <div className="min-w-0">
+                                        <p className="break-words font-semibold text-primary-950">{formatReportProductName(item)}</p>
                                         <p className="mt-1 text-xs text-primary-500">{item.category}</p>
                                     </div>
-                                    <div className="text-right">
+                                    <div className="shrink-0 text-right">
                                         <p className="font-semibold text-accent-blue">{formatCurrency(item.revenue)}</p>
                                         <p className="text-xs text-primary-500">{formatNumber(item.quantity)} units</p>
                                     </div>
@@ -896,8 +894,7 @@ const SalesReport = () => {
                                     <tr key={item.product_id}>
                                         <td>
                                             <div className="flex flex-col">
-                                                <span className="font-medium text-primary-950">{item.product_name}</span>
-                                                <span className="text-xs font-mono text-primary-500">{item.sku}</span>
+                                                <span className="font-medium text-primary-950">{formatReportProductName(item)}</span>
                                             </div>
                                         </td>
                                         <td>{item.category}</td>
@@ -915,12 +912,11 @@ const SalesReport = () => {
                     </div>
                 </Card>
 
-                <Card title="Peak Periods" subtitle="When each product performed best">
+                <Card title="Peak Periods" subtitle="See the month when each part sold best.">
                     <div className="grid gap-3 md:hidden">
                         {peakPeriods.map((item) => (
                             <div key={`${item.product_id}-${item.peak_month}`} className="rounded-xl border border-primary-200 bg-white px-4 py-3">
-                                <p className="font-semibold text-primary-950">{item.product_name}</p>
-                                <p className="text-xs font-mono text-primary-500">{item.sku}</p>
+                                <p className="break-words font-semibold text-primary-950">{formatReportProductName(item)}</p>
                                 <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                                     <div>
                                         <p className="text-xs uppercase tracking-wide text-primary-400">Peak Month</p>
@@ -959,8 +955,7 @@ const SalesReport = () => {
                                     <tr key={`${item.product_id}-${item.peak_month}`}>
                                         <td>
                                             <div className="flex flex-col">
-                                                <span className="font-medium text-primary-950">{item.product_name}</span>
-                                                <span className="text-xs font-mono text-primary-500">{item.sku}</span>
+                                                <span className="font-medium text-primary-950">{formatReportProductName(item)}</span>
                                             </div>
                                         </td>
                                         <td>{new Date(item.peak_month).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' })}</td>
@@ -981,7 +976,7 @@ const SalesReport = () => {
 
             <Card
                 title="Sales History"
-                subtitle="Receipt-level ledger of live POS and admin-encoded historical sales."
+                subtitle="Open a receipt to review a sale. Past sales entered by staff appear here too."
                 headerAction={(
                     <div className="w-full sm:w-72">
                         <input
