@@ -1166,7 +1166,7 @@ function CmsOverview({ onEditPage, onOpenTab, onRefresh, refreshing }) {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary-300">Website overview</p>
-            <h2 className="mt-2 text-2xl font-display font-bold">What would you like to update?</h2>
+            <h2 className="mt-2 text-2xl font-display font-bold text-white">What would you like to update?</h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-primary-200">Choose an area below. You can preview your changes before saving them.</p>
           </div>
           <button type="button" onClick={onRefresh} disabled={refreshing} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-700 bg-primary-900/70 px-4 text-sm font-semibold text-white hover:bg-primary-800 disabled:opacity-60">
@@ -2157,7 +2157,7 @@ export default function CmsAdmin() {
                 ) : navigationDraft.map((item, index) => (
                   <div key={item.id || index} className="rounded-2xl border border-primary-200 bg-white p-3 shadow-sm">
                     {navigationEditIndex !== index ? (
-                      <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
                         <button type="button" onClick={() => setNavigationEditIndex(index)} className="min-h-12 min-w-0 basis-full flex-1 rounded-xl px-2 text-left hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue sm:basis-auto">
                           <span className="block break-words font-semibold text-primary-950">{item.label || 'Untitled link'}</span>
                           <span className="mt-1 block break-all text-xs text-primary-500">{item.href}</span>
