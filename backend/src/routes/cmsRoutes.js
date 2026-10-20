@@ -12,6 +12,7 @@ import {
   listCmsRecommendationPackages,
   saveCmsNavigation,
   saveCmsPage,
+  saveCmsRenamedPage,
   saveCmsFeaturedCatalogItem,
   saveCmsRecommendationPackage,
   saveCmsSiteSettings,
@@ -242,10 +243,13 @@ router.put('/pages/:slug', requireRole('admin'), async (req, res, next) => {
       return;
     }
 
-    const page = await saveCmsPage({
-      ...req.body,
-      slug: req.params.slug,
-    }, req.user?.id);
+    const requestedSlug = String(req.body.slug || req.params.slug).trim();
+    const page = requestedSlug.toLowerCase() === req.params.slug.toLowerCase()
+      ? await saveCmsPage({
+        ...req.body,
+        slug: req.params.slug,
+      }, req.user?.id)
+      : await saveCmsRenamedPage(req.params.slug, req.body, req.user?.id);
 
     clearPublicResponseCache();
     res.json({ page });

@@ -53,6 +53,14 @@ export async function saveCmsPage(payload, actorId) {
   });
 }
 
+export async function saveCmsRenamedPage(currentSlug, payload, actorId) {
+  return callRpc('cms_admin_save_renamed_page', {
+    p_current_slug: currentSlug,
+    p_payload: payload,
+    p_actor_id: actorId || null,
+  });
+}
+
 export async function deleteCmsPage(slug, actorId) {
   const normalizedSlug = assertDeletableCmsPageSlug(slug);
 

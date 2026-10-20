@@ -5,14 +5,22 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
-const VIEWPORT_WIDTHS = [320, 360, 390, 430];
-const PUBLIC_ROUTES = ['/', '/catalog', '/estimate', '/service-orders', '/about'];
+const DEFAULT_VIEWPORT_WIDTHS = [320, 360, 375, 390, 430, 768, 844, 1024, 1440];
+const MOBILE_NAV_MAX_WIDTH = 1279;
+const DEFAULT_PUBLIC_ROUTES = ['/', '/catalog', '/estimate', '/service-orders', '/about'];
 const VIEWPORT_HEIGHT = 900;
 const DEFAULT_TIMEOUT_MS = 20_000;
 const ANIMATION_SETTLE_MS = 600;
 
 function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function getViewportHeight(width) {
+  if (width === 768) return 1024;
+  if (width === 844) return 390;
+  if (width === 1024) return 768;
+  return VIEWPORT_HEIGHT;
 }
 
 function getTimeoutMs() {
@@ -97,6 +105,9 @@ function waitForDevToolsEndpoint(chrome, timeoutMs) {
 async function launchChrome(timeoutMs) {
   const executable = findChromeExecutable();
   const profileDirectory = await mkdtemp(path.join(os.tmpdir(), 'limen-responsive-'));
+  const viewportWidths = getViewportWidths();
+  const maxViewportWidth = Math.max(...viewportWidths);
+  const maxViewportHeight = Math.max(...viewportWidths.map(getViewportHeight));
   const chrome = spawn(executable, [
     '--headless=new',
     '--disable-extensions',
@@ -108,7 +119,7 @@ async function launchChrome(timeoutMs) {
     '--no-sandbox',
     '--remote-debugging-port=0',
     `--user-data-dir=${profileDirectory}`,
-    `--window-size=${Math.max(...VIEWPORT_WIDTHS)},${VIEWPORT_HEIGHT}`,
+    `--window-size=${maxViewportWidth},${maxViewportHeight}`,
     'about:blank',
   ], {
     stdio: ['ignore', 'ignore', 'pipe'],
@@ -122,6 +133,16 @@ async function launchChrome(timeoutMs) {
     chrome.kill();
     throw error;
   }
+}
+
+function getViewportWidths() {
+  const configured = process.env.RESPONSIVE_TEST_WIDTHS?.split(',').map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value > 0);
+  return configured?.length ? configured : DEFAULT_VIEWPORT_WIDTHS;
+}
+
+function getRoutes() {
+  const configured = process.env.RESPONSIVE_TEST_ROUTES?.split(',').map((value) => value.trim()).filter(Boolean);
+  return configured?.length ? configured : DEFAULT_PUBLIC_ROUTES;
 }
 
 function decodeMessage(data) {
@@ -239,9 +260,29 @@ async function readResponsiveState(pageClient) {
       const toggle = document.querySelector('button[aria-label="Toggle menu"]');
       const viewportWidth = window.innerWidth;
       const scrollWidth = Math.max(root?.scrollWidth || 0, body?.scrollWidth || 0);
+      const overflowElements = scrollWidth > viewportWidth + 1
+        ? Array.from(document.querySelectorAll('body *'))
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            const style = window.getComputedStyle(element);
+            return {
+              tag: element.tagName.toLowerCase(),
+              className: typeof element.className === 'string' ? element.className.slice(0, 120) : '',
+              left: Math.round(rect.left),
+              right: Math.round(rect.right),
+              width: Math.round(rect.width),
+              scrollWidth: element.scrollWidth,
+              text: (element.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 70),
+              position: style.position,
+            };
+          })
+          .filter((element) => element.right > viewportWidth + 1 && element.width > 0)
+          .sort((first, second) => second.right - first.right)
+          .slice(0, 8)
+        : [];
 
       if (!toggle) {
-        return { viewportWidth, scrollWidth, toggleFound: false };
+        return { viewportWidth, scrollWidth, toggleFound: false, overflowElements };
       }
 
       const rect = toggle.getBoundingClientRect();
@@ -261,6 +302,7 @@ async function readResponsiveState(pageClient) {
         toggleHeight: rect.height,
         toggleLeft: rect.left,
         toggleRight: rect.right,
+        overflowElements,
       };
     })()`,
     returnByValue: true,
@@ -343,6 +385,10 @@ function validateResponsiveState(route, width, state) {
   if (state.scrollWidth > state.viewportWidth + 1) {
     failures.push(`document width ${state.scrollWidth}px exceeds viewport ${state.viewportWidth}px`);
   }
+  if (width > MOBILE_NAV_MAX_WIDTH) {
+    return failures;
+  }
+
   if (!state.toggleFound) {
     failures.push('mobile navigation toggle is missing');
   } else {
@@ -385,6 +431,8 @@ async function removeProfileDirectory(profileDirectory) {
 async function run() {
   const baseUrl = getBaseUrl();
   const timeoutMs = getTimeoutMs();
+  const viewportWidths = getViewportWidths();
+  const routes = getRoutes();
   const launched = await launchChrome(timeoutMs);
   let browserClient;
   let pageClient;
@@ -400,17 +448,18 @@ async function run() {
     await pageClient.send('Page.enable');
     const failures = [];
 
-    for (const width of VIEWPORT_WIDTHS) {
+    for (const width of viewportWidths) {
+      const height = getViewportHeight(width);
       await pageClient.send('Emulation.setDeviceMetricsOverride', {
         width,
-        height: VIEWPORT_HEIGHT,
+        height,
         deviceScaleFactor: 1,
-        mobile: true,
+        mobile: width <= 768,
         screenWidth: width,
-        screenHeight: VIEWPORT_HEIGHT,
+        screenHeight: height,
       });
 
-      for (const route of PUBLIC_ROUTES) {
+      for (const route of routes) {
         const targetUrl = new URL(route, baseUrl).href;
         const navigation = await pageClient.send('Page.navigate', { url: targetUrl });
         if (navigation.errorText) {
@@ -422,12 +471,15 @@ async function run() {
         await delay(ANIMATION_SETTLE_MS);
         const state = await readResponsiveState(pageClient);
         const routeFailures = validateResponsiveState(route, width, state);
-        if (route === '/') {
+        if (route === '/' && width <= MOBILE_NAV_MAX_WIDTH) {
           const menuState = await exerciseMobileMenu(pageClient);
           routeFailures.push(...validateMobileMenu(width, menuState));
         }
         failures.push(...routeFailures);
         console.log(`${routeFailures.length ? 'FAIL' : 'PASS'} ${route} at ${width}px`);
+        if (routeFailures.some((failure) => failure.includes('document width')) && state.overflowElements?.length) {
+          console.log(`  Overflowing elements: ${JSON.stringify(state.overflowElements)}`);
+        }
       }
     }
 
@@ -435,7 +487,7 @@ async function run() {
       throw new Error(`Responsive audit failed:\n- ${failures.join('\n- ')}`);
     }
 
-    console.log(`Responsive audit passed for ${PUBLIC_ROUTES.length * VIEWPORT_WIDTHS.length} route/viewport combinations.`);
+    console.log(`Responsive audit passed for ${routes.length * viewportWidths.length} route/viewport combinations.`);
   } finally {
     pageClient?.close();
     if (browserClient) {

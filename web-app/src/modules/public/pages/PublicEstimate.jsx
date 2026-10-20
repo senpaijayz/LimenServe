@@ -1490,7 +1490,7 @@ const PublicEstimate = () => {
         <div className="bg-primary-50 min-h-screen relative font-sans text-primary-900 pb-28 print:bg-white print:p-0 print:m-0 print:min-h-0 print:block">
             <div className="fixed inset-0 bg-gradient-to-b from-white via-primary-50 to-primary-50 -z-10 print:hidden" />
             <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-accent-blue/10 rounded-full blur-[150px] mix-blend-multiply pointer-events-none -z-10 opacity-60 print:hidden" />
-            <div className="absolute top-[30%] right-[-10%] w-[40vw] h-[40vw] bg-accent-danger/5 rounded-full blur-[120px] mix-blend-multiply pointer-events-none -z-10 opacity-50 print:hidden" />
+            <div className="absolute top-[30%] right-0 w-[40vw] h-[40vw] bg-accent-danger/5 rounded-full blur-[120px] mix-blend-multiply pointer-events-none -z-10 opacity-50 print:hidden" />
 
             <section className={`relative px-4 md:px-8 xl:px-12 z-10 max-w-[1600px] mx-auto layout-container print:hidden ${workflowStage === 'choice'
                 ? 'pt-24 pb-10 md:pt-28 md:pb-12'

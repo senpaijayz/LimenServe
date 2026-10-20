@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LoaderCircle, Plus, Save, Trash2 } from 'lucide-react';
 import { getProductCatalog, getServiceCatalog } from '../../../services/catalogApi';
 import { useToast } from '../../../components/ui/Toast';
@@ -53,6 +53,7 @@ const serviceGroupOptions = [
 ];
 
 const fieldClassName = 'w-full rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-950 outline-none transition focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15';
+const noop = () => {};
 
 function productLabel(product?: CatalogProductOption): string {
   if (!product) return 'Choose product';
@@ -265,39 +266,95 @@ function ServiceSearchSelect({ value, services, onChange }: {
   );
 }
 
-export default function CatalogContentCmsPanel() {
+export default function CatalogContentCmsPanel({ onUnsavedChange = noop }: { onUnsavedChange?: (isDirty: boolean) => void }) {
   const { success, error: showError } = useToast();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [savingKey, setSavingKey] = useState('');
+  const [activeView, setActiveView] = useState<'featured' | 'packages'>('featured');
+  const [editingFeaturedIndex, setEditingFeaturedIndex] = useState<number | null>(null);
+  const [editingPackageIndex, setEditingPackageIndex] = useState<number | null>(null);
   const [featuredItems, setFeaturedItems] = useState<CmsFeaturedCatalogItem[]>([]);
   const [packages, setPackages] = useState<CmsRecommendationPackage[]>([]);
   const [products, setProducts] = useState<CatalogProductOption[]>([]);
   const [services, setServices] = useState<ServiceOption[]>([]);
+  const [savedFeaturedSnapshot, setSavedFeaturedSnapshot] = useState('[]');
+  const [savedPackageSnapshot, setSavedPackageSnapshot] = useState('[]');
+  const mountedRef = useRef(false);
+  const requestIdRef = useRef(0);
+  const loadPromiseRef = useRef<Promise<void> | null>(null);
 
   const productMap = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
 
-  async function refreshContent() {
+  const refreshContent = useCallback(({ force = false }: { force?: boolean } = {}) => {
+    if (!force && loadPromiseRef.current) return loadPromiseRef.current;
+
+    const requestId = ++requestIdRef.current;
     setLoading(true);
-    try {
-      const [content, productCatalog, serviceCatalog] = await Promise.all([
-        getCmsCatalogContent(),
-        getProductCatalog({ page: 1, pageSize: 250, includeCategories: false }),
-        getServiceCatalog(),
-      ]);
-      setFeaturedItems(content.featuredItems);
-      setPackages(content.recommendationPackages);
-      setProducts(productCatalog.products ?? []);
-      setServices(serviceCatalog ?? []);
-    } catch (loadError) {
-      showError(loadError instanceof Error ? loadError.message : 'Failed to load catalog CMS content.');
-    } finally {
-      setLoading(false);
-    }
-  }
+    setLoadError('');
+    const request = (async () => {
+      try {
+        const [content, productCatalog, serviceCatalog] = await Promise.all([
+          getCmsCatalogContent(),
+          getProductCatalog({ page: 1, pageSize: 250, includeCategories: false }),
+          getServiceCatalog(),
+        ]);
+        if (!mountedRef.current || requestId !== requestIdRef.current) return;
+        setFeaturedItems(content.featuredItems);
+        setPackages(content.recommendationPackages);
+        setProducts(productCatalog.products ?? []);
+        setServices(serviceCatalog ?? []);
+        setSavedFeaturedSnapshot(JSON.stringify(content.featuredItems));
+        setSavedPackageSnapshot(JSON.stringify(content.recommendationPackages));
+      } catch (loadError) {
+        if (!mountedRef.current || requestId !== requestIdRef.current) return;
+        setLoadError(loadError instanceof Error ? loadError.message : 'Could not load featured products and recommendations.');
+      } finally {
+        if (mountedRef.current && requestId === requestIdRef.current) setLoading(false);
+      }
+    })();
+
+    if (force) return request;
+
+    const trackedRequest = request.finally(() => {
+      if (loadPromiseRef.current === trackedRequest) loadPromiseRef.current = null;
+    });
+    loadPromiseRef.current = trackedRequest;
+    return trackedRequest;
+  }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     void refreshContent();
-  }, []);
+    return () => {
+      mountedRef.current = false;
+      onUnsavedChange(false);
+    };
+  }, [onUnsavedChange, refreshContent]);
+
+  const featuredSnapshot = JSON.stringify(featuredItems);
+  const packageSnapshot = JSON.stringify(packages);
+  const hasUnsavedChanges = !loading && (featuredSnapshot !== savedFeaturedSnapshot || packageSnapshot !== savedPackageSnapshot);
+
+  useEffect(() => {
+    onUnsavedChange(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onUnsavedChange]);
+
+  const discardChanges = () => {
+    setFeaturedItems(JSON.parse(savedFeaturedSnapshot) as CmsFeaturedCatalogItem[]);
+    setPackages(JSON.parse(savedPackageSnapshot) as CmsRecommendationPackage[]);
+    setEditingFeaturedIndex(null);
+    setEditingPackageIndex(null);
+  };
+
+  const handleViewChange = (view: 'featured' | 'packages') => {
+    if (view === activeView) return;
+    if (hasUnsavedChanges) {
+      if (!window.confirm('You have unsaved catalog changes. Discard them and switch sections?')) return;
+      discardChanges();
+    }
+    setActiveView(view);
+  };
 
   const updateFeaturedItem = (index: number, patch: Partial<CmsFeaturedCatalogItem>) => {
     setFeaturedItems((items) => items.map((item, itemIndex) => (
@@ -327,7 +384,10 @@ export default function CatalogContentCmsPanel() {
     setSavingKey(`featured-${index}`);
     try {
       const saved = await saveCmsFeaturedCatalogItem(featuredItems[index]);
-      setFeaturedItems((items) => items.map((item, itemIndex) => (itemIndex === index ? saved : item)));
+      const nextItems = featuredItems.map((item, itemIndex) => (itemIndex === index ? saved : item));
+      setFeaturedItems(nextItems);
+      setSavedFeaturedSnapshot(JSON.stringify(nextItems));
+      setEditingFeaturedIndex(null);
       success('Featured product saved.');
     } catch (saveError) {
       showError(saveError instanceof Error ? saveError.message : 'Failed to save featured product.');
@@ -340,12 +400,17 @@ export default function CatalogContentCmsPanel() {
     const item = featuredItems[index];
     if (!item.id) {
       setFeaturedItems((items) => items.filter((_, itemIndex) => itemIndex !== index));
+      setEditingFeaturedIndex(null);
       return;
     }
+    if (!window.confirm(`Remove “${item.name || item.sku || 'this featured part'}” from the website?`)) return;
     setSavingKey(`featured-delete-${index}`);
     try {
       await deleteCmsFeaturedCatalogItem(item.id);
-      setFeaturedItems((items) => items.filter((_, itemIndex) => itemIndex !== index));
+      const nextItems = featuredItems.filter((_, itemIndex) => itemIndex !== index);
+      setFeaturedItems(nextItems);
+      setSavedFeaturedSnapshot(JSON.stringify(nextItems));
+      setEditingFeaturedIndex(null);
       success('Featured product removed.');
     } catch (deleteError) {
       showError(deleteError instanceof Error ? deleteError.message : 'Failed to remove featured product.');
@@ -363,7 +428,10 @@ export default function CatalogContentCmsPanel() {
       }
 
       const saved = await saveCmsRecommendationPackage(packages[index]);
-      setPackages((items) => items.map((item, itemIndex) => (itemIndex === index ? saved : item)));
+      const nextItems = packages.map((item, itemIndex) => (itemIndex === index ? saved : item));
+      setPackages(nextItems);
+      setSavedPackageSnapshot(JSON.stringify(nextItems));
+      setEditingPackageIndex(null);
       success('Recommendation package saved.');
     } catch (saveError) {
       showError(saveError instanceof Error ? saveError.message : 'Failed to save recommendation package.');
@@ -376,12 +444,17 @@ export default function CatalogContentCmsPanel() {
     const pkg = packages[index];
     if (!pkg.id) {
       setPackages((items) => items.filter((_, itemIndex) => itemIndex !== index));
+      setEditingPackageIndex(null);
       return;
     }
+    if (!window.confirm(`Remove “${pkg.packageName || 'this recommendation package'}” from the website?`)) return;
     setSavingKey(`package-delete-${index}`);
     try {
       await deleteCmsRecommendationPackage(pkg.id);
-      setPackages((items) => items.filter((_, itemIndex) => itemIndex !== index));
+      const nextItems = packages.filter((_, itemIndex) => itemIndex !== index);
+      setPackages(nextItems);
+      setSavedPackageSnapshot(JSON.stringify(nextItems));
+      setEditingPackageIndex(null);
       success('Recommendation package removed.');
     } catch (deleteError) {
       showError(deleteError instanceof Error ? deleteError.message : 'Failed to remove recommendation package.');
@@ -399,24 +472,53 @@ export default function CatalogContentCmsPanel() {
     );
   }
 
+  if (loadError) {
+    return (
+      <div role="alert" className="m-4 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-800 sm:m-6">
+        <p className="font-semibold">Catalog content could not be loaded.</p>
+        <p className="mt-1 break-words">{loadError}</p>
+        <button type="button" onClick={() => void refreshContent({ force: true })} className="mt-3 min-h-11 rounded-xl border border-red-200 bg-white px-4 font-semibold hover:bg-red-100">Try again</button>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 p-5 lg:p-6">
+    <div className="space-y-4 p-4 pb-24 sm:p-6">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-primary-200 bg-primary-50 p-2" role="tablist" aria-label="Website catalog content">
+        <button type="button" role="tab" aria-selected={activeView === 'featured'} onClick={() => handleViewChange('featured')} className={`min-h-11 flex-1 rounded-xl px-4 text-sm font-semibold sm:flex-none ${activeView === 'featured' ? 'bg-primary-950 text-white' : 'text-primary-700 hover:bg-white'}`}>Featured Products <span className="ml-1 text-xs opacity-75">{featuredItems.length}</span></button>
+        <button type="button" role="tab" aria-selected={activeView === 'packages'} onClick={() => handleViewChange('packages')} className={`min-h-11 flex-1 rounded-xl px-4 text-sm font-semibold sm:flex-none ${activeView === 'packages' ? 'bg-primary-950 text-white' : 'text-primary-700 hover:bg-white'}`}>Recommendation Packages <span className="ml-1 text-xs opacity-75">{packages.length}</span></button>
+        {hasUnsavedChanges && <span className="px-2 text-xs font-semibold text-amber-700">Unsaved changes</span>}
+      </div>
+      {activeView === 'featured' && (
       <section className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-xl font-display font-semibold text-primary-950">Featured Products</h2>
-            <p className="mt-1 text-sm text-primary-500">Choose catalog products that appear in the public Genuine Parts page.</p>
+            <p className="mt-1 text-sm text-primary-500">Choose the parts that appear on the customer website.</p>
           </div>
-          <button type="button" className="btn btn-secondary" onClick={() => setFeaturedItems((items) => [...items, createEmptyFeaturedCatalogItem()])}>
+          {editingFeaturedIndex === null && <button type="button" className="btn btn-secondary" onClick={() => {
+            setFeaturedItems((items) => [...items, createEmptyFeaturedCatalogItem()]);
+            setEditingFeaturedIndex(featuredItems.length);
+            setEditingPackageIndex(null);
+          }}>
             <Plus className="h-4 w-4" />
             Add Featured Product
-          </button>
+          </button>}
         </div>
 
         <div className="mt-5 space-y-3">
           {featuredItems.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-primary-300 bg-primary-50 p-8 text-center text-primary-500">No featured products yet.</div>
-          ) : featuredItems.map((item, index) => (
+          ) : editingFeaturedIndex === null ? featuredItems.map((item, index) => (
+            <div key={item.id || index} className="flex flex-wrap items-center gap-3 rounded-2xl border border-primary-200 bg-white p-3">
+              <button type="button" onClick={() => setEditingFeaturedIndex(index)} className="min-h-12 min-w-0 flex-1 rounded-xl px-2 text-left hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue">
+                <span className="block truncate font-semibold text-primary-950">{item.sku || 'Part number needed'}{item.name ? ` — ${item.name}` : ''}</span>
+                <span className="mt-1 block text-xs text-primary-500">{placementOptions.find((option) => option.value === item.placementKey)?.label || item.placementKey}</span>
+              </button>
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${item.isActive ? 'bg-green-50 text-green-700' : 'bg-primary-100 text-primary-600'}`}>{item.isActive ? 'Active' : 'Hidden'}</span>
+              <button type="button" onClick={() => setEditingFeaturedIndex(index)} className="min-h-10 rounded-lg border border-primary-200 px-3 text-sm font-semibold text-primary-700 hover:border-accent-primary hover:text-accent-primary">Edit</button>
+            </div>
+          )) : featuredItems.map((item, index) => index === editingFeaturedIndex && (
             <div key={item.id || index} className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <SelectField label="Placement" value={item.placementKey} options={placementOptions} onChange={(value) => updateFeaturedItem(index, { placementKey: value })} />
@@ -433,10 +535,11 @@ export default function CatalogContentCmsPanel() {
                   <input type="checkbox" checked={item.isActive} onChange={(event) => updateFeaturedItem(index, { isActive: event.target.checked })} />
                   Active
                 </label>
-                <button type="button" className="btn btn-primary" disabled={savingKey === `featured-${index}`} onClick={() => void saveFeatured(index)}>
+                <button type="button" className="btn btn-primary hidden sm:inline-flex" disabled={savingKey === `featured-${index}`} onClick={() => void saveFeatured(index)}>
                   {savingKey === `featured-${index}` ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Save
                 </button>
+                <button type="button" className="btn btn-secondary hidden sm:inline-flex" disabled={savingKey !== ''} onClick={discardChanges}>Cancel</button>
                 <button type="button" className="btn btn-secondary text-accent-danger" onClick={() => void removeFeatured(index)}>
                   <Trash2 className="h-4 w-4" />
                   Remove
@@ -446,45 +549,50 @@ export default function CatalogContentCmsPanel() {
           ))}
         </div>
       </section>
+      )}
 
-      <section className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
+      {activeView === 'packages' && <section className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-xl font-display font-semibold text-primary-950">Recommendation Packages</h2>
             <p className="mt-1 text-sm text-primary-500">Curate public smart bundles by anchor product, included parts, and included labor.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn btn-secondary" onClick={() => setPackages((items) => [...items, createEmptyRecommendationPackage()])}>
+          {editingPackageIndex === null && <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn btn-secondary" onClick={() => {
+              setPackages((items) => [...items, createEmptyRecommendationPackage()]);
+              setEditingPackageIndex(packages.length);
+              setEditingFeaturedIndex(null);
+            }}>
               <Plus className="h-4 w-4" />
               Add Package
             </button>
-            <button type="button" className="btn btn-primary" onClick={() => setPackages((items) => [...items, createEmptyServiceRecommendationPackage()])}>
+            <button type="button" className="btn btn-primary" onClick={() => {
+              setPackages((items) => [...items, createEmptyServiceRecommendationPackage()]);
+              setEditingPackageIndex(packages.length);
+              setEditingFeaturedIndex(null);
+            }}>
               <Plus className="h-4 w-4" />
               Add Service Package
             </button>
-          </div>
+          </div>}
         </div>
 
-        <div className="mt-5 grid gap-3 lg:grid-cols-3">
-          <div className="rounded-2xl border border-accent-blue/20 bg-accent-blue/10 p-4">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent-blue">Where it appears</p>
-            <p className="mt-2 text-sm font-semibold text-primary-950">Genuine Parts and Get Estimate</p>
-            <p className="mt-1 text-sm text-primary-600">Packages show when a customer selects the anchor product or opens a matching smart bundle.</p>
-          </div>
-          <div className="rounded-2xl border border-primary-200 bg-white p-4">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-500">Anchor product</p>
-            <p className="mt-2 text-sm text-primary-600">This is the main part that triggers the package recommendations.</p>
-          </div>
-          <div className="rounded-2xl border border-primary-200 bg-white p-4">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-500">Package items</p>
-            <p className="mt-2 text-sm text-primary-600">Add the parts and labor that should be offered together in the quote builder.</p>
-          </div>
-        </div>
+        <p className="mt-3 text-sm text-primary-500">These bundles appear in Get Estimate when a customer chooses a matching part or service.</p>
 
         <div className="mt-5 space-y-4">
           {packages.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-primary-300 bg-primary-50 p-8 text-center text-primary-500">No curated packages yet.</div>
-          ) : packages.map((pkg, packageIndex) => (
+          ) : editingPackageIndex === null ? packages.map((pkg, packageIndex) => (
+            <div key={pkg.id || packageIndex} className="flex flex-wrap items-center gap-3 rounded-2xl border border-primary-200 bg-white p-3">
+              <button type="button" onClick={() => setEditingPackageIndex(packageIndex)} className="min-h-12 min-w-0 flex-1 rounded-xl px-2 text-left hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue">
+                <span className="block truncate font-semibold text-primary-950">{pkg.packageName || pkg.packageKey || 'Untitled package'}</span>
+                <span className="mt-1 block truncate text-xs text-primary-500">{pkg.anchorProductSku || 'Choose an anchor part'}{pkg.anchorProductName ? ` — ${pkg.anchorProductName}` : ''} · {pkg.items.length} item(s)</span>
+              </button>
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${pkg.isActive ? 'bg-green-50 text-green-700' : 'bg-primary-100 text-primary-600'}`}>{pkg.isActive ? 'Active' : 'Hidden'}</span>
+              {!hasValidRecommendationPackageItems(pkg) && <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">Needs items</span>}
+              <button type="button" onClick={() => setEditingPackageIndex(packageIndex)} className="min-h-10 rounded-lg border border-primary-200 px-3 text-sm font-semibold text-primary-700 hover:border-accent-primary hover:text-accent-primary">Edit</button>
+            </div>
+          )) : packages.map((pkg, packageIndex) => packageIndex === editingPackageIndex && (
             <div key={pkg.id || packageIndex} className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <ProductSearchSelect label="Anchor product" value={pkg.anchorProductId} products={products} selectedLabel={pkg.anchorProductSku || pkg.anchorProductName ? `${pkg.anchorProductSku || 'No part number'} - ${pkg.anchorProductName || 'Unnamed product'}` : ''} onChange={(value, selectedProduct) => updatePackage(packageIndex, {
@@ -543,7 +651,10 @@ export default function CatalogContentCmsPanel() {
                       <Field label="Order" type="number" value={item.displayPriority} onChange={(value) => updatePackageItem(packageIndex, itemIndex, { displayPriority: Number(value) })} />
                     </div>
                     <div className="mt-3 flex justify-end">
-                      <button type="button" className="text-sm font-semibold text-accent-danger" onClick={() => updatePackage(packageIndex, { items: pkg.items.filter((_, nextIndex) => nextIndex !== itemIndex) })}>Remove item</button>
+                      <button type="button" className="min-h-11 px-2 text-sm font-semibold text-accent-danger" onClick={() => {
+                        if (!window.confirm('Remove this part or service from the package?')) return;
+                        updatePackage(packageIndex, { items: pkg.items.filter((_, nextIndex) => nextIndex !== itemIndex) });
+                      }}>Remove item</button>
                     </div>
                   </div>
                 ))}
@@ -559,10 +670,11 @@ export default function CatalogContentCmsPanel() {
                   <input type="checkbox" checked={pkg.isActive} onChange={(event) => updatePackage(packageIndex, { isActive: event.target.checked })} />
                   Active
                 </label>
-                <button type="button" className="btn btn-primary" disabled={savingKey === `package-${packageIndex}`} onClick={() => void savePackage(packageIndex)}>
+                <button type="button" className="btn btn-primary hidden sm:inline-flex" disabled={savingKey === `package-${packageIndex}`} onClick={() => void savePackage(packageIndex)}>
                   {savingKey === `package-${packageIndex}` ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Save Package
                 </button>
+                <button type="button" className="btn btn-secondary hidden sm:inline-flex" disabled={savingKey !== ''} onClick={discardChanges}>Cancel</button>
                 <button type="button" className="btn btn-secondary text-accent-danger" onClick={() => void removePackage(packageIndex)}>
                   <Trash2 className="h-4 w-4" />
                   Remove Package
@@ -571,7 +683,17 @@ export default function CatalogContentCmsPanel() {
             </div>
           ))}
         </div>
-      </section>
+      </section>}
+      {hasUnsavedChanges && (editingFeaturedIndex !== null || editingPackageIndex !== null) && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-primary-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur sm:hidden">
+          <div className="mx-auto flex max-w-2xl gap-3">
+            <button type="button" disabled={savingKey !== ''} onClick={discardChanges} className="min-h-12 flex-1 rounded-xl border border-primary-200 bg-white px-4 text-sm font-semibold text-primary-700 disabled:opacity-60">Cancel</button>
+            <button type="button" disabled={savingKey !== ''} onClick={() => editingFeaturedIndex !== null ? void saveFeatured(editingFeaturedIndex) : editingPackageIndex !== null ? void savePackage(editingPackageIndex) : undefined} className="min-h-12 flex-1 rounded-xl bg-accent-primary px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60">
+              {savingKey ? 'Saving…' : 'Save changes'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

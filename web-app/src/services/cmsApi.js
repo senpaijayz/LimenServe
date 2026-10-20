@@ -40,11 +40,12 @@ export async function getCmsPage(slug) {
   }
 }
 
-export async function saveCmsPage(payload) {
+export async function saveCmsPage(payload, { currentSlug = '' } = {}) {
   try {
-    const method = payload?.slug ? 'put' : 'post';
-    const url = payload?.slug ? `/cms/pages/${encodeURIComponent(payload.slug)}` : '/cms/pages';
-    const { data } = await apiClient[method](url, payload);
+    const existingSlug = String(currentSlug || '').trim();
+    const { data } = existingSlug
+      ? await apiClient.put(`/cms/pages/${encodeURIComponent(existingSlug)}`, payload)
+      : await apiClient.post('/cms/pages', payload);
     clearApiClientCache((key) => key.startsWith('/public/cms/'));
     return data.page;
   } catch (error) {

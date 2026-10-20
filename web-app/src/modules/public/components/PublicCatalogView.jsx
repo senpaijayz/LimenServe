@@ -295,13 +295,13 @@ const PublicCatalogView = () => {
   return (
     <div className="bg-primary-50 min-h-screen relative font-sans text-primary-900">
       <div className="absolute top-0 right-0 h-[60vh] w-full bg-gradient-to-b from-white via-primary-50 to-primary-50 -z-10" />
-      <div className="absolute top-[-20%] right-[-10%] w-[70vw] h-[70vw] bg-accent-blue/10 rounded-full blur-[150px] mix-blend-multiply -z-10 pointer-events-none opacity-60" />
+      <div className="absolute top-[-20%] right-0 w-[70vw] h-[70vw] bg-accent-blue/10 rounded-full blur-[150px] mix-blend-multiply -z-10 pointer-events-none opacity-60" />
       <div className="absolute top-[20%] left-[-10%] w-[40vw] h-[40vw] bg-accent-danger/5 rounded-full blur-[120px] mix-blend-multiply -z-10 pointer-events-none opacity-50" />
 
       <section className="relative z-20 px-4 pb-7 pt-24 md:px-8 md:pt-28 xl:px-12">
         <div className="max-w-[1600px] mx-auto">
           <div className="relative mb-6 overflow-hidden rounded-[28px] border border-primary-200 bg-white px-5 py-6 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.45)] sm:px-7 sm:py-8 lg:px-10">
-            <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-accent-blue/10 blur-3xl" />
+            <div className="pointer-events-none absolute right-0 -top-24 h-64 w-64 rounded-full bg-accent-blue/10 blur-3xl" />
             <div className="relative">
               <div className="max-w-3xl">
               <Motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="mb-4 flex items-center gap-3">

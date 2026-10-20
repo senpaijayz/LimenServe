@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowLeft,
   ArrowDown,
   ArrowUp,
-  Boxes,
-  CheckCircle2,
-  ClipboardList,
-  Clock3,
+  Eye,
   ExternalLink,
   FileText,
   Globe2,
@@ -20,12 +18,12 @@ import {
   Upload,
 } from 'lucide-react';
 import { Link } from 'react-router';
+import Modal from '../../../components/ui/Modal';
 import CatalogContentCmsPanel from '../catalog-content/CatalogContentCmsPanel';
+import DynamicPageRenderer from '../../public/components/DynamicPageRenderer';
 import {
   buildPageLinkOptions,
   canDeleteCmsPage,
-  normalizeCmsPageSlugFromHref,
-  withCurrentPageLinkOption,
 } from './cmsPageLinks';
 import { useToast } from '../../../components/ui/Toast';
 import {
@@ -38,9 +36,6 @@ import {
   saveCmsSiteSettings,
   uploadCmsImage,
 } from '../../../services/cmsApi';
-import { getCatalogSummary } from '../../../services/catalogApi';
-import { listEstimates } from '../../../services/estimatesApi';
-import { getAdminNotifications } from '../../../services/notificationsApi';
 
 const SECTION_TYPES = [
   { value: 'hero', label: 'Hero banner' },
@@ -553,27 +548,6 @@ function defaultDraftForSlug(slug) {
   return null;
 }
 
-function mergeRequiredSections(page) {
-  const defaultPage = defaultDraftForSlug(page?.slug);
-  if (!defaultPage) {
-    return page;
-  }
-
-  const existingSections = Array.isArray(page.sections) ? page.sections : [];
-  const existingKeys = new Set(existingSections.map((section) => section.sectionKey || section.section_key));
-  const missingSections = defaultPage.sections.filter((section) => !existingKeys.has(section.sectionKey));
-
-  return {
-    ...defaultPage,
-    ...page,
-    seo: {
-      ...defaultPage.seo,
-      ...(page.seo ?? {}),
-    },
-    sections: [...existingSections, ...missingSections].sort((a, b) => Number(a.sortOrder ?? a.sort_order ?? 0) - Number(b.sortOrder ?? b.sort_order ?? 0)),
-  };
-}
-
 function createPageDraft(overrides = {}) {
   return {
     slug: '',
@@ -653,6 +627,11 @@ function makeSlug(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function isCmsPageHref(href, slug) {
+  const value = String(href || '').trim();
+  return value === slug || value === `/${slug}` || value === `/${slug}/`;
 }
 
 function toInteger(value, fallback) {
@@ -744,7 +723,7 @@ function StatusBadge({ status }) {
   );
 }
 
-function Field({ label, value, onChange, placeholder = '', helper = '', type = 'text' }) {
+function Field({ label, value, onChange, placeholder = '', helper = '', type = 'text', disabled = false }) {
   return (
     <label className="block">
       <span className="text-xs font-bold uppercase tracking-[0.18em] text-primary-500">{label}</span>
@@ -752,8 +731,9 @@ function Field({ label, value, onChange, placeholder = '', helper = '', type = '
         type={type}
         value={value ?? ''}
         placeholder={placeholder}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-2 w-full rounded-2xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-900 outline-none transition focus:border-accent-primary focus:ring-4 focus:ring-accent-primary/10"
+        className="mt-2 w-full min-w-0 rounded-2xl border border-primary-200 bg-white px-4 py-3 text-sm text-primary-900 outline-none transition focus:border-accent-primary focus:ring-4 focus:ring-accent-primary/10 disabled:cursor-not-allowed disabled:bg-primary-50 disabled:text-primary-500"
       />
       {helper && <span className="mt-2 block text-xs text-primary-500">{helper}</span>}
     </label>
@@ -1171,158 +1151,55 @@ function SectionEditor({ section, index, total, onChange, onMove, onRemove, onIm
   );
 }
 
-function formatOverviewEstimateStatus(value) {
-  return String(value || 'unknown').replace(/_/g, ' ');
-}
-
-function CmsOverview({ pageCount, catalogSummary, estimates, notifications, onRefresh, refreshing }) {
-  const estimateRows = Array.isArray(estimates) ? estimates : [];
-  const activeEstimateRows = estimateRows.filter((estimate) => !['completed', 'cancelled', 'declined'].includes(String(estimate.status || '').toLowerCase()));
-  const summary = catalogSummary && typeof catalogSummary === 'object' ? catalogSummary : null;
-  const metricCards = [
-    {
-      label: 'Catalog products',
-      value: summary ? Number(summary.totalProducts ?? summary.uniqueProducts ?? 0).toLocaleString() : '—',
-      detail: summary ? `${Number(summary.inStockProducts ?? 0).toLocaleString()} in stock · ${Number(summary.currentPrices ?? 0).toLocaleString()} priced` : 'Catalog summary unavailable',
-      icon: Boxes,
-      href: '/products',
-    },
-    {
-      label: 'Open estimates',
-      value: estimates ? activeEstimateRows.length.toLocaleString() : '—',
-      detail: estimates ? `${estimateRows.length.toLocaleString()} recent requests loaded` : 'Estimate list unavailable',
-      icon: ClipboardList,
-      href: '/quotation',
-    },
-    {
-      label: 'Published pages',
-      value: Number(pageCount || 0).toLocaleString(),
-      detail: 'Managed from the Pages editor',
-      icon: CheckCircle2,
-      href: '/cms',
-    },
-    {
-      label: 'Inventory value',
-      value: summary ? `₱${Number(summary.inventoryValue ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—',
-      detail: summary ? 'Current catalog snapshot' : 'Catalog summary unavailable',
-      icon: Clock3,
-      href: '/inventory',
-    },
+function CmsOverview({ onEditPage, onOpenTab, onRefresh, refreshing }) {
+  const actions = [
+    { title: 'Edit Homepage', detail: 'Change the first page visitors see.', icon: <Globe2 className="h-5 w-5" />, onClick: () => onEditPage('home') },
+    { title: 'Edit About Page', detail: 'Update the store story and information.', icon: <FileText className="h-5 w-5" />, onClick: () => onEditPage('about') },
+    { title: 'Featured Products', detail: 'Choose parts to highlight on the website.', icon: <PackageSearch className="h-5 w-5" />, onClick: () => onOpenTab('catalog') },
+    { title: 'Contact Information', detail: 'Update phone, address, hours, and logo.', icon: <Settings className="h-5 w-5" />, onClick: () => onOpenTab('settings') },
+    { title: 'Website Navigation', detail: 'Organize top-menu and footer links.', icon: <Navigation className="h-5 w-5" />, onClick: () => onOpenTab('navigation') },
   ];
 
   return (
-    <div className="space-y-6 p-5 lg:p-6">
-      <section className="rounded-3xl border border-primary-200 bg-primary-950 p-6 text-white shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-5 p-4 sm:p-6">
+      <section className="rounded-3xl border border-primary-200 bg-primary-950 p-5 text-white sm:p-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary-300">CMS workspace</p>
-            <h2 className="mt-3 text-2xl font-display font-bold">Manage the parts of LIMEN that change often.</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-primary-200">
-              Use the focused editors below for website content, catalog highlights, site settings, and navigation. Operational modules remain connected through the existing staff workspace.
-            </p>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary-300">Website overview</p>
+            <h2 className="mt-2 text-2xl font-display font-bold">What would you like to update?</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-primary-200">Choose an area below. You can preview your changes before saving them.</p>
           </div>
-          <button
-            type="button"
-            onClick={onRefresh}
-            disabled={refreshing}
-            className="inline-flex items-center gap-2 rounded-2xl border border-primary-700 bg-primary-900/70 px-4 py-2.5 text-sm font-semibold text-white transition hover:border-primary-400 hover:bg-primary-800 disabled:cursor-wait disabled:opacity-70"
-          >
+          <button type="button" onClick={onRefresh} disabled={refreshing} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-700 bg-primary-900/70 px-4 text-sm font-semibold text-white hover:bg-primary-800 disabled:opacity-60">
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Refreshing…' : 'Refresh workspace'}
+            {refreshing ? 'Refreshing…' : 'Refresh pages'}
           </button>
         </div>
       </section>
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {metricCards.map((metric) => {
-          const Icon = metric.icon;
-          return (
-            <Link key={metric.label} to={metric.href} className="group rounded-3xl border border-primary-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-accent-primary hover:shadow-md">
-              <div className="flex items-start justify-between gap-3">
-                <span className="rounded-2xl bg-primary-50 p-3 text-accent-primary"><Icon className="h-5 w-5" /></span>
-                <ExternalLink className="h-4 w-4 text-primary-300 transition group-hover:text-accent-primary" />
-              </div>
-              <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-primary-500">{metric.label}</p>
-              <p className="mt-2 text-2xl font-display font-bold text-primary-950">{metric.value}</p>
-              <p className="mt-1 text-xs text-primary-500">{metric.detail}</p>
-            </Link>
-          );
-        })}
+      <section aria-label="Website management actions" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {actions.map(({ title, detail, icon, onClick }) => (
+          <button key={title} type="button" onClick={onClick} className="group flex min-h-24 items-center gap-4 rounded-2xl border border-primary-200 bg-white p-4 text-left shadow-sm transition hover:border-accent-primary hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue">
+            <span className="rounded-xl bg-primary-50 p-3 text-accent-primary">{icon}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold text-primary-950">{title}</span>
+              <span className="mt-1 block text-sm text-primary-500">{detail}</span>
+            </span>
+            <ExternalLink className="h-4 w-4 shrink-0 text-primary-300 transition group-hover:text-accent-primary" />
+          </button>
+        ))}
+        <a href="/" target="_blank" rel="noreferrer" className="group flex min-h-24 items-center gap-4 rounded-2xl border border-primary-200 bg-white p-4 text-left shadow-sm transition hover:border-accent-primary hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue">
+          <span className="rounded-xl bg-primary-50 p-3 text-accent-primary"><Eye className="h-5 w-5" /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold text-primary-950">View Public Website</span>
+            <span className="mt-1 block text-sm text-primary-500">Open the customer-facing site in a new tab.</span>
+          </span>
+          <ExternalLink className="h-4 w-4 shrink-0 text-primary-300 transition group-hover:text-accent-primary" />
+        </a>
       </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
-        <div className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-xl font-display font-semibold text-primary-950">Recent estimate requests</h3>
-              <p className="mt-1 text-sm text-primary-500">Open the quotation workspace to review, price, and update a request.</p>
-            </div>
-            <Link to="/quotation" className="text-sm font-semibold text-accent-primary hover:text-accent-blueDark">View all</Link>
-          </div>
-
-          {estimates === null ? (
-            <div className="mt-5 rounded-2xl border border-dashed border-primary-300 bg-primary-50 p-5 text-sm text-primary-600">Estimate requests are temporarily unavailable.</div>
-          ) : estimateRows.length === 0 ? (
-            <div className="mt-5 rounded-2xl border border-dashed border-primary-300 bg-primary-50 p-5 text-sm text-primary-600">No estimate requests have been received yet.</div>
-          ) : (
-            <div className="mt-5 divide-y divide-primary-100 rounded-2xl border border-primary-200">
-              {estimateRows.slice(0, 6).map((estimate) => (
-                <Link key={estimate.id || estimate.estimate_number} to="/quotation" className="flex items-center justify-between gap-4 p-4 transition hover:bg-primary-50">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-primary-950">{estimate.estimate_number || 'Estimate request'}</p>
-                    <p className="mt-1 truncate text-sm text-primary-500">{estimate.customer_name || estimate.customerName || estimate.phone || 'Customer details pending'}</p>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-primary-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-primary-600">{formatOverviewEstimateStatus(estimate.status)}</span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
-          <h3 className="text-xl font-display font-semibold text-primary-950">Quick actions</h3>
-          <p className="mt-1 text-sm text-primary-500">Go directly to the workflow you need.</p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            <Link to="/products" className="rounded-2xl border border-primary-200 bg-primary-50 p-4 transition hover:border-accent-primary hover:bg-white">
-              <p className="font-semibold text-primary-950">Manage products</p>
-              <p className="mt-1 text-sm text-primary-500">Add, edit, publish, archive, and search catalog products.</p>
-            </Link>
-            <Link to="/quotation" className="rounded-2xl border border-primary-200 bg-primary-50 p-4 transition hover:border-accent-primary hover:bg-white">
-              <p className="font-semibold text-primary-950">Review estimates</p>
-              <p className="mt-1 text-sm text-primary-500">Open requests, add parts or services, and save a quote.</p>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-xl font-display font-semibold text-primary-950">Recent activity</h3>
-            <p className="mt-1 text-sm text-primary-500">Operational events generated by existing admin workflows.</p>
-          </div>
-          {notifications && <span className="rounded-full bg-primary-100 px-3 py-1 text-xs font-bold text-primary-600">{notifications.unreadCount} unread</span>}
-        </div>
-
-        {notifications === null ? (
-          <div className="mt-5 rounded-2xl border border-dashed border-primary-300 bg-primary-50 p-5 text-sm text-primary-600">Activity is temporarily unavailable.</div>
-        ) : notifications.notifications.length === 0 ? (
-          <div className="mt-5 rounded-2xl border border-dashed border-primary-300 bg-primary-50 p-5 text-sm text-primary-600">No recent activity has been recorded yet.</div>
-        ) : (
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
-            {notifications.notifications.slice(0, 8).map((notification) => (
-              <Link key={notification.id} to={notification.targetPath || '/dashboard'} className="rounded-2xl border border-primary-200 bg-primary-50/60 p-4 transition hover:border-accent-primary hover:bg-white">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="font-semibold text-primary-950">{notification.title || 'Admin activity'}</p>
-                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${notification.read ? 'bg-primary-200' : 'bg-accent-danger'}`} title={notification.read ? 'Read' : 'Unread'} />
-                </div>
-                <p className="mt-1 text-sm leading-relaxed text-primary-600">{notification.message || 'Open the linked workflow for details.'}</p>
-                {notification.createdAt && <time className="mt-3 block text-xs text-primary-400">{new Date(notification.createdAt).toLocaleString('en-PH')}</time>}
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+      <div className="flex justify-end">
+        <button type="button" onClick={() => onOpenTab('pages')} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-200 bg-white px-4 text-sm font-semibold text-primary-700 hover:border-accent-primary hover:text-accent-primary">
+          Manage all pages <ArrowLeft className="h-4 w-4 rotate-180" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1338,13 +1215,22 @@ const tabs = [
 export default function CmsAdmin() {
   const { success, error: showError } = useToast();
   const skipNextPageLoadSlugRef = useRef('');
-  const mountedRef = useRef(true);
+  const mountedRef = useRef(false);
+  const cmsRequestIdRef = useRef(0);
+  const cmsLoadPromiseRef = useRef(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingMessage, setSavingMessage] = useState('');
   const [pageLoading, setPageLoading] = useState(false);
+  const [pageLoadError, setPageLoadError] = useState('');
+  const [pageRetryKey, setPageRetryKey] = useState(0);
+  const [mobilePageEditorOpen, setMobilePageEditorOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewViewport, setPreviewViewport] = useState('mobile');
+  const [hasVisitedCatalog, setHasVisitedCatalog] = useState(false);
+  const [catalogHasUnsavedChanges, setCatalogHasUnsavedChanges] = useState(false);
   const [deletingSlug, setDeletingSlug] = useState('');
   const [uploadingKey, setUploadingKey] = useState('');
   const [pages, setPages] = useState([]);
@@ -1353,9 +1239,8 @@ export default function CmsAdmin() {
   const [pageDraft, setPageDraft] = useState(createPageDraft());
   const [settingsDraft, setSettingsDraft] = useState(DEFAULT_SETTINGS);
   const [navigationDraft, setNavigationDraft] = useState([]);
-  const [catalogSummary, setCatalogSummary] = useState(null);
-  const [recentEstimates, setRecentEstimates] = useState(null);
-  const [recentNotifications, setRecentNotifications] = useState(null);
+  const [navigationEditIndex, setNavigationEditIndex] = useState(null);
+  const [siteLoadError, setSiteLoadError] = useState('');
   const [savedPageSnapshot, setSavedPageSnapshot] = useState('');
   const [savedSettingsSnapshot, setSavedSettingsSnapshot] = useState(JSON.stringify(DEFAULT_SETTINGS));
   const [savedNavigationSnapshot, setSavedNavigationSnapshot] = useState('[]');
@@ -1368,21 +1253,20 @@ export default function CmsAdmin() {
       ? pageSnapshot !== savedPageSnapshot
       : !selectedSlug && Boolean(pageDraft.title || pageDraft.sections?.length)
   );
-  const hasUnsavedChanges = activeTab === 'pages'
+  const settingsIsDirty = settingsSnapshot !== savedSettingsSnapshot;
+  const navigationIsDirty = navigationSnapshot !== savedNavigationSnapshot;
+  const activeTabHasUnsavedChanges = activeTab === 'pages'
     ? pageIsDirty
     : activeTab === 'settings'
-      ? settingsSnapshot !== savedSettingsSnapshot
+      ? settingsIsDirty
       : activeTab === 'navigation'
-        ? navigationSnapshot !== savedNavigationSnapshot
-        : false;
+        ? navigationIsDirty
+        : activeTab === 'catalog' && catalogHasUnsavedChanges;
+  const hasUnsavedChanges = pageIsDirty || settingsIsDirty || navigationIsDirty || catalogHasUnsavedChanges;
 
   const selectedPage = useMemo(
     () => pages.find((page) => page.slug === selectedSlug),
     [pages, selectedSlug],
-  );
-  const pageLinkOptions = useMemo(
-    () => withCurrentPageLinkOption(buildPageLinkOptions(navigationDraft), pageDraft.slug),
-    [navigationDraft, pageDraft.slug],
   );
   const activeSectionIndex = useMemo(() => {
     const sections = pageDraft.sections ?? [];
@@ -1393,53 +1277,82 @@ export default function CmsAdmin() {
   }, [activeSectionKey, pageDraft.sections]);
   const activeSection = activeSectionIndex >= 0 ? pageDraft.sections[activeSectionIndex] : null;
 
-  const loadCms = useCallback(async ({ isRefresh = false } = {}) => {
+  const loadCms = useCallback(({ isRefresh = false } = {}) => {
+    if (!isRefresh && cmsLoadPromiseRef.current) {
+      return cmsLoadPromiseRef.current;
+    }
+
+    const requestId = ++cmsRequestIdRef.current;
     if (isRefresh) {
       setRefreshing(true);
     } else {
       setLoading(true);
     }
-    try {
-      const [pageRows, site, summary, estimates, notificationResult] = await Promise.all([
-        listCmsPages(),
-        getPublicCmsSite().catch(() => ({ settings: {}, navigation: [] })),
-        getCatalogSummary().catch(() => null),
-        listEstimates('', 20).catch(() => null),
-        getAdminNotifications({ limit: 20 }).catch(() => null),
-      ]);
+    const request = (async () => {
+      try {
+        const [pageRows, siteResult] = await Promise.all([
+          listCmsPages(),
+          isRefresh
+            ? Promise.resolve(null)
+            : getPublicCmsSite().then((site) => ({ site, error: null })).catch((siteError) => ({ site: null, error: siteError })),
+        ]);
 
-      if (!mountedRef.current) {
-        return;
-      }
+        if (!mountedRef.current || requestId !== cmsRequestIdRef.current) {
+          return;
+        }
 
-      const editablePages = ensureEditablePublicPages(pageRows);
-      const normalizedSettings = normalizeSettings(site?.settings ?? {});
-      const normalizedNavigation = normalizeNavigationItems(site?.navigation ?? []);
-      setPages(editablePages);
-      setCatalogSummary(summary);
-      setRecentEstimates(Array.isArray(estimates) ? estimates : null);
-      setRecentNotifications(notificationResult?.notifications ? notificationResult : null);
-      setSettingsDraft(normalizedSettings);
-      setSavedSettingsSnapshot(JSON.stringify(normalizedSettings));
-      setNavigationDraft(normalizedNavigation);
-      setSavedNavigationSnapshot(JSON.stringify(normalizedNavigation));
-      setSelectedSlug(editablePages[0]?.slug || '');
-    } catch (loadError) {
-      if (mountedRef.current) {
-        showError(loadError.message || 'Failed to load CMS content.');
-      }
-    } finally {
-      if (mountedRef.current) {
-        if (isRefresh) {
-          setRefreshing(false);
-        } else {
-          setLoading(false);
+        const editablePages = ensureEditablePublicPages(pageRows);
+        setPages(editablePages);
+        setSelectedSlug((currentSlug) => (
+          editablePages.some((page) => page.slug === currentSlug)
+            ? currentSlug
+            : editablePages[0]?.slug || ''
+        ));
+
+        if (siteResult?.site) {
+          const normalizedSettings = normalizeSettings(siteResult.site.settings ?? {});
+          const normalizedNavigation = normalizeNavigationItems(siteResult.site.navigation ?? []);
+          setSettingsDraft(normalizedSettings);
+          setSavedSettingsSnapshot(JSON.stringify(normalizedSettings));
+          setNavigationDraft(normalizedNavigation);
+          setSavedNavigationSnapshot(JSON.stringify(normalizedNavigation));
+          setSiteLoadError('');
+        } else if (siteResult?.error) {
+          const message = siteResult.error?.message || 'Website details could not be loaded. Your current edits are still here.';
+          setSiteLoadError(message);
+          showError(message);
+        }
+      } catch (loadError) {
+        if (mountedRef.current && requestId === cmsRequestIdRef.current) {
+          showError(loadError.message || 'Failed to load CMS content.');
+        }
+      } finally {
+        if (mountedRef.current && requestId === cmsRequestIdRef.current) {
+          if (isRefresh) {
+            setRefreshing(false);
+          } else {
+            setLoading(false);
+          }
         }
       }
+
+    })();
+
+    if (isRefresh) {
+      return request;
     }
+
+    const trackedRequest = request.finally(() => {
+      if (cmsLoadPromiseRef.current === trackedRequest) {
+        cmsLoadPromiseRef.current = null;
+      }
+    });
+    cmsLoadPromiseRef.current = trackedRequest;
+    return trackedRequest;
   }, [showError]);
 
   useEffect(() => {
+    mountedRef.current = true;
     void loadCms();
     return () => {
       mountedRef.current = false;
@@ -1449,35 +1362,51 @@ export default function CmsAdmin() {
   useEffect(() => {
     let active = true;
 
-    async function loadPage() {
-      if (!selectedSlug) {
-        return;
-      }
+    if (!selectedSlug) {
+      setPageLoading(false);
+      setPageLoadError('');
+      return () => {
+        active = false;
+      };
+    }
 
+    if (selectedPage?.isLocalDraft) {
+      const fallbackDraft = defaultDraftForSlug(selectedSlug);
+      if (fallbackDraft) {
+        const normalizedDraft = normalizePage(fallbackDraft);
+        setPageDraft(normalizedDraft);
+        setSavedPageSnapshot('');
+      }
+      setPageLoading(false);
+      setPageLoadError('');
+      return () => {
+        active = false;
+      };
+    }
+
+    async function loadPage() {
       if (skipNextPageLoadSlugRef.current === selectedSlug) {
         skipNextPageLoadSlugRef.current = '';
         return;
       }
 
       setPageLoading(true);
+      setPageLoadError('');
       try {
         const page = await getCmsPage(selectedSlug);
-        if (!active || !page) {
+        if (!active) {
           return;
         }
+        if (!page) {
+          throw new Error('This page was not returned. Refresh the page list or try again.');
+        }
 
-        const normalizedPage = normalizePage(mergeRequiredSections(page));
+        const normalizedPage = normalizePage(page);
         setPageDraft(normalizedPage);
         setSavedPageSnapshot(JSON.stringify(normalizedPage));
       } catch (loadError) {
-        const fallbackDraft = defaultDraftForSlug(selectedSlug);
-        if (active && fallbackDraft) {
-          setPageDraft(fallbackDraft);
-          setSavedPageSnapshot('');
-          return;
-        }
         if (active) {
-          showError(loadError.message || 'Failed to load selected page.');
+          setPageLoadError(loadError.message || 'This page could not be loaded. Your previous content has been kept.');
         }
       } finally {
         if (active) {
@@ -1491,7 +1420,7 @@ export default function CmsAdmin() {
     return () => {
       active = false;
     };
-  }, [selectedSlug, showError]);
+  }, [selectedSlug, selectedPage?.isLocalDraft, pageRetryKey]);
 
   useEffect(() => {
     const sections = pageDraft.sections ?? [];
@@ -1520,9 +1449,40 @@ export default function CmsAdmin() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
+  useEffect(() => {
+    if (!hasUnsavedChanges) return undefined;
+
+    const handleInternalNavigation = (event) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+
+      const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+      if (!link || link.hasAttribute('download') || (link.target && link.target !== '_self')) return;
+
+      let targetUrl;
+      try {
+        targetUrl = new URL(link.href, window.location.href);
+      } catch {
+        return;
+      }
+
+      if (targetUrl.origin !== window.location.origin) return;
+      if (targetUrl.pathname === window.location.pathname && targetUrl.search === window.location.search) return;
+
+      if (!window.confirm('You have unsaved changes. Leave this editor and discard them?')) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    };
+
+    document.addEventListener('click', handleInternalNavigation, true);
+    return () => document.removeEventListener('click', handleInternalNavigation, true);
+  }, [hasUnsavedChanges]);
+
   const confirmDiscardChanges = () => (
     !hasUnsavedChanges
-    || window.confirm('You have unsaved CMS changes. Leave this editor without saving them?')
+    || window.confirm('You have unsaved CMS changes. Continue to another area? Your edits will remain here if you return.')
   );
 
   const handleTabChange = (nextTab) => {
@@ -1530,24 +1490,33 @@ export default function CmsAdmin() {
       return;
     }
 
+    if (nextTab === 'catalog') setHasVisitedCatalog(true);
     setActiveTab(nextTab);
   };
 
   const handleSelectPage = (nextSlug) => {
-    if (nextSlug === selectedSlug || !confirmDiscardChanges()) {
+    if (nextSlug === selectedSlug) {
+      setMobilePageEditorOpen(true);
+      return;
+    }
+    if (pageIsDirty && !window.confirm('This page has unsaved changes. Switch to another page and discard those changes?')) {
       return;
     }
 
     setSavedPageSnapshot('');
     setSelectedSlug(nextSlug);
+    setMobilePageEditorOpen(true);
   };
 
   const applySavedPage = (savedPage) => {
-    const normalizedPage = normalizePage(mergeRequiredSections(savedPage));
+    const normalizedPage = normalizePage(savedPage);
     const savedSummary = buildCmsPageSummary(normalizedPage);
 
     setPages((currentPages) => {
-      const editablePages = ensureEditablePublicPages(currentPages);
+      let editablePages = ensureEditablePublicPages(currentPages);
+      if (!selectedPage?.isLocalDraft && selectedSlug && selectedSlug !== savedSummary.slug) {
+        editablePages = editablePages.filter((page) => page.slug !== selectedSlug);
+      }
       const existingIndex = editablePages.findIndex((page) => page.slug === savedSummary.slug);
       if (existingIndex < 0) {
         return [...editablePages, savedSummary];
@@ -1562,6 +1531,21 @@ export default function CmsAdmin() {
 
     setPageDraft(normalizedPage);
     setSavedPageSnapshot(JSON.stringify(normalizedPage));
+    setPageLoadError('');
+    setMobilePageEditorOpen(true);
+    if (!selectedPage?.isLocalDraft && selectedSlug !== savedSummary.slug) {
+      const updateMatchingLink = (item) => {
+        if (!isCmsPageHref(item.href, selectedSlug)) return item;
+        const href = String(item.href || '');
+        const prefix = href.startsWith('/') ? '/' : '';
+        const suffix = href.endsWith('/') ? '/' : '';
+        return { ...item, href: `${prefix}${savedSummary.slug}${suffix}` };
+      };
+      const updatedNavigation = normalizeNavigationItems(navigationDraft.map(updateMatchingLink));
+      const savedNavigation = normalizeNavigationItems(JSON.parse(savedNavigationSnapshot).map(updateMatchingLink));
+      setNavigationDraft(updatedNavigation);
+      setSavedNavigationSnapshot(JSON.stringify(savedNavigation));
+    }
     skipNextPageLoadSlugRef.current = selectedSlug === savedSummary.slug ? '' : savedSummary.slug;
     setSelectedSlug(savedSummary.slug);
   };
@@ -1611,6 +1595,10 @@ export default function CmsAdmin() {
   };
 
   const removeSection = (index) => {
+    const section = pageDraft.sections[index];
+    if (!window.confirm(`Remove “${section?.title || 'this section'}” from this page? You can add a new section later.`)) {
+      return;
+    }
     setPageDraft((draft) => ({
       ...draft,
       sections: draft.sections.filter((_, sectionIndex) => sectionIndex !== index),
@@ -1662,7 +1650,7 @@ export default function CmsAdmin() {
   };
 
   const handleCreatePage = () => {
-    if (!confirmDiscardChanges()) {
+    if (pageIsDirty && !window.confirm('This page has unsaved changes. Start a new page and discard them?')) {
       return;
     }
 
@@ -1678,14 +1666,31 @@ export default function CmsAdmin() {
       status: 'draft',
       sections: [createDefaultSection('hero', 0)],
     }));
+    setPageLoadError('');
+    setMobilePageEditorOpen(true);
   };
 
   const handleSavePage = async () => {
+    const payload = normalizeBeforeSave(pageDraft);
+    if (!payload.title.trim()) {
+      showError('Add a page title before saving.');
+      return;
+    }
+    if (!payload.slug.trim()) {
+      showError('Add a page address before saving.');
+      return;
+    }
+    const duplicate = pages.find((page) => page.slug === payload.slug && page.slug !== selectedSlug);
+    if (duplicate) {
+      showError('That page address is already being used. Choose a different one.');
+      return;
+    }
+
     setSaving(true);
     setSavingMessage('Saving page changes...');
     try {
-      const payload = normalizeBeforeSave(pageDraft);
-      const savedPage = await saveCmsPage(payload);
+      const currentSlug = selectedPage && !selectedPage.isLocalDraft ? selectedSlug : '';
+      const savedPage = await saveCmsPage(payload, { currentSlug });
       setSavingMessage('Updating CMS preview...');
       applySavedPage(savedPage);
       success(`CMS page saved successfully: ${savedPage.title || savedPage.slug}`);
@@ -1722,10 +1727,14 @@ export default function CmsAdmin() {
       const nextSelectedSlug = currentSelectionStillExists ? selectedSlug : remainingPages[0]?.slug || '';
       setPages(remainingPages);
       setSelectedSlug(nextSelectedSlug);
+      if (selectedSlug === page.slug) setMobilePageEditorOpen(false);
       if (!nextSelectedSlug) {
         setPageDraft(createPageDraft());
       }
-      setNavigationDraft((items) => items.filter((item) => normalizeCmsPageSlugFromHref(item.href) !== page.slug));
+      const remainingNavigation = normalizeNavigationItems(navigationDraft.filter((item) => !isCmsPageHref(item.href, page.slug)));
+      const savedNavigation = normalizeNavigationItems(JSON.parse(savedNavigationSnapshot).filter((item) => !isCmsPageHref(item.href, page.slug)));
+      setNavigationDraft(remainingNavigation);
+      setSavedNavigationSnapshot(JSON.stringify(savedNavigation));
       if (!nextSelectedSlug) {
         setSavedPageSnapshot('');
       }
@@ -1766,6 +1775,7 @@ export default function CmsAdmin() {
       const normalizedNavigation = normalizeNavigationItems(navigation);
       setNavigationDraft(normalizedNavigation);
       setSavedNavigationSnapshot(JSON.stringify(normalizedNavigation));
+      setNavigationEditIndex(null);
       success('Navigation saved successfully.');
     } catch (saveError) {
       showError(saveError.message || 'Failed to save navigation. Please try again.');
@@ -1783,8 +1793,42 @@ export default function CmsAdmin() {
         ? handleSaveNavigation
         : undefined;
 
+  const handleEditPageFromOverview = (slug) => {
+    if (!confirmDiscardChanges()) return;
+    setActiveTab('pages');
+    if (slug !== selectedSlug) {
+      setSavedPageSnapshot('');
+      setSelectedSlug(slug);
+    }
+    setMobilePageEditorOpen(true);
+  };
+
+  const discardActiveChanges = () => {
+    if (activeTab === 'pages') {
+      if (selectedPage?.isLocalDraft) {
+        const fallbackDraft = defaultDraftForSlug(selectedSlug);
+        setPageDraft(fallbackDraft ? normalizePage(fallbackDraft) : createPageDraft());
+        setSavedPageSnapshot('');
+      } else if (savedPageSnapshot) {
+        setPageDraft(JSON.parse(savedPageSnapshot));
+      } else {
+        setPageDraft(createPageDraft());
+        setSelectedSlug('');
+      }
+    } else if (activeTab === 'settings') {
+      setSettingsDraft(JSON.parse(savedSettingsSnapshot));
+    } else if (activeTab === 'navigation') {
+      setNavigationDraft(JSON.parse(savedNavigationSnapshot));
+    }
+  };
+
+  const previewPage = useMemo(() => ({
+    ...normalizePage(pageDraft),
+    sections: (pageDraft.sections || []).filter((section) => section.status !== 'archived'),
+  }), [pageDraft]);
+
   return (
-    <div className="space-y-6">
+    <div className={handleSaveActive && activeTabHasUnsavedChanges ? 'space-y-6 pb-24 md:pb-0' : 'space-y-6'}>
       <div className="overflow-hidden rounded-3xl border border-primary-200 bg-white shadow-sm">
         <div className="flex flex-col gap-5 border-b border-primary-200 bg-[radial-gradient(circle_at_top_left,_rgba(30,58,138,0.08),_transparent_30%),linear-gradient(to_right,_#ffffff,_#f8fafc)] p-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -1795,30 +1839,37 @@ export default function CmsAdmin() {
             <h1 className="mt-4 text-3xl font-display font-bold text-primary-950">Content Management</h1>
           </div>
           {handleSaveActive ? (
-            <div className="flex flex-wrap items-center justify-end gap-3">
-              {hasUnsavedChanges && (
+            <div className="hidden flex-wrap items-center justify-end gap-3 md:flex">
+              {activeTabHasUnsavedChanges && (
                 <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
                   Unsaved changes
                 </span>
               )}
               <button
                 type="button"
-                disabled={saving || !hasUnsavedChanges}
+                disabled={saving || !activeTabHasUnsavedChanges}
                 onClick={handleSaveActive}
                 className="btn btn-primary min-w-[160px] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {saving ? 'Saving...' : `Save ${activeTab === 'pages' ? 'Page' : activeTab === 'settings' ? 'Settings' : 'Navigation'}`}
+                {saving ? 'Saving...' : activeTab === 'pages' && pageDraft.status === 'published' ? 'Save and Publish' : `Save ${activeTab === 'pages' ? 'Page' : activeTab === 'settings' ? 'Details' : 'Navigation'}`}
               </button>
             </div>
           ) : (
             <div className="rounded-2xl border border-primary-200 bg-white px-4 py-3 text-sm font-semibold text-primary-600">
-              {activeTab === 'overview' ? 'Live operational snapshot.' : 'Save each catalog card after editing.'}
+              {activeTab === 'overview' ? 'Website content and settings.' : 'Save each catalog item after editing.'}
             </div>
           )}
         </div>
 
-        <div className="flex max-w-full gap-2 overflow-x-auto border-b border-primary-200 bg-primary-50 px-4 py-3">
+        <div className="border-b border-primary-200 bg-primary-50 px-4 py-3 md:hidden">
+          <label className="sr-only" htmlFor="cms-section-navigation">Website management area</label>
+          <select id="cms-section-navigation" value={activeTab} onChange={(event) => handleTabChange(event.target.value)} className="min-h-11 w-full rounded-xl border border-primary-200 bg-white px-3 text-sm font-semibold text-primary-800 focus:border-accent-blue focus:outline-none focus:ring-2 focus:ring-accent-blue/20">
+            {tabs.map((tab) => <option key={tab.id} value={tab.id}>{tab.label}</option>)}
+          </select>
+        </div>
+
+        <div className="hidden max-w-full gap-2 overflow-x-auto border-b border-primary-200 bg-primary-50 px-4 py-3 md:flex">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -1852,10 +1903,10 @@ export default function CmsAdmin() {
             Loading CMS workspace...
           </div>
         ) : activeTab === 'overview' ? (
-          <CmsOverview pageCount={pages.length} catalogSummary={catalogSummary} estimates={recentEstimates} notifications={recentNotifications} onRefresh={() => loadCms({ isRefresh: true })} refreshing={refreshing} />
+          <CmsOverview onEditPage={handleEditPageFromOverview} onOpenTab={handleTabChange} onRefresh={() => loadCms({ isRefresh: true })} refreshing={refreshing} />
         ) : activeTab === 'pages' ? (
-          <div className="grid gap-0 lg:grid-cols-[320px_1fr]">
-            <aside className="border-b border-primary-200 bg-primary-50 p-4 lg:border-b-0 lg:border-r">
+          <div className="grid min-w-0 gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <aside className={`${mobilePageEditorOpen ? 'hidden' : 'block'} min-w-0 border-b border-primary-200 bg-primary-50 p-4 lg:block lg:border-b-0 lg:border-r`}>
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-bold uppercase tracking-[0.18em] text-primary-500">Pages</h2>
                 <button type="button" onClick={handleCreatePage} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-primary-200 bg-white px-3 py-2 text-xs font-bold text-accent-primary hover:bg-primary-100">
@@ -1905,53 +1956,78 @@ export default function CmsAdmin() {
               </div>
             </aside>
 
-            <main className="space-y-6 p-5 lg:p-6">
+            <main className={`${mobilePageEditorOpen ? 'block' : 'hidden'} min-w-0 space-y-5 p-4 lg:block lg:p-6`}>
+              <button type="button" onClick={() => setMobilePageEditorOpen(false)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-200 bg-white px-3 text-sm font-semibold text-primary-700 lg:hidden">
+                <ArrowLeft className="h-4 w-4" />
+                All pages
+              </button>
+              <div className="min-w-0 lg:hidden">
+                <h2 className="truncate text-xl font-display font-semibold text-primary-950">{selectedPage?.title || pageDraft.title || 'New page'}</h2>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-primary-500">
+                  <span>/{pageDraft.slug || 'page-address'}</span>
+                  <StatusBadge status={pageDraft.status} />
+                  {pageIsDirty && <span className="font-semibold text-amber-700">Unsaved changes</span>}
+                </div>
+              </div>
               {pageLoading && (
                 <div className="flex items-center gap-2 rounded-2xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm font-semibold text-primary-500">
                   <LoaderCircle className="h-4 w-4 animate-spin" />
                   Loading selected page...
                 </div>
               )}
+              {pageLoadError && (
+                <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                  <p className="font-semibold">This page could not be loaded.</p>
+                  <p className="mt-1 break-words">{pageLoadError}</p>
+                  <button type="button" onClick={() => setPageRetryKey((value) => value + 1)} className="mt-3 inline-flex min-h-10 items-center rounded-lg border border-red-200 bg-white px-3 font-semibold text-red-800 hover:bg-red-100">Try again</button>
+                </div>
+              )}
+              {!selectedSlug && !pageDraft.slug && !pageLoading && !pageLoadError && (
+                <div className="rounded-2xl border border-dashed border-primary-300 bg-white p-6 text-sm text-primary-600">Choose a page from the list or start a new one.</div>
+              )}
+              <div className={`${pageLoading || pageLoadError ? 'hidden' : 'space-y-5'}`}>
               <section className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
                 <div className="mb-5">
                   <h2 className="text-xl font-display font-semibold text-primary-950">Page details</h2>
-                  <p className="mt-1 text-sm text-primary-500">Basic page information and search preview text.</p>
+                  <p className="mt-1 text-sm text-primary-500">Set the page name, address, and whether it is visible to visitors.</p>
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid min-w-0 gap-4 md:grid-cols-2">
                   <Field label="Page title" value={pageDraft.title} onChange={(value) => updatePageField('title', value)} />
-                  <SelectField
-                    label="Page link"
+                  <Field
+                    label="Page address"
                     value={pageDraft.slug}
-                    options={pageLinkOptions}
                     onChange={handlePageLinkChange}
-                    helper="Choose from links saved in Navigation."
+                    disabled={['home', 'about', 'service-orders'].includes(pageDraft.slug)}
+                    helper={['home', 'about', 'service-orders'].includes(pageDraft.slug)
+                      ? 'This is a protected website page address and cannot be changed.'
+                      : 'This is the end of the website link. Example: /about-us. Changing it also updates matching menu links.'}
                   />
                   <SelectField label="Page status" value={pageDraft.status} options={STATUS_OPTIONS} onChange={(value) => updatePageField('status', value)} />
-                  <Field label="Browser title" value={pageDraft.seo?.title} onChange={(value) => updateSeoField('title', value)} />
-                  <div className="md:col-span-2">
-                    <TextAreaField label="Search description" value={pageDraft.seo?.description} rows={3} onChange={(value) => updateSeoField('description', value)} />
-                  </div>
+                  <details className="min-w-0 rounded-2xl border border-primary-200 bg-primary-50/60 p-4 md:col-span-2">
+                    <summary className="cursor-pointer font-semibold text-primary-800">Search engine details (optional)</summary>
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                      <Field label="Browser title" value={pageDraft.seo?.title} onChange={(value) => updateSeoField('title', value)} />
+                      <TextAreaField label="Search description" value={pageDraft.seo?.description} rows={3} onChange={(value) => updateSeoField('description', value)} />
+                    </div>
+                  </details>
                 </div>
               </section>
 
               <section className="space-y-4">
-                <div className="flex flex-col gap-4 rounded-3xl border border-primary-200 bg-primary-50 p-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-col gap-3 rounded-3xl border border-primary-200 bg-primary-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="text-xl font-display font-semibold text-primary-950">Page sections</h2>
-                    <p className="mt-1 text-sm text-primary-500">Choose one section card to edit at a time, so the page stays clean and easy to work through.</p>
+                    <p className="mt-1 text-sm text-primary-500">Pick one section below to edit it. Hidden sections stay saved but are not shown on the website.</p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {SECTION_TYPES.map((type) => (
-                      <button
-                        key={type.value}
-                        type="button"
-                        onClick={() => handleAddSection(type.value)}
-                        className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-primary-200 bg-white px-3 py-2 text-xs font-bold text-accent-primary hover:bg-primary-100"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        {type.label}
-                      </button>
-                    ))}
+                  <div className="flex flex-wrap gap-2 sm:justify-end">
+                    <button type="button" onClick={() => setIsPreviewOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-200 bg-white px-3 text-sm font-semibold text-primary-700 hover:border-accent-primary hover:text-accent-primary">
+                      <Eye className="h-4 w-4" /> Preview
+                    </button>
+                    <label className="sr-only" htmlFor="cms-add-section">Add a section</label>
+                    <select id="cms-add-section" value="" onChange={(event) => { if (event.target.value) handleAddSection(event.target.value); }} className="min-h-11 min-w-40 rounded-xl border border-primary-200 bg-white px-3 text-sm font-semibold text-primary-700 focus:border-accent-blue focus:outline-none focus:ring-2 focus:ring-accent-blue/20">
+                      <option value="">Add section…</option>
+                      {SECTION_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+                    </select>
                   </div>
                 </div>
 
@@ -1961,7 +2037,8 @@ export default function CmsAdmin() {
                   </div>
                 ) : (
                   <>
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid min-w-0 gap-4 lg:grid-cols-[250px_minmax(0,1fr)]">
+                      <div className="space-y-2" aria-label="Page sections">
                       {pageDraft.sections.map((section, index) => {
                         const sectionKey = section.sectionKey || section.id || `section-${index}`;
                         const isActive = index === activeSectionIndex;
@@ -1972,7 +2049,7 @@ export default function CmsAdmin() {
                             key={sectionKey}
                             type="button"
                             onClick={() => setActiveSectionKey(sectionKey)}
-                            className={`rounded-3xl border p-4 text-left transition ${
+                            className={`w-full rounded-2xl border p-3 text-left transition ${
                               isActive
                                 ? 'border-accent-primary bg-white shadow-md'
                                 : 'border-primary-200 bg-white/75 hover:border-primary-300 hover:bg-white'
@@ -1980,40 +2057,40 @@ export default function CmsAdmin() {
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-400">Section {index + 1}</p>
-                                <h3 className="mt-2 truncate text-base font-display font-semibold text-primary-950">{section.title || 'Untitled section'}</h3>
-                                <p className="mt-1 text-xs font-semibold text-primary-500">{typeLabel}</p>
+                                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary-400">Section {index + 1} · {typeLabel}</p>
+                                <h3 className="mt-1 truncate text-sm font-semibold text-primary-950">{section.title || 'Untitled section'}</h3>
                               </div>
                               <StatusBadge status={section.status} />
                             </div>
                           </button>
                         );
                       })}
-                    </div>
+                      </div>
 
-                    {activeSection && (
-                      <SectionEditor
-                        key={activeSection.id || activeSection.sectionKey || activeSectionIndex}
-                        section={activeSection}
-                        index={activeSectionIndex}
-                        total={pageDraft.sections.length}
-                        onChange={(nextSection) => updateSection(activeSectionIndex, nextSection)}
-                        onMove={moveSection}
-                        onRemove={() => removeSection(activeSectionIndex)}
-                        onImageUpload={handleImageUpload}
-                        uploadingKey={uploadingKey}
-                      />
-                    )}
+                      {activeSection && (
+                        <SectionEditor
+                          key={activeSection.id || activeSection.sectionKey || activeSectionIndex}
+                          section={activeSection}
+                          index={activeSectionIndex}
+                          total={pageDraft.sections.length}
+                          onChange={(nextSection) => updateSection(activeSectionIndex, nextSection)}
+                          onMove={moveSection}
+                          onRemove={() => removeSection(activeSectionIndex)}
+                          onImageUpload={handleImageUpload}
+                          uploadingKey={uploadingKey}
+                        />
+                      )}
+                    </div>
                   </>
                 )}
                 {selectedPage && <p className="text-xs text-primary-500">Last saved page: {selectedPage.updatedAt || 'not available'}</p>}
               </section>
+              </div>
             </main>
           </div>
-        ) : activeTab === 'catalog' ? (
-          <CatalogContentCmsPanel />
-        ) : activeTab === 'settings' ? (
+        ) : activeTab === 'catalog' ? null : activeTab === 'settings' ? (
           <div className="space-y-6 p-5 lg:p-6">
+            {siteLoadError && <div role="alert" className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between"><span>{siteLoadError}</span><button type="button" onClick={() => { if (confirmDiscardChanges()) void loadCms(); }} className="min-h-10 shrink-0 rounded-lg border border-amber-300 bg-white px-3 font-semibold hover:bg-amber-100">Try again</button></div>}
             <section className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
               <h2 className="text-xl font-display font-semibold text-primary-950">Company and contact details</h2>
               <p className="mt-1 text-sm text-primary-500">These values power the public header and footer.</p>
@@ -2044,6 +2121,7 @@ export default function CmsAdmin() {
           </div>
         ) : (
           <div className="space-y-6 p-5 lg:p-6">
+            {siteLoadError && <div role="alert" className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between"><span>{siteLoadError}</span><button type="button" onClick={() => { if (confirmDiscardChanges()) void loadCms(); }} className="min-h-10 shrink-0 rounded-lg border border-amber-300 bg-white px-3 font-semibold hover:bg-amber-100">Try again</button></div>}
             <section className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
@@ -2052,16 +2130,20 @@ export default function CmsAdmin() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setNavigationDraft((draft) => [...draft, {
-                    label: 'New link',
-                    href: '/',
-                    groupKey: 'primary',
-                    sortOrder: (draft.length + 1) * 10,
-                    isVisible: true,
-                    opensNewTab: false,
-                    status: 'published',
-                    metadata: {},
-                  }])}
+                  onClick={() => {
+                    const nextIndex = navigationDraft.length;
+                    setNavigationDraft((draft) => [...draft, {
+                      label: 'New link',
+                      href: '/',
+                      groupKey: 'primary',
+                      sortOrder: (draft.length + 1) * 10,
+                      isVisible: true,
+                      opensNewTab: false,
+                      status: 'published',
+                      metadata: {},
+                    }]);
+                    setNavigationEditIndex(nextIndex);
+                  }}
                   className="btn btn-secondary"
                 >
                   <Plus className="h-4 w-4" />
@@ -2073,7 +2155,23 @@ export default function CmsAdmin() {
                 {navigationDraft.length === 0 ? (
                   <div className="rounded-3xl border border-dashed border-primary-300 bg-primary-50 p-8 text-center text-primary-500">No navigation links yet.</div>
                 ) : navigationDraft.map((item, index) => (
-                  <div key={item.id || index} className="rounded-3xl border border-primary-200 bg-primary-50/70 p-4">
+                  <div key={item.id || index} className="rounded-2xl border border-primary-200 bg-white p-3 shadow-sm">
+                    {navigationEditIndex !== index ? (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button type="button" onClick={() => setNavigationEditIndex(index)} className="min-h-12 min-w-0 flex-1 rounded-xl px-2 text-left hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue">
+                          <span className="block truncate font-semibold text-primary-950">{item.label || 'Untitled link'}</span>
+                          <span className="mt-1 block break-all text-xs text-primary-500">{item.href}</span>
+                        </button>
+                        <StatusBadge status={item.status} />
+                        <button type="button" onClick={() => setNavigationEditIndex(index)} className="min-h-10 rounded-lg border border-primary-200 px-3 text-sm font-semibold text-primary-700 hover:border-accent-primary hover:text-accent-primary">Edit</button>
+                        <button type="button" onClick={() => {
+                          if (!window.confirm(`Remove the “${item.label || 'Untitled link'}” link? Save Navigation to apply this change.`)) return;
+                          setNavigationDraft((draft) => draft.filter((_, rowIndex) => rowIndex !== index));
+                          setNavigationEditIndex(null);
+                        }} className="min-h-10 rounded-lg border border-red-200 px-3 text-sm font-semibold text-accent-danger hover:bg-red-50">Remove</button>
+                      </div>
+                    ) : (
+                    <>
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_180px_120px]">
                       <Field label="Label" value={item.label} onChange={(value) => setNavigationDraft((draft) => draft.map((row, rowIndex) => (rowIndex === index ? { ...row, label: value } : row)))} />
                       <Field label="Link" value={item.href} onChange={(value) => setNavigationDraft((draft) => draft.map((row, rowIndex) => (rowIndex === index ? { ...row, href: value } : row)))} />
@@ -2086,20 +2184,64 @@ export default function CmsAdmin() {
                       <SelectField label="Status" value={item.status} options={STATUS_OPTIONS} onChange={(value) => setNavigationDraft((draft) => draft.map((row, rowIndex) => (rowIndex === index ? { ...row, status: value } : row)))} />
                       <button
                         type="button"
-                        onClick={() => setNavigationDraft((draft) => draft.filter((_, rowIndex) => rowIndex !== index))}
+                        onClick={() => setNavigationEditIndex(null)}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-200 bg-white px-4 text-sm font-semibold text-primary-700 hover:bg-primary-50"
+                      >
+                        Done editing
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!window.confirm(`Remove the “${item.label || 'Untitled link'}” link? Save Navigation to apply this change.`)) return;
+                          setNavigationDraft((draft) => draft.filter((_, rowIndex) => rowIndex !== index));
+                          setNavigationEditIndex(null);
+                        }}
                         className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-semibold text-accent-danger hover:bg-red-100"
                       >
                         <Trash2 className="h-4 w-4" />
                         Remove
                       </button>
                     </div>
+                    </>
+                    )}
                   </div>
                 ))}
               </div>
             </section>
           </div>
         )}
+        {hasVisitedCatalog && (
+          <div hidden={activeTab !== 'catalog'}>
+            <CatalogContentCmsPanel onUnsavedChange={setCatalogHasUnsavedChanges} />
+          </div>
+        )}
       </div>
+      {handleSaveActive && activeTabHasUnsavedChanges && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-primary-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:hidden">
+          <div className="mx-auto flex max-w-2xl gap-3">
+            <button type="button" disabled={saving} onClick={discardActiveChanges} className="min-h-12 flex-1 rounded-xl border border-primary-200 bg-white px-4 text-sm font-semibold text-primary-700 disabled:opacity-60">Discard</button>
+            <button type="button" disabled={saving} onClick={handleSaveActive} className="min-h-12 flex-1 rounded-xl bg-accent-primary px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60">
+              {saving ? 'Saving…' : pageDraft.status === 'published' && activeTab === 'pages' ? 'Save and Publish' : `Save ${activeTab === 'pages' ? 'Page' : activeTab === 'settings' ? 'Details' : 'Navigation'}`}
+            </button>
+          </div>
+        </div>
+      )}
+      <Modal isOpen={isPreviewOpen} onClose={() => setIsPreviewOpen(false)} title={`Preview: ${pageDraft.title || 'New page'}`} size="full" className="cms-preview-modal">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-primary-600">Preview how the page sections will look before saving.</p>
+          <div className="inline-flex rounded-xl border border-primary-200 bg-primary-50 p-1" aria-label="Preview size">
+            {['mobile', 'desktop'].map((viewport) => (
+              <button key={viewport} type="button" aria-pressed={previewViewport === viewport} onClick={() => setPreviewViewport(viewport)} className={`min-h-10 rounded-lg px-3 text-sm font-semibold capitalize ${previewViewport === viewport ? 'bg-primary-950 text-white' : 'text-primary-600 hover:bg-white'}`}>
+                {viewport}
+              </button>
+            ))}
+          </div>
+        </div>
+        {pageDraft.status !== 'published' && <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">This page is a draft. Visitors will not see it until its status is changed to Published and saved.</p>}
+        <div className={`mx-auto max-h-[68dvh] overflow-auto rounded-xl border border-primary-200 bg-white shadow-sm ${previewViewport === 'mobile' ? 'max-w-[390px]' : 'w-full'}`}>
+          <DynamicPageRenderer page={previewPage} fallback={<div className="p-8 text-center text-sm text-primary-500">Add a section to preview this page.</div>} />
+        </div>
+      </Modal>
     </div>
   );
 }
