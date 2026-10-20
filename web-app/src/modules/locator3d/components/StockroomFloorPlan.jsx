@@ -22,6 +22,7 @@ export default function StockroomFloorPlan({ onShelfClick }) {
             <div className="pr-16">
                 <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Floor {activeFloor} · Floor plan</p>
                 <p className="mt-1 text-xs text-slate-600">Select a shelf to see its parts. Select stairs to change floors.</p>
+                {locatedProduct && <p role="status" className="mt-2 break-words rounded-lg bg-yellow-50 p-2 text-xs font-semibold text-yellow-900">{locatedProduct.locationLabel} · Switch to 3D to see the exact slot.</p>}
             </div>
             <svg aria-label={`Floor ${activeFloor} shelf positions`} className="min-h-0 w-full flex-1" viewBox={`${bounds.x - bounds.width / 2 - 2} ${bounds.z - bounds.depth / 2 - 2} ${bounds.width + 4} ${bounds.depth + 4}`}>
                 <rect x={bounds.x - bounds.width / 2} y={bounds.z - bounds.depth / 2} width={bounds.width} height={bounds.depth} rx="0.2" fill="white" stroke="#cbd5e1" strokeWidth="0.12" />

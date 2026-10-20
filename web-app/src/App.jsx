@@ -14,6 +14,7 @@ import { recordRouteLoad } from './observability/performance';
 const LoginPage = lazy(() => import('./modules/auth/pages/LoginPage'));
 const AdminDashboard = lazy(() => import('./modules/dashboard/pages/AdminDashboard'));
 const InventoryList = lazy(() => import('./modules/inventory/pages/InventoryList'));
+const ReceiveStock = lazy(() => import('./modules/inventory/pages/ReceiveStock'));
 const InventoryLogs = lazy(() => import('./modules/inventory/pages/InventoryLogs'));
 const ProductManagement = lazy(() => import('./modules/products/pages/ProductManagement'));
 const SupplierManagement = lazy(() => import('./modules/suppliers/pages/SupplierManagement'));
@@ -100,6 +101,7 @@ function App() {
                 <Route element={<MainLayout />}>
                   <Route path="/dashboard" element={renderRoute(AdminDashboard, <WorkspaceRouteFallback title="Loading dashboard" />)} />
                   <Route path="/inventory" element={renderRoute(InventoryList, <WorkspaceRouteFallback title="Loading inventory" />)} />
+                  <Route path="/inventory/receive" element={renderRoute(ReceiveStock, <WorkspaceRouteFallback title="Loading stock receiving" />)} />
                   <Route path="/inventory/logs" element={renderRoute(InventoryLogs, <WorkspaceRouteFallback title="Loading inventory logs" />)} />
                   <Route path="/products" element={renderRoute(ProductManagement, <WorkspaceRouteFallback title="Loading products" />)} />
                   <Route path="/suppliers" element={renderRoute(SupplierManagement, <WorkspaceRouteFallback title="Loading suppliers" />)} />

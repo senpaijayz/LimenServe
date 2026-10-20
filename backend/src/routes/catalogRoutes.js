@@ -6,7 +6,7 @@ import { requireRole } from '../middleware/auth.js';
 import { clearPublicResponseCache } from '../middleware/cache.js';
 import { analyzeSupplierInvoiceImage } from '../services/invoiceOcrService.js';
 import { callRpc } from '../services/supabaseRpc.js';
-import { receiveCatalogStock, receiveSupplierInvoiceStock, requireIdempotencyKey } from '../services/stockReceipt.js';
+import { mapStockReceiptError, receiveCatalogStock, receiveSupplierInvoiceStock, requireIdempotencyKey } from '../services/stockReceipt.js';
 import { annotatePriceListImportError, classifyPriceListItem, parsePriceListActivation, parsePriceListVersionYear } from '../services/priceListVersionModel.js';
 import { selectByInChunks } from '../utils/supabaseBatchSelect.js';
 import { createPriceHistoryRouter } from './priceHistoryRoutes.js';
@@ -3654,11 +3654,6 @@ router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, r
       return;
     }
 
-    if (!supplierName) {
-      res.status(400).json({ error: 'Supplier name is required for stock receiving.' });
-      return;
-    }
-
     const receipt = await receiveCatalogStock({
       payload: {
         productId,
@@ -3685,6 +3680,29 @@ router.post('/stock/receive', requireRole('admin', 'stock_clerk'), async (req, r
   } catch (error) {
     next(error);
   }
+});
+
+router.post('/stock/receive-batch', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
+  try {
+    const key = requireIdempotencyKey(req.get('Idempotency-Key'));
+    const items = req.body?.items;
+    if (!Array.isArray(items) || items.length < 1 || items.length > 100
+      || items.some((item) => !/^[0-9a-f-]{36}$/i.test(String(item.productId || '')) || !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1 || Number(item.quantity) > 1000000)) {
+      return res.status(400).json({ error: 'Choose 1–100 products and enter a whole-number quantity from 1 to 1,000,000 for each.' });
+    }
+    const receipt = await callRpc('receive_catalog_stock_batch', {
+      p_payload: {
+        items: items.map((item) => ({ productId: item.productId, quantity: Number(item.quantity) })),
+        supplierId: normalizeOptionalText(req.body.supplierId, 80),
+        supplierName: normalizeOptionalText(req.body.supplierName, 180),
+        referenceNumber: normalizeOptionalText(req.body.referenceNumber, 120),
+        receivedDate: normalizeOptionalText(req.body.receivedDate, 10),
+        reason: normalizeOptionalText(req.body.reason, 1000),
+      }, p_performed_by: req.user.id, p_idempotency_key: key,
+    });
+    invalidateProductCatalogCache();
+    return res.set('Idempotency-Key', key).status(receipt?.idempotentReplay ? 200 : 201).json(receipt);
+  } catch (error) { next(error.statusCode ? error : mapStockReceiptError(error)); }
 });
 
 router.post('/stock/receive-invoice', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
@@ -4200,67 +4218,15 @@ router.get('/products/archived', requireRole('admin'), async (req, res, next) =>
 
 router.get('/stock/movements', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
-    const limit = parsePositiveInteger(req.query.limit, 12, 500);
-    let movementQuery = supabaseAdmin.schema('catalog').from('inventory_movements')
-      .select('id, product_id, movement_type, quantity, reference_type, reference_id, notes, performed_by, business_date, created_at')
-      .neq('movement_type', 'reservation')
-      .order('created_at', { ascending: false });
-    if (req.query.startDate) movementQuery = movementQuery.gte('business_date', req.query.startDate);
-    if (req.query.endDate) movementQuery = movementQuery.lte('business_date', req.query.endDate);
-    const { data: movements, error: movementsError } = await movementQuery.limit(limit);
-
-    if (movementsError) {
-      throw movementsError;
-    }
-
-    const productIds = [...new Set((movements ?? []).map((movement) => movement.product_id).filter(Boolean))];
-    const userIds = [...new Set((movements ?? []).map((movement) => movement.performed_by).filter(Boolean))];
-
-    const [{ data: products, error: productsError }, { data: profiles, error: profilesError }] = await Promise.all([
-      productIds.length > 0
-        ? supabaseAdmin.schema('catalog').from('products').select('id, sku, name, category').in('id', productIds)
-        : Promise.resolve({ data: [], error: null }),
-      userIds.length > 0
-        ? supabaseAdmin.schema('core').from('user_profiles').select('user_id, full_name, email').in('user_id', userIds)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-
-    if (productsError) {
-      throw productsError;
-    }
-
-    if (profilesError && !isPrivateSchemaAccessError(profilesError)) {
-      throw profilesError;
-    }
-
-    const productMap = new Map((products ?? []).map((product) => [product.id, product]));
-    const profileMap = new Map((profilesError ? [] : (profiles ?? [])).map((profile) => [profile.user_id, profile]));
-
-    res.json({
-      movements: (movements ?? []).map((movement) => {
-        const product = productMap.get(movement.product_id) ?? {};
-        const profile = profileMap.get(movement.performed_by) ?? {};
-
-        return {
-          id: movement.id,
-          productId: movement.product_id,
-          sku: product.sku ?? '',
-          productName: product.name ?? 'Unknown product',
-          category: product.category ?? '',
-          movementType: movement.movement_type,
-          quantity: Number(movement.quantity ?? 0),
-          referenceType: movement.reference_type,
-          referenceId: movement.reference_id,
-          notes: movement.notes,
-          performedBy: profile.full_name || profile.email || 'System',
-          businessDate: movement.business_date,
-          createdAt: movement.created_at,
-        };
-      }),
+    const result = await callRpc('get_inventory_movement_page', {
+      p_limit: parsePositiveInteger(req.query.limit, 50, 500),
+      p_page: parsePositiveInteger(req.query.page, 1, 1000000),
+      p_search: String(req.query.search || '').trim().slice(0, 180),
+      p_type: String(req.query.type || 'all').slice(0, 40),
+      p_start_date: req.query.startDate || null, p_end_date: req.query.endDate || null,
     });
-  } catch (error) {
-    next(error);
-  }
+    res.json(result);
+  } catch (error) { next(error); }
 });
 
 router.get('/services', async (_req, res, next) => {

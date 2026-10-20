@@ -45,8 +45,8 @@ export interface StockReceiptItemResult {
 
 export interface StockReceiptPostResult {
   receiptId: string;
-  supplierId: string;
-  supplierName: string;
+  supplierId: string | null;
+  supplierName: string | null;
   invoiceNumber: string;
   invoiceDate: string;
   totalLines: number;

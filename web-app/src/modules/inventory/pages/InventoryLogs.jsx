@@ -1,9 +1,9 @@
-import { useDeferredValue, useEffect, useMemo, useState, useCallback } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { ClipboardList, Download, Printer, RefreshCw, Search, X } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Dropdown from '../../../components/ui/Dropdown';
-import { getInventoryMovements } from '../../../services/catalogApi';
+import { getInventoryMovementPage } from '../../../services/catalogApi';
 import { formatDateTime, formatNumber } from '../../../utils/formatters';
 
 const MOVEMENT_LABELS = {
@@ -43,15 +43,6 @@ const DATE_RANGE_OPTIONS = [
 
 function escapeHtml(v) {
     return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function isWithinRange(dateStr, range) {
-    if (range === 'all') return true;
-    const date = new Date(dateStr);
-    if (isNaN(date)) return true;
-    const now = Date.now();
-    const ms = { '24h': 86400000, '7d': 604800000, '30d': 2592000000, '90d': 7776000000 };
-    return now - date.getTime() <= ms[range];
 }
 
 function exportToExcel(movements) {
@@ -143,23 +134,30 @@ export default function InventoryLogs() {
     const [typeFilter, setTypeFilter] = useState('all');
     const [dateRange, setDateRange] = useState('30d');
     const deferredSearch = useDeferredValue(search);
+    const [page, setPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const requestSequence = useRef(0);
 
     const loadData = useCallback(async () => {
+        const sequence = ++requestSequence.current;
         setLoading(true); setError('');
         try {
-            const data = await getInventoryMovements(500);
-            setAllMovements(data ?? []);
+            const days = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 }[dateRange];
+            const startDate = days ? new Date(Date.now() - days * 86400000).toISOString().slice(0, 10) : undefined;
+            const data = await getInventoryMovementPage(50, { page, search: deferredSearch.trim(), type: typeFilter, startDate });
+            if (sequence !== requestSequence.current) return;
+            setAllMovements(data.movements ?? []);
+            setTotalCount(Number(data.totalCount || 0));
         } catch (e) {
-            setError(e.message || 'Failed to load inventory logs.');
+            if (sequence === requestSequence.current) setError(e.message || 'Failed to load inventory logs.');
         } finally {
-            setLoading(false);
+            if (sequence === requestSequence.current) setLoading(false);
         }
-    }, []);
+    }, [dateRange, deferredSearch, page, typeFilter]);
 
     useEffect(() => { void loadData(); }, [loadData]);
 
     const movementModel = useMemo(() => {
-        const q = deferredSearch.trim().toLowerCase();
         const filtered = [];
         let stockInCount = 0;
         let salesCount = 0;
@@ -167,14 +165,6 @@ export default function InventoryLogs() {
         let totalQtySold = 0;
 
         for (const m of allMovements) {
-            if (!isWithinRange(m.createdAt, dateRange)) continue;
-            if (typeFilter !== 'all' && m.movementType !== typeFilter) continue;
-            if (q) {
-                const hay = [m.productName, m.sku, m.performedBy, m.referenceNumber, m.referenceType, m.notes, m.supplierName, m.supplier]
-                    .filter(Boolean).join(' ').toLowerCase();
-                if (!hay.includes(q)) continue;
-            }
-
             filtered.push(m);
 
             if (m.movementType === 'stock_in') {
@@ -182,7 +172,7 @@ export default function InventoryLogs() {
                 totalQtyIn += Number(m.quantity ?? 0);
             } else if (m.movementType === 'sale') {
                 salesCount += 1;
-                totalQtySold += Number(m.quantity ?? 0);
+                totalQtySold += Math.abs(Number(m.quantity ?? 0));
             }
         }
 
@@ -193,7 +183,7 @@ export default function InventoryLogs() {
             totalQtyIn,
             totalQtySold,
         };
-    }, [allMovements, deferredSearch, typeFilter, dateRange]);
+    }, [allMovements]);
 
     const {
         filteredMovements,
@@ -213,18 +203,18 @@ export default function InventoryLogs() {
                         Inventory Logs
                     </h1>
                     <p className="text-sm text-primary-500 mt-0.5">
-                        Full audit trail of all stock movements — receiving, sales, adjustments, and more.
+                        Search all recorded stock movements. Totals and exports below cover the displayed page.
                     </p>
                 </div>
-                <div className="flex gap-2 flex-shrink-0">
+                <div className="flex flex-wrap gap-2">
                     <Button variant="secondary" leftIcon={<RefreshCw className="w-4 h-4" />} isLoading={loading} onClick={loadData}>
                         Refresh
                     </Button>
                     <Button variant="secondary" leftIcon={<Download className="w-4 h-4" />} onClick={() => exportToExcel(filteredMovements)} disabled={filteredMovements.length === 0}>
-                        Export CSV
+                        Export page CSV
                     </Button>
                     <Button variant="primary" leftIcon={<Printer className="w-4 h-4" />} onClick={() => printLogs(filteredMovements)} disabled={filteredMovements.length === 0}>
-                        Print PDF
+                        Print page PDF
                     </Button>
                 </div>
             </div>
@@ -232,9 +222,9 @@ export default function InventoryLogs() {
             {/* KPI cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[
-                    { label: 'Total Records', value: formatNumber(filteredMovements.length), color: 'text-primary-950' },
-                    { label: 'Stock Received', value: `${formatNumber(stockInCount)} entries (${formatNumber(totalQtyIn)} units)`, color: 'text-emerald-700' },
-                    { label: 'Sales', value: `${formatNumber(salesCount)} entries (${formatNumber(totalQtySold)} units)`, color: 'text-red-600' },
+                    { label: 'Records on page', value: formatNumber(filteredMovements.length), color: 'text-primary-950' },
+                    { label: 'Received on page', value: `${formatNumber(stockInCount)} entries (${formatNumber(totalQtyIn)} units)`, color: 'text-emerald-700' },
+                    { label: 'Sales on page', value: `${formatNumber(salesCount)} entries (${formatNumber(totalQtySold)} units)`, color: 'text-red-600' },
                     { label: 'Date Range', value: DATE_RANGE_OPTIONS.find((o) => o.value === dateRange)?.label ?? dateRange, color: 'text-accent-blue' },
                 ].map(({ label, value, color }) => (
                     <div key={label} className="bg-white border border-primary-200 rounded-2xl p-4 shadow-sm">
@@ -253,7 +243,7 @@ export default function InventoryLogs() {
                             type="text"
                             placeholder="Search product, part number, staff, reference..."
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                             className="w-full pl-10 pr-4 py-2.5 bg-white border border-primary-200 rounded-xl text-sm text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/10 shadow-sm"
                         />
                         {search && (
@@ -263,10 +253,10 @@ export default function InventoryLogs() {
                         )}
                     </div>
                     <div className="flex-shrink-0 w-44">
-                        <Dropdown options={TYPE_OPTIONS} value={typeFilter} onChange={setTypeFilter} />
+                        <Dropdown options={TYPE_OPTIONS} value={typeFilter} onChange={(v) => { setTypeFilter(v); setPage(1); }} />
                     </div>
                     <div className="flex-shrink-0 w-44">
-                        <Dropdown options={DATE_RANGE_OPTIONS} value={dateRange} onChange={setDateRange} />
+                        <Dropdown options={DATE_RANGE_OPTIONS} value={dateRange} onChange={(v) => { setDateRange(v); setPage(1); }} />
                     </div>
                     <p className="text-sm text-primary-400 flex-shrink-0">
                         {formatNumber(filteredMovements.length)} records
@@ -285,8 +275,15 @@ export default function InventoryLogs() {
                         <p className="text-xs text-primary-400 mt-1">Try adjusting your search or filters</p>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full text-sm">
+                    <div>
+                        <div className="divide-y sm:hidden">{filteredMovements.map((m) => <article className="space-y-2 p-4" key={m.id}>
+                            <p className="break-all font-mono text-sm font-bold text-primary-950">{m.sku || 'No part number'}</p><p className="break-words text-sm font-semibold">{m.productName}</p>
+                            <div className="flex flex-wrap justify-between gap-2 text-sm"><span>{MOVEMENT_LABELS[m.movementType] || m.movementType}</span><strong className={m.quantity >= 0 ? 'text-emerald-700' : 'text-red-700'}>{m.quantity >= 0 ? '+' : ''}{formatNumber(m.quantity)}</strong></div>
+                            <p className="text-xs text-primary-600">Previous: {m.previousStock ?? 'Not recorded'} → New: {m.newStock ?? 'Not recorded'}</p>
+                            <p className="break-words text-xs">{m.supplierName || 'Supplier not provided'} · {m.referenceNumber || 'No reference'}</p>
+                            <p className="text-xs text-primary-500">{m.performedBy} · {formatDateTime(m.createdAt)}</p>{m.notes && <p className="break-words text-xs text-primary-600">{m.notes}</p>}
+                        </article>)}</div>
+                        <div className="hidden overflow-x-auto sm:block"><table className="min-w-full text-sm">
                             <thead className="bg-primary-50 border-b border-primary-100">
                                 <tr>
                                     {['#', 'Product / Part Number', 'Action', 'Prev Stock', 'Change', 'New Stock', 'Supplier', 'Reference', 'Staff', 'Date & Time', 'Notes'].map((h) => (
@@ -298,7 +295,7 @@ export default function InventoryLogs() {
                                 {filteredMovements.map((m, i) => {
                                     const badgeClass = MOVEMENT_BADGE[m.movementType] || 'bg-gray-100 text-gray-700 border-gray-200';
                                     const qty = Number(m.quantity ?? 0);
-                                    const isPositive = ['stock_in', 'release', 'restore'].includes(m.movementType);
+                                    const isPositive = qty >= 0;
                                     return (
                                         <tr key={m.id ?? i} className="hover:bg-primary-50/60 transition-colors">
                                             <td className="px-4 py-3 text-primary-400 text-xs">{i + 1}</td>
@@ -341,10 +338,11 @@ export default function InventoryLogs() {
                                     );
                                 })}
                             </tbody>
-                        </table>
+                        </table></div>
                     </div>
                 )}
             </Card>
+            <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-primary-600">{formatNumber(totalCount)} matching records · Page {page} of {Math.max(1, Math.ceil(totalCount / 50))}</p><div className="flex gap-2"><Button variant="secondary" disabled={loading || page === 1} onClick={() => setPage((p) => p - 1)}>Previous</Button><Button variant="secondary" disabled={loading || page * 50 >= totalCount} onClick={() => setPage((p) => p + 1)}>Next</Button></div></div>
         </div>
     );
 }

@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
+import { useAuth } from '../../../context/useAuth';
 import { AlertTriangle, ArrowRight, Camera, CheckCircle, ClipboardCheck, FileText, ListPlus, LoaderCircle, Package, Plus, Search, Trash2, UploadCloud } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import useDataStore from '../../../store/useDataStore';
-import { getSuppliers } from '../../../services/catalogApi';
+import { getSuppliers, receiveInventoryBatch } from '../../../services/catalogApi';
 import { formatNumber } from '../../../utils/formatters';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 import { createIdempotencyKey } from '../../../utils/idempotency';
@@ -223,9 +224,14 @@ const emptyInvoiceDraft = () => ({
     previewUrl: '',
 });
 
-const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
+const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcode' }) => {
     const { findProduct, products } = useDataStore();
     const navigate = useNavigate();
+    const { user } = useAuth();
+    const invoiceStorageKey = user?.id ? `limen:invoice-receiving:v1:${user.id}` : null;
+    const [draftReady, setDraftReady] = useState(false);
+    const [invoiceSubmitted, setInvoiceSubmitted] = useState(false);
+    const [invoiceDraftStatus, setInvoiceDraftStatus] = useState('Saving draft…');
     const setRecentlyReceivedStock = useLocator3DStore((state) => state.setRecentlyReceivedStock);
     const emptyItem = () => ({ product: null, searchQuery: '', quantity: '' });
     const [mode, setMode] = useState('barcode');
@@ -248,11 +254,11 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
     const invoiceReceiptKeyRef = useRef(null);
 
     useEffect(() => {
-        if (!isOpen) return;
+        if (!isOpen) { setDraftReady(false); return; }
         let isActive = true;
 
         setBulkItems([emptyItem()]);
-        setMode('barcode');
+        setMode(initialMode);
         setSupplier(EMPTY_SUPPLIER);
         setInvoiceDraft(emptyInvoiceDraft());
         setInvoiceReceipt(null);
@@ -266,6 +272,16 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
         stockReceiptKeysRef.current.clear();
         invoiceReceiptKeyRef.current = null;
 
+        try {
+            const saved = invoiceStorageKey && JSON.parse(localStorage.getItem(invoiceStorageKey) || 'null');
+            if (saved?.version === 1 && saved.invoiceDraft) {
+                setSupplier(saved.supplier || EMPTY_SUPPLIER); setInvoiceDraft(saved.invoiceDraft);
+                setMode(initialMode === 'invoice' ? 'invoice' : saved.mode || initialMode); setBulkItems(saved.bulkItems || [emptyItem()]);
+                invoiceReceiptKeyRef.current = saved.requestKey || null;
+                setInvoiceSubmitted(Boolean(saved.submitted));
+            } else setInvoiceSubmitted(false);
+        } catch { setInvoiceSubmitted(false); }
+        setDraftReady(true);
         const loadSuppliers = async () => {
             setLoadingSuppliers(true);
             try {
@@ -290,7 +306,14 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
         return () => {
             isActive = false;
         };
-    }, [isOpen]);
+    }, [isOpen, initialMode, invoiceStorageKey]);
+    useEffect(() => {
+        if (!isOpen || !draftReady || !invoiceStorageKey || bulkSuccess) return;
+        try {
+            localStorage.setItem(invoiceStorageKey, JSON.stringify({ version: 1, mode, supplier, invoiceDraft, bulkItems, requestKey: invoiceReceiptKeyRef.current, submitted: invoiceSubmitted }));
+            setInvoiceDraftStatus('Draft saved on this device. Reopen this form to continue.');
+        } catch { setInvoiceDraftStatus('Draft storage is unavailable. Keep this form open to avoid losing your work.'); }
+    }, [bulkItems, bulkSuccess, draftReady, invoiceDraft, invoiceStorageKey, invoiceSubmitted, isOpen, mode, supplier]);
 
     const updateSupplier = (field, val) => setSupplier((current) => ({ ...current, [field]: val }));
 
@@ -370,7 +393,7 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
     }, [getPricelistProduct]);
 
     const applyInvoiceAnalysis = useCallback((analysis) => {
-        const supplierName = analysis.invoice?.supplierName || 'Diamond Motor Corporation';
+        const supplierName = analysis.invoice?.supplierName || '';
         const matchedSupplier = suppliers.find((item) => item.name?.toLowerCase().includes(supplierName.toLowerCase().replace(' corporation', '')));
         const existingProducts = (analysis.existingProducts || []).map(buildInvoiceItemFromCatalog);
 
@@ -497,10 +520,6 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
             setError('Add at least one product with a valid quantity.');
             return;
         }
-        if (!supplier.id) {
-            setError('Choose a supplier from Supplier Management.');
-            return;
-        }
 
         setIsSubmitting(true);
         setError('');
@@ -508,35 +527,18 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
         const results = [];
 
         try {
-            for (let i = 0; i < validBulkItems.length; i += 1) {
-                const item = validBulkItems[i];
-                const qty = Number(item.quantity);
-                const receiptFingerprint = JSON.stringify({
-                    productId: item.product.id,
-                    quantity: qty,
-                    supplierId: supplier.id,
-                    referenceNumber: supplier.referenceNumber.trim(),
-                    receivedDate: supplier.receivedDate,
-                });
-                const idempotencyKey = stockReceiptKeysRef.current.get(receiptFingerprint)
-                    || createIdempotencyKey('stock');
-                stockReceiptKeysRef.current.set(receiptFingerprint, idempotencyKey);
-                await onSave({
-                    product: item.product,
-                    quantity: qty,
-                    supplierId: supplier.id,
-                    supplierName: supplier.name.trim(),
-                    supplierContact: supplier.contact.trim(),
-                    supplierAddress: supplier.address.trim(),
-                    referenceNumber: supplier.referenceNumber.trim(),
-                    receivedDate: supplier.receivedDate,
-                    reason: supplier.reason.trim() || 'Stock receiving',
-                    idempotencyKey,
-                    _bulkMode: true,
-                });
-                results.push({ name: item.product.name, sku: getProductPartNumber(item.product), qty });
-                setSubmitProgress({ done: i + 1, total: validBulkItems.length });
-            }
+            const fingerprint = JSON.stringify({ items: validBulkItems.map((item) => ({ productId: item.product.id, quantity: Number(item.quantity) })), supplierId: supplier.id, referenceNumber: supplier.referenceNumber, receivedDate: supplier.receivedDate });
+            const idempotencyKey = stockReceiptKeysRef.current.get(fingerprint) || createIdempotencyKey('stock');
+            stockReceiptKeysRef.current.set(fingerprint, idempotencyKey);
+            const saved = await receiveInventoryBatch({
+                items: validBulkItems.map((item) => ({ productId: item.product.id, quantity: Number(item.quantity) })),
+                supplierId: supplier.id || null, supplierName: supplier.name || '',
+                referenceNumber: supplier.referenceNumber, receivedDate: supplier.receivedDate, reason: supplier.reason,
+            }, { idempotencyKey });
+            setRecentlyReceivedStock(saved);
+            for (const item of saved.items || []) results.push({ name: item.description, sku: item.partNumber, qty: item.quantity });
+            if (invoiceStorageKey) localStorage.removeItem(invoiceStorageKey);
+            setSubmitProgress({ done: validBulkItems.length, total: validBulkItems.length });
             setBulkResults(results);
             setBulkSuccess(true);
         } catch (e) {
@@ -547,6 +549,7 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
     };
 
     const handlePostInvoice = async () => {
+        if (invoiceSubmitted && !invoiceReceiptKeyRef.current) { setError('The submitted invoice identity is missing. Do not post it again. Check inventory and receipt history first.'); return; }
         const items = invoiceDraft.items
             .map((item) => ({
                 partNumber: normalizeInvoicePartNumber(item.partNumber),
@@ -564,10 +567,6 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
             return;
         }
 
-        if (!supplier.name.trim() && !invoiceDraft.supplierName.trim()) {
-            setError('Supplier name is required before posting.');
-            return;
-        }
 
         if (!items.length) {
             setError('Add or detect at least one invoice line item with quantity greater than zero.');
@@ -588,6 +587,8 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
             if (!invoiceReceiptKeyRef.current) {
                 invoiceReceiptKeyRef.current = createIdempotencyKey('invoice');
             }
+            setInvoiceSubmitted(true);
+            if (invoiceStorageKey) localStorage.setItem(invoiceStorageKey, JSON.stringify({ version: 1, mode, supplier, invoiceDraft, bulkItems, requestKey: invoiceReceiptKeyRef.current, submitted: true }));
             const receipt = await receiveStockFromSupplierInvoice({
                 invoiceNumber: invoiceDraft.invoiceNumber,
                 invoiceDate: invoiceDraft.invoiceDate,
@@ -617,6 +618,8 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                 returnTo: '/inventory',
                 source: 'supplier_invoice',
             });
+            if (invoiceStorageKey) localStorage.removeItem(invoiceStorageKey);
+            try { sessionStorage.setItem(`limen:received:${user.id}`, JSON.stringify({ ...receipt, savedAt: Date.now() })); } catch { /* In-memory handoff remains available. */ }
             setInvoiceReceipt(receipt);
             setBulkResults(receiptItems.map((item) => ({
                 name: item.description || item.partNumber,
@@ -626,6 +629,10 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
             setBulkSuccess(true);
             onInvoicePosted?.(receipt);
         } catch (postError) {
+            if (postError.receiptRejected) {
+                setInvoiceSubmitted(false);
+                invoiceReceiptKeyRef.current = null;
+            }
             setError(postError.message || 'Failed to post supplier invoice stock.');
         } finally {
             setIsSubmitting(false);
@@ -640,8 +647,12 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
     if (!isOpen) return null;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Add Stock" size="lg">
+        <Modal isOpen={isOpen} onClose={() => { if (!isSubmitting) onClose(); }} title="Receive from invoice" size="lg">
             <div className="space-y-5">
+                {!bulkSuccess && <p role="status" className="text-xs text-primary-500">{invoiceSubmitted ? 'Submitted receipt kept. Retry below to confirm its result.' : invoiceDraftStatus}</p>}
+                {!bulkSuccess && !invoiceSubmitted && <button type="button" className="min-h-11 text-sm font-semibold text-red-700" disabled={isSubmitting} onClick={() => { if (!window.confirm('Discard this invoice draft?')) return; setInvoiceDraft(emptyInvoiceDraft()); setSupplier({ ...EMPTY_SUPPLIER }); invoiceReceiptKeyRef.current = null; setError(''); }}>Discard invoice draft</button>}
+                {invoiceSubmitted && !bulkSuccess && <button type="button" className="btn btn-primary" disabled={isSubmitting} onClick={() => void handlePostInvoice()}>{isSubmitting ? 'Checking receipt...' : 'Check / retry submitted invoice'}</button>}
+                <fieldset disabled={invoiceSubmitted && !bulkSuccess} className="min-w-0">
                 {bulkSuccess ? (
                     <div className="flex flex-col items-center justify-center py-8 gap-4">
                         <CheckCircle className="w-16 h-16 text-emerald-500" />
@@ -668,10 +679,11 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                     </div>
                 ) : (
                     <>
-                        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-primary-200 bg-primary-50 p-1">
+                        <div className={initialMode === 'invoice' ? 'hidden' : 'grid grid-cols-2 gap-2 rounded-2xl border border-primary-200 bg-primary-50 p-1'}>
                             <button
                                 type="button"
                                 onClick={() => setMode('barcode')}
+                                disabled={initialMode === 'invoice'}
                                 className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition ${mode === 'barcode' ? 'bg-white text-primary-950 shadow-sm' : 'text-primary-500 hover:text-primary-800'}`}
                             >
                                 <Package className="h-4 w-4" />
@@ -907,14 +919,14 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                             <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary-500">Supplier Information</p>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <label className="block sm:col-span-2">
-                                    <span className="mb-1 block text-xs font-medium text-primary-600">Supplier</span>
+                                    <span className="mb-1 block text-xs font-medium text-primary-600">Supplier (Optional)</span>
                                     <select
                                         className="input w-full"
                                         value={supplier.id}
                                         onChange={(e) => selectSupplier(e.target.value)}
                                         disabled={loadingSuppliers}
                                     >
-                                        <option value="">{loadingSuppliers ? 'Loading suppliers...' : 'Choose supplier'}</option>
+                                        <option value="">{loadingSuppliers ? 'Loading suppliers...' : 'No supplier / Not provided'}</option>
                                         {suppliers.map((supplierOption) => (
                                             <option key={supplierOption.id} value={supplierOption.id}>
                                                 {supplierOption.name}{supplierOption.supplierId ? ` - ${supplierOption.supplierId}` : ''}
@@ -924,7 +936,7 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                                 </label>
                                 {mode === 'invoice' && (
                                     <Input
-                                        label="Supplier Name from Invoice"
+                                        label="Supplier name from invoice (Optional)"
                                         placeholder="Diamond Motor Corporation"
                                         value={supplier.name || invoiceDraft.supplierName}
                                         onChange={(event) => {
@@ -985,7 +997,7 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                                     isLoading={isSubmitting}
                                     disabled={mode === 'invoice'
                                         ? invoiceDraft.items.length === 0 || isSubmitting || isReadingInvoice
-                                        : validBulkItems.length === 0 || !supplier.id || isSubmitting}
+                                        : validBulkItems.length === 0 || isSubmitting}
                                     leftIcon={<Plus className="w-4 h-4" />}
                                 >
                                     {mode === 'invoice' ? `Post Invoice Stock (${invoiceDraft.items.length})` : `Receive Stock (${validBulkItems.length})`}
@@ -994,6 +1006,7 @@ const AddStockModal = ({ isOpen, onClose, onSave, onInvoicePosted }) => {
                         </div>
                     </>
                 )}
+                </fieldset>
             </div>
         </Modal>
     );

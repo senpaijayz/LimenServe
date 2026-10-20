@@ -8,7 +8,6 @@ import { StockBadge } from '../../../components/ui/Badge';
 import Dropdown from '../../../components/ui/Dropdown';
 import Modal from '../../../components/ui/Modal';
 import ProductCard from '../components/ProductCard';
-import AddStockModal from '../components/AddStockModal';
 import { formatCurrency, formatNumber } from '../../../utils/formatters';
 import { useToast } from '../../../components/ui/Toast';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
@@ -20,14 +19,13 @@ import {
     getProductStockHistory,
     getRetailPriceListVersionItems,
     getRetailPriceListVersions,
-    receiveInventoryStock,
     updateCatalogProduct,
 } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useDataStore from '../../../store/useDataStore';
 import { getPartNumberSearchSuggestions, getProductPartNumber, findProductByIdentifier } from '../../../utils/barcode';
 import { isShelfObject, normalizeAisle } from '../../locator3d/data/locatorScene';
-import { assignProductLocation, loadStoreLayout } from '../../locator3d/services/locator3DApi';
+import { assignProductLocation, removeProductLocation, loadStoreLayout } from '../../locator3d/services/locator3DApi';
 import { buildLocator3DUrl } from '../../locator3d/utils/locatorNavigation';
 
 const PAGE_SIZE = 12;
@@ -92,7 +90,7 @@ function normalizeLocationForDisplay(rawLocation) {
         ? String(location.aisle).replace(/^aisle\s+/i, '').toUpperCase()
         : '';
     const shelfNumber = location.shelfNumber ?? location.shelf_number ?? location.shelf;
-    const level = location.level;
+    const level = location.layerNumber ?? location.level;
     const bin = location.bin || location.binNumber || location.bin_number || location.binLabel || location.slot;
 
     if (location.label) {
@@ -103,7 +101,7 @@ function normalizeLocationForDisplay(rawLocation) {
         return [
             aisle ? `Aisle ${aisle}` : null,
             shelfNumber ? `Shelf ${shelfNumber}` : null,
-            level ? `Level ${level}` : null,
+            level ? `Layer ${level}` : null,
             bin ? `Bin ${bin}` : null,
         ].filter(Boolean).join(' • ');
     }
@@ -123,6 +121,7 @@ const buildShelfOptions = (objects = []) => objects
     .map((object) => ({
         aisle: normalizeAisle(object.aisle),
         binCount: Number(object.binCount || 1),
+        layerCount: Number(object.layerCount || (object.type === 'shelf-4-layer' ? 4 : 2)),
         floor: Number(object.floor || 1),
         id: object.id,
         label: `${object.name} / Floor ${object.floor || 1} / Aisle ${normalizeAisle(object.aisle)} Shelf ${object.shelfNumber}`,
@@ -151,7 +150,7 @@ function extractLocationFormValues(product = {}) {
         locationAisle: aisle,
         locationShelfObjectId: shelfOption?.id || location.shelfObjectId || location.shelf_object_id || '',
         locationShelfNumber: String(location.shelfNumber ?? location.shelf_number ?? location.shelf ?? ''),
-        locationLevel: String(location.level ?? ''),
+        locationLevel: String(location.layerNumber ?? location.level ?? ''),
         locationBin: String(location.bin ?? location.binNumber ?? location.bin_number ?? location.binLabel ?? location.slot ?? ''),
     };
 }
@@ -222,7 +221,7 @@ function EditProductModalContent({ isOpen, product, isSaving, onClose, onSave, s
             ...current,
             locationAisle: shelf?.aisle || '',
             locationBin: shelf ? '1' : '',
-            locationLevel: '',
+            locationLevel: shelf ? '1' : '',
             locationShelfNumber: shelf ? String(shelf.shelfNumber) : '',
             locationShelfObjectId: value,
         }));
@@ -329,6 +328,11 @@ function EditProductModalContent({ isOpen, product, isSaving, onClose, onSave, s
                             </select>
                         </label>
                         <label className="block">
+                            <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Layer (1 is the bottom)</span>
+                            <select className={`${inputClassName} mt-2 mb-3`} disabled={!selectedShelf} value={form.locationLevel || ''} onChange={(event) => updateForm('locationLevel', event.target.value)}>
+                                <option value="">Choose layer</option>
+                                {Array.from({ length: selectedShelf?.layerCount || 0 }, (_, i) => <option key={i + 1} value={i + 1}>Layer {i + 1}</option>)}
+                            </select>
                             <span className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500">Bin</span>
                             <select
                                 className={`${inputClassName} mt-2`}
@@ -365,7 +369,7 @@ const InventoryList = () => {
     const [selectedStockFilter, setSelectedStockFilter] = useState('all');
     const [selectedSortBy, setSelectedSortBy] = useState('stock-desc');
     const [viewMode, setViewMode] = useState('grid');
-    const [showAddModal, setShowAddModal] = useState(false);
+    const [showFilters, setShowFilters] = useState(false);
     const [showCameraScanner, setShowCameraScanner] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [refreshKey, setRefreshKey] = useState(0);
@@ -375,6 +379,7 @@ const InventoryList = () => {
     const [previewHistoryLoading, setPreviewHistoryLoading] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
     const [publishedStockroom, setPublishedStockroom] = useState(null);
+    const [stockroomLocationStatus, setStockroomLocationStatus] = useState('Loading location…');
     const stockroomShelfOptions = useMemo(() => buildShelfOptions(publishedStockroom?.layoutData?.objects), [publishedStockroom]);
     const [savingProductDetails, setSavingProductDetails] = useState(false);
     const [sortConfig, setSortConfig] = useState({ key: null, dir: null });
@@ -453,9 +458,19 @@ const InventoryList = () => {
         setSummaryError('');
     };
 
+    useEffect(() => {
+        let active = true;
+        const refresh = () => loadStoreLayout('', { publishedOnly: true }).then((layout) => {
+            if (active) { setPublishedStockroom(layout); setStockroomLocationStatus(''); }
+        }).catch(() => { if (active) { setPublishedStockroom(null); setStockroomLocationStatus('Location unavailable'); } });
+        void refresh();
+        window.addEventListener('focus', refresh);
+        return () => { active = false; window.removeEventListener('focus', refresh); };
+    }, [refreshKey]);
+
     const visibleProducts = useMemo(() => (
-        products.map((product) => productOverrides[product.id] ?? formatCatalogProduct(product))
-    ), [productOverrides, products]);
+        products.map((product) => ({ ...(productOverrides[product.id] ?? formatCatalogProduct(product)), location: publishedStockroom ? (publishedStockroom.locations?.find((item) => item.productId === product.id) || {}) : { label: stockroomLocationStatus || 'Unassigned' } }))
+    ), [productOverrides, products, publishedStockroom, stockroomLocationStatus]);
 
     const visibleProductSkus = useMemo(() => visibleProducts.map((product) => product.sku).filter(Boolean), [visibleProducts]);
     const visibleProductSkuKey = visibleProductSkus.join('|');
@@ -568,7 +583,7 @@ const InventoryList = () => {
             return;
         }
 
-        const normalizedProduct = productOverrides[product.id] ?? formatCatalogProduct(product);
+        const normalizedProduct = { ...(productOverrides[product.id] ?? formatCatalogProduct(product)), location: publishedStockroom?.locations?.find((item) => item.productId === product.id) || { label: stockroomLocationStatus || 'Unassigned' } };
         setSelectedPreviewProduct(normalizedProduct);
         setPreviewStockHistory([]);
         setPreviewHistoryLoading(true);
@@ -582,7 +597,7 @@ const InventoryList = () => {
                 setPreviewHistoryLoading(false);
             }
         })();
-    }, [productOverrides, showError]);
+    }, [productOverrides, publishedStockroom, showError, stockroomLocationStatus]);
 
     const handleSearchQueryChange = useCallback((value) => {
         setSearchQuery(value);
@@ -612,7 +627,7 @@ const InventoryList = () => {
         try {
             const layout = await loadStoreLayout('', { publishedOnly: true });
             setPublishedStockroom(layout);
-            setEditingProduct({ ...normalized, location: layout?.locations.find((item) => item.productId === product.id) || normalized.location });
+            setEditingProduct({ ...normalized, location: layout?.locations?.find((item) => item.productId === product.id) || {} });
         } catch {
             // Product editing still works; no guessed/default shelves are offered.
             setEditingProduct(normalized);
@@ -624,7 +639,7 @@ const InventoryList = () => {
             return;
         }
 
-        const normalizedProduct = productOverrides[product.id] ?? formatCatalogProduct(product);
+        const normalizedProduct = { ...(productOverrides[product.id] ?? formatCatalogProduct(product)), location: publishedStockroom?.locations?.find((item) => item.productId === product.id) || {} };
 
         setSelectedPreviewProduct(null);
         navigate(buildLocator3DUrl(normalizedProduct), {
@@ -633,7 +648,7 @@ const InventoryList = () => {
                 productId: normalizedProduct.id,
             },
         });
-    }, [navigate, productOverrides]);
+    }, [navigate, productOverrides, publishedStockroom]);
 
     const handleSaveProductDetails = async (form) => {
         if (!editingProduct?.id) {
@@ -641,9 +656,10 @@ const InventoryList = () => {
         }
 
         setSavingProductDetails(true);
+        let detailsSaved = false;
         try {
             const productForm = { ...form };
-            const { locationBin, locationShelfObjectId } = productForm;
+            const { locationBin, locationShelfObjectId, locationLevel } = productForm;
             delete productForm.locationAisle;
             delete productForm.locationShelfNumber;
             delete productForm.locationLevel;
@@ -656,17 +672,22 @@ const InventoryList = () => {
                 throw new Error('Choose an available shelf before saving a stockroom location.');
             }
 
+            if (selectedShelf && (!Number.isInteger(Number(locationLevel)) || Number(locationLevel) < 1 || Number(locationLevel) > selectedShelf.layerCount)) throw new Error('Choose a valid shelf layer.');
+            const shouldRemoveLocation = !selectedShelf && Boolean(editingProduct.location?.shelfObjectId);
+            if (shouldRemoveLocation && !window.confirm('Remove this product’s saved stockroom location? Its stock quantity will not change.')) return;
             const updatedProduct = await updateCatalogProduct(editingProduct.id, {
                 ...productForm,
                 price: Number(productForm.price ?? 0),
                 stock: Number(productForm.stock ?? 0),
             });
+            detailsSaved = true;
             let updatedLocation = editingProduct.location;
 
             if (selectedShelf) {
                 const savedLocation = await assignProductLocation({
                     aisle: selectedShelf.aisle,
                     binNumber: Number(locationBin || 1),
+                    layerNumber: Number(locationLevel),
                     floor: selectedShelf.floor,
                     productId: editingProduct.id,
                     productName: productForm.name || editingProduct.name,
@@ -674,6 +695,7 @@ const InventoryList = () => {
                     shelfObjectId: selectedShelf.id,
                     sku: productForm.sku || editingProduct.sku,
                 }, { layoutId: publishedStockroom?.id, expectedRevision: publishedStockroom?.revision });
+                setPublishedStockroom((layout) => ({ ...layout, revision: savedLocation.layoutRevision, locations: [...(layout?.locations || []).filter((item) => item.productId !== editingProduct.id), savedLocation] }));
                 updatedLocation = {
                     ...savedLocation,
                     aisle: savedLocation?.aisle ?? selectedShelf.aisle,
@@ -685,6 +707,11 @@ const InventoryList = () => {
                 };
             }
 
+            if (shouldRemoveLocation) {
+                const layout = await removeProductLocation(editingProduct.id, { layoutId: publishedStockroom?.id, expectedRevision: publishedStockroom?.revision });
+                setPublishedStockroom(layout);
+                updatedLocation = {};
+            }
             const normalizedProduct = {
                 ...editingProduct,
                 ...formatCatalogProduct({
@@ -703,7 +730,7 @@ const InventoryList = () => {
             setRefreshKey((value) => value + 1);
             success('Inventory details updated successfully.');
         } catch (saveError) {
-            showError(saveError.message || 'Unable to update inventory details.');
+            showError(detailsSaved ? `Product details were saved, but the location was not confirmed. ${saveError.message || 'Reload the stockroom and try assigning the location again.'}` : (saveError.message || 'Unable to update inventory details.'));
         } finally {
             setSavingProductDetails(false);
         }
@@ -749,14 +776,14 @@ const InventoryList = () => {
             </div>
 
             {/* KPI Stats Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4 [&>div]:p-3 [&>div]:gap-2 [&>div:last-child]:col-span-2 sm:[&>div:last-child]:col-span-1 [&>div>div:first-child]:hidden sm:[&>div>div:first-child]:flex">
                 <div className="bg-white border border-primary-200 border-l-4 border-l-accent-info rounded-2xl p-5 shadow-sm flex items-center gap-4">
                     <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-accent-info/10 flex items-center justify-center">
                         <Package className="w-6 h-6 text-accent-info" />
                     </div>
                     <div className="min-w-0">
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500 mb-0.5">Total Products</p>
-                        <p className="text-2xl font-bold font-display text-primary-950 leading-none">{formatNumber(totalProducts)}</p>
+                        <p className="break-words text-lg font-bold font-display text-primary-950 leading-tight sm:text-2xl">{formatNumber(totalProducts)}</p>
                     </div>
                 </div>
 
@@ -789,7 +816,7 @@ const InventoryList = () => {
 
             <div className="flex flex-wrap gap-2 items-center">
                 {/* Search + Camera */}
-                <div className="relative flex gap-2 flex-1 min-w-[200px] max-w-xs">
+                <div className="relative flex w-full min-w-0 gap-2 sm:w-auto sm:flex-1 sm:max-w-xs">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                         <input
@@ -837,8 +864,10 @@ const InventoryList = () => {
                     </Button>
                 </div>
 
-                {/* Category dropdown — fixed width, never grows */}
-                <div className="flex-shrink-0 w-44">
+                <button type="button" className="btn btn-secondary sm:hidden" aria-expanded={showFilters} onClick={() => setShowFilters((v) => !v)}>Filters</button>
+                <div className={`${showFilters ? 'grid' : 'hidden'} w-full gap-3 rounded-xl border border-primary-200 bg-white p-3 sm:contents`}>
+                {/* Category dropdown */}
+                <div className="w-full sm:w-44 sm:shrink-0">
                     <Dropdown
                         options={categories}
                         value={selectedCategory}
@@ -847,7 +876,7 @@ const InventoryList = () => {
                 </div>
 
                 {/* Stock level dropdown — fixed width, never grows */}
-                <div className="flex-shrink-0 w-48">
+                <div className="w-full sm:w-48 sm:shrink-0">
                     <Dropdown
                         options={stockFilters}
                         value={selectedStockFilter}
@@ -855,7 +884,7 @@ const InventoryList = () => {
                     />
                 </div>
 
-                <div className="flex-shrink-0 w-48">
+                <div className="w-full sm:w-48 sm:shrink-0">
                     <Dropdown
                         options={inventorySortOptions}
                         value={selectedSortBy}
@@ -864,7 +893,7 @@ const InventoryList = () => {
                 </div>
 
                 {isAdmin && priceListVersions.length > 0 && (
-                    <div className="flex-shrink-0 w-52">
+                    <div className="w-full sm:w-52 sm:shrink-0">
                         <Dropdown
                             options={priceListVersions.map((version) => ({
                                 value: version.id,
@@ -876,8 +905,9 @@ const InventoryList = () => {
                     </div>
                 )}
 
-                {/* Right actions — pushed to the end */}
-                <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+                </div>
+                {/* Right actions */}
+                <div className="ml-auto flex max-w-full flex-wrap items-center gap-2">
                     {isAdmin && (
                         <PriceListManager onUpdated={async () => {
                             setRefreshKey((value) => value + 1);
@@ -889,7 +919,7 @@ const InventoryList = () => {
                         }} />
                     )}
 
-                    <div className="hidden items-center border border-primary-200 rounded-xl bg-primary-50 p-1 sm:flex gap-0.5">
+                    <div className="flex items-center border border-primary-200 rounded-xl bg-primary-50 p-1 gap-0.5">
                         <button
                             onClick={() => setViewMode('grid')}
                             className={`min-h-9 min-w-9 rounded-lg p-2 transition-all duration-150 ${viewMode === 'grid' ? 'bg-white text-accent-primary shadow-sm border border-primary-200' : 'text-primary-400 hover:text-primary-700'}`}
@@ -909,7 +939,7 @@ const InventoryList = () => {
                     <Button
                         variant="primary"
                         leftIcon={<Plus className="w-4 h-4" />}
-                        onClick={() => setShowAddModal(true)}
+                        onClick={() => navigate('/inventory/receive')}
                         className="whitespace-nowrap"
                     >
                         Add Stock
@@ -929,13 +959,13 @@ const InventoryList = () => {
             {loading ? (
                 <Card className="text-center py-12">
                     <Package className="w-12 h-12 text-primary-400 mx-auto mb-4 animate-pulse" />
-                    <h3 className="text-lg font-semibold text-primary-300 mb-2">Connecting to Supabase...</h3>
+                    <h3 className="text-lg font-semibold text-primary-300 mb-2">Loading inventory...</h3>
                     <p className="text-primary-500">Fetching live inventory data</p>
                 </Card>
             ) : catalogError ? (
                 <Card className="text-center py-12">
                     <AlertTriangle className="w-12 h-12 text-accent-danger mx-auto mb-4" />
-                    <h3 className="text-lg font-bold text-primary-900 mb-2">Database catalog unavailable</h3>
+                    <h3 className="text-lg font-bold text-primary-900 mb-2">Inventory unavailable</h3>
                     <p className="text-primary-500 font-medium">{catalogError}</p>
                 </Card>
             ) : filteredProducts.length === 0 ? (
@@ -962,7 +992,8 @@ const InventoryList = () => {
                 </Motion.div>
             ) : (
                 <Card padding="none">
-                    <div className="overflow-x-auto">
+                    <div className="divide-y sm:hidden">{sortedProducts.map((product) => <article key={product.catalogEntryId || product.id} className="space-y-2 p-4"><button type="button" className="w-full text-left" onClick={() => openPreview(product)}><strong className="block break-all font-mono text-primary-950">{getProductPartNumber(product)}</strong><span className="block text-sm">{product.name}</span></button><div className="flex flex-wrap justify-between gap-2 text-sm"><span>{formatCurrency(product.price)}</span><StockBadge quantity={product.quantity} /><span>Qty: {product.quantity}</span></div><p className="break-words text-xs text-primary-500">{normalizeLocationForDisplay(product.location)}</p><div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => handleLocateIn3D(product)}>Locate in 3D</Button>{isAdmin && <Button size="sm" variant="outline" onClick={() => openEditProduct(product)}>Edit</Button>}</div></article>)}</div>
+                    <div className="hidden overflow-x-auto sm:block">
                         <table className="table">
                             <thead>
                                 <tr>
@@ -1098,49 +1129,6 @@ const InventoryList = () => {
                 </Card>
             )}
 
-            <AddStockModal
-                isOpen={showAddModal}
-                onClose={() => setShowAddModal(false)}
-                onInvoicePosted={async (receipt) => {
-                    setRefreshKey((value) => value + 1);
-                    await refreshInventoryMeta();
-                    success(`Posted invoice ${receipt.invoiceNumber}. Received ${formatNumber(receipt.totalQuantity)} units across ${formatNumber(receipt.totalLines)} parts.`);
-                }}
-                onSave={async ({ product, quantity, supplierId, supplierName, supplierContact, supplierAddress, referenceNumber, receivedDate, reason, idempotencyKey, _bulkMode }) => {
-                    const result = await receiveInventoryStock({
-                        productId: product.id,
-                        quantity,
-                        supplierId,
-                        supplierName,
-                        supplierContact,
-                        supplierAddress,
-                        referenceNumber,
-                        receivedDate,
-                        reason,
-                    }, {
-                        idempotencyKey,
-                    });
-                    const updatedProduct = {
-                        ...product,
-                        stock: result.updatedStock,
-                        quantity: result.updatedStock,
-                    };
-                    setProductOverrides((current) => ({
-                        ...current,
-                        [updatedProduct.id]: updatedProduct,
-                    }));
-                    // In bulk mode the modal manages its own UI
-                    if (_bulkMode) {
-                        setRefreshKey((value) => value + 1);
-                        return;
-                    }
-                    setRefreshKey((value) => value + 1);
-                    await refreshInventoryMeta();
-                    success(`Received ${formatNumber(result.quantityAdded)} units. ${updatedProduct.name} now has ${formatNumber(result.updatedStock)} units.`);
-                    setShowAddModal(false);
-                }}
-
-            />
 
 
             <CameraScannerModal

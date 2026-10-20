@@ -11,6 +11,15 @@ export default defineConfig({
     // verifier consumes this instead of inferring load behavior from manual
     // chunk names.
     manifest: true,
+    rollupOptions: {
+      output: {
+        // Camera and 2D geometry are shared without pulling the WebGL renderer
+        // back into the locator page's initial module graph.
+        manualChunks(id) {
+          if (id.replaceAll('\\', '/').endsWith('/locator3d/utils/locatorViewport.js')) return 'locator-viewport';
+        },
+      },
+    },
   },
   test: {
     environment: 'jsdom',

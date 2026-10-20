@@ -8,7 +8,7 @@ import {
     cloneLocatorSceneObjects,
     createLocatorSceneObject,
     formatProductLocationLabel,
-    getShelfBinWorldPosition,
+    getShelfSlotWorldPosition,
     getShelfObjectByLocation,
     isShelfObject,
     locationBelongsToShelf,
@@ -50,6 +50,7 @@ function createInitialState() {
         objects: sceneObjects,
         pathAnimationRequest: 0,
         productLocations: [],
+        assignmentPreview: null,
         qualityPreference: 'auto',
         recentlyReceivedStock: {
             createdAt: null,
@@ -480,7 +481,7 @@ export const useLocator3DStore = create((set, get) => ({
         const shelf = getShelfObjectByLocation(location, sceneObjects);
         const floor = Number(location.floor || shelf?.floor || 1) === 2 ? 2 : 1;
         const shelfObjectId = shelf?.id || location.shelfObjectId || '';
-        const targetPosition = getShelfBinWorldPosition(shelf, location.binNumber);
+        const targetPosition = getShelfSlotWorldPosition(shelf, location.layerNumber, location.binNumber);
 
         set({
             activeFloor: floor,
@@ -493,6 +494,8 @@ export const useLocator3DStore = create((set, get) => ({
                 shelfNumber: Number(location.shelfNumber),
                 shelfObjectId,
                 targetPosition,
+                precise: Boolean(targetPosition),
+                focusSequence: Date.now(),
             },
             selectedObjectId: shelfObjectId || get().selectedObjectId,
         });
@@ -965,6 +968,14 @@ export const useLocator3DStore = create((set, get) => ({
             return;
         }
 
+        const target = get().sceneObjects.find((object) => object.id === objectId);
+        const invalid = get().productLocations.some((location) => locationBelongsToShelf(location, target)
+            && ((updates.layerCount !== undefined && Number(location.layerNumber) > Number(updates.layerCount))
+                || (updates.binCount !== undefined && Number(location.binNumber) > Number(updates.binCount))));
+        if (invalid) {
+            window.alert('Products use a layer or bin that would be removed. Reassign those products before reducing this shelf.');
+            return;
+        }
         withSceneObjects(set, (sceneObjects) => sceneObjects.map((object) => {
             if (object.id !== objectId || !isShelfObject(object)) {
                 return object;

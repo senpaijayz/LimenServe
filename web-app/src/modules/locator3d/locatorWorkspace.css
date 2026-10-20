@@ -36,6 +36,9 @@
     }
 }
 @media (max-width: 639px) {
+    .locator-workspace .locator-canvas { height: clamp(300px, 56svh, 520px); }
+    .locator-workspace button, .locator-workspace select { touch-action: manipulation; }
+    .locator-workspace [aria-label="Shelf inspector"] { max-height: 65svh; overscroll-behavior: contain; }
     .locator-workspace > header { padding: 16px; }
     .locator-workspace [aria-label="Design toolbar"] { gap: 6px; padding: 10px; }
     .locator-workspace [aria-label="Design toolbar"] button { min-height: 40px; }

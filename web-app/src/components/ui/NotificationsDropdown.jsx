@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { motion as Motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 import { AlertTriangle, Bell, Check, FileText, Info, LoaderCircle, X } from 'lucide-react';
 import {
     dismissNotification,
@@ -8,6 +8,9 @@ import {
     markAllNotificationsRead,
     markNotificationRead,
 } from '../../services/notificationsApi';
+
+import Modal from './Modal';
+import { useTheme } from '../../context/ThemeContext';
 
 const typeIcons = {
     error: AlertTriangle,
@@ -44,7 +47,8 @@ function formatTimeAgo(value) {
 
 const NotificationsDropdown = () => {
     const navigate = useNavigate();
-    const [isOpen, setIsOpen] = useState(false);
+    const { notificationsOpen: isOpen, openNotifications, closeNotifications } = useTheme();
+    const setIsOpen = (value) => value ? openNotifications() : closeNotifications();
     const [notifications, setNotifications] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -78,17 +82,6 @@ const NotificationsDropdown = () => {
 
         return () => window.clearInterval(timer);
     }, [loadNotifications]);
-
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                setIsOpen(false);
-            }
-        };
-
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
 
     const openDropdown = () => {
         const nextOpen = !isOpen;
@@ -143,15 +136,7 @@ const NotificationsDropdown = () => {
                 )}
             </button>
 
-            <AnimatePresence>
-                {isOpen && (
-                    <Motion.div
-                        initial={{ opacity: 0, y: -8, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                        transition={{ duration: 0.15 }}
-                        className="absolute right-0 top-full z-50 mt-2 max-h-[480px] w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-primary-200 bg-white shadow-xl shadow-primary-950/5"
-                    >
+            <Modal isOpen={isOpen} onClose={closeNotifications} title="Quotation Notifications" size="lg">
                         <div className="flex items-center justify-between border-b border-primary-100 bg-primary-50 px-4 py-3">
                             <div className="min-w-0">
                                 <h3 className="text-sm font-bold text-primary-950">Quotation Notifications</h3>
@@ -160,7 +145,7 @@ const NotificationsDropdown = () => {
                             {unreadCount > 0 && (
                                 <button
                                     type="button"
-                                    onClick={markAllRead}
+                                    onClick={() => void markAllRead().catch((e) => setError(e.message))}
                                     className="flex items-center gap-1 text-xs font-semibold text-accent-blue hover:underline"
                                 >
                                     <Check className="h-3 w-3" /> Mark all read
@@ -168,7 +153,7 @@ const NotificationsDropdown = () => {
                             )}
                         </div>
 
-                        <div className="max-h-[380px] overflow-y-auto">
+                        <div className="max-h-[60dvh] overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
                             {isLoading ? (
                                 <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm font-semibold text-primary-500">
                                     <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -190,28 +175,31 @@ const NotificationsDropdown = () => {
                                         <div
                                             key={notification.id}
                                             className={`flex cursor-pointer items-start gap-3 border-b border-primary-100 px-4 py-3 transition-colors hover:bg-primary-50 ${!notification.read ? 'bg-accent-blue/5' : ''}`}
-                                            onClick={() => openNotification(notification)}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(event) => { if (event.target === event.currentTarget && ['Enter', ' '].includes(event.key)) { event.preventDefault(); void openNotification(notification).catch((e) => setError(e.message)); } }}
+                                            onClick={() => void openNotification(notification).catch((e) => setError(e.message))}
                                         >
                                             <div className={`mt-0.5 flex-shrink-0 rounded-lg p-1.5 ${colorClass}`}>
                                                 <Icon className="h-3.5 w-3.5" />
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <div className="mb-0.5 flex items-center gap-2">
-                                                    <p className={`truncate text-sm font-semibold ${!notification.read ? 'text-primary-950' : 'text-primary-600'}`}>
+                                                    <p className={`break-words text-sm font-semibold ${!notification.read ? 'text-primary-950' : 'text-primary-600'}`}>
                                                         {notification.title}
                                                     </p>
                                                     {!notification.read && <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-accent-blue" />}
                                                 </div>
-                                                <p className="line-clamp-2 text-xs text-primary-500">{notification.message}</p>
+                                                <p className="break-words text-sm leading-5 text-primary-600">{notification.message}</p>
                                                 <p className="mt-1 text-[10px] font-medium text-primary-400">{formatTimeAgo(notification.createdAt)}</p>
                                             </div>
                                             <button
                                                 type="button"
                                                 onClick={(event) => {
                                                     event.stopPropagation();
-                                                    void removeNotification(notification.id);
+                                                    void removeNotification(notification.id).catch((e) => setError(e.message));
                                                 }}
-                                                className="flex-shrink-0 rounded p-1 text-primary-300 transition-colors hover:bg-primary-100 hover:text-accent-danger"
+                                                className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded p-1 text-primary-300 transition-colors hover:bg-primary-100 hover:text-accent-danger"
                                                 aria-label="Dismiss notification"
                                             >
                                                 <X className="h-3 w-3" />
@@ -221,9 +209,7 @@ const NotificationsDropdown = () => {
                                 })
                             )}
                         </div>
-                    </Motion.div>
-                )}
-            </AnimatePresence>
+            </Modal>
         </div>
     );
 };

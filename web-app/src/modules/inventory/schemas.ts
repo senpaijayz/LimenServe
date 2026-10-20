@@ -47,7 +47,7 @@ export const supplierInvoiceHeaderSchema = z.object({
     .refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00`)), 'Invoice date must be valid.'),
   supplierId: optionalTrimmedString,
   supplierCode: optionalTrimmedString,
-  supplierName: z.string().trim().min(1, 'Supplier name is required.'),
+  supplierName: z.string().trim().default(''),
   supplierContactName: optionalTrimmedString,
   supplierPhone: optionalTrimmedString,
   supplierEmail: optionalTrimmedString.refine(

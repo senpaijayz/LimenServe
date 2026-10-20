@@ -501,7 +501,7 @@ export function formatProductLocationLabel(location) {
         return '';
     }
 
-    return `Floor ${location.floor || 1} → Aisle ${normalizeAisle(location.aisle)} → Shelf ${location.shelfNumber} → Layer ${location.layerNumber || 1} → Bin ${location.binNumber}`;
+    return `Floor ${location.floor || 1} → Aisle ${normalizeAisle(location.aisle)} → Shelf ${location.shelfNumber} → ${Number(location.layerNumber) > 0 ? `Layer ${location.layerNumber}` : 'Layer not confirmed'} → Bin ${location.binNumber || 'not confirmed'}`;
 }
 
 export function locationBelongsToShelf(location, shelf) {
@@ -568,18 +568,28 @@ function roundPoint(value) {
     return Number(Number(value || 0).toFixed(3));
 }
 
-export function getShelfBinWorldPosition(shelf, binNumber = 1) {
-    if (!shelf) {
-        return [0, 0, 0];
-    }
+export function getShelfGeometry(shelf) {
+    const layerCount = Math.min(12, Math.max(1, Math.round(Number(shelf?.layerCount ?? (shelf?.type === 'shelf-4-layer' ? 4 : 2)))));
+    const binCount = Math.max(1, Math.round(Number(shelf?.binCount || 1)));
+    const width = Number(shelf?.dimensions?.width || 3.2);
+    const height = Number(shelf?.dimensions?.height || (0.72 + layerCount * 0.46));
+    const depth = Number(shelf?.dimensions?.depth || 0.9);
+    const levels = Array.from({ length: layerCount }, (_, i) => 0.26 + ((height - 0.48) / Math.max(1, layerCount - 1)) * i);
+    return { layerCount, binCount, width, height, depth, levels, slotWidth: width / binCount };
+}
 
-    const binCount = Math.max(1, Number(shelf.binCount || 1));
-    const safeBin = Math.min(binCount, Math.max(1, Math.round(Number(binNumber) || 1)));
-    const shelfWidth = Number(shelf.dimensions?.width || 3.2);
-    const slotWidth = shelfWidth / binCount;
-    const localX = (-shelfWidth / 2) + (slotWidth / 2) + ((safeBin - 1) * slotWidth);
-    const localY = Math.min(Number(shelf.dimensions?.height || 1.4), 0.9);
-    const localZ = -0.35;
+export function getShelfSlotLocalPosition(shelf, layerNumber, binNumber) {
+    if (!shelf) return null;
+    const geometry = getShelfGeometry(shelf);
+    const layer = Number(layerNumber), bin = Number(binNumber);
+    if (!Number.isInteger(layer) || layer < 1 || layer > geometry.layerCount || !Number.isInteger(bin) || bin < 1 || bin > geometry.binCount) return null;
+    return [(-geometry.width / 2) + geometry.slotWidth * (bin - 0.5), geometry.levels[layer - 1] + 0.23, shelf.type === 'parts-cabinet' ? geometry.depth / 2 + 0.1 : -geometry.depth / 3];
+}
+
+export function getShelfSlotWorldPosition(shelf, layerNumber, binNumber) {
+    const local = getShelfSlotLocalPosition(shelf, layerNumber, binNumber);
+    if (!local) return null;
+    const [localX, localY, localZ] = local;
     const angle = Number(shelf.rotation?.[1] || 0);
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
@@ -591,4 +601,9 @@ export function getShelfBinWorldPosition(shelf, binNumber = 1) {
         roundPoint((shelf.position?.[1] || 0) + localY),
         roundPoint((shelf.position?.[2] || 0) + rotatedZ),
     ];
+}
+
+// Compatibility helper for callers which only know the bin: no false layer.
+export function getShelfBinWorldPosition(shelf, binNumber = 1) {
+    return getShelfSlotWorldPosition(shelf, 1, binNumber);
 }

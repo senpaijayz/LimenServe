@@ -14,11 +14,14 @@ function formatLocation(location = {}) {
 
     const aisle = location?.aisle ? String(location.aisle).replace(/^aisle\s+/i, '').toUpperCase() : '';
     const shelfNumber = location?.shelfNumber ?? location?.shelf_number ?? location?.shelf;
-    const bin = location?.bin || location?.slot;
+    const bin = location?.binNumber || location?.bin || location?.slot;
+    const layer = location?.layerNumber ?? location?.level;
     const parts = aisle || shelfNumber || bin
         ? [
+            location?.floor ? `Floor ${location.floor}` : null,
             aisle ? `Aisle ${aisle}` : null,
             shelfNumber ? `Shelf ${shelfNumber}` : null,
+            layer ? `Layer ${layer}` : null,
             bin ? `Bin ${bin}` : null,
         ].filter(Boolean)
         : [
@@ -52,7 +55,7 @@ const ProductCard = memo(({ product, onEdit, onDelete, onLocate, onSelect }) => 
                 onClick={() => onSelect?.(product)}
                 className="bg-white border border-primary-200 rounded-xl p-4 shadow-sm group cursor-pointer transition-all duration-300 hover:border-accent-blue hover:shadow-md"
             >
-                <div className="mb-4 relative overflow-hidden rounded-2xl border border-primary-200 bg-[#0b1320] p-3">
+                <div className="mb-4 relative hidden sm:block overflow-hidden rounded-2xl border border-primary-200 bg-[#0b1320] p-3">
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(216,23,36,0.18),transparent_34%)] pointer-events-none" />
                     <div className="relative flex min-h-[150px] items-center justify-center">
                         {product.imageUrl ? (
@@ -88,6 +91,7 @@ const ProductCard = memo(({ product, onEdit, onDelete, onLocate, onSelect }) => 
                 </div>
 
                 <div className="space-y-3">
+                    {onEdit && <button type="button" className="min-h-11 w-full rounded-lg border border-primary-200 text-sm font-semibold sm:hidden" onClick={(event) => { event.stopPropagation(); onEdit(product); }}>Edit product / location</button>}
                     <div>
                         <h3 className="font-semibold text-primary-950 line-clamp-2 mb-1">
                             {product.name}
@@ -126,7 +130,7 @@ const ProductCard = memo(({ product, onEdit, onDelete, onLocate, onSelect }) => 
                     </div>
 
                     <div className="flex items-center gap-1 text-xs font-semibold text-primary-500">
-                        <MapPin className="w-3 h-3" />
+                        <MapPin className="w-3 h-3 shrink-0" />
                         <span>{formatLocation(product.location)}</span>
                     </div>
 
@@ -151,6 +155,7 @@ const ProductCard = memo(({ product, onEdit, onDelete, onLocate, onSelect }) => 
                             Locate in 3D
                         </button>
                     )}
+                {onEdit && <button type="button" className="min-h-11 w-full rounded-lg border border-primary-200 text-sm font-semibold sm:hidden" onClick={(event) => { event.stopPropagation(); onEdit(product); }}>Edit product / location</button>}
                 </div>
             </Motion.div>
 

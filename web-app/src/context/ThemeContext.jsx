@@ -21,6 +21,9 @@ export function ThemeProvider({ children }) {
 
     // Mobile sidebar open state
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [notificationsOpen, setNotificationsOpen] = useState(false);
+    const openNotifications = useCallback(() => { setSidebarOpen(false); setNotificationsOpen(true); }, []);
+    const closeNotifications = useCallback(() => setNotificationsOpen(false), []);
 
     // Toggle sidebar collapsed state
     const toggleSidebar = useCallback(() => {
@@ -33,6 +36,7 @@ export function ThemeProvider({ children }) {
 
     // Toggle mobile sidebar
     const toggleMobileSidebar = useCallback(() => {
+        setNotificationsOpen(false);
         setSidebarOpen(prev => !prev);
     }, []);
 
@@ -59,6 +63,9 @@ export function ThemeProvider({ children }) {
         toggleSidebar,
         toggleMobileSidebar,
         closeMobileSidebar,
+        notificationsOpen,
+        openNotifications,
+        closeNotifications,
     };
 
     return (

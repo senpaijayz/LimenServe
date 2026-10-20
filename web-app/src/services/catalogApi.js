@@ -645,6 +645,23 @@ export async function receiveInventoryStock(payload, options = {}) {
   }
 }
 
+export async function receiveInventoryBatch(payload, { idempotencyKey } = {}) {
+  try {
+    const { data } = await apiClient.post('/catalog/stock/receive-batch', payload, {
+      timeout: INVENTORY_API_TIMEOUT_MS,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    });
+    clearProductCatalogCaches();
+    return data;
+  } catch (error) {
+    try { extractApiError(error, 'Unable to confirm this stock receipt.'); }
+    catch (friendly) {
+      friendly.receiptRejected = [400, 404, 422].includes(error?.response?.status);
+      throw friendly;
+    }
+  }
+}
+
 export async function getProductStockHistory(productId, limit = 20) {
   try {
     const { data } = await apiClient.get(`/catalog/products/${productId}/stock-history`, {
@@ -657,16 +674,20 @@ export async function getProductStockHistory(productId, limit = 20) {
   }
 }
 
-export async function getInventoryMovements(limit = 12, params = {}) {
+export async function getInventoryMovementPage(limit = 50, params = {}) {
   try {
     const { data } = await apiClient.get('/catalog/stock/movements', {
       params: { limit, ...params },
       timeout: INVENTORY_API_TIMEOUT_MS,
     });
-    return data.movements ?? [];
+    return data;
   } catch (error) {
     extractApiError(error, 'Failed to load inventory movement history.');
   }
+}
+
+export async function getInventoryMovements(limit = 12, params = {}) {
+  return (await getInventoryMovementPage(limit, params)).movements || [];
 }
 
 export async function getCatalogProductByPartNumber(partNumber, options = {}) {

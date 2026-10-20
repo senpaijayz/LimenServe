@@ -7,6 +7,9 @@ import {
     FLOOR_HEIGHT,
     SNAP_STEP,
     getCounterObject,
+    getShelfGeometry,
+    getShelfSlotLocalPosition,
+    getShelfSlotWorldPosition,
     getStairLayoutMetrics,
     isShelfObject,
     locationBelongsToShelf,
@@ -654,7 +657,10 @@ function ShelfObject({ object, onTransformingChange }) {
     const width = Number(object.dimensions?.width || 3.2);
     const depth = Number(object.dimensions?.depth || 0.9);
     const height = Number(object.dimensions?.height || (0.72 + layers * 0.46));
-    const shelfLevels = useMemo(() => Array.from({ length: layers }, (_, index) => 0.26 + ((height - 0.48) / Math.max(1, layers - 1)) * index), [height, layers]);
+    const shelfLevels = useMemo(() => getShelfGeometry(object).levels, [object]);
+    const preview = useLocator3DStore((state) => state.assignmentPreview);
+    const target = preview?.shelfObjectId === object.id ? preview : locatedProduct?.shelfObjectId === object.id ? locatedProduct : null;
+    const targetSlot = getShelfSlotLocalPosition(object, target?.layerNumber, target?.binNumber);
     const frameColor = '#4A5568';
     const accentColor = '#3182CE';
     const slotWidth = width / binCount;
@@ -671,14 +677,14 @@ function ShelfObject({ object, onTransformingChange }) {
                         [-width / 2, height / 2, depth / 2],
                         [width / 2, height / 2, depth / 2],
                     ].map((position) => (
-                        <Block key={position.join('-')} args={[0.12, height, 0.12]} color={frameColor} located={located} locked={locked} position={position} selected={selected} />
+                        <Block key={position.join('-')} args={[0.12, height, 0.12]} color={frameColor} located={false} locked={locked} position={position} selected={selected} />
                     ))}
                     {shelfLevels.map((level) => (
                         <group key={level}>
                             <Block
                                 args={[width + 0.1, 0.08, 0.05]}
                                 color="#f3c969"
-                                located={located}
+                                located={false}
                                 locked={locked}
                                 position={[0, level + 0.09, depth / 2 + 0.02]}
                                 selected={selected}
@@ -686,7 +692,7 @@ function ShelfObject({ object, onTransformingChange }) {
                             <Block
                                 args={[width + 0.35, 0.12, depth + 0.18]}
                                 color={accentColor}
-                                located={located}
+                                located={false}
                                 locked={locked}
                                 position={[0, level, 0]}
                                 selected={selected}
@@ -707,7 +713,7 @@ function ShelfObject({ object, onTransformingChange }) {
                     <Block
                         args={[width, height - 0.2, 0.08]}
                         color="#1e293b"
-                        located={located}
+                        located={false}
                         locked={locked}
                         opacity={0.7}
                         position={[0, height / 2, depth / 2 - 0.05]}
@@ -716,7 +722,7 @@ function ShelfObject({ object, onTransformingChange }) {
                     <Block
                         args={[width + 0.12, 0.28, depth + 0.08]}
                         color="#111827"
-                        located={located}
+                        located={false}
                         locked={locked}
                         position={[0, height + 0.14, 0]}
                         selected={selected}
@@ -725,23 +731,23 @@ function ShelfObject({ object, onTransformingChange }) {
                     {isDesignMode && <Label position={[0, height + 0.38, depth / 2 + 0.18]} tone="floor">
                         {`AISLE ${normalizeAisle(object.aisle)} · ${object.binCount || 0} BINS`}
                     </Label>}
-                    {shelfLocations.filter((location) => isDesignMode || location.productId === locatedProduct?.productId || (recentlyReceived?.items?.length && useLocator3DStore.getState().isRecentlyReceivedProduct(location.productId || location.sku))).map((location, index) => {
-                        const safeBin = Math.min(binCount, Math.max(1, Number(location.binNumber || 1)));
-                        const savedLayer = Number(location.layerNumber || 0);
-                        const markerLevel = savedLayer > 0
-                            ? shelfLevels[Math.min(layers, Math.max(1, savedLayer)) - 1]
-                            : shelfLevels[index % shelfLevels.length] ?? shelfLevels[0];
-
-                        return (
-                            <ProductMarker
-                                highlighted={locatedProduct?.productId === location.productId}
-                                key={location.productId}
-                                location={location}
-                                position={[slotPositions[safeBin - 1], markerLevel + 0.28, 0.18]}
-                            />
-                        );
+                    {targetSlot && <group>
+                        <mesh position={[0, shelfLevels[Number(target.layerNumber) - 1] + 0.09, depth / 2 + 0.08]}>
+                            <boxGeometry args={[width, 0.08, 0.08]} />
+                            <meshBasicMaterial color={preview ? '#8b5cf6' : '#38bdf8'} toneMapped={false} />
+                        </mesh>
+                        <mesh position={targetSlot} renderOrder={10}>
+                            <boxGeometry args={[slotWidth * 0.9, 0.34, Math.max(0.25, depth * 0.65)]} />
+                            <meshBasicMaterial color={preview ? '#8b5cf6' : '#facc15'} transparent opacity={0.35} depthTest={false} toneMapped={false} />
+                            <Edges color={preview ? '#7c3aed' : '#ca8a04'} threshold={8} />
+                        </mesh>
+                    </group>}
+                    {shelfLocations.filter((location) => isDesignMode || location.productId === locatedProduct?.productId || (recentlyReceived?.items?.length && useLocator3DStore.getState().isRecentlyReceivedProduct(location.productId || location.sku))).map((location) => {
+                        const position = getShelfSlotLocalPosition(object, location.layerNumber, location.binNumber);
+                        if (!position) return null;
+                        return <ProductMarker highlighted={locatedProduct?.productId === location.productId} key={location.productId} location={location} position={position} />;
                     })}
-                    <Block args={[width + 0.4, 0.18, depth + 0.22]} color="#111827" located={located} locked={locked} position={[0, 0.09, 0]} selected={selected} />
+                    <Block args={[width + 0.4, 0.18, depth + 0.22]} color="#111827" located={false} locked={locked} position={[0, 0.09, 0]} selected={selected} />
                     {(isDesignMode || located || selected || quality.tier === 'high') && <Label position={[0, height + 0.18, depth / 2 + 0.28]} rotation={[-0.5, 0, 0]} testId={`locator-label-${object.id}`}>
                         {`Aisle ${object.aisle} Shelf ${object.shelfNumber}`}
                     </Label>}
@@ -752,38 +758,28 @@ function ShelfObject({ object, onTransformingChange }) {
 }
 
 function PartsCabinetObject({ object, onTransformingChange }) {
-    const width = Number(object.dimensions?.width || 3.2);
-    const depth = Number(object.dimensions?.depth || 0.9);
-    const height = Number(object.dimensions?.height || 2.35);
-    const drawerCount = Math.max(6, Math.min(16, Number(object.binCount || 12)));
-    const columns = 4;
-    const rows = Math.ceil(drawerCount / columns);
-    const drawerWidth = (width - 0.35) / columns;
-    const drawerHeight = Math.max(0.16, (height - 0.38) / rows);
-
+    const { width, depth, height, layerCount, binCount, levels, slotWidth } = getShelfGeometry(object);
+    const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
+    const preview = useLocator3DStore((state) => state.assignmentPreview);
+    const target = preview?.shelfObjectId === object.id ? preview : locatedProduct?.shelfObjectId === object.id ? locatedProduct : null;
+    const targetSlot = getShelfSlotLocalPosition(object, target?.layerNumber, target?.binNumber);
+    const drawerHeight = Math.max(0.12, Math.min(0.42, (height - 0.3) / layerCount));
     return (
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
-            {({ located, locked, selected }) => (
-                <>
-                    <Block args={[width, height, depth]} color="#312e81" located={located} locked={locked} position={[0, height / 2, 0]} selected={selected} />
-                    {Array.from({ length: drawerCount }, (_, index) => {
-                        const column = index % columns;
-                        const row = Math.floor(index / columns);
-                        return (
-                            <Block
-                                args={[Math.max(0.18, drawerWidth - 0.08), Math.max(0.1, drawerHeight - 0.08), 0.08]}
-                                color={index % 3 === 0 ? '#8b5cf6' : '#6366f1'}
-                                key={`drawer-${index}`}
-                                located={located}
-                                locked={locked}
-                                position={[-width / 2 + drawerWidth / 2 + column * drawerWidth, 0.22 + drawerHeight / 2 + row * drawerHeight, depth / 2 + 0.04]}
-                                selected={selected}
-                            />
-                        );
-                    })}
-                    <Label position={[0, height + 0.28, depth / 2 + 0.16]} tone="floor">SMALL PARTS</Label>
-                </>
-            )}
+            {({ locked, selected }) => <>
+                <Block args={[width, height, depth]} color="#312e81" located={false} locked={locked} position={[0, height / 2, 0]} selected={selected} />
+                {levels.map((level, layer) => Array.from({ length: binCount }, (_, bin) => (
+                    <Block key={`drawer-${layer}-${bin}`} args={[Math.max(0.04, slotWidth - 0.05), drawerHeight, 0.08]}
+                        color={bin % 3 === 0 ? '#8b5cf6' : '#6366f1'} located={false} locked={locked}
+                        position={[-width / 2 + slotWidth * (bin + 0.5), level + 0.23, depth / 2 + 0.04]} selected={selected} />
+                )))}
+                {targetSlot && <mesh position={[targetSlot[0], targetSlot[1], depth / 2 + 0.1]} renderOrder={10}>
+                    <boxGeometry args={[Math.max(0.06, slotWidth - 0.02), drawerHeight + 0.04, 0.03]} />
+                    <meshBasicMaterial color={preview ? '#a855f7' : '#facc15'} transparent opacity={0.65} depthTest={false} />
+                    <Edges color="#ffffff" />
+                </mesh>}
+                {targetSlot && <Label position={[targetSlot[0], targetSlot[1] + drawerHeight, depth / 2 + 0.15]} tone="floor">Layer {target.layerNumber} · Bin {target.binNumber}</Label>}
+            </>}
         </TransformableObject>
     );
 }
@@ -1128,13 +1124,31 @@ function CameraRig({ controlsRef, isTransforming }) {
 
         if (locatedProduct?.targetPosition) {
             const shelf = sceneObjects.find((object) => object.id === locatedProduct.shelfObjectId);
-            if (shelf) return buildObjectCameraTarget(shelf, aspect);
-            const [x, y, z] = locatedProduct.targetPosition;
+            const exact = getShelfSlotWorldPosition(shelf, locatedProduct.layerNumber, locatedProduct.binNumber) || locatedProduct.targetPosition;
+            const [x, y, z] = exact;
+            const angle = Number(shelf?.rotation?.[1] || 0);
+            const distance = Math.max(3.5, Number(shelf?.dimensions?.width || 3.2) * 1.2 / Math.min(1, aspect));
 
-            return {
-                lookAt: new THREE.Vector3(x, y, z),
-                position: new THREE.Vector3(x + 5.2, y + 3.8, z + 5.2),
-            };
+            const lookAt = new THREE.Vector3(x, y, z);
+            const front = angle + (shelf?.type === 'parts-cabinet' ? Math.PI : 0);
+            const candidates = [0, 0.65, -0.65, 1.2, -1.2, Math.PI].map((offset) => {
+                const position = new THREE.Vector3(x - Math.sin(front + offset) * distance, y + Math.min(2, distance * 0.3), z - Math.cos(front + offset) * distance);
+                const ray = new THREE.Ray(position, lookAt.clone().sub(position).normalize());
+                const blocked = sceneObjects.filter((object) => {
+                    if (object.id === shelf?.id || object.type === 'floor' || Number(object.floor || 1) !== activeFloor) return false;
+                    const [ox = 0, oy = 0, oz = 0] = object.position || [];
+                    const yaw = Number(object.rotation?.[1] || 0);
+                    const w = Number(object.dimensions?.width || 0), d = Number(object.dimensions?.depth || 0), h = Number(object.dimensions?.height || 0);
+                    const halfX = (Math.abs(Math.cos(yaw)) * w + Math.abs(Math.sin(yaw)) * d) / 2;
+                    const halfZ = (Math.abs(Math.sin(yaw)) * w + Math.abs(Math.cos(yaw)) * d) / 2;
+                    const box = new THREE.Box3(new THREE.Vector3(ox - halfX, oy, oz - halfZ), new THREE.Vector3(ox + halfX, oy + h, oz + halfZ));
+                    const hit = ray.intersectBox(box, new THREE.Vector3());
+                    return box.containsPoint(position) || (hit && position.distanceTo(hit) < position.distanceTo(lookAt));
+                }).length;
+                return { position, blocked };
+            });
+            candidates.sort((a, b) => a.blocked - b.blocked);
+            return { lookAt, position: candidates[0].position };
         }
 
         const focusedObject = cameraFocusRequest?.objectId
@@ -1158,6 +1172,10 @@ function CameraRig({ controlsRef, isTransforming }) {
         locatedProduct?.productId || '',
         locatedProduct?.shelfObjectId || '',
         locatedProduct?.binNumber || '',
+        locatedProduct?.layerNumber || '',
+        locatedProduct?.focusSequence || '',
+        JSON.stringify(locatedProduct?.targetPosition || []),
+        JSON.stringify(sceneObjects.find((object) => object.id === locatedProduct?.shelfObjectId) || null),
     ].join(':');
 
     useEffect(() => {

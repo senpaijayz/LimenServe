@@ -92,6 +92,7 @@ export interface ReceiveStockFromSupplierInvoiceOptions {
 
 export class StockReceiptProcessingError extends Error {
   issues: StockReceiptProcessingIssue[];
+  receiptRejected = false;
 
   constructor(message: string, issues: StockReceiptProcessingIssue[] = []) {
     super(message);
@@ -228,7 +229,12 @@ async function postStockReceipt(payload: SupplierInvoiceStockReceiptInput, idemp
     void invalidateCatalogClientCaches();
     return data.receipt as StockReceiptPostResult;
   } catch (error) {
-    extractApiError(error, 'Failed to receive stock from invoice.');
+    try { extractApiError(error, 'Failed to receive stock from invoice.'); }
+    catch (friendly) {
+      const receiptError = friendly as Error & { receiptRejected?: boolean };
+      receiptError.receiptRejected = [400, 404, 422].includes((error as { response?: { status: number } })?.response?.status ?? 0);
+      throw receiptError;
+    }
   }
 }
 
@@ -273,12 +279,14 @@ export async function receiveStockFromSupplierInvoice(
       throw error;
     }
 
-    throw new StockReceiptProcessingError(
+    const receiptError = new StockReceiptProcessingError(
       error instanceof Error ? error.message : 'Failed to receive stock from invoice.',
       normalizedPayload.items.map((item) => ({
         partNumber: item.partNumber,
-        message: 'Invoice posting failed before this line could be committed.',
+        message: 'This line has not been confirmed. Keep the same invoice request when checking its result.',
       })),
     );
+    receiptError.receiptRejected = Boolean((error as { receiptRejected?: boolean })?.receiptRejected);
+    throw receiptError;
   }
 }
