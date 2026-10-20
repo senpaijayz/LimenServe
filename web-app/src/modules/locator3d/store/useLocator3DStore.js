@@ -957,6 +957,9 @@ export const useLocator3DStore = create((set, get) => ({
             };
         });
     },
+    removeProductLocation: (productId) => set((state) => ({
+        productLocations: state.productLocations.filter((item) => String(item.productId) !== String(productId)),
+    })),
     updateShelfProperties: (objectId, updates) => {
         if (!objectId || !updates) {
             return;
@@ -986,12 +989,17 @@ export const useLocator3DStore = create((set, get) => ({
             const safeDescription = updates.description === undefined
                 ? object.description || ''
                 : String(updates.description || '').trim();
+            const previousLayers = Math.max(1, Math.round(Number(object.layerCount || (object.type === 'shelf-4-layer' ? 4 : 2))));
+            const addedLayers = Math.max(0, layerCount - previousLayers);
 
             return {
                 ...object,
                 aisle: safeAisle,
                 binCount,
                 description: safeDescription,
+                dimensions: addedLayers && object.type !== 'parts-cabinet'
+                    ? { ...object.dimensions, height: clampDimension(Number(object.dimensions.height) + addedLayers * 0.5, object.dimensions.height) }
+                    : object.dimensions,
                 layerCount,
                 name: safeName || `Aisle ${safeAisle} Shelf ${shelfNumber}`,
                 shelfNumber,

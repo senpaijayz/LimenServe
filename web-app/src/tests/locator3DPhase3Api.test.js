@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../services/apiClient', () => ({ default: { post: vi.fn() }, STOCKROOM_API_TIMEOUT_MS: 15000 }));
 import api from '../services/apiClient';
-import { assignProductLocation, getProductLocations, listStoreLayouts, loadStoreLayout, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
+import { assignProductLocation, getProductLocations, listStoreLayouts, loadStoreLayout, removeProductLocation, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
 const row = { id: 'layout-a', name: 'Workshop', store_id: 'store-a', revision: 5, status: 'published', metadata: { scene: { objects: [] }, locations: [{ productId: 'part-a', shelfObjectId: 'shelf-a', layoutId: 'layout-a' }] } };
 describe('normalized locator API', () => {
     beforeEach(() => { vi.resetAllMocks(); api.post.mockResolvedValue({ data: { result: row } }); });
@@ -46,6 +46,14 @@ describe('normalized locator API', () => {
         expect(await assignProductLocation(location, { layoutId: 'layout-a', expectedRevision: 5 })).toMatchObject({ ...location, layoutRevision: 6 });
         expect(api.post.mock.calls.map((call) => call[1].action)).toEqual(['assign', 'load']);
         expect(api.post.mock.calls[1][1].payload.layoutId).toBe('layout-a');
+    });
+    it('removes a shelf assignment only when the server confirms a newer layout without it', async () => {
+        api.post.mockResolvedValueOnce({ data: { result: { ...row, revision: 6, metadata: { ...row.metadata, locations: [] } } } });
+        expect(await removeProductLocation('part-a', { layoutId: 'layout-a', expectedRevision: 5 })).toMatchObject({ revision: 6, locations: [] });
+        expect(api.post.mock.calls[0][1]).toEqual({ action: 'unassign', payload: { productId: 'part-a', layoutId: 'layout-a', expectedRevision: 5 } });
+    });
+    it('does not report removal if the assignment is still saved', async () => {
+        await expect(removeProductLocation('part-a', { layoutId: 'layout-a', expectedRevision: 5 })).rejects.toThrow(/did not confirm/);
     });
     it('does not confirm a stale assignment or a different bin after timeout', async () => {
         const location = { productId: 'part-a', shelfObjectId: 'shelf-a', binNumber: 3 };

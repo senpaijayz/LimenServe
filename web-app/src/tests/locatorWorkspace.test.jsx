@@ -11,11 +11,12 @@ vi.mock('../modules/locator3d/components/Locator3DScene', () => ({ default: () =
 vi.mock('../services/catalogApi', () => ({ getFullProductCatalog: vi.fn(async () => [{ id: 'part-1', name: 'Oil Filter', sku: 'OF-1' }]) }));
 vi.mock('../modules/locator3d/services/locator3DApi', () => ({
     assignProductLocation: vi.fn(async (location) => location),
+    removeProductLocation: vi.fn(),
     getProductLocations: vi.fn(async () => [{ productId: 'part-1', productName: 'Oil Filter', shelfObjectId: 'shelf-4-a', aisle: 'B', shelfNumber: 2, floor: 1, binNumber: 4 }]),
     listStoreLayouts: vi.fn(), loadStoreLayout: vi.fn(), saveStoreLayout: vi.fn(), setStoreLayoutPriority: vi.fn(),
     getLayoutHistory: vi.fn(), restoreLayoutRevision: vi.fn(),
 }));
-import { assignProductLocation, listStoreLayouts, loadStoreLayout, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
+import { assignProductLocation, listStoreLayouts, loadStoreLayout, removeProductLocation, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
 import Locator3DAdmin from '../modules/locator3d/pages/Locator3DAdmin';
 import { getFullProductCatalog } from '../services/catalogApi';
 
@@ -126,7 +127,7 @@ describe('Stockroom workspace workflows', () => {
         fireEvent.keyDown(screen.getByRole('button', { name: 'Aisle B 4-Layer Shelf' }), { key: 'Enter' });
         const dialog = screen.getByRole('dialog');
         fireEvent.change(within(dialog).getByLabelText('Product'), { target: { value: 'OF-1' } });
-        fireEvent.click(within(dialog).getByRole('button', { name: /OF-1.*Oil Filter/ }));
+        fireEvent.click(within(dialog).getByText('Oil Filter').closest('button'));
         expect(within(dialog).getByLabelText('Layer').value).toBe('2');
         expect(within(dialog).getByLabelText('Bin').value).toBe('4');
         fireEvent.change(within(dialog).getByLabelText('Bin'), { target: { value: '3' } });
@@ -137,6 +138,18 @@ describe('Stockroom workspace workflows', () => {
         await screen.findByText('Draft saved. Publish it when ready for staff.');
         expect(useLocator3DStore.getState().productLocations[0]).toMatchObject({ layerNumber: 2, binNumber: 3 });
         expect(saveStoreLayout).not.toHaveBeenCalled();
+    });
+    it('removes a selected shelf assignment without deleting its product', async () => {
+        removeProductLocation.mockResolvedValue({ id: 'layout-1', revision: 5, status: 'published', layoutName: 'Workshop', layoutData: { objects: LOCATOR_SCENE_OBJECTS }, locations: [] });
+        mount(); await loaded();
+        fireEvent.click(screen.getByRole('button', { name: 'Top-down 2D floor view' }));
+        fireEvent.keyDown(screen.getByRole('button', { name: 'Aisle B 4-Layer Shelf' }), { key: 'Enter' });
+        const dialog = screen.getByRole('dialog');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Remove OF-1 (Oil Filter) from shelf' }));
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }));
+        await waitFor(() => expect(removeProductLocation).toHaveBeenCalledWith('part-1', { layoutId: 'layout-1', expectedRevision: 4 }));
+        await waitFor(() => expect(within(dialog).getByText('No products assigned yet.')).toBeTruthy());
+        expect(getFullProductCatalog).toHaveBeenCalled();
     });
     it('prevents duplicate assignments and layout saves while assignment is in flight', async () => {
         loadStoreLayout.mockResolvedValueOnce({ id: 'draft-1', revision: 7, status: 'draft', layoutName: 'Workshop', layoutData: { objects: LOCATOR_SCENE_OBJECTS }, locations: [] });

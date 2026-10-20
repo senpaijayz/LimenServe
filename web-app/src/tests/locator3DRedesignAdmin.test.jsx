@@ -165,7 +165,7 @@ describe('3D Locator rebuild', () => {
 
         expect(screen.getByRole('complementary', { name: 'Shelf inspector' })).toBeTruthy();
         expect(screen.getByDisplayValue('Aisle B 4-Layer Shelf')).toBeTruthy();
-        expect(screen.getByText('Oil Filter')).toBeTruthy();
+        expect(screen.getByText('OF-1 (Oil Filter)')).toBeTruthy();
         expect(screen.getByText(/Layer 2 · Bin 4 · Floor 1 · Aisle B/)).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText('Shelf name'), { target: { value: 'Fast Filters' } });
@@ -176,6 +176,22 @@ describe('3D Locator rebuild', () => {
             description: 'Near receiving lane',
             name: 'Fast Filters',
         }));
+    });
+
+    it('opens shelf sizing beside Size on hover and raises height when a layer is added', async () => {
+        renderLocator();
+        fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
+        act(() => useLocator3DStore.getState().forceSelectObject('shelf-4-a'));
+        const sizeButton = screen.getByRole('button', { name: 'Size' });
+        fireEvent.mouseEnter(sizeButton.parentElement);
+        expect(screen.getByLabelText('Resize Aisle B 4-Layer Shelf')).toBeTruthy();
+        expect(screen.queryByRole('dialog', { name: /Resize/ })).toBeNull();
+        fireEvent.change(screen.getByLabelText('shelf layer count'), { target: { value: '5' } });
+        expect(screen.getByLabelText('height dimension').value).toBe('3.05');
+        fireEvent.click(screen.getByRole('button', { name: 'Apply size' }));
+        expect(useLocator3DStore.getState().sceneObjects.find((object) => object.id === 'shelf-4-a')).toMatchObject({
+            layerCount: 5, dimensions: { height: 3.05 },
+        });
     });
 
     it('protects mapped shelves from accidental deletion', async () => {

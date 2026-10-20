@@ -16,7 +16,7 @@ import { useLocator3DStore } from '../store/useLocator3DStore';
 import { getLocatorQualityCapabilities, getLocatorQualityProfile } from '../utils/qualityTier';
 import { buildObstacleAwarePath } from '../utils/locatorPathfinding';
 import { getFloorBounds, getObjectFitCamera, getOverviewCamera } from '../utils/locatorViewport';
-import { getFloorSurface, rectanglePolygon, subtractFloorOpenings } from '../utils/stairOpening';
+import { getFloorSurface } from '../utils/stairOpening';
 import { createFrameSampler, sampleFrameQuality } from '../utils/frameQuality';
 
 const SELECTED_EDGE = '#0ea5e9';
@@ -340,12 +340,17 @@ function TransformableObject({ children, object, onTransformingChange }) {
                 data-testid={`locator-object-${object.id}`}
                 name={object.id}
                 onClick={handleClick}
+                onDoubleClick={(event) => {
+                    if (!isDesignMode || !isShelfObject(object)) return;
+                    event.stopPropagation?.();
+                    onShelfClick?.(object);
+                }}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={finishPointerDrag}
                 onPointerOver={(event) => {
-                    if (isDesignMode && event.nativeEvent?.target) {
-                        event.nativeEvent.target.style.cursor = object.isLocked ? 'not-allowed' : selected ? 'grab' : 'pointer';
+                    if (event.nativeEvent?.target && (isDesignMode || isShelfObject(object))) {
+                        event.nativeEvent.target.style.cursor = isDesignMode && object.isLocked ? 'not-allowed' : selected ? 'grab' : 'pointer';
                     }
                 }}
                 position={object.position}
@@ -395,14 +400,8 @@ function FloorObject({ object, onTransformingChange }) {
     const width = Number(object.dimensions?.width || 18);
     const depth = Number(object.dimensions?.depth || 14);
     const floorY = activeFloor === 2 ? floorHeight : 0;
-    const entranceZ = (depth / 2) - 0.72;
-    const laneLength = Math.max(1.2, depth * 0.36);
     const surface = useMemo(() => getFloorSurface(object, sceneObjects, activeFloor), [object, sceneObjects, activeFloor]);
     const slabShapes = useMemo(() => floorShapes(surface.panels), [surface]);
-    const paint = useMemo(() => [
-        { color: '#243b53', polygon: rectanglePolygon(Math.min(width * 0.36, 5.2), Math.min(depth * 0.16, 1.4), 0, entranceZ) },
-        ...[-0.3, -0.1, 0.1, 0.3].map((ratio) => ({ color: '#f8c76a', polygon: rectanglePolygon(0.075, laneLength, width * ratio) })),
-    ].map(({ color, polygon }) => ({ color, shapes: floorShapes(subtractFloorOpenings(polygon, surface.openings)) })), [depth, entranceZ, laneLength, surface, width]);
 
     return (
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
@@ -415,19 +414,6 @@ function FloorObject({ object, onTransformingChange }) {
                         <meshStandardMaterial attach="material-1" color="#94a3b8" roughness={0.88} />
                         {selected && <Edges color={locked ? LOCKED_EDGE : SELECTED_EDGE} />}
                     </mesh>}
-                    {paint.map(({ color, shapes }, index) => shapes.length > 0 && (
-                        <mesh key={`floor-paint-${index}`} position={[0, floorY + 0.028, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                            <shapeGeometry args={[shapes]} />
-                            <meshStandardMaterial color={color} roughness={0.82} />
-                        </mesh>
-                    ))}
-                    {activeFloor === 1 && (
-                        <>
-                            <Label position={[-Math.max(1, width / 2 - 1.3), floorY + 0.1, entranceZ]} tone="floor">ENTRANCE</Label>
-                            <Label position={[-Math.max(1, width / 2 - 3.6), floorY + 0.18, entranceZ - 1.02]} tone="floor">CHECKOUT</Label>
-                            <Label position={[0, floorY + 0.12, entranceZ - 0.1]} tone="floor">CUSTOMER WALKWAY</Label>
-                        </>
-                    )}
                     <Label position={[-width / 2 + 1.55, floorY + 0.14, -depth / 2 + 0.55]} tone="floor">{`FLOOR ${activeFloor}`}</Label>
                 </>
             )}

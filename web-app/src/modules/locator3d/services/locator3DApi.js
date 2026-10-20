@@ -80,6 +80,26 @@ export async function assignProductLocation(location, context = {}) {
         throw error;
     }
 }
+export async function removeProductLocation(productId, context) {
+    if (!productId || !context?.layoutId || !Number.isFinite(context.expectedRevision)) {
+        throw new Error('Load the saved stockroom before removing a product location.');
+    }
+    const confirmedRemoval = (saved) => saved?.id === context.layoutId
+        && saved.revision > context.expectedRevision
+        && !saved.locations.some((entry) => String(entry.productId) === String(productId));
+    try {
+        const saved = mapLayout(await command('unassign', { ...context, productId }));
+        if (!confirmedRemoval(saved)) throw new Error('The server did not confirm that this location was removed. Refresh the stockroom before retrying.');
+        return saved;
+    } catch (error) {
+        if (!['LOCATOR_SAVE_UNCONFIRMED', 'ECONNABORTED', 'ERR_NETWORK'].includes(error.code)) throw error;
+        try {
+            const saved = await loadStoreLayout('', { layoutId: context.layoutId });
+            if (confirmedRemoval(saved)) return saved;
+        } catch { /* An interrupted response does not mean the write failed. */ }
+        throw error;
+    }
+}
 export async function getProductLocations(name = '', options = { publishedOnly: true }) {
     return (await loadStoreLayout(name, options))?.locations || [];
 }

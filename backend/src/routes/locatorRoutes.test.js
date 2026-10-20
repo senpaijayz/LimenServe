@@ -26,8 +26,17 @@ test('anonymous requests cannot read layouts', async () => {
   assert.equal((await request(null, { action: 'list' })).status, 401);
 });
 test('staff cannot write or inspect draft history', async () => {
-  for (const action of ['save', 'assign', 'publish', 'restore', 'history'])
+  for (const action of ['save', 'assign', 'unassign', 'publish', 'restore', 'history'])
     assert.equal((await request({ role: 'cashier' }, { action })).status, 403);
+});
+test('admin can remove one saved product location through the locator command', async () => {
+  const result = await request({ id: 'admin-id', role: 'admin' }, { action: 'unassign', payload: { layoutId: 'layout-id', expectedRevision: 3, productId: 'product-id' } }, async (name, args) => {
+    assert.equal(name, 'limen_locator_command');
+    assert.equal(args.p_action, 'unassign');
+    assert.equal(args.p_payload.productId, 'product-id');
+    return { data: { revision: 4, metadata: { locations: [] } } };
+  });
+  assert.equal(result.status, 200);
 });
 test('staff cannot forge allowDraft; actor comes from authenticated session', async () => {
   const result = await request({ id: 'staff-id', role: 'cashier' }, { action: 'load', payload: { allowDraft: true, p_actor: 'forged' } }, async (_name, args) => {

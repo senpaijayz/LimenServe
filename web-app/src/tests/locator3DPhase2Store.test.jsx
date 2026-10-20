@@ -59,7 +59,17 @@ describe('3D Locator Phase 2 store behavior', () => {
         expect(shelf.shelfNumber).toBe(7);
         expect(shelf.binCount).toBe(12);
         expect(shelf.layerCount).toBe(12);
+        expect(shelf.dimensions.height).toBe(6.55);
         expect(shelf.name).toBe('Aisle Electronics Shelf 7');
+    });
+
+    it('removes only the selected product location', () => {
+        resetLocator3DStore();
+        act(() => {
+            useLocator3DStore.getState().setProductLocations([{ productId: 'first' }, { productId: 'second' }]);
+            useLocator3DStore.getState().removeProductLocation('first');
+        });
+        expect(useLocator3DStore.getState().productLocations).toEqual([{ productId: 'second' }]);
     });
 
     it('persists a custom shelf name and location description', () => {

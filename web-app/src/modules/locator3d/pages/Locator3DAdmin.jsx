@@ -57,6 +57,7 @@ import {
 } from '../data/locatorScene';
 import {
     assignProductLocation,
+    removeProductLocation,
     getLayoutHistory,
     restoreLayoutRevision,
     listStoreLayouts,
@@ -681,9 +682,10 @@ function DesignToolbar({ isSaving, onDiscardChanges, onOpenAssignment, onRequest
     const selected = getLocatorObjectById(selectedObjectId, sceneObjects);
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [isMoreOpen, setIsMoreOpen] = useState(false);
-    const [isSizeOpen, setIsSizeOpen] = useState(false);
+    const [sizeObjectId, setSizeObjectId] = useState(null);
     const [sizeDraft, setSizeDraft] = useState({ depth: '', height: '', width: '' });
     const [layerDraft, setLayerDraft] = useState('');
+    const isSizeOpen = Boolean(selectedObjectId && sizeObjectId === selectedObjectId);
 
     if (!isDesignMode) {
         return null;
@@ -693,6 +695,16 @@ function DesignToolbar({ isSaving, onDiscardChanges, onOpenAssignment, onRequest
         addSceneObject(type);
         setActiveTool('move');
         setIsAddOpen(false);
+    };
+    const openSize = () => {
+        if (!selected || isSizeOpen) return;
+        setSizeDraft({
+            depth: String(selected.dimensions?.depth ?? ''),
+            height: String(selected.dimensions?.height ?? ''),
+            width: String(selected.dimensions?.width ?? ''),
+        });
+        setLayerDraft(String(selected.layerCount ?? (selected.type === 'shelf-4-layer' ? 4 : 2)));
+        setSizeObjectId(selected.id);
     };
 
     return (
@@ -733,24 +745,20 @@ function DesignToolbar({ isSaving, onDiscardChanges, onOpenAssignment, onRequest
                 <>
                     <span className="hidden h-6 w-px bg-slate-200 lg:block" />
                     <span className="max-w-36 truncate px-1 text-xs font-bold text-slate-700">Selected: {selected.name}</span>
-                    <div className="relative">
+                    <div className="relative" onMouseEnter={openSize} onMouseLeave={(event) => {
+                        if (!event.currentTarget.contains(document.activeElement)) setSizeObjectId(null);
+                    }} onBlur={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget)) setSizeObjectId(null);
+                    }}>
                         <Button
                             aria-expanded={isSizeOpen}
-                            onClick={() => {
-                                setSizeDraft({
-                                    depth: String(selected.dimensions?.depth ?? ''),
-                                    height: String(selected.dimensions?.height ?? ''),
-                                    width: String(selected.dimensions?.width ?? ''),
-                                });
-                                setLayerDraft(String(selected.layerCount ?? (selected.type === 'shelf-4-layer' ? 4 : 2)));
-                                setIsSizeOpen((value) => !value);
-                            }}
+                            onClick={openSize}
                         >
                             <Ruler className="h-4 w-4" />
                             Size
                         </Button>
                         {isSizeOpen && (
-                            <Modal isOpen={isSizeOpen} onClose={() => setIsSizeOpen(false)} title={`Resize ${selected.name}`} size="sm">
+                            <div aria-label={`Resize ${selected.name}`} className="absolute left-0 top-full z-50 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
                                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Dimensions · metres</p>
                                 <div className="mt-2 grid grid-cols-3 gap-2">
                                     {['width', 'height', 'depth'].map((key) => (
@@ -778,7 +786,14 @@ function DesignToolbar({ isSaving, onDiscardChanges, onOpenAssignment, onRequest
                                             inputMode="numeric"
                                             max="12"
                                             min="1"
-                                            onChange={(event) => setLayerDraft(event.target.value)}
+                                            onChange={(event) => {
+                                                const nextLayers = Number(event.target.value);
+                                                const previousLayers = Number(layerDraft);
+                                                if (Number.isInteger(nextLayers) && nextLayers > previousLayers && nextLayers <= 12) {
+                                                    setSizeDraft((current) => ({ ...current, height: String(Number((Number(current.height) + (nextLayers - previousLayers) * 0.5).toFixed(2))) }));
+                                                }
+                                                setLayerDraft(event.target.value);
+                                            }}
                                             step="1"
                                             type="number"
                                             value={layerDraft}
@@ -789,19 +804,21 @@ function DesignToolbar({ isSaving, onDiscardChanges, onOpenAssignment, onRequest
                                     className="mt-3 w-full justify-center"
                                     onClick={() => {
                                         const dimensions = Object.fromEntries(Object.entries(sizeDraft).map(([key, value]) => [key, Number(value)]));
-                                        if (Object.values(dimensions).every((value) => Number.isFinite(value) && value > 0)) {
-                                            updateObjectDimensions(selected.id, dimensions);
+                                        if (Object.values(dimensions).every((value) => Number.isFinite(value) && value > 0)
+                                            && (!isShelfObject(selected) || selected.type === 'parts-cabinet'
+                                                || (Number.isInteger(Number(layerDraft)) && Number(layerDraft) >= 1 && Number(layerDraft) <= 12))) {
                                             if (isShelfObject(selected) && selected.type !== 'parts-cabinet') {
                                                 updateShelfProperties(selected.id, { layerCount: Number(layerDraft) });
                                             }
-                                            setIsSizeOpen(false);
+                                            updateObjectDimensions(selected.id, dimensions);
+                                            setSizeObjectId(null);
                                         }
                                     }}
                                     tone="primary"
                                 >
                                     Apply size
                                 </Button>
-                            </Modal>
+                            </div>
                         )}
                     </div>
                     <Button aria-label="Rotate selected object" onClick={() => rotateSelectedObject(-15)}>
@@ -1050,12 +1067,13 @@ function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shel
     );
 }
 
-function ProductAssignmentModal({ canAssign = false, layoutContext, mutationLock, isOpen, onAssigned, onClose, products, shelf }) {
+function ProductAssignmentModal({ canAssign = false, layoutContext, mutationLock, isOpen, onAssigned, onRemoved, onClose, products, shelf }) {
     const [query, setQuery] = useState('');
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [binNumber, setBinNumber] = useState(1);
     const [layerNumber, setLayerNumber] = useState(1);
     const [isSaving, setIsSaving] = useState(false);
+    const [pendingRemoval, setPendingRemoval] = useState(null);
     const assignmentInFlight = useRef(false);
     const assignmentMounted = useRef(true);
     useEffect(() => {
@@ -1069,6 +1087,7 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, mutationLock
         if (!isOpen) {
             return;
         }
+        setPendingRemoval(null);
         const selected = useLocator3DStore.getState().selectedProductForLocation;
         setQuery(getProductPartNumber(selected || {}) || selected?.name || '');
         setSelectedProduct(selected || null);
@@ -1119,6 +1138,27 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, mutationLock
             onClose();
         } catch (saveError) {
             if (assignmentMounted.current) error(saveError.message || 'Unable to save product location.');
+        } finally {
+            assignmentInFlight.current = false;
+            if (mutationLock) mutationLock.current = false;
+            if (assignmentMounted.current) setIsSaving(false);
+        }
+    };
+    const removeAssignment = async (productId) => {
+        if (!canAssign || !productId || assignmentInFlight.current || mutationLock?.current) return;
+        assignmentInFlight.current = true;
+        if (mutationLock) mutationLock.current = true;
+        setIsSaving(true);
+        try {
+            const saved = await removeProductLocation(productId, layoutContext);
+            if (!assignmentMounted.current) return;
+            useLocator3DStore.getState().removeProductLocation(productId);
+            onRemoved?.(saved);
+            setPendingRemoval(null);
+            if (String(selectedProduct?.id) === String(productId)) setSelectedProduct(null);
+            success('Product removed from this shelf. The product remains in the catalog.');
+        } catch (removeError) {
+            if (assignmentMounted.current) error(removeError.message || 'Unable to remove the product location.');
         } finally {
             assignmentInFlight.current = false;
             if (mutationLock) mutationLock.current = false;
@@ -1209,9 +1249,19 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, mutationLock
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Current shelf map</p>
                     <div className="mt-2 space-y-1.5">
                         {assignedProducts.map((location) => (
-                            <p className="text-xs font-semibold text-slate-600" key={location.productId}>
-                                {formatLocatedProductLabel(location, products.find((product) => String(product.id) === String(location.productId)))} · Layer {location.layerNumber || 1} · Bin {location.binNumber || '-'}
-                            </p>
+                            <div className="flex items-start justify-between gap-2 rounded-lg bg-white px-2 py-1.5" key={location.productId}>
+                                <p className="min-w-0 text-xs font-semibold text-slate-600">
+                                    {formatLocatedProductLabel(location, products.find((product) => String(product.id) === String(location.productId)))} · Layer {location.layerNumber || 1} · Bin {location.binNumber || '-'}
+                                </p>
+                                {canAssign && (pendingRemoval === location.productId ? (
+                                    <span className="flex shrink-0 gap-1">
+                                        <button className="text-xs font-bold text-red-700 hover:underline" disabled={isSaving} onClick={() => void removeAssignment(location.productId)} type="button">Remove</button>
+                                        <button className="text-xs text-slate-500 hover:underline" onClick={() => setPendingRemoval(null)} type="button">Cancel</button>
+                                    </span>
+                                ) : (
+                                    <button aria-label={`Remove ${formatLocatedProductLabel(location, products.find((product) => String(product.id) === String(location.productId)))} from shelf`} className="shrink-0 rounded p-1 text-slate-500 hover:bg-red-50 hover:text-red-700" disabled={isSaving} onClick={() => setPendingRemoval(location.productId)} title="Remove from shelf" type="button"><Trash2 className="h-3.5 w-3.5" /></button>
+                                ))}
+                            </div>
                         ))}
                         {!assignedProducts.length && <p className="text-xs text-slate-400">No products assigned yet.</p>}
                     </div>
@@ -1872,6 +1922,10 @@ export default function Locator3DAdmin() {
                         locations: [...(layout?.locations || []).filter((item) => item.productId !== location.productId), location],
                     }));
                     setLocationNotice({ message: 'Mapped ' + (location.productName || 'product') + ' · ' + formatLocation(location), tone: 'success' });
+                }}
+                onRemoved={(layout) => {
+                    setCurrentLayout(layout);
+                    setLocationNotice({ message: 'Product location removed from this shelf.', tone: 'success' });
                 }}
                 onClose={() => setAssignmentShelf(null)}
                 products={products}

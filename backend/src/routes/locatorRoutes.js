@@ -8,7 +8,7 @@ export function createLocatorRouter({ client = locatorRpcClient } = {}) {
   router.use(requireRole('admin', 'stock_clerk', 'cashier', 'staff', 'viewer', 'mechanic'));
   router.post('/command', async (req, res, next) => {
     const { action, payload = {} } = req.body || {};
-    if (!['list', 'load', 'history', 'save', 'assign', 'publish', 'restore'].includes(action)
+    if (!['list', 'load', 'history', 'save', 'assign', 'unassign', 'publish', 'restore'].includes(action)
       || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
       return res.status(400).json({ error: 'Invalid locator request.' });
     }
