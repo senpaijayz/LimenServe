@@ -1,9 +1,15 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
-import { createClient } from '@supabase/supabase-js';
 import { Router } from 'express';
 import { env } from '../config/env.js';
 import { supabaseAdmin, supabaseAuth } from '../config/supabase.js';
 import { clearAuthUserCache, requireAuth } from '../middleware/auth.js';
+import {
+  createEphemeralAuthClient,
+  createRecoveryUrl,
+  escapeHtml,
+  getRecoveryOrigin,
+  sendSecurityEmail,
+} from '../services/recoveryDelivery.js';
 
 const router = Router();
 const RECOVERY_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -59,63 +65,6 @@ async function consumeSharedRateLimit(scope, identity, windowSeconds, limit) {
 function setNoStore(res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Pragma', 'no-cache');
-}
-
-function getRecoveryOrigin() {
-  return String(env.recoveryLinkOrigin || env.frontendUrl).replace(/\/$/, '');
-}
-
-function createRecoveryUrl(path, token) {
-  const url = new URL(path, `${getRecoveryOrigin()}/`);
-  url.hash = new URLSearchParams({ token }).toString();
-  return url.toString();
-}
-
-function escapeHtml(value) {
-  return String(value || '').replace(/[&<>"']/g, (character) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-  })[character]);
-}
-
-async function sendSecurityEmail({ to, subject, text, html }) {
-  if (!env.recoveryEmailConfigured) return false;
-
-  try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${env.resendApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: env.recoveryEmailFrom,
-        to: [to],
-        subject,
-        text,
-        html,
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
-
-    return response.ok;
-  } catch {
-    // Do not include addresses, tokens, or provider response bodies in logs.
-    return false;
-  }
-}
-
-function createEphemeralAuthClient() {
-  return createClient(env.supabaseUrl, env.supabaseAnonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
 }
 
 function isEligibleActiveAccount(account) {

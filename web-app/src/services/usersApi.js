@@ -44,3 +44,30 @@ export async function restoreUser(userId) {
     extractApiError(error, 'Unable to restore this staff account.');
   }
 }
+
+export async function getUserRecoveryEmail(userId) {
+  try {
+    const { data } = await apiClient.get(`/users/${userId}/recovery-email`);
+    return data.recovery;
+  } catch (error) {
+    extractApiError(error, 'Unable to load the recovery email.');
+  }
+}
+
+export async function requestUserRecoveryEmail(userId, payload) {
+  try {
+    const { data } = await apiClient.post(`/users/${userId}/recovery-email`, payload);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to send a recovery email verification link.');
+  }
+}
+
+export async function permanentlyDeleteUser(userId) {
+  try {
+    const { data } = await apiClient.delete(`/users/${userId}/permanent`);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to permanently delete this user.');
+  }
+}

@@ -1,11 +1,47 @@
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { Router } from 'express';
+import { env } from '../config/env.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { clearAuthUserCache, requireRole } from '../middleware/auth.js';
+import {
+  createEphemeralAuthClient,
+  createRecoveryUrl,
+  escapeHtml,
+  sendSecurityEmail,
+} from '../services/recoveryDelivery.js';
 
 const router = Router();
 const ALLOWED_ROLES = new Set(['admin', 'cashier', 'stock_clerk']);
 const PERSISTED_ROLES = new Set([...ALLOWED_ROLES, 'customer']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const RECOVERY_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function firstRow(data) {
+  return Array.isArray(data) ? data[0] ?? null : data ?? null;
+}
+
+function noStore(res) {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
+}
+
+async function limitRecoverySetup(scope, identity, limit) {
+  const keyHash = createHmac('sha256', env.supabaseServiceRoleKey)
+    .update(String(identity || 'unknown'))
+    .digest('hex');
+  const { data, error } = await supabaseAdmin.rpc('consume_public_rate_limit', {
+    p_scope: scope,
+    p_key_hash: keyHash,
+    p_window_seconds: 3600,
+    p_limit: limit,
+  });
+  if (error) throw new Error('Account security is temporarily unavailable.');
+  const decision = firstRow(data);
+  return {
+    allowed: Boolean(decision?.allowed),
+    retryAfter: Math.max(1, Number(decision?.reset_seconds) || 60),
+  };
+}
 
 function splitName(fullName = '') {
   const [firstName = '', ...lastNameParts] = String(fullName || '').trim().split(/\s+/).filter(Boolean);
@@ -150,6 +186,10 @@ function normalizeUserSaveError(error) {
     error.statusCode = 409;
     error.message = 'This account was deactivated while it was being edited. Restore it before making further changes.';
   }
+  if (message.includes('ACTIVE_STAFF_ACCOUNT_DELETE_BLOCKED')) {
+    error.statusCode = 409;
+    error.message = 'Restore and deactivate this account again before permanently deleting it.';
+  }
   if (message.includes('app.user_profiles') || message.includes('handle_auth_user')) {
     error.statusCode = 503;
     error.message = 'Supabase Auth profile sync still points to the old app.user_profiles table. Run 01_core_identity.sql to install the core.user_profiles sync functions.';
@@ -228,6 +268,133 @@ router.get('/', async (_req, res, next) => {
       .sort((left, right) => String(left.email).localeCompare(String(right.email)));
 
     res.json({ users });
+  } catch (error) {
+    next(normalizeUserSaveError(error));
+  }
+});
+
+router.get('/:userId/recovery-email', async (req, res, next) => {
+  noStore(res);
+  try {
+    const { userId } = req.params;
+    if (!UUID_PATTERN.test(userId)) {
+      res.status(400).json({ error: 'Choose a valid staff account.' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin.rpc('get_limen_account_security', {
+      p_account_id: userId,
+    });
+    if (error) throw error;
+    const security = firstRow(data);
+    if (!security) {
+      res.status(404).json({ error: 'This staff account could not be found.' });
+      return;
+    }
+
+    res.json({
+      recovery: {
+        loginEmail: security.login_email,
+        verifiedEmail: security.verified_email,
+        verifiedAt: security.verified_at,
+        pendingEmail: security.pending_email,
+        pendingExpiresAt: security.pending_expires_at,
+        deliveryReady: env.recoveryEmailConfigured,
+      },
+    });
+  } catch (error) {
+    next(normalizeUserSaveError(error));
+  }
+});
+
+router.post('/:userId/recovery-email', async (req, res, next) => {
+  noStore(res);
+  try {
+    const { userId } = req.params;
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const currentPassword = String(req.body?.currentPassword || '');
+    if (!UUID_PATTERN.test(userId) || !RECOVERY_EMAIL_PATTERN.test(email) || email.length > 254 || !currentPassword) {
+      res.status(400).json({ error: 'Enter a valid recovery email and confirm your administrator password.' });
+      return;
+    }
+    if (!env.recoveryEmailConfigured) {
+      res.status(503).json({ error: 'Recovery email delivery is not set up yet. Configure the email sender first.' });
+      return;
+    }
+
+    const [ipLimit, actorLimit, targetLimit] = await Promise.all([
+      limitRecoverySetup('users.recovery.ip', req.ip, 10),
+      limitRecoverySetup('users.recovery.actor', req.user.id, 5),
+      limitRecoverySetup('users.recovery.target', userId, 5),
+    ]);
+    if (!ipLimit.allowed || !actorLimit.allowed || !targetLimit.allowed) {
+      res.setHeader('Retry-After', String(Math.max(ipLimit.retryAfter, actorLimit.retryAfter, targetLimit.retryAfter)));
+      res.status(429).json({ error: 'Too many recovery email attempts. Please wait before trying again.' });
+      return;
+    }
+
+    const [{ data: actorData, error: actorError }, { data: targetData, error: targetError }] = await Promise.all([
+      supabaseAdmin.auth.admin.getUserById(req.user.id),
+      supabaseAdmin.auth.admin.getUserById(userId),
+    ]);
+    if (actorError || !actorData?.user || actorData.user.app_metadata?.role !== 'admin') {
+      res.status(403).json({ error: 'Sign in again before changing account security settings.' });
+      return;
+    }
+    if (targetError || !targetData?.user) {
+      res.status(404).json({ error: 'This staff account could not be found.' });
+      return;
+    }
+    const target = targetData.user;
+    const profile = await fetchProfileByUserId(userId).catch(() => null);
+    const role = getTrustedStaffRole(target, profile);
+    if (!role.matches || target.app_metadata?.account_status === 'deactivated' || isCurrentlyBanned(target)) {
+      res.status(409).json({ error: 'This account must be active before its recovery email can be changed.' });
+      return;
+    }
+
+    const authClient = createEphemeralAuthClient();
+    const { data: verified, error: passwordError } = await authClient.auth.signInWithPassword({
+      email: actorData.user.email,
+      password: currentPassword,
+    });
+    if (passwordError || verified?.user?.id !== req.user.id) {
+      res.status(401).json({ error: 'Your administrator password could not be confirmed.' });
+      return;
+    }
+
+    const token = randomBytes(32).toString('hex');
+    const { error: beginError } = await supabaseAdmin.rpc('begin_limen_recovery_email_verification', {
+      p_account_id: userId,
+      p_email: email,
+      p_token_digest: createHash('sha256').update(token).digest('hex'),
+    });
+    if (beginError) {
+      const message = String(beginError.message || '');
+      if (beginError.code === '23505' || message.includes('RECOVERY_EMAIL_IN_USE')) {
+        res.status(409).json({ error: 'This email is already used by another account.' });
+      } else if (message.includes('already verified')) {
+        res.status(409).json({ error: 'This recovery email is already verified.' });
+      } else {
+        res.status(409).json({ error: 'The recovery email could not be changed for this account.' });
+      }
+      return;
+    }
+
+    const verificationUrl = createRecoveryUrl('/verify-recovery-email', token);
+    const text = `An administrator added this address as a recovery email for a LimenServe account. Confirm it within 15 minutes:\n\n${verificationUrl}\n\nIf you did not expect this, ignore the message. The current recovery email stays active until you confirm.`;
+    const html = `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033"><h2>Confirm your recovery email</h2><p>An administrator added this address as a recovery email for a LimenServe account. Confirm it within 15 minutes.</p><p><a href="${escapeHtml(verificationUrl)}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700">Verify email</a></p><p>If you did not expect this, ignore the message. The current recovery email stays active until you confirm.</p></div>`;
+    const sent = await sendSecurityEmail({
+      to: email,
+      subject: 'Verify your LimenServe recovery email',
+      text,
+      html,
+    });
+    if (!sent) {
+      res.status(503).json({ error: 'The verification email could not be sent. The current recovery email is unchanged. Try again shortly.' });
+      return;
+    }
+    res.status(202).json({ message: 'Verification sent. This recovery email will become active after the recipient confirms it.' });
   } catch (error) {
     next(normalizeUserSaveError(error));
   }
@@ -357,6 +524,62 @@ router.delete('/:userId', async (req, res, next) => {
       deactivated: true,
       businessHistoryPreserved: true,
     });
+  } catch (error) {
+    next(normalizeUserSaveError(error));
+  }
+});
+
+router.delete('/:userId/permanent', async (req, res, next) => {
+  noStore(res);
+  try {
+    const { userId } = req.params;
+    if (!UUID_PATTERN.test(userId)) {
+      res.status(400).json({ error: 'Choose a valid staff account.' });
+      return;
+    }
+    if (userId === req.user.id) {
+      res.status(403).json({ error: 'You cannot permanently delete the account you are using.' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (error || !data?.user) {
+      res.status(404).json({ error: 'This staff account could not be found.' });
+      return;
+    }
+    const target = data.user;
+    const profile = await fetchProfileByUserId(userId).catch(() => null);
+    if (String(target.email || '').toLowerCase() === 'admin@limen.com'
+      || target.app_metadata?.role === 'admin'
+      || profile?.role === 'admin'
+      || target.app_metadata?.former_staff_role === 'admin') {
+      res.status(403).json({ error: 'Administrator accounts cannot be permanently deleted.' });
+      return;
+    }
+    if (target.app_metadata?.account_status !== 'deactivated'
+      || target.app_metadata?.role !== 'customer'
+      || !['cashier', 'stock_clerk'].includes(target.app_metadata?.former_staff_role)
+      || profile?.role !== 'customer') {
+      res.status(409).json({ error: 'Only deactivated Cashier and Clerk accounts can be permanently deleted. Reconcile this account before trying again.' });
+      return;
+    }
+
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    if (deleteError) {
+      const message = String(deleteError.message || '');
+      if (/storage|owns? .*objects?/i.test(message)) {
+        res.status(409).json({ error: 'This account still owns uploaded files. Transfer or remove those files before permanently deleting it.' });
+        return;
+      }
+      if (/foreign key|constraint|ACTIVE_STAFF_ACCOUNT_DELETE_BLOCKED/i.test(message)) {
+        res.status(409).json({ error: 'This account is still linked to records that cannot be cleared safely. Review the account and try again.' });
+        return;
+      }
+      throw deleteError;
+    }
+
+    clearAuthUserCache();
+    res.json({ deleted: true, userId, businessHistoryPreserved: true });
   } catch (error) {
     next(normalizeUserSaveError(error));
   }

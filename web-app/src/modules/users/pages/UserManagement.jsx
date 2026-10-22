@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Search, Plus, Edit2, Shield, User, UserCheck, Trash2, LockKeyhole, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Search, Plus, Edit2, Shield, User, UserCheck, Trash2, LockKeyhole, RotateCcw, Mail } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
@@ -10,8 +10,9 @@ import Table from '../../../components/ui/Table';
 import { useToast } from '../../../components/ui/Toast';
 import { listMechanics } from '../../../services/mechanicsApi';
 import MechanicManagementPanel from '../components/MechanicManagementPanel';
+import RecoveryEmailModal from '../components/RecoveryEmailModal';
 import { removeMechanicRow, upsertMechanicRow } from '../utils/mechanicVisibilityModel';
-import { createUser, deactivateUser, listUsers, restoreUser, updateUser } from '../../../services/usersApi';
+import { createUser, deactivateUser, listUsers, permanentlyDeleteUser, restoreUser, updateUser } from '../../../services/usersApi';
 
 const roleOptions = [
     { value: 'admin', label: 'Administrator' },
@@ -137,6 +138,11 @@ const UserManagement = () => {
     const [deactivationTarget, setDeactivationTarget] = useState(null);
     const [restoreTarget, setRestoreTarget] = useState(null);
     const [isChangingAccountStatus, setIsChangingAccountStatus] = useState(false);
+    const [recoveryTarget, setRecoveryTarget] = useState(null);
+    const [permanentDeleteTarget, setPermanentDeleteTarget] = useState(null);
+    const [permanentDeleteConfirmation, setPermanentDeleteConfirmation] = useState('');
+    const [permanentDeleteError, setPermanentDeleteError] = useState('');
+    const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false);
 
     const loadMechanics = async () => {
         try {
@@ -293,19 +299,57 @@ const UserManagement = () => {
         }
     };
 
+    const openPermanentDelete = (user) => {
+        setPermanentDeleteConfirmation('');
+        setPermanentDeleteError('');
+        setPermanentDeleteTarget(user);
+    };
+
+    const handlePermanentDelete = async () => {
+        if (!permanentDeleteTarget || isPermanentlyDeleting || permanentDeleteConfirmation !== 'DELETE') return;
+        setIsPermanentlyDeleting(true);
+        setPermanentDeleteError('');
+        try {
+            const result = await permanentlyDeleteUser(permanentDeleteTarget.id);
+            if (!result?.deleted || result.userId !== permanentDeleteTarget.id) {
+                throw new Error('The server did not confirm this account was deleted.');
+            }
+            setUsers((current) => current.filter((user) => user.id !== permanentDeleteTarget.id));
+            setPermanentDeleteTarget(null);
+            setPermanentDeleteConfirmation('');
+            success('Inactive user permanently deleted. Business records were kept.');
+            void loadUsers();
+        } catch (deleteError) {
+            setPermanentDeleteError(deleteError.message || 'Unable to permanently delete this account.');
+        } finally {
+            setIsPermanentlyDeleting(false);
+        }
+    };
+
     const renderUserActions = (user) => {
         if (user.status !== 'active') {
             if (user.accountStatus === 'deactivated') {
                 return (
-                    <button
-                        type="button"
-                        onClick={() => setRestoreTarget(user)}
-                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-primary-200 px-3 text-sm font-semibold text-primary-700 transition hover:border-primary-300 hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue"
-                        aria-label={`Restore access for ${user.fullName || user.email}`}
-                    >
-                        <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                        <span>Restore access</span>
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setRestoreTarget(user)}
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-primary-200 px-3 text-sm font-semibold text-primary-700 transition hover:border-primary-300 hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue"
+                            aria-label={`Restore access for ${user.fullName || user.email}`}
+                        >
+                            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                            <span>Restore access</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => openPermanentDelete(user)}
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-red-200 px-3 text-sm font-semibold text-red-700 transition hover:border-red-300 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                            aria-label={`Permanently delete ${user.fullName || user.email}`}
+                        >
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                            <span>Delete permanently</span>
+                        </button>
+                    </div>
                 );
             }
 
@@ -323,6 +367,15 @@ const UserManagement = () => {
                     <Edit2 className="h-4 w-4" aria-hidden="true" />
                     <span>Edit</span>
                 </button>
+                <button
+                    type="button"
+                    onClick={() => setRecoveryTarget(user)}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-primary-200 px-3 text-sm font-semibold text-primary-700 transition hover:border-primary-300 hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue"
+                    aria-label={`Manage recovery email for ${user.fullName || user.email}`}
+                >
+                    <Mail className="h-4 w-4" aria-hidden="true" />
+                    <span>Recovery email</span>
+                </button>
                 {user.role === 'admin' ? (
                     <span className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary-50 px-3 text-sm font-medium text-primary-500" title="Administrator accounts cannot be deactivated">
                         <LockKeyhole className="h-4 w-4" aria-hidden="true" />
@@ -333,10 +386,10 @@ const UserManagement = () => {
                         type="button"
                         onClick={() => setDeactivationTarget(user)}
                         className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-red-200 px-3 text-sm font-semibold text-red-700 transition hover:border-red-300 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-                        aria-label={`Delete ${user.fullName || user.email}`}
+                        aria-label={`Deactivate ${user.fullName || user.email}`}
                     >
                         <Trash2 className="h-4 w-4" aria-hidden="true" />
-                        <span>Delete</span>
+                        <span>Deactivate</span>
                     </button>
                 )}
             </div>
@@ -523,6 +576,10 @@ const UserManagement = () => {
             />
             )}
 
+            {recoveryTarget && (
+                <RecoveryEmailModal user={recoveryTarget} onClose={() => setRecoveryTarget(null)} />
+            )}
+
             <Modal
                 isOpen={Boolean(deactivationTarget)}
                 onClose={() => !isChangingAccountStatus && setDeactivationTarget(null)}
@@ -601,6 +658,46 @@ const UserManagement = () => {
                                 className="min-h-11 rounded-xl bg-primary-800 px-5 font-semibold text-white hover:bg-primary-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
                             >
                                 {isChangingAccountStatus ? 'Restoring access…' : 'Restore access'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            <Modal
+                isOpen={Boolean(permanentDeleteTarget)}
+                onClose={() => !isPermanentlyDeleting && setPermanentDeleteTarget(null)}
+                title="Permanently delete user?"
+                size="md"
+                closeOnBackdrop={!isPermanentlyDeleting}
+                closeOnEscape={!isPermanentlyDeleting}
+            >
+                {permanentDeleteTarget && (
+                    <div className="space-y-5">
+                        <p className="text-sm leading-6 text-primary-600">
+                            This removes the sign-in account, staff profile, and recovery email for <span className="font-semibold text-primary-950">{permanentDeleteTarget.fullName || permanentDeleteTarget.email}</span>. It cannot be restored. Sales, stock, service, and content records stay in the system, but may no longer show this staff member as the actor.
+                        </p>
+                        <p className="break-all rounded-xl border border-primary-200 bg-primary-50 p-3 text-sm font-medium text-primary-800">{permanentDeleteTarget.email}</p>
+                        <div>
+                            <label htmlFor="confirm-permanent-delete" className="mb-2 block text-sm font-semibold text-primary-800">Type DELETE to confirm</label>
+                            <input
+                                id="confirm-permanent-delete"
+                                type="text"
+                                autoComplete="off"
+                                value={permanentDeleteConfirmation}
+                                onChange={(event) => setPermanentDeleteConfirmation(event.target.value)}
+                                className="min-h-11 w-full rounded-xl border border-primary-200 bg-white px-3 py-3 text-primary-950 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                            />
+                        </div>
+                        {permanentDeleteError && (
+                            <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{permanentDeleteError}</p>
+                        )}
+                        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                            <button type="button" onClick={() => setPermanentDeleteTarget(null)} disabled={isPermanentlyDeleting} className="min-h-11 rounded-xl border border-primary-200 px-5 font-semibold text-primary-700 hover:bg-primary-50 disabled:opacity-60">
+                                Cancel
+                            </button>
+                            <button type="button" onClick={handlePermanentDelete} disabled={isPermanentlyDeleting || permanentDeleteConfirmation !== 'DELETE'} className="min-h-11 rounded-xl bg-red-600 px-5 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60">
+                                {isPermanentlyDeleting ? 'Deleting…' : 'Delete permanently'}
                             </button>
                         </div>
                     </div>

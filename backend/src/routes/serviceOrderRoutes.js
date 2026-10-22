@@ -97,7 +97,7 @@ async function loadLatestAssignments(orderIds = []) {
       } : null,
       assignedBy: {
         id: row.assigned_by,
-        name: actor?.full_name || 'Administrator',
+        name: actor?.full_name || 'Former staff',
       },
     });
   });

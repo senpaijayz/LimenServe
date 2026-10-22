@@ -12,11 +12,17 @@ The backend supports the Resend transactional email API for verified recovery ad
 4. In Supabase Auth URL Configuration, allow the exact production callback `https://limen-serve.vercel.app/reset-password` (and the relevant development callback only if needed).
 5. Configure a production custom SMTP provider in Supabase Auth for staff accounts that use Supabase's standard password reset email. The built-in sender is intended for trying out email, not dependable production delivery.
 
-After changing Render environment variables, allow the service to restart and confirm `/api/health/ready` is healthy. The Account Security page reports whether the separate recovery-email sender is configured. Until Resend is configured, users can still request standard Supabase resets, but the secondary recovery address cannot be enrolled or changed; the dummy `admin@limen.com` address is never sent mail.
+After changing Render environment variables, allow the service to restart and confirm `/api/health/ready` is healthy. User Management and Account Security report whether the separate recovery-email sender is configured. Until Resend is configured, users can still request standard Supabase resets, but the secondary recovery address cannot be enrolled or changed; the dummy `admin@limen.com` address is never sent mail.
+
+To add a recovery address as an Administrator, open **User Management**, choose the active user, then select **Recovery email**. Enter a real inbox and your current administrator password. The recipient must click the verification link before the address becomes active. The sign-in email stays unchanged. Each signed-in staff member can also manage their own recovery address from **Account Security**.
 
 ## Primary administrator protection
 
-The migration records the existing, active `admin@limen.com` Auth user ID in a private table and adds database guards. The account must continue using that same ID and login address. Password recovery changes only its password; it does not update role data, user metadata, app metadata, or linked business records. User Management cannot edit or deactivate this identity.
+The migration records the existing, active `admin@limen.com` Auth user ID in a private table and adds database guards. The account must continue using that same ID and login address. Password recovery changes only its password; it does not update role data, user metadata, app metadata, or linked business records. User Management can set a separately verified recovery email for this identity, but cannot edit its login details or deactivate it.
+
+## Inactive staff deletion
+
+**Deactivate** removes access and keeps the account available for restoration. For an explicitly deactivated Cashier or Clerk, the **Inactive** tab offers **Delete permanently**. This deletes the Auth login, staff profile, recovery methods, and sessions. It cannot be undone. Sales, stock, service, and content records remain; their actor link may be cleared. Active staff, temporarily banned accounts, and Administrators cannot be permanently deleted. Supabase will also reject deletion if the user owns files in Storage; those files must be transferred or removed separately.
 
 ## Emergency administrator recovery
 
@@ -35,10 +41,11 @@ The supported Admin API is `supabase.auth.admin.updateUserById(existingUserId, {
 - From Login, use **Forgot Password?** with a cashier/clerk's working login email. Confirm the response is neutral, and that the link returns to `/reset-password`.
 - As each staff role, open **Account Security** from the signed-in profile area. Confirm the current login address and role are correct.
 - With a configured Resend sender, add a recovery email while signed in, enter the current password, and confirm the link arrives. Verify it once; confirm the status changes to Verified. A second use of the same link must fail.
+- In User Management, add a recovery address for an active staff member, using the Administrator's current password. Confirm the recipient must verify it and the login email does not change.
 - Change the recovery email and confirm the old address remains active until the new one is verified. Confirm the old address is notified after the change.
 - Request a custom reset for the primary administrator. Confirm the message arrives at the verified recovery address, the link expires after 15 minutes, and reusing the link fails.
 - Reset the password and confirm login still uses `admin@limen.com`; check that the account remains an Administrator and that its existing data remains available.
 - Change a staff password from Account Security with a wrong current password; it must fail. Use the correct current password; confirm the current device remains signed in and other refresh sessions are revoked.
-- In User Management, verify Cashier and Clerk removal only deactivates access and preserves history; verify the primary Administrator cannot be edited, demoted, or removed.
+- In User Management, verify **Deactivate** moves a Cashier or Clerk to the Inactive tab. Confirm **Delete permanently** appears only for deactivated staff, requires the typed confirmation, and does not remove business records. Verify the primary Administrator cannot be edited, demoted, deactivated, or deleted.
 
 Automated test suites are intentionally not part of this project request. Complete these checks manually in the deployed app after the email provider and Supabase Auth URL/SMTP settings are configured.
