@@ -3,6 +3,7 @@ import { ArrowLeft, CheckCircle2, Eye, EyeOff, KeyRound, LockKeyhole } from 'luc
 import { Link } from 'react-router';
 import { useAuth } from '../../../context/useAuth';
 import { supabase } from '../../../services/supabase';
+import { resetPasswordWithRecoveryToken } from '../../../services/authApi';
 
 const PASSWORD_RULES = [
     { label: 'At least 12 characters', test: (value) => value.length >= 12 },
@@ -39,6 +40,15 @@ const PasswordField = ({ id, label, value, onChange, visible, onToggle, autoComp
     </div>
 );
 
+function readCustomRecoveryToken() {
+    if (typeof window === 'undefined' || !window.location.hash) return '';
+    const token = new URLSearchParams(window.location.hash.slice(1)).get('token') || '';
+    if (token) {
+        window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
+    }
+    return /^[a-f0-9]{64}$/i.test(token) ? token : '';
+}
+
 const ResetPasswordPage = () => {
     const { isLoadingAuth, isPasswordRecovery, finishPasswordRecovery } = useAuth();
     const [password, setPassword] = useState('');
@@ -48,20 +58,23 @@ const ResetPasswordPage = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isComplete, setIsComplete] = useState(false);
     const [formError, setFormError] = useState('');
+    const [customRecoveryToken] = useState(readCustomRecoveryToken);
+    const [sessionNote, setSessionNote] = useState('');
+    const hasRecoveryAuthorization = isPasswordRecovery || Boolean(customRecoveryToken);
 
     const rules = useMemo(() => PASSWORD_RULES.map((rule) => ({ ...rule, passed: rule.test(password) })), [password]);
     const passwordIsStrong = rules.every((rule) => rule.passed);
 
     useEffect(() => {
-        if (!isPasswordRecovery) {
+        if (!hasRecoveryAuthorization) {
             setPassword('');
             setConfirmPassword('');
         }
-    }, [isPasswordRecovery]);
+    }, [hasRecoveryAuthorization]);
 
     const handleSubmit = async (event) => {
         event.preventDefault();
-        if (isSubmitting || !isPasswordRecovery) return;
+        if (isSubmitting || !hasRecoveryAuthorization) return;
         setFormError('');
 
         if (!passwordIsStrong) {
@@ -76,10 +89,27 @@ const ResetPasswordPage = () => {
 
         setIsSubmitting(true);
         try {
-            const { error } = await supabase.auth.updateUser({ password });
-            if (error) {
-                setFormError(error.message || 'We couldn’t update your password. Request a new reset link and try again.');
-                return;
+            if (customRecoveryToken) {
+                const result = await resetPasswordWithRecoveryToken({ token: customRecoveryToken, password });
+                setSessionNote(result.refreshSessionsRevoked
+                    ? 'Other refresh sessions were signed out. Already-issued access tokens can remain active until they expire.'
+                    : 'Your password changed, but we could not confirm that other refresh sessions were signed out. Sign out from any other devices you can access.');
+            } else {
+                const { error } = await supabase.auth.updateUser({ password });
+                if (error) {
+                    setFormError(error.message || 'We couldn’t update your password. Request a new reset link and try again.');
+                    return;
+                }
+
+                let signOutError = null;
+                try {
+                    ({ error: signOutError } = await supabase.auth.signOut({ scope: 'global' }));
+                } catch {
+                    signOutError = new Error('Session revocation could not be confirmed.');
+                }
+                setSessionNote(signOutError
+                    ? 'Your password changed. Please sign out from any other devices you can access.'
+                    : 'Other refresh sessions were signed out. Already-issued access tokens can remain active until they expire.');
             }
 
             setIsComplete(true);
@@ -108,11 +138,12 @@ const ResetPasswordPage = () => {
                         </div>
                         <h1 className="font-display text-2xl font-bold text-primary-950">Password updated</h1>
                         <p className="mt-2 text-sm leading-6 text-primary-600">Your password has been changed. Sign in with your new password to continue.</p>
+                        {sessionNote && <p className="mt-3 text-xs leading-5 text-primary-500">{sessionNote}</p>}
                         <Link to="/login" className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-primary-800 px-4 py-3 font-semibold text-white hover:bg-primary-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-offset-2">
                             Return to sign in
                         </Link>
                     </div>
-                ) : !isPasswordRecovery ? (
+                ) : !hasRecoveryAuthorization ? (
                     <div>
                         <Link to="/login" className="mb-7 inline-flex items-center gap-2 rounded text-sm font-semibold text-primary-600 hover:text-primary-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-offset-2">
                             <ArrowLeft className="h-4 w-4" aria-hidden="true" />

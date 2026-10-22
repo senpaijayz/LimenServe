@@ -14,6 +14,8 @@ import { recordRouteLoad } from './observability/performance';
 const LoginPage = lazy(() => import('./modules/auth/pages/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('./modules/auth/pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('./modules/auth/pages/ResetPasswordPage'));
+const RecoveryEmailVerificationPage = lazy(() => import('./modules/auth/pages/RecoveryEmailVerificationPage'));
+const AccountSecurityPage = lazy(() => import('./modules/auth/pages/AccountSecurityPage'));
 const AdminDashboard = lazy(() => import('./modules/dashboard/pages/AdminDashboard'));
 const InventoryList = lazy(() => import('./modules/inventory/pages/InventoryList'));
 const ReceiveStock = lazy(() => import('./modules/inventory/pages/ReceiveStock'));
@@ -101,8 +103,10 @@ function App() {
                 <Route path="/login" element={renderRoute(LoginPage, <PageLoader />)} />
                 <Route path="/forgot-password" element={renderRoute(ForgotPasswordPage, <PageLoader />)} />
                 <Route path="/reset-password" element={renderRoute(ResetPasswordPage, <PageLoader />)} />
+                <Route path="/verify-recovery-email" element={renderRoute(RecoveryEmailVerificationPage, <PageLoader />)} />
 
                 <Route element={<MainLayout />}>
+                  <Route path="/settings/security" element={renderRoute(AccountSecurityPage, <WorkspaceRouteFallback title="Loading account security" />)} />
                   <Route path="/dashboard" element={renderRoute(AdminDashboard, <WorkspaceRouteFallback title="Loading dashboard" />)} />
                   <Route path="/inventory" element={renderRoute(InventoryList, <WorkspaceRouteFallback title="Loading inventory" />)} />
                   <Route path="/inventory/receive" element={renderRoute(ReceiveStock, <WorkspaceRouteFallback title="Loading stock receiving" />)} />

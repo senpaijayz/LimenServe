@@ -8,6 +8,7 @@ import { NAV_ITEMS, ROLE_LABELS } from '../../utils/constants';
 const privateRouteRoles = new Map([
     ...NAV_ITEMS.main.map((item) => [item.path, item.roles]),
     ...NAV_ITEMS.admin.map((item) => [item.path, item.roles]),
+    ['/settings/security', ['admin', 'cashier', 'stock_clerk']],
 ]);
 
 function getRouteRoles(pathname) {

@@ -14,6 +14,7 @@ import {
     ClipboardList,
     ChevronLeft,
     LogOut,
+    ShieldCheck,
     X,
 } from 'lucide-react';
 import { useAuth } from '../../context/useAuth';
@@ -191,6 +192,20 @@ const Sidebar = () => {
                             )}
                         </AnimatePresence>
                     </div>
+
+                    {/* Account security lives with the signed-in user's profile controls. */}
+                    {['admin', 'cashier', 'stock_clerk'].includes(user?.role) && (
+                        <NavLink
+                            to="/settings/security"
+                            onClick={closeMobileSidebar}
+                            title={sidebarCollapsed ? 'Account Security' : undefined}
+                            aria-label="Account Security"
+                            className={`flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-primary-600 transition-colors hover:bg-primary-100 hover:text-primary-950 ${location.pathname.startsWith('/settings/security') ? 'bg-primary-100 font-semibold text-primary-950' : ''}`}
+                        >
+                            <ShieldCheck className="h-5 w-5 shrink-0" aria-hidden="true" />
+                            {!sidebarCollapsed && <span className="text-sm">Account Security</span>}
+                        </NavLink>
+                    )}
 
                     {/* Collapse Toggle (Desktop) */}
                     <button

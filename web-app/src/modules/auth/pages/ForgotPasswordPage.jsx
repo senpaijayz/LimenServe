@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, CheckCircle2, KeyRound, Mail } from 'lucide-react';
 import { Link } from 'react-router';
-import { supabase } from '../../../services/supabase';
+import { requestPasswordRecovery } from '../../../services/authApi';
 
-const RESET_PASSWORD_REDIRECT_URL = 'https://limen-serve.vercel.app/reset-password';
 const RESEND_COOLDOWN_SECONDS = 60;
 
 const ForgotPasswordPage = () => {
@@ -37,14 +36,12 @@ const ForgotPasswordPage = () => {
         setFormError('');
 
         try {
-            await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-                redirectTo: RESET_PASSWORD_REDIRECT_URL,
-            });
-        } catch {
-            // Keep the response neutral so the form does not reveal registered addresses.
-        } finally {
+            await requestPasswordRecovery(normalizedEmail);
             setRequestSent(true);
             setCooldown(RESEND_COOLDOWN_SECONDS);
+        } catch (error) {
+            setFormError(error.message || 'We could not start recovery right now. Please try again shortly.');
+        } finally {
             setIsSubmitting(false);
         }
     };
@@ -65,16 +62,16 @@ const ForgotPasswordPage = () => {
                 <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-100 text-primary-800">
                     <KeyRound className="h-6 w-6" aria-hidden="true" />
                 </div>
-                <h1 className="font-display text-2xl font-bold text-primary-950">Reset your password</h1>
+                <h1 className="font-display text-2xl font-bold text-primary-950">Forgot your password?</h1>
                 <p className="mt-2 text-sm leading-6 text-primary-600">
-                    Enter your staff email and we’ll send a secure link to choose a new password.
+                    Enter the email address you use to sign in, and we’ll help you get back into LimenServe.
                 </p>
 
                 {requestSent && (
                     <div role="status" className="mt-5 rounded-xl border border-accent-success/30 bg-accent-success/10 p-4 text-sm text-primary-800">
                         <div className="flex items-start gap-3">
                             <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-accent-success" aria-hidden="true" />
-                            <p>If an account matches this email, a reset link will arrive shortly. Check your inbox and spam folder. For your security, we can’t confirm whether an address is registered.</p>
+                            <p>If a recovery method is available for this account, instructions will be sent. Check your inbox and spam folder. If nothing arrives, contact your LimenServe administrator for help.</p>
                         </div>
                     </div>
                 )}
@@ -98,7 +95,7 @@ const ForgotPasswordPage = () => {
                                 maxLength={254}
                                 value={email}
                                 onChange={(event) => setEmail(event.target.value)}
-                                placeholder="name@example.com"
+                        placeholder="Your sign-in email"
                                 className="w-full rounded-xl border border-primary-200 bg-white py-3 pl-10 pr-4 text-primary-950 placeholder:text-primary-400 focus:border-accent-blue focus:outline-none focus:ring-2 focus:ring-accent-blue/20"
                             />
                         </div>
@@ -109,7 +106,7 @@ const ForgotPasswordPage = () => {
                         disabled={isSubmitting || cooldown > 0}
                         className="flex w-full items-center justify-center rounded-xl bg-primary-800 px-4 py-3 font-semibold text-white transition hover:bg-primary-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                        {isSubmitting ? 'Sending…' : cooldown > 0 ? `Try again in ${cooldown}s` : requestSent ? 'Send another link' : 'Send reset link'}
+                        {isSubmitting ? 'Checking recovery options…' : cooldown > 0 ? `Try again in ${cooldown}s` : requestSent ? 'Send another link' : 'Continue'}
                     </button>
                 </form>
             </section>

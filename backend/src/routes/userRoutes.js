@@ -296,6 +296,10 @@ router.delete('/:userId', async (req, res, next) => {
     }
 
     const target = data.user;
+    if (String(target.email || '').toLowerCase() === 'admin@limen.com') {
+      res.status(403).json({ error: 'The primary administrator account is protected and cannot be removed.' });
+      return;
+    }
     const profile = await fetchProfileByUserId(userId).catch(() => null);
     const { appRole, profileRole, matches } = getTrustedStaffRole(target, profile);
 
@@ -447,6 +451,10 @@ router.patch('/:userId', async (req, res, next) => {
     }
     const currentProfile = await fetchProfileByUserId(userId).catch(() => null);
     const currentTarget = currentAuth.user;
+    if (String(currentTarget.email || '').toLowerCase() === 'admin@limen.com') {
+      res.status(403).json({ error: 'The primary administrator identity is protected. Use Account Security to change its password.' });
+      return;
+    }
     const currentRole = getTrustedStaffRole(currentTarget, currentProfile);
     if (currentTarget.app_metadata?.account_status === 'deactivated' || isCurrentlyBanned(currentTarget)) {
       res.status(409).json({ error: 'Restore this account before editing its details.' });

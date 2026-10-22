@@ -157,6 +157,18 @@ export function buildEnv(source = process.env) {
     minimum: 0,
     maximum: 10,
   });
+  const resendApiKey = String(source.RESEND_API_KEY || '').trim();
+  const recoveryEmailFrom = String(source.RECOVERY_EMAIL_FROM || '').trim();
+  const recoveryLinkOrigin = normalizeAllowedOrigin(
+    source.RECOVERY_LINK_ORIGIN || frontendUrls[0],
+    applicationEnvironment,
+  );
+  if (!frontendUrls.includes(recoveryLinkOrigin)) {
+    throw new Error('RECOVERY_LINK_ORIGIN must be one of the configured FRONTEND_URLS.');
+  }
+  if (/[\r\n]/.test(recoveryEmailFrom)) {
+    throw new Error('RECOVERY_EMAIL_FROM must not contain line breaks.');
+  }
 
   return Object.freeze({
     applicationEnvironment,
@@ -198,6 +210,10 @@ export function buildEnv(source = process.env) {
     supabaseUrl: requireValue(source, 'SUPABASE_URL'),
     supabaseAnonKey,
     supabaseServiceRoleKey,
+    resendApiKey,
+    recoveryEmailFrom,
+    recoveryLinkOrigin,
+    recoveryEmailConfigured: Boolean(resendApiKey && recoveryEmailFrom),
   });
 }
 
