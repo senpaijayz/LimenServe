@@ -5,6 +5,38 @@ alter table operations.service_orders
   add column if not exists payment_status text not null default 'unpaid',
   add column if not exists payment_method text;
 
+-- The live sales table restricts source_type. Preserve its existing values
+-- while allowing a posted service order to retain its own source label.
+do $migration$
+declare
+  v_definition text;
+begin
+  select pg_get_constraintdef(oid) into v_definition
+  from pg_constraint
+  where conrelid = 'operations.sales_transactions'::regclass
+    and conname = 'sales_transactions_source_type_check';
+
+  if v_definition is null then
+    raise exception 'The sales source-type constraint is missing; review the live schema before continuing.';
+  end if;
+
+  if v_definition not like '%''service_order''%' then
+    if v_definition <> 'CHECK ((source_type = ANY (ARRAY[''pos''::text, ''historical_encoded''::text, ''estimate_conversion''::text, ''service_conversion''::text, ''demo_seed''::text])))' then
+      raise exception 'The sales source-type constraint differs from the reviewed live schema.';
+    end if;
+
+    alter table operations.sales_transactions
+      drop constraint sales_transactions_source_type_check;
+    alter table operations.sales_transactions
+      add constraint sales_transactions_source_type_check
+      check (source_type in (
+        'pos', 'historical_encoded', 'estimate_conversion',
+        'service_conversion', 'demo_seed', 'service_order'
+      ));
+  end if;
+end;
+$migration$;
+
 do $migration$
 begin
   if not exists (
@@ -40,7 +72,7 @@ create or replace function public.create_service_order_sale(
 returns uuid
 language plpgsql
 security definer
-set search_path = pg_catalog, operations, public
+set search_path = pg_catalog
 as $function$
 declare
   v_reference text := nullif(btrim(coalesce(p_original_reference, '')), '');
