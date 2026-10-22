@@ -335,30 +335,6 @@ const PublicCatalogView = () => {
                 <span className="rounded-full bg-primary-50 px-3 py-1.5">3. Request a quote</span>
               </div>
               </div>
-
-            <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="mt-7 w-full max-w-3xl">
-              <label htmlFor="public-catalog-search" className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-primary-500">What are you looking for?</label>
-              <div className="relative group">
-                <div className="absolute -inset-0.5 rounded-2xl bg-gradient-to-r from-accent-blue/30 to-accent-primary/20 opacity-50 blur transition duration-500 group-hover:opacity-80" />
-                <div className="relative flex items-center rounded-2xl border border-primary-200 bg-white p-1.5 shadow-lg shadow-primary-950/5">
-                  <Search className="ml-3 h-5 w-5 shrink-0 text-accent-blue" />
-                  <input
-                    id="public-catalog-search"
-                    type="text"
-                    placeholder={hasVehicle ? `Search parts for ${vehicle.model}...` : 'Search by part name, part number, or vehicle...'}
-                    value={searchQuery}
-                    onChange={(event) => handleSearchChange(event.target.value)}
-                    className="w-full bg-transparent border-none px-3 py-3.5 text-primary-900 outline-none placeholder-primary-400 focus:ring-0"
-                  />
-                  {searchQuery && (
-                    <button onClick={() => handleSearchChange('')} className="p-2 hover:bg-primary-50 text-primary-500 hover:text-primary-900 rounded-lg transition-colors">
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <p className="mt-2 text-xs text-primary-500">Try a part name, material code, or Mitsubishi model.</p>
-            </Motion.div>
             </div>
           </div>
 
@@ -495,18 +471,37 @@ const PublicCatalogView = () => {
             />
           )}
 
-          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm text-primary-600">
-              <span>
-                Showing <strong className="text-primary-950">{rangeStart}-{rangeEnd}</strong> of{' '}
-                <strong className="text-primary-950">{totalCount}</strong> parts
-              </span>
-              <p className="mt-1 text-xs uppercase tracking-[0.22em] text-primary-400">
-                Page {pagination.page} of {totalPages}
-              </p>
+          <div className="mb-4 flex flex-col gap-4 rounded-2xl border border-primary-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center">
+            <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="shrink-0 text-sm text-primary-600">
+                <span>
+                  Showing <strong className="text-primary-950">{rangeStart}-{rangeEnd}</strong> of{' '}
+                  <strong className="text-primary-950">{totalCount}</strong> parts
+                </span>
+                <p className="mt-1 text-xs uppercase tracking-[0.22em] text-primary-400">
+                  Page {pagination.page} of {totalPages}
+                </p>
+              </div>
+              <div className="relative min-w-0 sm:max-w-md sm:flex-1">
+                <label htmlFor="public-catalog-search" className="sr-only">Search parts</label>
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-accent-blue" />
+                <input
+                  id="public-catalog-search"
+                  type="text"
+                  placeholder={hasVehicle ? `Search parts for ${vehicle.model}...` : 'Search by part name, number, or vehicle...'}
+                  value={searchQuery}
+                  onChange={(event) => handleSearchChange(event.target.value)}
+                  className="min-h-11 w-full rounded-xl border border-primary-200 bg-primary-50 py-2.5 pl-11 pr-10 text-sm text-primary-900 outline-none transition placeholder:text-primary-400 focus:border-accent-blue focus:bg-white focus:ring-2 focus:ring-accent-blue/15"
+                />
+                {searchQuery && (
+                  <button type="button" aria-label="Clear search" onClick={() => handleSearchChange('')} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-primary-500 transition hover:bg-primary-100 hover:text-primary-900">
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center lg:shrink-0">
               {hasActiveFilters && <button type="button" onClick={resetFilters} className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary-200 px-3 py-2 text-sm font-semibold text-primary-600 transition hover:border-accent-blue hover:bg-primary-50 hover:text-accent-blue"><X className="h-4 w-4" /> Clear filters</button>}
               <label className="text-xs font-bold uppercase tracking-[0.22em] text-primary-500">Sort by</label>
               <div className="relative min-w-[220px]">
