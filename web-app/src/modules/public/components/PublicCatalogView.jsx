@@ -98,7 +98,6 @@ const PublicCatalogView = () => {
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [sortBy, setSortBy] = useState('stock-desc');
-  const [prioritizeAvailable, setPrioritizeAvailable] = useState(true);
   const [stockFilter, setStockFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -126,7 +125,7 @@ const PublicCatalogView = () => {
     pageSize: PAGE_SIZE,
     searchQuery: deferredSearchQuery,
     selectedCategory,
-    sortBy: prioritizeAvailable ? `available-${sortBy}` : sortBy,
+    sortBy,
     stockFilter,
     vehicleModel: deferredVehicleModel,
     vehicleYear: deferredVehicleYear,
@@ -243,7 +242,6 @@ const PublicCatalogView = () => {
     setSearchQuery('');
     setSelectedCategory('all');
     setSortBy('stock-desc');
-    setPrioritizeAvailable(true);
     setStockFilter('all');
     setCurrentPage(1);
     setSelectedProduct(null);
@@ -524,10 +522,6 @@ const PublicCatalogView = () => {
                   ))}
                 </select>
               </div>
-              <label className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-200 bg-primary-50 px-3 text-xs font-semibold text-primary-700">
-                <input type="checkbox" checked={prioritizeAvailable} onChange={(event) => { setPrioritizeAvailable(event.target.checked); setCurrentPage(1); }} className="h-4 w-4 accent-blue-700" />
-                Available items first
-              </label>
               <div className="inline-flex rounded-2xl border border-primary-200 bg-primary-50 p-1 shadow-sm" aria-label="Catalog view mode">
                 <button
                   type="button"
