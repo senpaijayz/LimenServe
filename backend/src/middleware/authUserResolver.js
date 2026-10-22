@@ -57,6 +57,7 @@ export function createAuthUserResolver({
 } = {}) {
   const cache = new Map();
   const inflight = new Map();
+  let cacheEpoch = 0;
 
   async function fetchProfile(userId) {
     const { data, error } = await supabaseAdmin.rpc('get_user_profile_by_user_id', {
@@ -83,13 +84,17 @@ export function createAuthUserResolver({
     // The managed database profile is the only authorization source. If the
     // profile lookup is unavailable or the row is not provisioned yet, fail
     // closed as a customer instead of trusting mutable/stale token metadata.
-    const resolvedRole = profile?.role || 'customer';
+    const banExpiresAt = Date.parse(data.user.banned_until || '');
+    const isBanned = Number.isFinite(banExpiresAt) && banExpiresAt > now();
+    const isDeactivated = data.user.app_metadata?.account_status === 'deactivated';
+    const resolvedRole = isBanned || isDeactivated ? 'customer' : profile?.role || 'customer';
 
     return {
       id: data.user.id,
       email: data.user.email,
       fullName: profile?.full_name || fallbackFullName,
       role: normalizeRole(resolvedRole),
+      accountStatus: isDeactivated ? 'deactivated' : isBanned ? 'inactive' : 'active',
       profile,
     };
   }
@@ -134,9 +139,10 @@ export function createAuthUserResolver({
     }
 
     const request = (async () => {
+      const requestEpoch = cacheEpoch;
       const user = await fetchResolvedUser(token);
 
-      if (user && cacheTtlMs > 0 && maxCacheEntries > 0) {
+      if (user && requestEpoch === cacheEpoch && cacheTtlMs > 0 && maxCacheEntries > 0) {
         cache.set(token, {
           user,
           expiresAt: resolveCacheExpiry({ token, ttlMs: cacheTtlMs, now }),
@@ -157,6 +163,7 @@ export function createAuthUserResolver({
   }
 
   function clearCache() {
+    cacheEpoch += 1;
     cache.clear();
     inflight.clear();
   }

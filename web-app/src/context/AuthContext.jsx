@@ -40,6 +40,7 @@ export function AuthProvider({ children }) {
     const [isProfileReady, setIsProfileReady] = useState(false);
     const [error, setError] = useState(null);
     const [profileWarning, setProfileWarning] = useState(null);
+    const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
     const pendingProfileSessionKeyRef = useRef(null);
     const resolvedProfileSessionKeyRef = useRef(null);
 
@@ -53,6 +54,7 @@ export function AuthProvider({ children }) {
         setUser(null);
         setError(null);
         setProfileWarning(null);
+        setIsPasswordRecovery(false);
         setIsProfileReady(true);
     }, [clearProfileTracking]);
 
@@ -156,16 +158,22 @@ export function AuthProvider({ children }) {
             }
         };
 
-        initializeAuth();
-
-        const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
             if (!mounted) {
                 return;
+            }
+
+            if (event === 'PASSWORD_RECOVERY') {
+                setIsPasswordRecovery(true);
+            } else if (event === 'SIGNED_OUT') {
+                setIsPasswordRecovery(false);
             }
 
             applySession(session);
             setIsLoadingAuth(false);
         });
+
+        initializeAuth();
 
         return () => {
             mounted = false;
@@ -206,6 +214,14 @@ export function AuthProvider({ children }) {
         resetAuthState();
     }, [resetAuthState]);
 
+    const finishPasswordRecovery = useCallback(async () => {
+        try {
+            await supabase.auth.signOut({ scope: 'local' });
+        } finally {
+            resetAuthState();
+        }
+    }, [resetAuthState]);
+
     const hasRole = useCallback((roles) => {
         if (!user) return false;
         if (typeof roles === 'string') {
@@ -226,8 +242,10 @@ export function AuthProvider({ children }) {
         isAdmin: user?.role === ROLES.ADMIN,
         login,
         logout,
+        isPasswordRecovery,
+        finishPasswordRecovery,
         hasRole,
-    }), [user, isLoadingAuth, isProfileReady, error, profileWarning, login, logout, hasRole]);
+    }), [user, isLoadingAuth, isProfileReady, error, profileWarning, login, logout, isPasswordRecovery, finishPasswordRecovery, hasRole]);
 
     return (
         <AuthContext.Provider value={value}>

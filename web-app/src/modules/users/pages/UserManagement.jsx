@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Search, Plus, Edit2, Shield, User, UserCheck } from 'lucide-react';
+import { AlertTriangle, Search, Plus, Edit2, Shield, User, UserCheck, Trash2, LockKeyhole, RotateCcw } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
@@ -11,7 +11,7 @@ import { useToast } from '../../../components/ui/Toast';
 import { listMechanics } from '../../../services/mechanicsApi';
 import MechanicManagementPanel from '../components/MechanicManagementPanel';
 import { removeMechanicRow, upsertMechanicRow } from '../utils/mechanicVisibilityModel';
-import { createUser, listUsers, updateUser } from '../../../services/usersApi';
+import { createUser, deactivateUser, listUsers, restoreUser, updateUser } from '../../../services/usersApi';
 
 const roleOptions = [
     { value: 'admin', label: 'Administrator' },
@@ -133,6 +133,10 @@ const UserManagement = () => {
     const [isSavingUser, setIsSavingUser] = useState(false);
     const [userFormError, setUserFormError] = useState('');
     const [mechanics, setMechanics] = useState([]);
+    const [showInactiveUsers, setShowInactiveUsers] = useState(false);
+    const [deactivationTarget, setDeactivationTarget] = useState(null);
+    const [restoreTarget, setRestoreTarget] = useState(null);
+    const [isChangingAccountStatus, setIsChangingAccountStatus] = useState(false);
 
     const loadMechanics = async () => {
         try {
@@ -162,11 +166,19 @@ const UserManagement = () => {
         void loadMechanics();
     }, []);
 
-    const filteredUsers = useMemo(() => users.filter((user) =>
-        String(user.firstName || '').toLowerCase().includes(searchQuery.toLowerCase())
-        || String(user.lastName || '').toLowerCase().includes(searchQuery.toLowerCase())
-        || String(user.email || '').toLowerCase().includes(searchQuery.toLowerCase())
-    ), [searchQuery, users]);
+    const activeUsers = useMemo(() => users.filter((user) => user.status === 'active'), [users]);
+    const inactiveUsers = useMemo(() => users.filter((user) => user.status !== 'active'), [users]);
+    const filteredUsers = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        const visibleUsers = showInactiveUsers ? inactiveUsers : activeUsers;
+        if (!query) return visibleUsers;
+
+        return visibleUsers.filter((user) =>
+            String(user.firstName || '').toLowerCase().includes(query)
+            || String(user.lastName || '').toLowerCase().includes(query)
+            || String(user.email || '').toLowerCase().includes(query)
+        );
+    }, [activeUsers, inactiveUsers, searchQuery, showInactiveUsers]);
 
     const closeUserModal = () => {
         if (isSavingUser) {
@@ -244,6 +256,93 @@ const UserManagement = () => {
         setShowAddModal(true);
     };
 
+    const handleDeactivate = async () => {
+        if (!deactivationTarget || isChangingAccountStatus) return;
+
+        setIsChangingAccountStatus(true);
+        try {
+            const result = await deactivateUser(deactivationTarget.id);
+            if (!result?.user) throw new Error('The server did not confirm that staff access was removed.');
+            setUsers((current) => current.map((user) => user.id === result.user.id ? result.user : user));
+            setDeactivationTarget(null);
+            success('Staff access removed. Business history is preserved.');
+            void loadUsers();
+        } catch (error) {
+            showError(error.message || 'Unable to remove this staff account.');
+        } finally {
+            setIsChangingAccountStatus(false);
+        }
+    };
+
+    const handleRestore = async () => {
+        if (!restoreTarget || isChangingAccountStatus) return;
+
+        setIsChangingAccountStatus(true);
+        try {
+            const result = await restoreUser(restoreTarget.id);
+            if (!result?.user) throw new Error('The server did not confirm account access was restored.');
+            setUsers((current) => current.map((user) => user.id === result.user.id ? result.user : user));
+            setRestoreTarget(null);
+            setShowInactiveUsers(false);
+            success('Staff access restored.');
+            void loadUsers();
+        } catch (error) {
+            showError(error.message || 'Unable to restore this staff account.');
+        } finally {
+            setIsChangingAccountStatus(false);
+        }
+    };
+
+    const renderUserActions = (user) => {
+        if (user.status !== 'active') {
+            if (user.accountStatus === 'deactivated') {
+                return (
+                    <button
+                        type="button"
+                        onClick={() => setRestoreTarget(user)}
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-primary-200 px-3 text-sm font-semibold text-primary-700 transition hover:border-primary-300 hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue"
+                        aria-label={`Restore access for ${user.fullName || user.email}`}
+                    >
+                        <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                        <span>Restore access</span>
+                    </button>
+                );
+            }
+
+            return <span className="text-sm text-primary-400">Inactive</span>;
+        }
+
+        return (
+            <div className="flex flex-wrap items-center gap-2">
+                <button
+                    type="button"
+                    onClick={() => handleEdit(user)}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-primary-200 px-3 text-sm font-semibold text-primary-700 transition hover:border-primary-300 hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue"
+                    aria-label={`Edit ${user.fullName || user.email}`}
+                >
+                    <Edit2 className="h-4 w-4" aria-hidden="true" />
+                    <span>Edit</span>
+                </button>
+                {user.role === 'admin' ? (
+                    <span className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary-50 px-3 text-sm font-medium text-primary-500" title="Administrator accounts cannot be deactivated">
+                        <LockKeyhole className="h-4 w-4" aria-hidden="true" />
+                        <span>Protected account</span>
+                    </span>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={() => setDeactivationTarget(user)}
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-red-200 px-3 text-sm font-semibold text-red-700 transition hover:border-red-300 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                        aria-label={`Delete ${user.fullName || user.email}`}
+                    >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        <span>Delete</span>
+                    </button>
+                )}
+            </div>
+        );
+    };
+
     const columns = [
         {
             key: 'name',
@@ -284,22 +383,13 @@ const UserManagement = () => {
             key: 'actions',
             label: 'Actions',
             sortable: false,
-            render: (_, row) => (
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => handleEdit(row)}
-                        className="p-1.5 rounded-lg hover:bg-primary-50 text-primary-400 hover:text-accent-blue transition-colors border border-transparent hover:border-primary-200"
-                    >
-                        <Edit2 className="w-4 h-4" />
-                    </button>
-                </div>
-            ),
+            render: (_, row) => renderUserActions(row),
         },
     ];
 
-    const adminCount = users.filter((user) => user.role === 'admin').length;
-    const cashierCount = users.filter((user) => user.role === 'cashier').length;
-    const clerkCount = users.filter((user) => user.role === 'stock_clerk').length;
+    const adminCount = activeUsers.filter((user) => user.role === 'admin').length;
+    const cashierCount = activeUsers.filter((user) => user.role === 'cashier').length;
+    const clerkCount = activeUsers.filter((user) => user.role === 'stock_clerk').length;
 
     return (
         <div className="space-y-6">
@@ -337,7 +427,7 @@ const UserManagement = () => {
                 </Card>
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                     <input
@@ -347,6 +437,26 @@ const UserManagement = () => {
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-2.5 bg-white border border-primary-200 rounded-lg text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue shadow-sm"
                     />
+                </div>
+                <div role="tablist" aria-label="Staff account status" className="inline-flex w-full rounded-xl border border-primary-200 bg-white p-1 sm:w-auto">
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={!showInactiveUsers}
+                        onClick={() => setShowInactiveUsers(false)}
+                        className={`min-h-10 flex-1 rounded-lg px-3 text-sm font-semibold transition sm:flex-none ${!showInactiveUsers ? 'bg-primary-100 text-primary-950' : 'text-primary-600 hover:bg-primary-50'}`}
+                    >
+                        Active <span className="ml-1 text-xs">{activeUsers.length}</span>
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={showInactiveUsers}
+                        onClick={() => setShowInactiveUsers(true)}
+                        className={`min-h-10 flex-1 rounded-lg px-3 text-sm font-semibold transition sm:flex-none ${showInactiveUsers ? 'bg-primary-100 text-primary-950' : 'text-primary-600 hover:bg-primary-50'}`}
+                    >
+                        Inactive <span className="ml-1 text-xs">{inactiveUsers.length}</span>
+                    </button>
                 </div>
             </div>
 
@@ -369,23 +479,22 @@ const UserManagement = () => {
                     <Card padding="sm" className="text-center text-primary-500">No users found.</Card>
                 ) : filteredUsers.map((user) => (
                     <Card key={user.id} padding="sm">
-                        <div className="flex items-start justify-between gap-3">
-                            <div>
+                        <div className="space-y-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
                                 <p className="font-semibold text-primary-950">{user.firstName} {user.lastName}</p>
                                 <p className="text-sm text-primary-500">{user.email}</p>
                                 <div className="mt-3 flex flex-wrap gap-2">
                                     <RoleBadge role={user.role} />
                                     <span className="rounded-full border border-primary-200 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-primary-500">
-                                        {user.status}
+                                        {user.accountStatus === 'deactivated' ? 'Deactivated' : user.status === 'active' ? 'Active' : 'Inactive'}
                                     </span>
                                 </div>
+                              </div>
                             </div>
-                            <button
-                                onClick={() => handleEdit(user)}
-                                className="rounded-lg border border-primary-200 p-2 text-primary-500"
-                            >
-                                <Edit2 className="h-4 w-4" />
-                            </button>
+                            <div className="flex flex-wrap gap-2 border-t border-primary-100 pt-3">
+                                {renderUserActions(user)}
+                            </div>
                         </div>
                     </Card>
                 ))}
@@ -413,6 +522,90 @@ const UserManagement = () => {
                 onSubmit={handleSubmit}
             />
             )}
+
+            <Modal
+                isOpen={Boolean(deactivationTarget)}
+                onClose={() => !isChangingAccountStatus && setDeactivationTarget(null)}
+                title="Remove staff access?"
+                size="md"
+                closeOnBackdrop={!isChangingAccountStatus}
+                closeOnEscape={!isChangingAccountStatus}
+            >
+                {deactivationTarget && (
+                    <div className="space-y-5">
+                        <p className="text-sm leading-6 text-primary-600">
+                            This will disable sign-in and move the account to Inactive Users. Sales, stock movements, service records, and audit history will remain linked to this staff profile. An administrator can restore access later.
+                        </p>
+                        <dl className="rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm">
+                            <div className="grid grid-cols-[5rem_1fr] gap-3 py-1">
+                                <dt className="font-semibold text-primary-600">Name</dt>
+                                <dd className="break-words font-medium text-primary-950">{deactivationTarget.fullName || `${deactivationTarget.firstName} ${deactivationTarget.lastName}`.trim() || '—'}</dd>
+                            </div>
+                            <div className="grid grid-cols-[5rem_1fr] gap-3 py-1">
+                                <dt className="font-semibold text-primary-600">Email</dt>
+                                <dd className="break-all text-primary-800">{deactivationTarget.email}</dd>
+                            </div>
+                            <div className="grid grid-cols-[5rem_1fr] gap-3 py-1">
+                                <dt className="font-semibold text-primary-600">Role</dt>
+                                <dd className="text-primary-800">{deactivationTarget.role === 'cashier' ? 'Cashier' : 'Clerk'}</dd>
+                            </div>
+                        </dl>
+                        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row sm:justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setDeactivationTarget(null)}
+                                disabled={isChangingAccountStatus}
+                                className="min-h-11 rounded-xl border border-red-300 px-5 font-semibold text-red-700 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDeactivate}
+                                disabled={isChangingAccountStatus}
+                                className="min-h-11 rounded-xl bg-red-600 px-5 font-semibold text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+                            >
+                                {isChangingAccountStatus ? 'Removing access…' : 'Deactivate account'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            <Modal
+                isOpen={Boolean(restoreTarget)}
+                onClose={() => !isChangingAccountStatus && setRestoreTarget(null)}
+                title="Restore staff access?"
+                size="sm"
+                closeOnBackdrop={!isChangingAccountStatus}
+                closeOnEscape={!isChangingAccountStatus}
+            >
+                {restoreTarget && (
+                    <div className="space-y-5">
+                        <p className="text-sm leading-6 text-primary-600">
+                            {restoreTarget.fullName || restoreTarget.email} will be able to sign in again with the {restoreTarget.role === 'cashier' ? 'Cashier' : 'Clerk'} role.
+                        </p>
+                        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setRestoreTarget(null)}
+                                disabled={isChangingAccountStatus}
+                                className="min-h-11 rounded-xl border border-primary-200 px-5 font-semibold text-primary-700 hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue disabled:opacity-60"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleRestore}
+                                disabled={isChangingAccountStatus}
+                                className="min-h-11 rounded-xl bg-primary-800 px-5 font-semibold text-white hover:bg-primary-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+                            >
+                                {isChangingAccountStatus ? 'Restoring access…' : 'Restore access'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 };

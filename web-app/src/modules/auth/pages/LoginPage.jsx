@@ -108,6 +108,12 @@ const LoginPage = () => {
                             {...register('password')}
                         />
 
+                        <div className="-mt-3 flex justify-end">
+                            <Link to="/forgot-password" className="text-sm font-semibold text-accent-blue hover:text-primary-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-offset-2 rounded">
+                                Forgot Password?
+                            </Link>
+                        </div>
+
                         <Button
                             type="submit"
                             variant="primary"
@@ -125,7 +131,7 @@ const LoginPage = () => {
                         </p>
                         <div className="rounded-xl border border-primary-100 bg-primary-50 px-4 py-3 text-xs text-primary-500">
                             <p className="text-center">
-                                Staff password support is handled by an administrator.
+                                If you no longer have access to your email, ask an administrator for help.
                             </p>
                         </div>
                     </div>

@@ -12,6 +12,8 @@ import { queryClient } from './lib/queryClient';
 import { recordRouteLoad } from './observability/performance';
 
 const LoginPage = lazy(() => import('./modules/auth/pages/LoginPage'));
+const ForgotPasswordPage = lazy(() => import('./modules/auth/pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./modules/auth/pages/ResetPasswordPage'));
 const AdminDashboard = lazy(() => import('./modules/dashboard/pages/AdminDashboard'));
 const InventoryList = lazy(() => import('./modules/inventory/pages/InventoryList'));
 const ReceiveStock = lazy(() => import('./modules/inventory/pages/ReceiveStock'));
@@ -97,6 +99,8 @@ function App() {
                   </Route>
 
                 <Route path="/login" element={renderRoute(LoginPage, <PageLoader />)} />
+                <Route path="/forgot-password" element={renderRoute(ForgotPasswordPage, <PageLoader />)} />
+                <Route path="/reset-password" element={renderRoute(ResetPasswordPage, <PageLoader />)} />
 
                 <Route element={<MainLayout />}>
                   <Route path="/dashboard" element={renderRoute(AdminDashboard, <WorkspaceRouteFallback title="Loading dashboard" />)} />

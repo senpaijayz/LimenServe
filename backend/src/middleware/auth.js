@@ -3,6 +3,10 @@ import { createAuthUserResolver } from './authUserResolver.js';
 
 export const authUserResolver = createAuthUserResolver({ supabaseAuth, supabaseAdmin });
 
+export function clearAuthUserCache() {
+  authUserResolver.clearCache();
+}
+
 export async function attachUser(req, _res, next) {
   try {
     const authorization = req.headers.authorization || '';

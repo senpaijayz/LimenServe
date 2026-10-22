@@ -26,3 +26,21 @@ export async function updateUser(userId, payload) {
     extractApiError(error, 'Failed to update user.');
   }
 }
+
+export async function deactivateUser(userId) {
+  try {
+    const { data } = await apiClient.delete(`/users/${userId}`);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to remove this staff account.');
+  }
+}
+
+export async function restoreUser(userId) {
+  try {
+    const { data } = await apiClient.post(`/users/${userId}/restore`);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to restore this staff account.');
+  }
+}
