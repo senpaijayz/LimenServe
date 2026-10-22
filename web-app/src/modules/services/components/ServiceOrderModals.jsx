@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
-import { X, Wrench, User, Phone, Car, FileText, Save, CheckCircle, ArrowRight, Archive, CreditCard, Package, CalendarDays, UserCheck, Printer, Search, Plus, Trash2 } from 'lucide-react';
+import { X, Wrench, User, Phone, Car, FileText, Save, CheckCircle, ArrowRight, Archive, CreditCard, Package, CalendarDays, UserCheck, Printer, Search, Plus, Trash2, Clock } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import Input from '../../../components/ui/Input';
@@ -9,6 +9,74 @@ import { StatusBadge } from '../../../components/ui/Badge';
 import useDataStore from '../../../store/useDataStore';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 import { listMechanics } from '../../../services/mechanicsApi';
+
+const PRIORITY_STYLES = {
+    low: 'border-slate-200 bg-slate-50 text-slate-700',
+    normal: 'border-blue-200 bg-blue-50 text-blue-800',
+    high: 'border-orange-200 bg-orange-50 text-orange-800',
+    urgent: 'border-red-200 bg-red-50 text-red-800',
+};
+
+export function PriorityBadge({ priority }) {
+    const normalized = String(priority || 'normal').toLowerCase();
+    const label = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+    return <span className={`inline-flex min-h-7 items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${PRIORITY_STYLES[normalized] || PRIORITY_STYLES.normal}`}>Priority: {label}</span>;
+}
+
+function manilaDateTimeParts(date) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).formatToParts(date);
+    return Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+}
+
+function manilaDateInputValue(date = new Date()) {
+    const parts = manilaDateTimeParts(date);
+    return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function manilaDateTimeInputValue(date) {
+    const parts = manilaDateTimeParts(date);
+    return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+function formatManilaDateTime(value) {
+    if (!value || Number.isNaN(new Date(value).getTime())) return 'Not scheduled';
+    return new Intl.DateTimeFormat('en-PH', {
+        timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short',
+    }).format(new Date(value));
+}
+
+function manilaDateTimeToIso(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(value || ''));
+    if (!match) return '';
+    const [, year, month, day, hour, minute] = match;
+    return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour) - 8, Number(minute))).toISOString();
+}
+
+function validateManilaSchedule(startValue, endValue) {
+    const start = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/.exec(startValue || '');
+    const end = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/.exec(endValue || '');
+    if (!start || !end) return 'Choose a mechanic and service schedule.';
+    const [, startDate, startHour, startMinute] = start;
+    const [, endDate, endHour, endMinute] = end;
+    const startTime = Number(startHour) * 60 + Number(startMinute);
+    const endTime = Number(endHour) * 60 + Number(endMinute);
+    const today = manilaDateInputValue(new Date());
+    if (startDate < today) return 'Start date cannot be in the past.';
+    if (startDate === today && new Date(manilaDateTimeToIso(startValue)).getTime() <= Date.now()) return 'Start time cannot be in the past.';
+    if (startTime < 8 * 60 || startTime >= 17 * 60 || endTime > 17 * 60) return 'Workshop hours are 8:00 AM–5:00 PM.';
+    if (endDate !== startDate) return 'End time must be on the same workday. Schedule separate workday assignments for multi-day jobs.';
+    if (endTime <= startTime) return 'End time must be later than the start time.';
+    return '';
+}
+
+export function isServiceOrderOverdue(order) {
+    if (!order || ['completed', 'cancelled'].includes(order.status)) return false;
+    const plannedEnd = order.scheduledEnd ?? order.scheduled_end ?? order.assignment?.scheduledEnd;
+    return Boolean(plannedEnd && new Date(plannedEnd).getTime() < Date.now());
+}
 
 const escapeHtml = (value) => String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -57,7 +125,7 @@ const printServiceOrderDocument = ({ order, serviceItems, partItems, orderTotal,
     const createdAt = order.createdAt ?? order.created_at;
     const orderNumber = order.orderNumber ?? order.order_number ?? order.id;
     const status = order.status ? order.status.replace(/_/g, ' ') : 'pending';
-    const paymentStatus = order.paymentStatus || order.payment_status || (order.status === 'completed' ? 'Paid / posted' : 'Pending completion');
+    const paymentStatus = order.paymentStatus || order.payment_status || 'Unpaid';
 
     const html = `
         <!doctype html>
@@ -315,7 +383,19 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
                 estimatedCost: combinedTotal,
                 status: 'pending',
                 priority: formData.priority,
-                items: parts,
+                items: [
+                    ...parts,
+                    ...(laborCost > 0 ? [{
+                        lineType: 'service',
+                        serviceId: null,
+                        displayName: formData.description.trim().slice(0, 120) || 'Service labor',
+                        itemName: formData.description.trim().slice(0, 120) || 'Service labor',
+                        itemSku: 'LABOR',
+                        quantity: 1,
+                        unitPrice: laborCost,
+                        lineTotal: laborCost,
+                    }] : []),
+                ],
             });
             onClose();
         } catch (error) {
@@ -356,8 +436,8 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
                             </div>
                             <h2 className="text-xl font-display font-bold text-primary-950">New Service Order</h2>
                         </div>
-                        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-primary-50 transition-colors">
-                            <X className="w-5 h-5 text-primary-400" />
+                        <button type="button" onClick={onClose} aria-label="Close service order" className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
+                            <X className="w-5 h-5" />
                         </button>
                     </div>
 
@@ -373,6 +453,7 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
                                     placeholder="Full name"
                                     value={formData.customerName}
                                     onChange={e => updateField('customerName', e.target.value)}
+                                    required
                                     error={errors.customerName}
                                 />
                                 <Input
@@ -412,6 +493,7 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
                                     placeholder="e.g. Montero Sport"
                                     value={formData.vehicleModel}
                                     onChange={e => updateField('vehicleModel', e.target.value)}
+                                    required
                                     error={errors.vehicleModel}
                                 />
                             </div>
@@ -428,6 +510,7 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
                                     placeholder="ABC 1234"
                                     value={formData.vehiclePlate}
                                     onChange={e => updateField('vehiclePlate', e.target.value)}
+                                    required
                                     error={errors.vehiclePlate}
                                 />
                             </div>
@@ -443,15 +526,18 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
                                 <textarea
                                     value={formData.description}
                                     onChange={e => updateField('description', e.target.value)}
+                                    required
+                                    aria-invalid={Boolean(errors.description) || undefined}
                                     placeholder="Describe the service needed..."
                                     rows={3}
                                     className="input resize-none"
                                 />
+                                {errors.description && <p className="mt-1 text-xs text-accent-danger" role="alert">{errors.description}</p>}
                                 {errors.description && <p className="text-xs text-accent-danger mt-1">{errors.description}</p>}
                             </div>
                             <div className="grid grid-cols-1 gap-4 mt-3 sm:grid-cols-2">
                                 <Input
-                                    label="Estimated Cost (₱)"
+                                    label="Estimated Labor Cost (₱)"
                                     type="number"
                                     placeholder="0.00"
                                     value={formData.estimatedCost}
@@ -514,7 +600,7 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
 
                         {/* Actions */}
                         <div className="flex gap-3 pt-4 border-t border-primary-700">
-                            <Button variant="secondary" fullWidth onClick={onClose} type="button">Cancel</Button>
+                                <Button variant="cancel" fullWidth onClick={onClose} type="button">Cancel</Button>
                             <Button variant="primary" fullWidth type="submit" isLoading={saving} leftIcon={<Save className="w-4 h-4" />}>
                                 Create Order
                             </Button>
@@ -533,9 +619,15 @@ export const CreateServiceOrderModal = ({ isOpen, onClose, onSave }) => {
 const toDateTimeLocalValue = (value, fallbackOffsetHours = 0) => {
     const date = value ? new Date(value) : new Date(Date.now() + fallbackOffsetHours * 60 * 60 * 1000);
     if (Number.isNaN(date.getTime())) return '';
-    date.setMinutes(0, 0, 0);
-    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000);
-    return local.toISOString().slice(0, 16);
+    if (!value) {
+        date.setMinutes(0, 0, 0);
+        const parts = manilaDateTimeParts(date);
+        if (Number(parts.hour) < 8 || Number(parts.hour) >= 17) {
+            const nextDay = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day) + 1, 9 - 8));
+            return manilaDateTimeInputValue(nextDay);
+        }
+    }
+    return manilaDateTimeInputValue(date);
 };
 
 export const ServiceOrderDetailModal = ({
@@ -556,17 +648,25 @@ export const ServiceOrderDetailModal = ({
     const [assignmentSaving, setAssignmentSaving] = useState(false);
     const [assignmentRemoving, setAssignmentRemoving] = useState(false);
     const [removeConfirmationOpen, setRemoveConfirmationOpen] = useState(false);
+    const [showCompletionReview, setShowCompletionReview] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState('cash');
+    const [cashReceived, setCashReceived] = useState('');
+    const [paymentReceivedConfirmed, setPaymentReceivedConfirmed] = useState(false);
     const [mechanicId, setMechanicId] = useState('');
     const [scheduledStart, setScheduledStart] = useState('');
     const [scheduledEnd, setScheduledEnd] = useState('');
 
     useEffect(() => {
         if (!isOpen || !order) return;
-        const nextStart = toDateTimeLocalValue(order.scheduledStart ?? order.scheduled_start, 1);
-        const nextEnd = toDateTimeLocalValue(order.scheduledEnd ?? order.scheduled_end, 2);
+        const storedStart = order.scheduledStart ?? order.scheduled_start;
+        const storedEnd = order.scheduledEnd ?? order.scheduled_end;
+        const nextStart = toDateTimeLocalValue(storedStart, 1);
+        const nextEnd = storedEnd
+            ? toDateTimeLocalValue(storedEnd)
+            : manilaDateTimeInputValue(new Date(Date.parse(manilaDateTimeToIso(nextStart)) + 60 * 60 * 1000));
         setMechanicId(order.assignment?.mechanicId ?? order.assignedMechanic?.id ?? '');
         setScheduledStart(nextStart);
-        setScheduledEnd(nextEnd > nextStart ? nextEnd : toDateTimeLocalValue(null, 2));
+        setScheduledEnd(nextEnd > nextStart ? nextEnd : manilaDateTimeInputValue(new Date(Date.parse(manilaDateTimeToIso(nextStart)) + 60 * 60 * 1000)));
         setAssignmentError('');
     }, [isOpen, order]);
 
@@ -580,8 +680,8 @@ export const ServiceOrderDetailModal = ({
                 const rows = await listMechanics({
                     activeOnly: true,
                     orderId: order.id,
-                    start: new Date(scheduledStart).toISOString(),
-                    end: new Date(scheduledEnd).toISOString(),
+                    start: manilaDateTimeToIso(scheduledStart),
+                    end: manilaDateTimeToIso(scheduledEnd),
                 });
                 if (active) setMechanics(rows);
             } catch (error) {
@@ -605,9 +705,16 @@ export const ServiceOrderDetailModal = ({
     const items = Array.isArray(order.items) ? order.items : Array.isArray(order.lineItems) ? order.lineItems : [];
     const serviceItems = items.filter((item) => (item.lineType ?? item.line_type) === 'service' || item.serviceId || item.service_id);
     const partItems = items.filter((item) => !serviceItems.includes(item));
-    const orderTotal = Number(order.totalAmount ?? order.total_amount ?? order.estimatedCost ?? order.estimated_cost ?? 0);
+    const recordedTotal = Number(order.totalAmount ?? order.total_amount ?? order.estimatedCost ?? order.estimated_cost ?? 0);
+    const itemSubtotal = items.reduce((sum, item, index) => sum + getLineItemDisplay(item, index).lineTotal, 0);
+    const orderTotal = items.length
+        ? Math.max(itemSubtotal - Number(order.discountTotal ?? order.discount_total ?? 0) + Number(order.taxTotal ?? order.tax_total ?? 0), 0)
+        : recordedTotal;
     const completedAt = order.completedAt ?? order.completed_at ?? null;
     const mechanicName = order.assignedMechanic?.name ?? order.assignment?.mechanic?.name ?? order.mechanicName ?? order.assignedMechanicName ?? order.assigned_to_name ?? order.assignedToName ?? '';
+    const isOverdue = isServiceOrderOverdue(order);
+    const todayManila = manilaDateInputValue(new Date());
+    const currentManilaInput = manilaDateTimeInputValue(new Date());
 
     const statusLabels = {
         pending: 'Pending',
@@ -625,9 +732,18 @@ export const ServiceOrderDetailModal = ({
     };
 
     const handleComplete = async () => {
+        const received = Number(cashReceived);
+        if (!paymentReceivedConfirmed) return;
+        if (paymentMethod === 'cash' && (!Number.isFinite(received) || received < orderTotal)) return;
         setCompleting(true);
         try {
-            await onComplete?.(order.id);
+            await onComplete?.(order.id, {
+                paymentMethod,
+                cashReceived: paymentMethod === 'cash' ? received : 0,
+                changeDue: paymentMethod === 'cash' ? Math.max(received - orderTotal, 0) : 0,
+                paymentReceivedConfirmed: true,
+            });
+            setShowCompletionReview(false);
         } finally {
             setCompleting(false);
         }
@@ -648,13 +764,9 @@ export const ServiceOrderDetailModal = ({
         event.preventDefault();
         setAssignmentError('');
 
-        if (!mechanicId || !scheduledStart || !scheduledEnd) {
-            setAssignmentError('Choose a mechanic and service schedule.');
-            return;
-        }
-
-        if (new Date(scheduledEnd) <= new Date(scheduledStart)) {
-            setAssignmentError('Service end time must be after the start time.');
+        const scheduleError = validateManilaSchedule(scheduledStart, scheduledEnd);
+        if (!mechanicId || scheduleError) {
+            setAssignmentError(scheduleError || 'Choose a mechanic and service schedule.');
             return;
         }
 
@@ -662,8 +774,8 @@ export const ServiceOrderDetailModal = ({
         try {
             await onAssignMechanic?.(order.id, {
                 mechanicId,
-                scheduledStart: new Date(scheduledStart).toISOString(),
-                scheduledEnd: new Date(scheduledEnd).toISOString(),
+                scheduledStart: manilaDateTimeToIso(scheduledStart),
+                scheduledEnd: manilaDateTimeToIso(scheduledEnd),
             });
         } catch (error) {
             setAssignmentError(error.message || 'Unable to assign the mechanic.');
@@ -727,12 +839,14 @@ export const ServiceOrderDetailModal = ({
                             <div className="flex flex-wrap items-center gap-2">
                                 <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-primary-500">{order.orderNumber || order.id}</p>
                                 <StatusBadge status={order.status} />
+                                <PriorityBadge priority={order.priority} />
+                                {isOverdue && <span className="inline-flex min-h-7 items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-800"><Clock className="h-3.5 w-3.5" /> Overdue</span>}
                             </div>
                             <h2 id="service-order-detail-title" className="mt-2 text-xl font-display font-bold text-primary-950 sm:text-2xl">Customer Service Order</h2>
                             <p className="mt-1 text-sm text-primary-500">Review customer, vehicle, services, parts, and completion record.</p>
                         </div>
-                        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white transition-colors">
-                            <X className="w-5 h-5 text-primary-400" />
+                        <button type="button" onClick={onClose} aria-label="Close service order" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
+                            <X className="w-5 h-5" />
                         </button>
                     </div>
 
@@ -812,7 +926,7 @@ export const ServiceOrderDetailModal = ({
                                 <div className="rounded-2xl border border-primary-100 bg-primary-950 p-5 text-white">
                                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/45">Final amount</p>
                                     <p className="mt-2 text-3xl font-display font-bold">{formatCurrency(orderTotal)}</p>
-                                    <p className="mt-2 text-sm text-white/60">Posted to Sales when marked complete.</p>
+                                    <p className="mt-2 text-sm text-white/60">Receipt review and payment confirmation are required before posting.</p>
                                 </div>
 
                                 <div className="grid gap-3">
@@ -822,7 +936,7 @@ export const ServiceOrderDetailModal = ({
                                         </div>
                                         <p className="mt-2 text-sm font-semibold text-primary-950">{mechanicName || 'Not assigned'}</p>
                                         {order.assignedMechanic?.specialization && <p className="mt-1 text-xs text-primary-600">{order.assignedMechanic.specialization}</p>}
-                                        {order.scheduledStart && <p className="mt-2 text-xs text-primary-600">{formatDateTime(order.scheduledStart)} – {formatDateTime(order.scheduledEnd)}</p>}
+                                        {order.scheduledStart && <p className="mt-2 text-xs text-primary-600">{formatManilaDateTime(order.scheduledStart)} – {formatManilaDateTime(order.scheduledEnd)}</p>}
                                     </div>
                                     {canAssignMechanic && order.status !== 'completed' && order.status !== 'cancelled' && (
                                         <form onSubmit={handleAssignmentSubmit} className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
@@ -839,9 +953,10 @@ export const ServiceOrderDetailModal = ({
                                                 </select>
                                             </label>
                                             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                                <label className="text-xs font-semibold text-primary-700">Start<input type="datetime-local" className="input mt-1" value={scheduledStart} onChange={(event) => setScheduledStart(event.target.value)} required /></label>
-                                                <label className="text-xs font-semibold text-primary-700">End<input type="datetime-local" className="input mt-1" value={scheduledEnd} onChange={(event) => setScheduledEnd(event.target.value)} required /></label>
+                                                <label className="text-xs font-semibold text-primary-700">Start <span className="text-red-600">*</span><input type="datetime-local" className="input mt-1" value={scheduledStart} min={currentManilaInput} max={`${scheduledStart.slice(0, 10)}T16:59`} onChange={(event) => setScheduledStart(event.target.value)} required /></label>
+                                                <label className="text-xs font-semibold text-primary-700">End <span className="text-red-600">*</span><input type="datetime-local" className="input mt-1" value={scheduledEnd} min={scheduledStart || `${todayManila}T08:00`} max={`${scheduledStart.slice(0, 10)}T17:00`} onChange={(event) => setScheduledEnd(event.target.value)} required /></label>
                                             </div>
+                                            <p className="mt-2 text-xs text-blue-800">Schedule in Philippine time, 8:00 AM–5:00 PM. Each assignment must fit within one workday.</p>
                                             <div className="mt-3 flex flex-wrap gap-2">
                                                 <Button type="submit" size="sm" variant="confirm" isLoading={assignmentSaving} leftIcon={<UserCheck className="h-4 w-4" />}>{order.assignment ? 'Change assignment' : 'Assign mechanic'}</Button>
                                                 {order.assignment && <Button size="sm" variant="delete" isLoading={assignmentRemoving} onClick={() => setRemoveConfirmationOpen(true)}>Remove</Button>}
@@ -859,7 +974,7 @@ export const ServiceOrderDetailModal = ({
                                         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary-500">
                                             <CreditCard className="h-4 w-4" /> Payment
                                         </div>
-                                        <p className="mt-2 text-sm font-semibold text-primary-950">{order.paymentStatus || order.payment_status || (order.status === 'completed' ? 'Paid / posted' : 'Pending completion')}</p>
+                                        <p className="mt-2 text-sm font-semibold text-primary-950">{order.paymentStatus || order.payment_status || 'Unpaid'}</p>
                                     </div>
                                 </div>
                             </aside>
@@ -869,7 +984,7 @@ export const ServiceOrderDetailModal = ({
                             <Button variant="outline" leftIcon={<Printer className="w-4 h-4" />} onClick={handlePrint}>
                                 Print / Save PDF
                             </Button>
-                            <Button variant="secondary" onClick={onClose}>Close</Button>
+                            <Button variant="cancel" onClick={onClose}>Close</Button>
                             {nextStatus === 'in_progress' && (
                                 <Button
                                     variant="primary"
@@ -880,14 +995,18 @@ export const ServiceOrderDetailModal = ({
                                     Start Work
                                 </Button>
                             )}
-                            {order.status !== 'completed' && (
+                            {order.status !== 'completed' && order.status !== 'cancelled' && (
                                 <Button
                                     variant="success"
-                                    isLoading={completing}
+                                    isDisabled={completing}
                                     leftIcon={<Archive className="w-4 h-4" />}
-                                    onClick={handleComplete}
+                                    onClick={() => {
+                                        setCashReceived('');
+                                        setPaymentReceivedConfirmed(false);
+                                        setShowCompletionReview(true);
+                                    }}
                                 >
-                                    Finish, Archive, and Add to Sales
+                                    Review Completion
                                 </Button>
                             )}
                             {order.status === 'completed' && (
@@ -900,6 +1019,38 @@ export const ServiceOrderDetailModal = ({
                     </div>
                 </Motion.div>
             </Motion.div>
+        </AnimatePresence>
+        <AnimatePresence>
+            {showCompletionReview && (
+                <Motion.div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/60 p-2 backdrop-blur-sm sm:items-center sm:p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { if (!completing) setShowCompletionReview(false); }}>
+                    <Motion.div role="dialog" aria-modal="true" aria-labelledby="service-completion-review-title" className="flex max-h-[95dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-primary-200 bg-white shadow-2xl sm:rounded-2xl" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 18 }} onClick={(event) => event.stopPropagation()}>
+                        <div className="flex items-start justify-between gap-4 border-b border-primary-200 px-4 py-4 sm:px-6">
+                            <div><p className="text-xs font-bold uppercase tracking-[0.2em] text-primary-500">Final review</p><h3 id="service-completion-review-title" className="mt-1 text-xl font-display font-bold text-primary-950">Review service receipt</h3><p className="mt-1 text-sm text-primary-600">Check the work, parts, and amount with the customer before finishing.</p></div>
+                            <button type="button" onClick={() => setShowCompletionReview(false)} aria-label="Close receipt review" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-700 hover:bg-red-100"><X className="h-5 w-5" /></button>
+                        </div>
+                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
+                            <div className="grid gap-3 rounded-xl bg-primary-50 p-4 text-sm sm:grid-cols-2">
+                                <p><span className="text-primary-500">Order</span><br /><strong>{order.orderNumber || order.id}</strong></p>
+                                <p><span className="text-primary-500">Customer</span><br /><strong>{order.customerName || 'Walk-in customer'}</strong></p>
+                                <p><span className="text-primary-500">Vehicle</span><br /><strong>{[order.vehicle?.year, order.vehicle?.make, order.vehicle?.model, order.vehicle?.plate].filter(Boolean).join(' ') || 'Not recorded'}</strong></p>
+                                <p><span className="text-primary-500">Mechanic</span><br /><strong>{mechanicName || 'Not assigned'}</strong></p>
+                            </div>
+                            <div className="space-y-2"><h4 className="font-semibold text-primary-950">Work and parts</h4>{[...serviceItems, ...partItems].length ? [...serviceItems, ...partItems].map(renderItemRow) : <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">No itemized lines were saved. The service note will be used as the receipt description.</p>}</div>
+                            <div className="flex items-center justify-between rounded-xl border border-primary-200 bg-white p-4"><span className="font-semibold text-primary-700">Total due</span><strong className="text-xl text-primary-950">{formatCurrency(orderTotal)}</strong></div>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <label className="text-sm font-medium text-primary-700">Payment method <span className="text-red-600">*</span><select className="input mt-1" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="cash">Cash</option><option value="gcash">GCash</option><option value="bank_transfer">Bank transfer</option></select></label>
+                                {paymentMethod === 'cash' && <label className="text-sm font-medium text-primary-700">Cash received <span className="text-red-600">*</span><input className="input mt-1" type="number" min={orderTotal} step="0.01" value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} placeholder="Enter amount received" /></label>}
+                            </div>
+                            {paymentMethod === 'cash' && Number(cashReceived) >= orderTotal && <p className="text-sm text-primary-600">Change due: <strong>{formatCurrency(Number(cashReceived) - orderTotal)}</strong></p>}
+                            <label className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><input type="checkbox" className="mt-0.5 h-4 w-4 accent-accent-primary" checked={paymentReceivedConfirmed} onChange={(event) => setPaymentReceivedConfirmed(event.target.checked)} /><span><strong>Confirm work and payment.</strong> I checked the completed job, and the customer’s payment shown above has actually been received. This will post the receipt to Sales.</span></label>
+                        </div>
+                        <div className="flex flex-col-reverse gap-2 border-t border-primary-200 bg-primary-50 p-3 sm:flex-row sm:justify-end sm:px-6">
+                            <Button variant="cancel" onClick={() => setShowCompletionReview(false)} isDisabled={completing}>Back to order</Button>
+                            <Button variant="success" onClick={handleComplete} isLoading={completing} isDisabled={!paymentReceivedConfirmed || (paymentMethod === 'cash' && Number(cashReceived) < orderTotal)} leftIcon={<Archive className="h-4 w-4" />}>Confirm Finish & Add to Sales</Button>
+                        </div>
+                    </Motion.div>
+                </Motion.div>
+            )}
         </AnimatePresence>
         <ConfirmDialog
             isOpen={removeConfirmationOpen}

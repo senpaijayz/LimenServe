@@ -22,7 +22,7 @@ const ConfirmDialog = ({
         closeOnEscape={!isLoading}
         footer={(
             <>
-                <Button variant="secondary" onClick={onClose} isDisabled={isLoading}>
+                <Button variant="cancel" onClick={onClose} isDisabled={isLoading}>
                     {cancelLabel}
                 </Button>
                 <Button

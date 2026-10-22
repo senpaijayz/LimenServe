@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 
 const router = Router();
 const ALLOWED_STATUSES = new Set(['pending', 'in_progress', 'completed', 'cancelled']);
+const ALLOWED_PRIORITIES = new Set(['low', 'normal', 'high', 'urgent']);
 const SALES_SCHEMA_CANDIDATES = ['operations', 'app'];
 const SERVICE_ORDER_SCHEMA_CANDIDATES = ['operations', 'app'];
 
@@ -105,11 +106,34 @@ async function loadLatestAssignments(orderIds = []) {
 }
 
 async function enrichOrdersWithAssignments(orders = []) {
+  const orderIds = [...new Set(orders.map((order) => order?.id).filter(Boolean))];
+  const { data: metadata, error: metadataError } = orderIds.length
+    ? await supabaseAdmin.schema('operations').from('service_orders')
+      .select('id, priority, payment_status, payment_method')
+      .in('id', orderIds)
+    : { data: [], error: null };
+  if (metadataError?.code === '42703') {
+    const { data: legacyRows, error: legacyError } = orderIds.length
+      ? await supabaseAdmin.schema('operations').from('service_orders').select('id').in('id', orderIds)
+      : { data: [], error: null };
+    if (legacyError) throw legacyError;
+    return enrichOrdersWithAssignmentsUsingMetadata(orders, new Map((legacyRows ?? []).map((row) => [row.id, {}])));
+  }
+  if (metadataError) throw metadataError;
+  const metadataById = new Map((metadata ?? []).map((row) => [row.id, row]));
+  return enrichOrdersWithAssignmentsUsingMetadata(orders, metadataById);
+}
+
+async function enrichOrdersWithAssignmentsUsingMetadata(orders, metadataById) {
   const assignments = await loadLatestAssignments(orders.map((order) => order?.id));
   return orders.map((order) => {
     const assignment = assignments.get(order?.id) ?? null;
+    const orderMetadata = metadataById.get(order?.id) ?? {};
     return {
       ...order,
+      priority: orderMetadata.priority ?? order.priority ?? 'normal',
+      paymentStatus: orderMetadata.payment_status ?? order.paymentStatus ?? order.payment_status ?? 'unpaid',
+      paymentMethod: orderMetadata.payment_method ?? order.paymentMethod ?? order.payment_method ?? null,
       assignment,
       assignedMechanic: assignment?.mechanic ?? null,
       scheduledStart: assignment?.scheduledStart
@@ -141,7 +165,20 @@ async function loadOrder(orderId) {
 
   if (!order) return null;
   const [enriched] = await enrichOrdersWithAssignments([order]);
-  return enriched;
+  return { ...enriched, items: normalizeServiceOrderItems(enriched) };
+}
+
+async function persistServiceOrderPriority(orderId, priority) {
+  if (!ALLOWED_PRIORITIES.has(priority)) {
+    const error = new Error('Choose a valid service priority.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const { error } = await supabaseAdmin.schema('operations')
+    .from('service_orders').update({ priority, updated_at: new Date().toISOString() }).eq('id', orderId);
+  if (error?.code === '42703') return false;
+  if (error) throw error;
+  return true;
 }
 
 async function loadCustomerOrders(userId) {
@@ -206,6 +243,9 @@ function normalizeServiceOrderError(error) {
     message.includes('missing product') ||
     message.includes('missing service') ||
     message.includes('Insufficient stock')
+    || message.includes('Payment confirmation')
+    || message.includes('Cash received')
+    || message.includes('supported payment method')
   ) {
     error.statusCode = error.statusCode || 400;
   }
@@ -226,6 +266,36 @@ function isDemoServiceOrderEntry(order) {
 function toNumber(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function manilaParts(value) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(value);
+  return Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+}
+
+function validateAssignmentWindow(start, end) {
+  if (!(start instanceof Date) || !(end instanceof Date) || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return 'Choose a mechanic and valid service schedule.';
+  }
+  if (start.getTime() <= Date.now()) return 'Start time cannot be in the past.';
+  if (end <= start) return 'End time must be later than the start time.';
+  const startLocal = manilaParts(start);
+  const endLocal = manilaParts(end);
+  const todayLocal = manilaParts(new Date());
+  const startDate = `${startLocal.year}-${startLocal.month}-${startLocal.day}`;
+  const endDate = `${endLocal.year}-${endLocal.month}-${endLocal.day}`;
+  const todayDate = `${todayLocal.year}-${todayLocal.month}-${todayLocal.day}`;
+  if (startDate < todayDate) return 'Start date cannot be in the past.';
+  if (startDate !== endDate) return 'End time must be on the same workday. Schedule separate workday assignments for multi-day jobs.';
+  const startMinutes = Number(startLocal.hour) * 60 + Number(startLocal.minute);
+  const endMinutes = Number(endLocal.hour) * 60 + Number(endLocal.minute);
+  if (startMinutes < 8 * 60 || startMinutes >= 17 * 60 || endMinutes > 17 * 60) {
+    return 'Workshop hours are 8:00 AM–5:00 PM, Philippine time.';
+  }
+  return '';
 }
 
 function pickFirstString(...values) {
@@ -268,16 +338,29 @@ function normalizeServiceOrderItems(order) {
     })
     .filter((item) => item.quantity > 0 && item.unitPrice >= 0 && (item.productId || item.serviceId || item.displayName));
 
+  const tax = Math.max(toNumber(order?.taxTotal ?? order?.tax_total), 0);
+  const discount = Math.max(toNumber(order?.discountTotal ?? order?.discount_total), 0);
+  const savedSubtotal = order?.subtotal ?? order?.subtotalAmount ?? order?.estimatedCost ?? order?.estimated_cost;
   const orderTotal = Math.max(toNumber(
-    order?.totalAmount
-      ?? order?.total_amount
-      ?? order?.estimatedCost
-      ?? order?.estimated_cost
-      ?? order?.amount
-      ?? order?.total,
+    savedSubtotal
+      ?? (toNumber(order?.totalAmount ?? order?.total_amount ?? order?.amount ?? order?.total) - tax + discount),
   ), 0);
 
   if (normalizedItems.length > 0) {
+    const itemSubtotal = normalizedItems.reduce((sum, item) => sum + toNumber(item.lineTotal), 0);
+    const remainingLabor = Number((orderTotal - itemSubtotal).toFixed(2));
+    if (remainingLabor > 0.01) {
+      normalizedItems.push({
+        lineType: 'service',
+        productId: null,
+        serviceId: null,
+        quantity: 1,
+        unitPrice: remainingLabor,
+        lineTotal: remainingLabor,
+        displayName: 'Service labor / additional work',
+        sku: 'LABOR',
+      });
+    }
     return normalizedItems;
   }
 
@@ -293,7 +376,7 @@ function normalizeServiceOrderItems(order) {
   }];
 }
 
-function buildServiceSalePayload(order) {
+function buildServiceSalePayload(order, paymentDetails) {
   const items = normalizeServiceOrderItems(order);
   const rawSubtotal = items.reduce((sum, item) => sum + toNumber(item.lineTotal), 0);
   const tax = Math.max(toNumber(order?.taxTotal ?? order?.tax_total), 0);
@@ -302,9 +385,9 @@ function buildServiceSalePayload(order) {
 
   return {
     customerName: pickFirstString(order?.customerName, order?.customer_name, 'Walk-in Customer'),
-    paymentMethod: 'cash',
-    cashReceived: total,
-    changeDue: 0,
+    paymentMethod: paymentDetails.paymentMethod,
+    cashReceived: paymentDetails.paymentMethod === 'cash' ? Number(paymentDetails.cashReceived) : 0,
+    changeDue: paymentDetails.paymentMethod === 'cash' ? Number(paymentDetails.changeDue ?? 0) : 0,
     discountPercent: rawSubtotal > 0 ? Number(((discountAmount / rawSubtotal) * 100).toFixed(2)) : 0,
     totals: {
       rawSubtotal: Number(rawSubtotal.toFixed(2)),
@@ -357,9 +440,11 @@ async function tagServiceSale(saleId, reference) {
   return null;
 }
 
-async function persistServiceCompletion(orderId) {
+async function persistServiceCompletion(orderId, paymentDetails) {
   const patch = {
     status: 'completed',
+    payment_status: 'paid',
+    payment_method: paymentDetails.paymentMethod,
     completed_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -374,10 +459,30 @@ async function persistServiceCompletion(orderId) {
     if (!error) {
       return;
     }
+    if (error.code === '42703') {
+      const { error: legacyError } = await supabaseAdmin.schema(schema).from('service_orders').update({
+        status: patch.status,
+        completed_at: patch.completed_at,
+        updated_at: patch.updated_at,
+      }).eq('id', orderId);
+      if (!legacyError) return;
+    }
   }
+  throw new Error('The service order could not be marked complete. The posted sale is safely linked and can be retried.');
 }
 
-async function completeServiceOrder(orderId, operatorId) {
+async function completeServiceOrder(orderId, operatorId, paymentDetails = {}) {
+  if (paymentDetails.paymentReceivedConfirmed !== true) {
+    const error = new Error('Payment confirmation is required before finishing and posting this service order.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!['cash', 'gcash', 'bank_transfer'].includes(paymentDetails.paymentMethod)) {
+    const error = new Error('Choose a supported payment method.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   const currentOrder = await loadOrder(orderId);
 
   if (!currentOrder || isDemoServiceOrderEntry(currentOrder)) {
@@ -390,14 +495,41 @@ async function completeServiceOrder(orderId, operatorId) {
   let sale = await findExistingServiceSale(reference);
   let saleCreated = false;
 
-  if (!sale) {
-    const payload = buildServiceSalePayload(currentOrder);
-    const saleId = await callRpc('create_pos_sale', {
-      payload,
-      p_operator_id: operatorId ?? null,
-    });
+  if (currentOrder.status === 'completed' && sale) {
+    return { order: currentOrder, sale, saleCreated: false, archiveReference: reference };
+  }
 
-    sale = await tagServiceSale(saleId, reference) || { id: saleId };
+  const paymentPayload = {
+    ...paymentDetails,
+    cashReceived: toNumber(paymentDetails.cashReceived),
+    changeDue: toNumber(paymentDetails.changeDue),
+  };
+  const payload = buildServiceSalePayload(currentOrder, paymentPayload);
+  if (paymentPayload.paymentMethod === 'cash') {
+    const total = payload.totals.total;
+    if (paymentPayload.cashReceived < total) {
+      const error = new Error('Cash received must be greater than or equal to the service total.');
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  if (!sale) {
+    let saleId;
+    try {
+      saleId = await callRpc('create_service_order_sale', {
+        payload,
+        p_operator_id: operatorId ?? null,
+        p_original_reference: reference,
+      });
+      sale = await findExistingServiceSale(reference) || { id: saleId };
+    } catch (error) {
+      const migrationPending = error?.code === 'PGRST202'
+        || error?.code === '42883';
+      if (!migrationPending) throw error;
+      const legacySaleId = await callRpc('create_pos_sale', { payload, p_operator_id: operatorId ?? null });
+      sale = await tagServiceSale(legacySaleId, reference) || { id: legacySaleId };
+    }
     saleCreated = true;
   }
 
@@ -413,7 +545,7 @@ async function completeServiceOrder(orderId, operatorId) {
     },
   });
 
-  await persistServiceCompletion(orderId);
+  await persistServiceCompletion(orderId, paymentPayload);
   await callRpc('finish_mechanic_assignment', {
     p_service_order_id: orderId,
     p_actor_user_id: operatorId ?? null,
@@ -475,13 +607,9 @@ router.post('/:orderId/assignment', requireRole('admin'), async (req, res, next)
     const scheduledStart = new Date(req.body?.scheduledStart);
     const scheduledEnd = new Date(req.body?.scheduledEnd);
 
-    if (!mechanicId || Number.isNaN(scheduledStart.getTime()) || Number.isNaN(scheduledEnd.getTime())) {
-      res.status(400).json({ error: 'Choose a mechanic and valid service schedule.' });
-      return;
-    }
-
-    if (scheduledEnd <= scheduledStart) {
-      res.status(400).json({ error: 'Service end time must be after the start time.' });
+    const scheduleError = validateAssignmentWindow(scheduledStart, scheduledEnd);
+    if (!mechanicId || scheduleError) {
+      res.status(400).json({ error: scheduleError || 'Choose a mechanic and valid service schedule.' });
       return;
     }
 
@@ -519,10 +647,15 @@ router.delete('/:orderId/assignment', requireRole('admin'), async (req, res, nex
 
 router.post('/', async (req, res, next) => {
   try {
+    if (req.body?.priority && !ALLOWED_PRIORITIES.has(String(req.body.priority).toLowerCase())) {
+      res.status(400).json({ error: 'Choose a valid service priority.' });
+      return;
+    }
     const order = await callRpc('limen_create_service_order', {
       p_payload: req.body ?? {},
     });
-    res.status(201).json({ order });
+    if (order?.id && req.body?.priority) await persistServiceOrderPriority(order.id, String(req.body.priority).toLowerCase());
+    res.status(201).json({ order: order?.id ? await loadOrder(order.id) : order });
   } catch (error) {
     next(normalizeServiceOrderError(error));
   }
@@ -530,6 +663,31 @@ router.post('/', async (req, res, next) => {
 
 router.patch('/:orderId', async (req, res, next) => {
   try {
+    if (req.body?.priority !== undefined && !ALLOWED_PRIORITIES.has(String(req.body.priority).toLowerCase())) {
+      res.status(400).json({ error: 'Choose a valid service priority.' });
+      return;
+    }
+    if (req.body?.status) {
+      const current = await loadOrder(req.params.orderId);
+      if (!current) {
+        res.status(404).json({ error: 'Service order not found.' });
+        return;
+      }
+      const permitted = {
+        pending: new Set(['pending', 'in_progress', 'cancelled']),
+        in_progress: new Set(['in_progress', 'cancelled']),
+        completed: new Set(['completed']),
+        cancelled: new Set(['cancelled']),
+      };
+      if (req.body.status === 'completed') {
+        res.status(409).json({ error: 'Use the receipt review and payment confirmation to finish and post a service order.' });
+        return;
+      }
+      if (!permitted[current.status]?.has(req.body.status)) {
+        res.status(409).json({ error: 'This service order status change is not allowed. Orders move from Pending to In Progress, then through the completion review.' });
+        return;
+      }
+    }
     const order = await callRpc('limen_update_service_order', {
       p_order_id: req.params.orderId,
       p_payload: req.body ?? {},
@@ -537,6 +695,10 @@ router.patch('/:orderId', async (req, res, next) => {
     if (!order) {
       res.status(404).json({ error: 'Service order not found.' });
       return;
+    }
+
+    if (req.body?.priority !== undefined) {
+      await persistServiceOrderPriority(req.params.orderId, String(req.body.priority).toLowerCase());
     }
 
     if (req.body?.status === 'cancelled') {
@@ -555,7 +717,7 @@ router.patch('/:orderId', async (req, res, next) => {
 
 router.post('/:orderId/complete', requireRole('admin', 'cashier'), async (req, res, next) => {
   try {
-    const result = await completeServiceOrder(req.params.orderId, req.user?.id ?? null);
+    const result = await completeServiceOrder(req.params.orderId, req.user?.id ?? null, req.body ?? {});
     res.json(result);
   } catch (error) {
     next(normalizeServiceOrderError(error));

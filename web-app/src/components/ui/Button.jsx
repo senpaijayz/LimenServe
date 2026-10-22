@@ -44,7 +44,7 @@ const Button = forwardRef(({
         approve: 'btn-success',
         reject: 'btn-danger',
         confirm: 'btn-primary',
-        cancel: 'btn-secondary',
+        cancel: 'btn-cancel',
     };
 
     // Size classes
@@ -55,9 +55,16 @@ const Button = forwardRef(({
         icon: 'btn-icon',
     };
 
+    const buttonLabel = typeof children === 'string' ? children.trim() : '';
+    const actionVariant = /^(cancel|close|back to order|discard\b.*)$/i.test(buttonLabel)
+        ? 'cancel'
+        : /^(remove\b.*|delete\b.*)$/i.test(buttonLabel)
+            ? 'danger'
+            : variant;
+
     const buttonClasses = `
     btn
-    ${variants[variant] || variants.primary}
+    ${variants[actionVariant] || variants.primary}
     ${sizes[size] || ''}
     ${fullWidth ? 'w-full' : ''}
     ${isUnavailable ? 'opacity-50 cursor-not-allowed' : ''}

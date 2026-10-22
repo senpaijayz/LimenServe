@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion as Motion } from 'framer-motion';
 import { useSearchParams } from 'react-router';
-import { Search, Plus, Minus, Calculator, Printer, Pencil, User, Phone, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
+import { Search, Plus, Minus, Calculator, Printer, Pencil, User, Phone, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Sparkles, Copy, Download } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
 import { normalizePhilippinePhoneNumber, sanitizePhilippineMobileInput } from '../../../utils/phone';
 import useProductCatalog from '../../../hooks/useProductCatalog';
@@ -17,7 +17,7 @@ import PublicQuoteLookupCard from '../components/PublicQuoteLookupCard';
 import PublicVehicleSelector from '../components/PublicVehicleSelector';
 import VehiclePackageShowcase from '../components/VehiclePackageShowcase';
 import { buildSmartQuoteModel } from '../utils/quoteRecommendationModel';
-import { buildBundleLineItems, getAppliedBundleDisplaySummaries, getAppliedBundleSummaries, roundCurrency } from '../utils/bundleQuotePricing';
+import { buildBundleLineItems, clearBundlePricing, createQuoteLineKey, getAppliedBundleDisplaySummaries, getAppliedBundleSummaries, roundCurrency } from '../utils/bundleQuotePricing';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 
 const SORT_OPTIONS = [
@@ -323,7 +323,7 @@ const enrichCreatedQuoteWithRequestedLabels = (quote, requestedItems = []) => {
                 bundle_key: item.bundle_key || requestedItem.bundle_key || null,
                 bundle_name: item.bundle_name || requestedItem.bundle_name || null,
                 bundle_tier_label: item.bundle_tier_label || requestedItem.bundle_tier_label || null,
-                catalog_unit_price: item.catalog_unit_price || requestedItem.catalog_unit_price || null,
+                catalog_unit_price: item.catalog_unit_price ?? requestedItem.catalog_unit_price ?? null,
             };
         }),
     };
@@ -378,7 +378,7 @@ function getIncomingPartSearch(searchParams) {
 
 const PublicEstimate = () => {
     const [searchParams] = useSearchParams();
-    const { loading: showToastLoading, updateToast } = useToast();
+    const { loading: showToastLoading, updateToast, success, error: showToastError } = useToast();
     const incomingPartSearch = getIncomingPartSearch(searchParams);
     const packageShelfRef = useRef(null);
     const addedBundleKeysRef = useRef(new Set());
@@ -583,6 +583,14 @@ const PublicEstimate = () => {
     const canGoPrev = pagination.page > 1;
     const canGoNext = pagination.page < totalPages;
 
+    const breakBundle = (bundleKey) => {
+        if (!bundleKey) return true;
+        if (!window.confirm('Changing or removing this package item will remove the package discount from the remaining items. Continue?')) return false;
+        setSelectedParts((parts) => parts.map((part) => part.bundleKey === bundleKey ? clearBundlePricing(part) : part));
+        setSelectedServices((services) => services.map((service) => service.bundleKey === bundleKey ? clearBundlePricing(service) : service));
+        return true;
+    };
+
     const addPart = (product, extra = {}) => {
         if (!isUuid(product?.id)) {
             setSaveError('This pricelist item is not yet linked to an active catalogue product and cannot be quoted online.');
@@ -593,62 +601,79 @@ const PublicEstimate = () => {
         setFocusedProduct(product);
         markSavedQuoteDirty();
         setSelectedParts((parts) => {
-            const existing = parts.find((part) => part.id === product.id);
-            const nextPrice = Number(extra.price ?? product.price ?? existing?.price ?? 0);
-            const hasPriceOverride = Number.isFinite(nextPrice);
+            const bundleKey = extra.bundleKey || '';
+            if (bundleKey && parts.some((part) => part.id === product.id && part.bundleKey === bundleKey)) return parts;
 
-            if (existing) {
-                return parts.map((part) => (part.id === product.id ? {
-                    ...part,
-                    ...extra,
-                    price: hasPriceOverride ? nextPrice : part.price,
-                    quantity: part.quantity + 1,
-                } : part));
+            const ordinaryLine = parts.find((part) => part.id === product.id && !part.bundleKey);
+            const nextPrice = Number(extra.price ?? product.price ?? ordinaryLine?.price ?? 0);
+            if (!Number.isFinite(nextPrice)) return parts;
+
+            if (bundleKey && ordinaryLine && Number(ordinaryLine.quantity || 1) === 1) {
+                return parts.map((part) => part.lineKey === ordinaryLine.lineKey
+                    ? { ...part, ...extra, lineKey: part.lineKey, price: nextPrice, catalogPrice: Number(extra.catalogPrice ?? part.catalogPrice ?? part.price), quantity: 1 }
+                    : part);
+            }
+
+            if (!bundleKey && ordinaryLine) {
+                return parts.map((part) => part.lineKey === ordinaryLine.lineKey
+                    ? { ...part, quantity: Number(part.quantity || 1) + 1 }
+                    : part);
             }
 
             return [...parts, {
+                lineKey: createQuoteLineKey(),
                 ...product,
                 quantity: 1,
                 ...extra,
-                price: hasPriceOverride ? nextPrice : Number(product.price ?? 0),
+                price: nextPrice,
+                catalogPrice: Number(extra.catalogPrice ?? product.price ?? nextPrice),
             }];
         });
     };
 
-    const removePart = (id) => {
+    const removePart = (identifier) => {
+        const selectedLine = selectedParts.find((part) => part.lineKey === identifier) || selectedParts.find((part) => part.id === identifier);
+        if (!selectedLine) return;
+        if (selectedLine.bundleKey && !breakBundle(selectedLine.bundleKey)) return;
         markSavedQuoteDirty();
-        setSelectedParts((parts) => parts.filter((part) => part.id !== id));
-        if (focusedProduct?.id === id) {
-            setFocusedProduct(null);
-        }
+        setSelectedParts((parts) => parts.filter((part) => part.lineKey !== selectedLine.lineKey));
+        if (focusedProduct?.id === selectedLine.id) setFocusedProduct(null);
     };
 
-    const updateQty = (id, qty) => {
+    const updateQty = (identifier, qty) => {
+        const selectedLine = selectedParts.find((part) => part.lineKey === identifier) || selectedParts.find((part) => part.id === identifier);
+        if (!selectedLine) return;
         markSavedQuoteDirty();
         if (qty < 1) {
-            removePart(id);
+            removePart(selectedLine.lineKey);
             return;
         }
 
-        setSelectedParts((parts) => parts.map((part) => (part.id === id ? { ...part, quantity: qty } : part)));
+        if (selectedLine.bundleKey && !breakBundle(selectedLine.bundleKey)) return;
+        setSelectedParts((parts) => parts.map((part) => (part.lineKey === selectedLine.lineKey ? { ...part, quantity: qty } : part)));
     };
 
-    const removeService = (id) => {
+    const removeService = (identifier) => {
+        const selectedLine = selectedServices.find((service) => service.lineKey === identifier) || selectedServices.find((service) => service.id === identifier);
+        if (!selectedLine) return;
+        if (selectedLine.bundleKey && !breakBundle(selectedLine.bundleKey)) return;
         markSavedQuoteDirty();
-        setSelectedServices((services) => services.filter((service) => service.id !== id));
+        setSelectedServices((services) => services.filter((service) => service.lineKey !== selectedLine.lineKey));
     };
 
     const toggleService = (service) => {
         markSavedQuoteDirty();
         setSelectedServices((services) => {
-            const existing = services.find((selected) => selected.id === service.id);
+            const existing = services.find((selected) => selected.id === service.id && !selected.bundleKey);
             if (existing) {
-                return services.filter((selected) => selected.id !== service.id);
+                return services.filter((selected) => selected.lineKey !== existing.lineKey);
             }
 
             return [...services, {
+                lineKey: createQuoteLineKey(),
                 ...service,
                 price: Number(service.price ?? 0),
+                catalogPrice: Number(service.price ?? 0),
                 quantity: 1,
             }];
         });
@@ -686,23 +711,25 @@ const PublicEstimate = () => {
             : null;
 
         setSelectedParts((parts) => {
-            const existing = parts.find((part) => part.id === productId);
+            const bundleKey = approvedPricing.bundleMeta?.bundleKey || '';
+            if (bundleKey && parts.some((part) => part.id === productId && part.bundleKey === bundleKey)) return parts;
+            const ordinaryLine = parts.find((part) => part.id === productId && !part.bundleKey);
 
-            if (existing) {
-                return parts.map((part) => (part.id === productId ? {
+            if (!bundleKey && ordinaryLine) return parts;
+            if (bundleKey && ordinaryLine && Number(ordinaryLine.quantity || 1) === 1) {
+                return parts.map((part) => part.lineKey === ordinaryLine.lineKey ? {
                     ...part,
                     isUpsell: true,
-                    recommendationRuleId: approvedPricing.recommendationRuleId || part.recommendationRuleId || null,
+                    recommendationRuleId: approvedPricing.recommendationRuleId || null,
                     catalogPrice: approvedPricing.catalogPrice,
                     ...approvedPricing.bundleMeta,
                     ...(displayBundleMeta ? { displayBundleMeta } : {}),
-                    price: approvedPricing.recommendationRuleId
-                        ? Math.min(Number(part.price ?? approvedPricing.price), approvedPricing.price)
-                        : approvedPricing.price,
-                } : part));
+                    price: approvedPricing.price,
+                } : part);
             }
 
             return [...parts, {
+                lineKey: createQuoteLineKey(),
                 id: matchedProduct.id,
                 name: matchedProduct.name,
                 sku: matchedProduct.sku,
@@ -745,6 +772,7 @@ const PublicEstimate = () => {
             }
             : null;
         const service = {
+            lineKey: createQuoteLineKey(),
             id: serviceId,
             name: recommendation.recommendedServiceName || recommendedService?.name || 'Recommended service',
             price: approvedPricing.price,
@@ -757,14 +785,13 @@ const PublicEstimate = () => {
         };
 
         setSelectedServices((services) => {
-            const existing = services.find((selected) => selected.id === service.id);
-            if (existing) {
-                return services.map((selected) => (selected.id === service.id ? {
-                    ...selected,
-                    ...service,
-                    price: Math.min(Number(selected.price ?? service.price ?? 0), Number(service.price ?? selected.price ?? 0)),
-                } : selected));
-            }
+            const bundleKey = service.bundleKey || '';
+            if (bundleKey && services.some((selected) => selected.id === service.id && selected.bundleKey === bundleKey)) return services;
+            const ordinaryLine = services.find((selected) => selected.id === service.id && !selected.bundleKey);
+            if (!bundleKey && ordinaryLine) return services;
+            if (bundleKey && ordinaryLine) return services.map((selected) => selected.lineKey === ordinaryLine.lineKey
+                ? { ...selected, ...service, lineKey: selected.lineKey, price: service.price, catalogPrice: service.catalogPrice }
+                : selected);
 
             return [...services, service];
         });
@@ -1002,6 +1029,33 @@ const PublicEstimate = () => {
         setShowPrintPreview(true);
     };
 
+    const handleCopyQuoteNumber = async (reference = printableQuote?.referenceValue || savedDraftQuote?.estimate?.estimate_number) => {
+        if (!reference) return;
+        try {
+            await navigator.clipboard.writeText(reference);
+            success('Quotation number copied!');
+        } catch {
+            showToastError('Unable to copy the quote number on this device.');
+        }
+    };
+
+    const handleDownloadQuotePdf = async () => {
+        if (!printableQuote) return;
+        const toastId = showToastLoading('Preparing your quotation PDF…');
+        try {
+            await downloadQuotationPdf({
+                ...printableQuote,
+                issuedAt: formatPrintDate(printableQuote.issuedAt),
+                validUntil: printableQuote.validUntil ? formatPrintDate(printableQuote.validUntil) : '',
+                subtotalBeforeDiscount: printableQuote.subtotal,
+                subtotalAfterDiscount: roundCurrency(Number(printableQuote.subtotal || 0) - Number(printableQuote.discountTotal || 0)),
+            });
+            updateToast(toastId, { type: 'success', message: 'Your quotation PDF has been downloaded.' });
+        } catch (pdfError) {
+            updateToast(toastId, { type: 'error', message: pdfError.message || 'We could not create the quotation PDF.' });
+        }
+    };
+
     const resetForm = () => {
         setCustomerName('');
         setCustomerPhone('');
@@ -1168,7 +1222,7 @@ const PublicEstimate = () => {
                                 </div>
                                 <div className="space-y-3">
                                     {selectedParts.map((part) => (
-                                        <div key={part.id} className="rounded-2xl border border-primary-200 bg-primary-50/70 p-3">
+                                        <div key={part.lineKey} className="rounded-2xl border border-primary-200 bg-primary-50/70 p-3">
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
                                                     <p className="truncate text-sm font-semibold text-primary-950">{part.name}</p>
@@ -1181,7 +1235,7 @@ const PublicEstimate = () => {
                                                 </div>
                                                 <button
                                                     type="button"
-                                                    onClick={() => removePart(part.id)}
+                                                    onClick={() => removePart(part.lineKey)}
                                                     className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-primary-400 transition hover:bg-accent-danger/10 hover:text-accent-danger"
                                                     aria-label={`Remove ${part.name}`}
                                                 >
@@ -1190,11 +1244,11 @@ const PublicEstimate = () => {
                                             </div>
                                             <div className="mt-3 flex items-center justify-between gap-3">
                                                 <div className="flex min-h-[44px] items-center rounded-2xl border border-primary-200 bg-white p-1">
-                                                    <button type="button" onClick={() => updateQty(part.id, part.quantity - 1)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Decrease ${part.name} quantity`}>
+                                                    <button type="button" onClick={() => updateQty(part.lineKey, part.quantity - 1)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Decrease ${part.name} quantity`}>
                                                         <Minus className="h-4 w-4" />
                                                     </button>
                                                     <span className="w-9 text-center text-sm font-semibold text-primary-950">{part.quantity}</span>
-                                                    <button type="button" onClick={() => updateQty(part.id, part.quantity + 1)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Increase ${part.name} quantity`}>
+                                                    <button type="button" onClick={() => updateQty(part.lineKey, part.quantity + 1)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Increase ${part.name} quantity`}>
                                                         <Plus className="h-4 w-4" />
                                                     </button>
                                                 </div>
@@ -1217,7 +1271,7 @@ const PublicEstimate = () => {
                                 </div>
                                 <div className="space-y-3">
                                     {selectedServices.map((service) => (
-                                        <div key={service.id} className="flex min-h-[64px] items-center justify-between gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 p-3">
+                                        <div key={service.lineKey} className="flex min-h-[64px] items-center justify-between gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 p-3">
                                             <div className="min-w-0">
                                                 <p className="truncate text-sm font-semibold text-primary-950">{service.name}</p>
                                                 <p className="mt-1 text-xs text-primary-500">{service.displayBundleMeta?.bundleKey || service.bundleKey ? `${service.displayBundleMeta?.bundleName || service.bundleName} / ${service.displayBundleMeta?.bundleTierLabel || service.bundleTierLabel} package labor` : 'Service / labor line'}</p>
@@ -1226,7 +1280,7 @@ const PublicEstimate = () => {
                                                 <span className="text-sm font-bold text-accent-blue">{formatCurrency(service.price)}</span>
                                                 <button
                                                     type="button"
-                                                    onClick={() => removeService(service.id)}
+                                                    onClick={() => removeService(service.lineKey)}
                                                     className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-primary-400 transition hover:bg-accent-danger/10 hover:text-accent-danger"
                                                     aria-label={`Remove ${service.name}`}
                                                 >
@@ -1275,17 +1329,15 @@ const PublicEstimate = () => {
                             <span className="font-semibold text-primary-950">{formatCurrency(servicesTotal)}</span>
                         </div>
                         {bundleDiscountTotal > 0 && (
-                            <>
-                                <div className="flex justify-between text-sm text-primary-600">
-                                    <span>Before package savings</span>
-                                    <span className="font-semibold text-primary-950">{formatCurrency(subtotalBeforeDiscount)}</span>
-                                </div>
-                                <div className="flex justify-between text-sm text-accent-success">
-                                    <span>Package savings applied</span>
-                                    <span className="font-semibold">-{formatCurrency(bundleDiscountTotal)}</span>
-                                </div>
-                            </>
+                            <div className="flex justify-between text-sm text-accent-success">
+                                <span>Package savings applied</span>
+                                <span className="font-semibold">-{formatCurrency(bundleDiscountTotal)}</span>
+                            </div>
                         )}
+                        <div className="flex justify-between text-sm text-primary-600">
+                            <span>Subtotal after savings</span>
+                            <span className="font-semibold text-primary-950">{formatCurrency(subtotal)}</span>
+                        </div>
                         <div className="flex justify-between text-sm text-primary-600">
                             <span>VAT (12%)</span>
                             <span className="font-semibold text-primary-950">{formatCurrency(vat)}</span>
@@ -1358,7 +1410,12 @@ const PublicEstimate = () => {
                     <p className="text-[0.7rem] font-bold uppercase tracking-[0.24em] text-accent-success">Quote successfully saved</p>
                     <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div>
-                            <p className="text-3xl font-display font-bold text-primary-950">{quoteNumber}</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-3xl font-display font-bold text-primary-950">{quoteNumber}</p>
+                                <button type="button" onClick={() => handleCopyQuoteNumber(quoteNumber)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-primary-200 bg-white px-3 text-sm font-semibold text-primary-700 transition hover:border-accent-blue hover:text-accent-blue" aria-label="Copy quote number">
+                                    <Copy className="h-4 w-4" /> Copy number
+                                </button>
+                            </div>
                             <p className="mt-2 text-sm text-primary-600">Use this quote number and the same phone number in Retrieve Quote to open the saved quotation again.</p>
                         </div>
                         <div className="flex flex-col gap-3 sm:flex-row">
@@ -1434,7 +1491,7 @@ const PublicEstimate = () => {
                 ) : (
                     <div className="grid gap-3">
                         {selectedParts.map((part) => (
-                            <div key={part.id} className="grid gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                            <div key={part.lineKey} className="grid gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                                 <div className="min-w-0">
                                     <p className="font-semibold text-primary-950">{part.name}</p>
                                     <p className="mt-1 text-xs text-primary-500">{getProductPartNumber(part) || 'Pricelist item'} - Qty {part.quantity}</p>
@@ -1448,7 +1505,7 @@ const PublicEstimate = () => {
                             </div>
                         ))}
                         {selectedServices.map((service) => (
-                            <div key={service.id} className="grid gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                            <div key={service.lineKey} className="grid gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                                 <div className="min-w-0">
                                     <p className="font-semibold text-primary-950">{service.name}</p>
                                     <p className="mt-1 text-xs text-primary-500">{service.displayBundleMeta?.bundleKey || service.bundleKey ? `${service.displayBundleMeta?.bundleName || service.bundleName} / ${service.displayBundleMeta?.bundleTierLabel || service.bundleTierLabel} package labor` : 'Service / labor line'}</p>
@@ -1769,8 +1826,8 @@ const PublicEstimate = () => {
                                             <Package className="w-5 h-5 text-accent-primary" />
                                         </div>
                                         <div>
-                                            <h3 className="text-xl font-display font-semibold text-primary-950">{hasVehicle ? `Genuine Parts for ${vehicle.displayLabel}` : 'Genuine Parts Pricelist'}</h3>
-                                            <p className="text-sm text-primary-500">{hasVehicle ? 'Car parts from the active pricelist. Confirm vehicle fitment with the shop.' : 'Showing car parts from the active pricelist. Merchandise is not included.'}</p>
+                                            <h3 className="text-xl font-display font-semibold text-primary-950">Order Parts</h3>
+                                            <p className="text-sm text-primary-500">{hasVehicle ? `Browse genuine parts for ${vehicle.displayLabel}. Please confirm vehicle fitment with the shop.` : 'Browse car parts from the current pricelist. Merchandise is not included.'}</p>
                                             <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary-400">Click a part to add it and reveal its Good / Better / Best bundle options.</p>
                                         </div>
                                     </div>
@@ -1832,7 +1889,8 @@ const PublicEstimate = () => {
                                     </button>
                                 </div>
 
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:max-h-[520px] lg:overflow-y-auto lg:pr-2 lg:custom-scrollbar">
+                                                <div className="mb-2 flex items-end justify-between gap-3"><div><h4 className="text-sm font-semibold text-primary-950">Matched Components</h4><p className="text-xs text-primary-500">Check the part number and vehicle information before adding.</p></div><span className="shrink-0 text-xs text-primary-500">{filteredProducts.length} shown</span></div>
+                                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:max-h-[520px] lg:overflow-y-auto lg:pr-2 lg:custom-scrollbar">
                                     {loading ? (
                                         <div className="sm:col-span-2 rounded-xl border border-primary-200 bg-white p-6 text-sm text-primary-500">
                                             Loading the current pricelist...
@@ -1920,7 +1978,7 @@ const PublicEstimate = () => {
                                                     className="min-h-11 rounded-xl border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-900 outline-none focus:border-accent-blue"
                                                 >
                                                     {selectedParts.map((part) => (
-                                                        <option key={`${part.id}-bundle-anchor`} value={part.id}>{part.name}</option>
+                                                        <option key={`${part.lineKey}-bundle-anchor`} value={part.id}>{part.name}</option>
                                                     ))}
                                                 </select>
                                             )}
@@ -2147,7 +2205,7 @@ const PublicEstimate = () => {
                                                         </div>
                                                         <div className="space-y-3">
                                                             {selectedParts.map((part) => (
-                                                                <div key={part.id} className="rounded-2xl border border-primary-200 bg-primary-50/60 p-3">
+                                                                <div key={part.lineKey} className="rounded-2xl border border-primary-200 bg-primary-50/60 p-3">
                                                                     <div className="flex items-start justify-between gap-3">
                                                                         <div className="min-w-0">
                                                                             <span className="block text-sm font-semibold text-primary-950">{part.name}</span>
@@ -2155,7 +2213,7 @@ const PublicEstimate = () => {
                                                                         </div>
                                                                         <button
                                                                             type="button"
-                                                                            onClick={() => removePart(part.id)}
+                                                                            onClick={() => removePart(part.lineKey)}
                                                                             className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-primary-400 transition hover:bg-accent-danger/10 hover:text-accent-danger"
                                                                             aria-label={`Remove ${part.name}`}
                                                                         >
@@ -2164,11 +2222,11 @@ const PublicEstimate = () => {
                                                                     </div>
                                                                     <div className="mt-3 flex items-center justify-between gap-3">
                                                                         <div className="flex items-center rounded-xl border border-primary-200 bg-white p-0.5">
-                                                                            <button type="button" onClick={() => updateQty(part.id, part.quantity - 1)} className="rounded-lg p-1.5 text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Decrease ${part.name} quantity`}>
+                                                                            <button type="button" onClick={() => updateQty(part.lineKey, part.quantity - 1)} className="rounded-lg p-1.5 text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Decrease ${part.name} quantity`}>
                                                                                 <Minus className="h-4 w-4" />
                                                                             </button>
                                                                             <span className="w-9 text-center text-sm font-semibold text-primary-950">{part.quantity}</span>
-                                                                            <button type="button" onClick={() => updateQty(part.id, part.quantity + 1)} className="rounded-lg p-1.5 text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Increase ${part.name} quantity`}>
+                                                                            <button type="button" onClick={() => updateQty(part.lineKey, part.quantity + 1)} className="rounded-lg p-1.5 text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Increase ${part.name} quantity`}>
                                                                                 <Plus className="h-4 w-4" />
                                                                             </button>
                                                                         </div>
@@ -2193,7 +2251,7 @@ const PublicEstimate = () => {
                                                         </div>
                                                         <div className="space-y-3">
                                                             {selectedServices.map((service) => (
-                                                                <div key={service.id} className="flex items-center justify-between gap-3 rounded-2xl border border-primary-200 bg-primary-50/60 p-3">
+                                                                <div key={service.lineKey} className="flex items-center justify-between gap-3 rounded-2xl border border-primary-200 bg-primary-50/60 p-3">
                                                                     <div className="min-w-0">
                                                                         <span className="block text-sm font-semibold text-primary-950">{service.name}</span>
                                                                         <span className="mt-1 block text-xs text-primary-500">Service / labor line</span>
@@ -2202,7 +2260,7 @@ const PublicEstimate = () => {
                                                                         <span className="text-sm font-bold text-accent-blue">{formatCurrency(service.price)}</span>
                                                                         <button
                                                                             type="button"
-                                                                            onClick={() => removeService(service.id)}
+                                                                            onClick={() => removeService(service.lineKey)}
                                                                             className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-primary-400 transition hover:bg-accent-danger/10 hover:text-accent-danger"
                                                                             aria-label={`Remove ${service.name}`}
                                                                         >
@@ -2228,7 +2286,7 @@ const PublicEstimate = () => {
                                                 onAddBundle={addBundleToEstimate}
                                                 selectedProductIds={selectedProductIds}
                                                 selectedServiceIds={selectedServiceIds}
-                                                title={hasVehicle ? 'Recommendations and packages in this cart' : 'Part-based smart bundles'}
+                                                title="Recommended Packages"
                                                 subtitle={hasVehicle
                                                     ? 'Add remaining upsell items and labor for the selected product without going back to the long catalog view.'
                                                     : 'Vehicle selection is optional. These bundles are based on the part you clicked and can still be added to the quote.'}
@@ -2247,6 +2305,16 @@ const PublicEstimate = () => {
                                             <div className="flex justify-between text-sm text-primary-600">
                                                 <span>Services Subtotal</span>
                                                 <span className="font-medium text-primary-950">{formatCurrency(servicesTotal)}</span>
+                                            </div>
+                                            {bundleDiscountTotal > 0 && (
+                                                <div className="flex justify-between text-sm text-accent-success">
+                                                    <span>Package savings</span>
+                                                    <span className="font-medium">-{formatCurrency(bundleDiscountTotal)}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between text-sm text-primary-600">
+                                                <span>Subtotal after savings</span>
+                                                <span className="font-medium text-primary-950">{formatCurrency(subtotal)}</span>
                                             </div>
                                             <div className="flex justify-between text-sm text-primary-600">
                                                 <span>VAT (12%)</span>
@@ -2353,7 +2421,7 @@ const PublicEstimate = () => {
                             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
                                 <div style={{ width: '220px', fontSize: '12px' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #ddd' }}>
-                                        <span style={{ fontWeight: '600' }}>Subtotal</span>
+                                        <span style={{ fontWeight: '600' }}>Subtotal before package savings</span>
                                         <span>{formatCurrency(printableQuote.subtotal)}</span>
                                     </div>
                                     {printableQuote.discountTotal > 0 && (
@@ -2362,6 +2430,10 @@ const PublicEstimate = () => {
                                             <span>-{formatCurrency(printableQuote.discountTotal)}</span>
                                         </div>
                                     )}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #ddd' }}>
+                                        <span style={{ fontWeight: '600' }}>Subtotal after savings</span>
+                                        <span>{formatCurrency(Number(printableQuote.subtotal || 0) - Number(printableQuote.discountTotal || 0))}</span>
+                                    </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #ddd' }}>
                                         <span style={{ fontWeight: '600' }}>VAT (12%)</span>
                                         <span>{formatCurrency(printableQuote.vat)}</span>
@@ -2374,11 +2446,17 @@ const PublicEstimate = () => {
                             </div>
                         </div>
                         <div className="mt-4 flex gap-3 print:hidden">
-                            <Button variant="secondary" fullWidth onClick={() => setShowPrintPreview(false)}>
+                            <Button variant="cancel" fullWidth onClick={() => setShowPrintPreview(false)}>
                                 Close
+                            </Button>
+                            <Button variant="outline" fullWidth leftIcon={<Copy className="w-4 h-4" />} onClick={() => handleCopyQuoteNumber(printableQuote.referenceValue)}>
+                                Copy Quote No.
                             </Button>
                             <Button variant="primary" fullWidth leftIcon={<Printer className="w-4 h-4" />} onClick={() => window.print()}>
                                 Print
+                            </Button>
+                            <Button variant="primary" fullWidth leftIcon={<Download className="w-4 h-4" />} onClick={handleDownloadQuotePdf}>
+                                Download PDF
                             </Button>
                         </div>
                     </>

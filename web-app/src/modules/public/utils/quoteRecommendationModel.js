@@ -5,6 +5,7 @@ import {
   normalizePackage,
   toNumber,
 } from './smartBundleUtils';
+import { roundCurrency } from './bundleQuotePricing';
 
 const VAT_RATE = 0.12;
 const NO_PRODUCT_REASON = 'Choose a part to unlock smart recommendations.';
@@ -14,8 +15,9 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
-function roundCurrency(value) {
-  return Number(toNumber(value, 0).toFixed(2));
+function toCents(value) {
+  const amount = toNumber(value, 0);
+  return Math.round((amount + Number.EPSILON * Math.sign(amount)) * 100);
 }
 
 function getRawItemKind(item = {}) {
@@ -94,10 +96,19 @@ function normalizeQuotePackages(packages = [], recommendations = []) {
 }
 
 function calculateLineSubtotal(lines = []) {
-  return roundCurrency(asArray(lines).reduce((sum, line) => {
+  const subtotalCents = asArray(lines).reduce((sum, line) => {
     const quantity = Math.max(Number(line.quantity ?? 1), 1);
-    return sum + (toNumber(line.price, 0) * quantity);
-  }, 0));
+    return sum + toCents(toNumber(line.price, 0) * quantity);
+  }, 0);
+  return roundCurrency(subtotalCents / 100);
+}
+
+function calculateCatalogLineSubtotal(lines = []) {
+  const subtotalCents = asArray(lines).reduce((sum, line) => {
+    const quantity = Math.max(Number(line.quantity ?? 1), 1);
+    return sum + toCents(toNumber(line.catalogPrice ?? line.price, 0) * quantity);
+  }, 0);
+  return roundCurrency(subtotalCents / 100);
 }
 
 function buildOptionalAddOns(packages, activeTier, selectedProduct) {
@@ -138,10 +149,13 @@ export function buildSmartQuoteModel({
   const selectedOptionalAddOns = optionalAddOns.filter((item) => optionalAddOnSet.has(item.key) || optionalAddOnSet.has(item.id));
   const partsSubtotal = calculateLineSubtotal(selectedParts);
   const servicesSubtotal = calculateLineSubtotal(selectedServices);
+  const catalogPartsSubtotal = calculateCatalogLineSubtotal(selectedParts);
+  const catalogServicesSubtotal = calculateCatalogLineSubtotal(selectedServices);
   const optionalAddOnsSubtotal = roundCurrency(selectedOptionalAddOns.reduce((sum, item) => sum + item.price, 0));
   const subtotal = roundCurrency(partsSubtotal + servicesSubtotal + optionalAddOnsSubtotal);
-  const vat = roundCurrency(subtotal * VAT_RATE);
-  const estimatedTotal = roundCurrency(subtotal + vat);
+  const subtotalCents = toCents(subtotal);
+  const vat = roundCurrency(Math.round(subtotalCents * VAT_RATE) / 100);
+  const estimatedTotal = roundCurrency((subtotalCents + toCents(vat)) / 100);
 
   return {
     selectedProduct,
@@ -163,6 +177,8 @@ export function buildSmartQuoteModel({
     totals: {
       partsSubtotal,
       servicesSubtotal,
+      catalogPartsSubtotal,
+      catalogServicesSubtotal,
       bundleSubtotal: roundCurrency(activeTier?.smartTotal ?? 0),
       bundleCatalogSubtotal: roundCurrency(activeTier?.catalogTotal ?? 0),
       bundleSavings: roundCurrency(activeTier?.savingsAmount ?? 0),

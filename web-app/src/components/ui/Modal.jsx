@@ -118,8 +118,9 @@ const Modal = ({
                                 {showCloseButton && (
                                     <button
                                         onClick={onClose}
-                                        className="p-1 rounded-lg text-primary-400 hover:text-primary-100 hover:bg-primary-700 transition-colors"
+                                        className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-700 transition-colors hover:border-red-300 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
                                         aria-label="Close modal"
+                                        type="button"
                                     >
                                         <X className="w-5 h-5" />
                                     </button>

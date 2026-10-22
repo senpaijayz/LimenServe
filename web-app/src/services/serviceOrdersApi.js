@@ -36,9 +36,9 @@ export async function updateServiceOrder(orderId, payload) {
   }
 }
 
-export async function completeServiceOrder(orderId) {
+export async function completeServiceOrder(orderId, paymentDetails) {
   try {
-    const { data } = await apiClient.post(`/service-orders/${orderId}/complete`);
+    const { data } = await apiClient.post(`/service-orders/${orderId}/complete`, paymentDetails);
     return data;
   } catch (error) {
     extractApiError(error, 'Failed to complete and archive the service order.');

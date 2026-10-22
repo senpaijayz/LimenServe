@@ -1527,26 +1527,38 @@ function matchesCatalogFilters(product, { searchQuery = '', selectedCategory = '
 }
 
 function sortCatalogProducts(products = [], sortBy = 'name-asc') {
+  const sortValue = String(sortBy);
+  const prioritizeAvailable = sortValue.startsWith('available-');
+  const prioritizeUnavailable = sortValue.startsWith('unavailable-');
+  const requestedSort = sortValue.replace(/^(available-|unavailable-)/, '');
   return [...products].sort((left, right) => {
-    if (sortBy === 'stock-desc') {
+    if (prioritizeAvailable || prioritizeUnavailable) {
+      const leftAvailable = Number(left.availableStock ?? left.stock ?? left.quantity ?? 0) > 0 ? 1 : 0;
+      const rightAvailable = Number(right.availableStock ?? right.stock ?? right.quantity ?? 0) > 0 ? 1 : 0;
+      if (leftAvailable !== rightAvailable) return prioritizeAvailable
+        ? rightAvailable - leftAvailable
+        : leftAvailable - rightAvailable;
+    }
+
+    if (requestedSort === 'stock-desc') {
       return Number(right.stock ?? right.quantity ?? 0) - Number(left.stock ?? left.quantity ?? 0)
         || String(left.name || '').localeCompare(String(right.name || ''));
     }
 
-    if (sortBy === 'stock-asc') {
+    if (requestedSort === 'stock-asc') {
       return Number(left.stock ?? left.quantity ?? 0) - Number(right.stock ?? right.quantity ?? 0)
         || String(left.name || '').localeCompare(String(right.name || ''));
     }
 
-    if (sortBy === 'name-desc') {
+    if (requestedSort === 'name-desc') {
       return String(right.name || '').localeCompare(String(left.name || '')) || String(left.sku || '').localeCompare(String(right.sku || ''));
     }
 
-    if (sortBy === 'price-asc') {
+    if (requestedSort === 'price-asc') {
       return Number(left.price ?? 0) - Number(right.price ?? 0) || String(left.name || '').localeCompare(String(right.name || ''));
     }
 
-    if (sortBy === 'price-desc') {
+    if (requestedSort === 'price-desc') {
       return Number(right.price ?? 0) - Number(left.price ?? 0) || String(left.name || '').localeCompare(String(right.name || ''));
     }
 
@@ -3501,7 +3513,12 @@ router.get('/products', async (req, res, next) => {
         usingVehiclePricelist = false;
       }
 
-      const sortedProducts = sortCatalogProducts(scopedProducts, sortBy);
+      const stockFilteredProducts = stockFilter === 'available'
+        ? scopedProducts.filter((product) => Number(product.availableStock ?? product.stock ?? product.quantity ?? 0) > 0)
+        : stockFilter === 'out'
+          ? scopedProducts.filter((product) => Number(product.availableStock ?? product.stock ?? product.quantity ?? 0) <= 0)
+          : scopedProducts;
+      const sortedProducts = sortCatalogProducts(stockFilteredProducts, sortBy);
       const pageProducts = sortedProducts.slice((page - 1) * pageSize, page * pageSize);
 
       totalCount = sortedProducts.length;

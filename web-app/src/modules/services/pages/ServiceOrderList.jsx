@@ -5,7 +5,7 @@ import Card from '../../../components/ui/Card';
 import { StatusBadge } from '../../../components/ui/Badge';
 import Tabs from '../../../components/ui/Tabs';
 import { formatCurrency, formatRelativeTime } from '../../../utils/formatters';
-import { CreateServiceOrderModal, ServiceOrderDetailModal } from '../components/ServiceOrderModals';
+import { CreateServiceOrderModal, ServiceOrderDetailModal, PriorityBadge, isServiceOrderOverdue } from '../components/ServiceOrderModals';
 import { useToast } from '../../../components/ui/Toast';
 import {
     assignMechanicToServiceOrder,
@@ -79,6 +79,8 @@ const ServiceOrderList = () => {
     const archivedOrders = searchedOrders.filter(o => o.status === 'completed');
     const visibleMobileOrders = statusFilter === 'archive'
         ? archivedOrders
+        : statusFilter === 'overdue'
+            ? searchedOrders.filter(isServiceOrderOverdue)
         : statusFilter === 'all'
             ? activeOrders
             : searchedOrders.filter((order) => order.status === statusFilter && order.status !== 'completed');
@@ -87,6 +89,7 @@ const ServiceOrderList = () => {
         pending: orders.filter((order) => order.status === 'pending').length,
         inProgress: orders.filter((order) => order.status === 'in_progress').length,
         archived: orders.filter((order) => order.status === 'completed').length,
+        overdue: orders.filter(isServiceOrderOverdue).length,
     }), [orders]);
 
     // Handle status update
@@ -102,9 +105,9 @@ const ServiceOrderList = () => {
         }
     };
 
-    const handleCompleteOrder = async (orderId) => {
+    const handleCompleteOrder = async (orderId, paymentDetails) => {
         try {
-            const result = await completeServiceOrder(orderId);
+            const result = await completeServiceOrder(orderId, paymentDetails);
             const completedOrder = result?.order;
 
             if (completedOrder) {
@@ -161,6 +164,7 @@ const ServiceOrderList = () => {
     // Order card component
     const OrderCard = ({ order }) => {
         const isArchived = order.status === 'completed';
+        const overdue = isServiceOrderOverdue(order);
         const itemCount = Array.isArray(order.items) ? order.items.length : 0;
 
         return (
@@ -176,7 +180,7 @@ const ServiceOrderList = () => {
                         <p className="font-mono text-xs tracking-widest text-primary-500 mb-1">{order.orderNumber || order.id}</p>
                         <h3 className="font-display font-semibold text-lg text-primary-950 group-hover:text-red-600 transition-colors">{order.customerName}</h3>
                     </div>
-                    <StatusBadge status={order.status} />
+                    <div className="flex flex-col items-end gap-2"><StatusBadge status={order.status} /><PriorityBadge priority={order.priority} />{overdue && <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-800">Overdue</span>}</div>
                 </div>
 
                 <div className="space-y-3 p-4 bg-primary-50 rounded-lg border border-primary-100">
@@ -214,6 +218,7 @@ const ServiceOrderList = () => {
                         Archived and posted to Sales
                     </div>
                 )}
+                {overdue && (order.scheduledEnd || order.scheduled_end || order.assignment?.scheduledEnd) && <p className="mt-2 text-xs font-medium text-red-700">Scheduled completion has passed.</p>}
             </div>
         </div>
         );
@@ -261,6 +266,19 @@ const ServiceOrderList = () => {
             content: (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
                     {activeOrders.map((order) => (
+                        <OrderCard key={order.id} order={order} />
+                    ))}
+                </div>
+            ),
+        },
+        {
+            id: 'overdue',
+            label: 'Overdue',
+            badge: statusCounts.overdue,
+            icon: <Clock className="w-4 h-4 text-red-700" />,
+            content: (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+                    {searchedOrders.filter(isServiceOrderOverdue).map((order) => (
                         <OrderCard key={order.id} order={order} />
                     ))}
                 </div>
@@ -330,10 +348,11 @@ const ServiceOrderList = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
                 <StatusMetric label="Active Queue" value={statusCounts.all} helper="Pending and in-progress only" icon={<Wrench className="h-5 w-5" />} />
                 <StatusMetric label="Pending" value={statusCounts.pending} helper="Needs workshop review" icon={<Clock className="h-5 w-5" />} />
                 <StatusMetric label="In Progress" value={statusCounts.inProgress} helper="Currently being handled" icon={<AlertCircle className="h-5 w-5" />} />
+                <StatusMetric label="Overdue" value={statusCounts.overdue} helper="Unfinished after scheduled end" icon={<Clock className="h-5 w-5 text-red-700" />} />
                 <StatusMetric label="Archive" value={statusCounts.archived} helper="Completed and posted to Sales" icon={<Archive className="h-5 w-5" />} />
             </div>
 
@@ -385,7 +404,7 @@ const ServiceOrderList = () => {
                 </div>
 
                 <div className="mb-4 flex flex-wrap gap-2 sm:hidden">
-                    {['all', 'pending', 'in_progress', 'archive'].map((status) => (
+                    {['all', 'pending', 'in_progress', 'overdue', 'archive'].map((status) => (
                         <button
                             key={status}
                             type="button"

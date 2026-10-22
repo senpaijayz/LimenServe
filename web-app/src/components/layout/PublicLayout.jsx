@@ -49,11 +49,28 @@ const PublicLayout = () => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const { settings, navigation } = usePublicCmsSite();
 
+    const getSetting = (key, fallback) => {
+        const value = settings?.[key];
+        if (typeof value === 'string' || typeof value === 'number') {
+            return String(value);
+        }
+        return fallback;
+    };
+    const logoUrl = getSetting('logo_url', '/LogoLimen.jpg');
+
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 20);
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
+
+    useEffect(() => {
+        const iconUrl = new URL(logoUrl, window.location.href);
+        if (!logoUrl.startsWith('data:')) iconUrl.searchParams.set('brand', logoUrl);
+        document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]').forEach((link) => {
+            link.href = iconUrl.href;
+        });
+    }, [logoUrl]);
 
     if (isAuthenticated && user?.role !== ROLES.CUSTOMER) {
         return <Navigate to={getDefaultAuthenticatedPath(user?.role)} replace />;
@@ -66,15 +83,6 @@ const PublicLayout = () => {
         return location.pathname === to;
     };
 
-    const getSetting = (key, fallback) => {
-        const value = settings?.[key];
-        if (typeof value === 'string' || typeof value === 'number') {
-            return String(value);
-        }
-        return fallback;
-    };
-
-    const logoUrl = getSetting('logo_url', '/LogoLimen.jpg');
     const brandKicker = getSetting('brand_kicker', 'Limen');
     const brandTitle = getSetting('brand_title', 'Genuine Auto Parts');
     const companyName = getSetting('company_name', 'Limen Auto Parts Center');

@@ -20,9 +20,17 @@ const shiftOptions = [
     { value: 'on_call', label: 'On Call / By Appointment' },
 ];
 
+const specializationOptions = [
+    'General Automotive Repair', 'Engine Repair', 'Transmission', 'Brakes and Suspension',
+    'Electrical Systems', 'Air Conditioning / HVAC', 'Diagnostics', 'Steering and Alignment',
+    'Preventive Maintenance', 'Engine Tune-Up', 'Diesel Engine Repair', 'Body Repair', 'Auto Detailing',
+];
+const CUSTOM_SPECIALIZATION = '__custom__';
+
 const initialForm = {
     full_name: '',
     specialization: '',
+    customSpecialization: '',
     availability_status: 'available',
     shift_type: 'full_day',
     available_date: '',
@@ -117,9 +125,12 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
 
     const openEdit = (mechanic) => {
         setEditingMechanic(mechanic);
+        const savedSpecialization = mechanic.specialization || '';
+        const knownSpecialization = specializationOptions.includes(savedSpecialization);
         setForm({
             full_name: mechanic.full_name || '',
-            specialization: mechanic.specialization || '',
+            specialization: knownSpecialization ? savedSpecialization : CUSTOM_SPECIALIZATION,
+            customSpecialization: knownSpecialization ? '' : savedSpecialization,
             availability_status: mechanic.availability_status || 'available',
             shift_type: mechanic.shift_type || mechanic.schedule_type || 'full_day',
             available_date: mechanic.available_date || '',
@@ -178,9 +189,17 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
 
         setIsSaving(true);
         const isEditing = Boolean(editingMechanic);
+        const specialization = form.specialization === CUSTOM_SPECIALIZATION
+            ? form.customSpecialization.trim()
+            : form.specialization.trim();
+        if (!specialization) {
+            setFormError('Choose a specialization or enter a custom specialty.');
+            return;
+        }
         try {
             const savedMechanic = await upsertMechanic({
                 ...form,
+                specialization,
                 shift_label: getShiftLabel(form.shift_type),
                 location_name: 'Limen',
                 id: editingMechanic?.id,
@@ -310,7 +329,17 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
                     )}
 
                     <Input label="Full Name" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required />
-                    <Input label="Specialization" value={form.specialization} onChange={(e) => setForm({ ...form, specialization: e.target.value })} required />
+                    <label className="block text-sm font-medium text-primary-700">
+                        Specialization <span className="text-red-600">*</span>
+                        <select value={form.specialization} onChange={(e) => setForm({ ...form, specialization: e.target.value })} className="input mt-2 py-2.5 text-sm" required>
+                            <option value="">Select specialization</option>
+                            {specializationOptions.map((specialization) => <option key={specialization} value={specialization}>{specialization}</option>)}
+                            <option value={CUSTOM_SPECIALIZATION}>Other / Custom</option>
+                        </select>
+                    </label>
+                    {form.specialization === CUSTOM_SPECIALIZATION && (
+                        <Input label="Custom Specialization *" value={form.customSpecialization} onChange={(e) => setForm({ ...form, customSpecialization: e.target.value })} required />
+                    )}
                     <Input
                         label="Contact Number"
                         value={form.contact_number}

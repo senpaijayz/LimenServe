@@ -31,11 +31,15 @@ import Button from '../../../components/ui/Button';
 
 const PAGE_SIZE = 12;
 
+const formatCatalogPrice = (value) => Number(value ?? 0) > 0 ? formatCurrency(value) : 'Price on request';
+
 const SORT_OPTIONS = [
+  { value: 'stock-desc', label: 'Stock: High to Low' },
   { value: 'name-asc', label: 'A-Z' },
   { value: 'name-desc', label: 'Z-A' },
   { value: 'price-asc', label: 'Price: Low to High' },
   { value: 'price-desc', label: 'Price: High to Low' },
+  { value: 'stock-asc', label: 'Stock: Low to High' },
 ];
 
 const PublicProductSummary = ({ product }) => {
@@ -46,7 +50,7 @@ const PublicProductSummary = ({ product }) => {
       <div>
         <div className="flex items-center justify-between gap-3">
           <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-accent-blue">Genuine part</p>
-          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${product.inStock ? 'bg-emerald-50 text-emerald-700' : 'bg-primary-100 text-primary-500'}`}>
+          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${product.inStock ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
             {product.inStock ? 'In stock' : 'Unavailable'}
           </span>
         </div>
@@ -55,8 +59,8 @@ const PublicProductSummary = ({ product }) => {
       </div>
       <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
         <p><span className="text-primary-500">Category</span><br /><span className="truncate font-semibold text-primary-950">{product.category}</span></p>
-        <p className="text-right"><span className="text-primary-500">Price</span><br /><span className="font-semibold text-accent-blue">{formatCurrency(product.price)}</span></p>
-        <p className="col-span-2 border-t border-primary-100 pt-3"><span className="text-primary-500">Availability</span><br /><span className={`font-semibold ${product.inStock ? 'text-accent-success' : 'text-primary-500'}`}>{statusLabel}</span></p>
+        <p className="text-right"><span className="text-primary-500">Price</span><br /><span className="font-semibold text-accent-blue">{formatCatalogPrice(product.price)}</span></p>
+        <p className="col-span-2 border-t border-primary-100 pt-3"><span className="text-primary-500">Availability</span><br /><span className={`font-semibold ${product.inStock ? 'text-accent-success' : 'text-red-700'}`}>{statusLabel}</span></p>
       </div>
     </div>
   );
@@ -93,7 +97,9 @@ const PublicCatalogView = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [sortBy, setSortBy] = useState('name-asc');
+  const [sortBy, setSortBy] = useState('stock-desc');
+  const [prioritizeAvailable, setPrioritizeAvailable] = useState(true);
+  const [stockFilter, setStockFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [largeBarcodeProduct, setLargeBarcodeProduct] = useState(null);
@@ -120,7 +126,8 @@ const PublicCatalogView = () => {
     pageSize: PAGE_SIZE,
     searchQuery: deferredSearchQuery,
     selectedCategory,
-    sortBy,
+    sortBy: prioritizeAvailable ? `available-${sortBy}` : sortBy,
+    stockFilter,
     vehicleModel: deferredVehicleModel,
     vehicleYear: deferredVehicleYear,
   });
@@ -229,13 +236,15 @@ const PublicCatalogView = () => {
   const rangeEnd = totalCount === 0 ? 0 : Math.min(pagination.page * pagination.pageSize, totalCount);
   const canGoPrev = pagination.page > 1;
   const canGoNext = pagination.page < totalPages;
-  const hasActiveFilters = Boolean(searchQuery.trim()) || selectedCategory !== 'all' || hasVehicle;
+  const hasActiveFilters = Boolean(searchQuery.trim()) || selectedCategory !== 'all' || stockFilter !== 'all' || hasVehicle;
   const quickCategories = categories.filter((category) => category.value !== 'all').slice(0, 6);
 
   const resetFilters = () => {
     setSearchQuery('');
     setSelectedCategory('all');
-    setSortBy('name-asc');
+    setSortBy('stock-desc');
+    setPrioritizeAvailable(true);
+    setStockFilter('all');
     setCurrentPage(1);
     setSelectedProduct(null);
   };
@@ -261,6 +270,12 @@ const PublicCatalogView = () => {
 
   const handleSortChange = (value) => {
     setSortBy(value);
+    setCurrentPage(1);
+    setSelectedProduct(null);
+  };
+
+  const handleStockFilterChange = (value) => {
+    setStockFilter(value);
     setCurrentPage(1);
     setSelectedProduct(null);
   };
@@ -384,7 +399,7 @@ const PublicCatalogView = () => {
             transition={{ delay: 0.1 }}
             className="mt-5 rounded-2xl border border-primary-200 bg-white/90 p-3 shadow-sm"
           >
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(200px,0.7fr)_auto] lg:items-end">
               <label htmlFor="catalog-category-filter" className="min-w-0">
                 <span className="mb-2 block text-xs font-bold uppercase tracking-[0.24em] text-primary-500">Category</span>
                 <div className="relative">
@@ -401,6 +416,18 @@ const PublicCatalogView = () => {
                         {category.label}
                       </option>
                     ))}
+                  </select>
+                </div>
+              </label>
+
+              <label htmlFor="catalog-stock-filter" className="min-w-0">
+                <span className="mb-2 block text-xs font-bold uppercase tracking-[0.24em] text-primary-500">Availability</span>
+                <div className="relative">
+                  <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
+                  <select id="catalog-stock-filter" value={stockFilter} onChange={(event) => handleStockFilterChange(event.target.value)} className="min-h-12 w-full appearance-none rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 pr-11 text-sm font-semibold text-primary-950 outline-none transition focus:border-accent-blue focus:bg-white focus:ring-2 focus:ring-accent-blue/15">
+                    <option value="all">All products</option>
+                    <option value="available">In stock</option>
+                    <option value="out">Out of stock</option>
                   </select>
                 </div>
               </label>
@@ -497,6 +524,10 @@ const PublicCatalogView = () => {
                   ))}
                 </select>
               </div>
+              <label className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-200 bg-primary-50 px-3 text-xs font-semibold text-primary-700">
+                <input type="checkbox" checked={prioritizeAvailable} onChange={(event) => { setPrioritizeAvailable(event.target.checked); setCurrentPage(1); }} className="h-4 w-4 accent-blue-700" />
+                Available items first
+              </label>
               <div className="inline-flex rounded-2xl border border-primary-200 bg-primary-50 p-1 shadow-sm" aria-label="Catalog view mode">
                 <button
                   type="button"
@@ -611,8 +642,8 @@ const PublicCatalogView = () => {
                         </div>
                         <p className="font-mono text-sm text-primary-600">{product.sku}</p>
                         <p className="hidden text-sm font-semibold text-primary-800 xl:block">{product.category}</p>
-                        <p className="text-sm font-bold text-accent-blue xl:text-right">{formatCurrency(product.price)}</p>
-                        <p className={`text-sm font-semibold xl:text-right ${product.inStock ? 'text-accent-success' : 'text-primary-500'}`}>{product.inStock ? 'In Stock' : 'Out of Stock'}</p>
+                        <p className="text-sm font-bold text-accent-blue xl:text-right">{formatCatalogPrice(product.price)}</p>
+                        <p className={`text-sm font-semibold xl:text-right ${product.inStock ? 'text-accent-success' : 'text-red-700'}`}>{product.inStock ? 'In Stock' : 'Out of Stock'}</p>
                         <span className="hidden h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-primary-500 xl:flex">
                           <ChevronRight className="h-4 w-4" />
                         </span>
@@ -762,7 +793,7 @@ const PublicCatalogView = () => {
                     <div className="mt-auto flex flex-col gap-3 border-t border-primary-200 pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                       <div>
                         <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.22em] text-primary-500">Unit Valuation (VAT Inc.)</p>
-                        <p className="text-2xl font-display font-bold text-accent-blue sm:text-[2rem]">{formatCurrency(selectedProduct.price)}</p>
+                        <p className="text-2xl font-display font-bold text-accent-blue sm:text-[2rem]">{formatCatalogPrice(selectedProduct.price)}</p>
                       </div>
 
                       <div className="flex flex-col gap-2.5 sm:flex-row">

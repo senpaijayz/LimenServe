@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
     Archive,
+    Copy,
+    Download,
     FileClock,
     FileText,
     Phone,
@@ -22,8 +24,9 @@ import { useCart } from '../../../context/CartContext';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
 import ProductPackageSuggestions from '../../public/components/ProductPackageSuggestions';
-import { buildBundleLineItems, getAppliedBundleSummaries, roundCurrency } from '../../public/utils/bundleQuotePricing';
+import { buildBundleLineItems, calculateQuoteTotals, clearBundlePricing, createQuoteLineKey } from '../../public/utils/bundleQuotePricing';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
+import { downloadQuotationPdf } from '../utils/downloadQuotationPdf';
 import {
     createEstimate,
     archiveEstimate,
@@ -84,6 +87,7 @@ const escapeHtml = (value) => String(value ?? '')
 
 function mapCatalogProduct(product) {
     return {
+        lineKey: createQuoteLineKey(),
         id: product.id,
         name: product.name,
         sku: product.sku,
@@ -204,9 +208,10 @@ function buildPrintableQuote({
                     <section class="section"><h3>Bundle Pricing</h3><div class="notes">${bundleRows}</div></section>
                     <section class="summary">
                         <div class="summary-card">
-                            <div class="summary-row"><span>Parts subtotal</span><strong>${escapeHtml(formatCurrency(totals.partsTotal))}</strong></div>
-                            <div class="summary-row"><span>Services subtotal</span><strong>${escapeHtml(formatCurrency(totals.servicesTotal))}</strong></div>
+                            <div class="summary-row"><span>Parts subtotal</span><strong>${escapeHtml(formatCurrency(totals.partsCatalogTotal))}</strong></div>
+                            <div class="summary-row"><span>Services subtotal</span><strong>${escapeHtml(formatCurrency(totals.servicesCatalogTotal))}</strong></div>
                             ${totals.bundleDiscountTotal > 0 ? `<div class="summary-row"><span>Bundle savings</span><strong>-${escapeHtml(formatCurrency(totals.bundleDiscountTotal))}</strong></div>` : ''}
+                            <div class="summary-row"><span>Subtotal after savings</span><strong>${escapeHtml(formatCurrency(totals.subtotal))}</strong></div>
                             <div class="summary-row"><span>VAT (12%)</span><strong>${escapeHtml(formatCurrency(totals.vat))}</strong></div>
                             <div class="summary-row total"><span>Total estimate</span><span>${escapeHtml(formatCurrency(totals.total))}</span></div>
                         </div>
@@ -226,13 +231,11 @@ function buildEstimatePayload({
     selectedServices,
     currentEstimateNumber,
 }) {
-    const partsTotal = selectedParts.reduce((sum, part) => sum + (Number(part.price ?? 0) * Number(part.quantity ?? 1)), 0);
-    const servicesTotal = selectedServices.reduce((sum, service) => sum + Number(service.price ?? 0), 0);
-    const subtotal = partsTotal + servicesTotal;
-    const taxTotal = subtotal * 0.12;
-    const appliedBundles = getAppliedBundleSummaries([...selectedParts, ...selectedServices]);
-    const bundleDiscountTotal = appliedBundles.reduce((sum, bundle) => sum + Number(bundle.savings ?? 0), 0);
-    const subtotalBeforeDiscount = subtotal + bundleDiscountTotal;
+    const quoteTotals = calculateQuoteTotals(selectedParts, selectedServices);
+    const taxTotal = quoteTotals.vat;
+    const appliedBundles = quoteTotals.appliedBundles;
+    const bundleDiscountTotal = quoteTotals.bundleDiscountTotal;
+    const subtotalBeforeDiscount = quoteTotals.subtotalBeforeDiscount;
     const bundleNote = appliedBundles.length
         ? ` Bundle pricing applied: ${appliedBundles.map((bundle) => `${bundle.bundleName} (${bundle.bundleTierLabel})`).join(', ')}.`
         : '';
@@ -250,7 +253,7 @@ function buildEstimatePayload({
             subtotal: subtotalBeforeDiscount,
             discount_total: bundleDiscountTotal,
             tax_total: taxTotal,
-            grand_total: subtotal + taxTotal,
+            grand_total: quoteTotals.total,
             issued_at: new Date().toISOString(),
             valid_until: new Date(Date.now() + (30 * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10),
         },
@@ -298,6 +301,7 @@ function mapEstimateDetailToState(estimate) {
         selectedParts: items
             .filter((item) => item.line_type === 'product')
             .map((item) => ({
+                lineKey: item.id || createQuoteLineKey(),
                 id: item.product_id,
                 name: item.product_name || 'Unnamed Part',
                 sku: item.product_sku || '',
@@ -313,6 +317,7 @@ function mapEstimateDetailToState(estimate) {
         selectedServices: items
             .filter((item) => item.line_type === 'service')
             .map((item) => ({
+                lineKey: item.id || createQuoteLineKey(),
                 id: item.service_id,
                 name: item.service_name || 'Unnamed Service',
                 price: Number(item.unit_price ?? 0),
@@ -329,7 +334,7 @@ function mapEstimateDetailToState(estimate) {
 
 const QuoteBuilder = () => {
     const navigate = useNavigate();
-    const { success, error: showError, info } = useToast();
+    const { success, error: showError, info, loading: showToastLoading, updateToast } = useToast();
     const { addItem: addPosItem, clearCart, setCustomerName: setPosCustomerName } = useCart();
     const { services: availableServices, loading: servicesLoading, error: servicesError } = useServiceCatalog();
     const [customerName, setCustomerName] = useState('');
@@ -346,6 +351,7 @@ const QuoteBuilder = () => {
     const [currentEstimateId, setCurrentEstimateId] = useState(null);
     const [currentEstimateNumber, setCurrentEstimateNumber] = useState('');
     const [currentEstimateStatus, setCurrentEstimateStatus] = useState('draft');
+    const [quoteDirty, setQuoteDirty] = useState(false);
     const [changeNote, setChangeNote] = useState('Customer requested item updates');
     const [, setRevisions] = useState([]);
     const [focusedProduct, setFocusedProduct] = useState(null);
@@ -367,22 +373,21 @@ const QuoteBuilder = () => {
         includeCategories: false,
     });
     const partNumberSuggestions = useMemo(() => getPartNumberSearchSuggestions(availableProducts, searchQuery, 5), [availableProducts, searchQuery]);
+    const markQuoteDirty = () => setQuoteDirty(true);
 
     const totals = useMemo(() => {
-        const partsTotal = selectedParts.reduce((sum, part) => sum + (Number(part.price ?? 0) * Number(part.quantity ?? 1)), 0);
-        const servicesTotal = selectedServices.reduce((sum, service) => sum + Number(service.price ?? 0), 0);
-        const subtotal = partsTotal + servicesTotal;
-        const vat = subtotal * 0.12;
-        const appliedBundles = getAppliedBundleSummaries([...selectedParts, ...selectedServices]);
-        const bundleDiscountTotal = roundCurrency(appliedBundles.reduce((sum, bundle) => sum + Number(bundle.savings ?? 0), 0));
+        const quoteTotals = calculateQuoteTotals(selectedParts, selectedServices);
         return {
-            partsTotal,
-            servicesTotal,
-            appliedBundles,
-            bundleDiscountTotal,
-            subtotal,
-            vat,
-            total: subtotal + vat,
+            partsCatalogTotal: quoteTotals.partsCatalogSubtotal,
+            servicesCatalogTotal: quoteTotals.servicesCatalogSubtotal,
+            partsTotal: quoteTotals.partsSubtotal,
+            servicesTotal: quoteTotals.servicesSubtotal,
+            appliedBundles: quoteTotals.appliedBundles,
+            bundleDiscountTotal: quoteTotals.bundleDiscountTotal,
+            subtotalBeforeDiscount: quoteTotals.subtotalBeforeDiscount,
+            subtotal: quoteTotals.subtotal,
+            vat: quoteTotals.vat,
+            total: quoteTotals.total,
         };
     }, [selectedParts, selectedServices]);
     const focusedPartSelection = selectedParts.find((part) => part.id === focusedProduct?.id);
@@ -415,55 +420,75 @@ const QuoteBuilder = () => {
         };
     }, [quoteSearch, quoteStatusFilter]);
 
+    const breakBundle = (bundleKey) => {
+        if (!bundleKey) return true;
+        if (!window.confirm('This change removes the package discount from its remaining items and returns them to their listed prices. Continue?')) return false;
+        setSelectedParts((parts) => parts.map((part) => part.bundleKey === bundleKey ? clearBundlePricing(part) : part));
+        setSelectedServices((services) => services.map((service) => service.bundleKey === bundleKey ? clearBundlePricing(service) : service));
+        return true;
+    };
+
     const addPart = (product, extra = {}) => {
+        markQuoteDirty();
         setFocusedProduct(product);
         setSelectedParts((parts) => {
-            const existing = parts.find((part) => part.id === product.id);
-            const nextPrice = Number(extra.price ?? product.price ?? existing?.price ?? 0);
-            const hasPriceOverride = Number.isFinite(nextPrice);
+            const bundleKey = extra.bundleKey || '';
+            if (bundleKey && parts.some((part) => part.id === product.id && part.bundleKey === bundleKey)) return parts;
 
-            if (existing) {
-                return parts.map((part) => (part.id === product.id ? {
-                    ...part,
-                    ...extra,
-                    price: hasPriceOverride ? nextPrice : part.price,
-                    quantity: part.quantity + 1,
-                } : part));
+            const ordinaryLine = parts.find((part) => part.id === product.id && !part.bundleKey);
+            const nextPrice = Number(extra.price ?? product.price ?? ordinaryLine?.price ?? 0);
+            if (!Number.isFinite(nextPrice)) return parts;
+
+            if (bundleKey && ordinaryLine && Number(ordinaryLine.quantity || 1) === 1) {
+                return parts.map((part) => part.lineKey === ordinaryLine.lineKey
+                    ? { ...part, ...extra, lineKey: part.lineKey, price: nextPrice, catalogPrice: Number(extra.catalogPrice ?? part.catalogPrice ?? part.price), quantity: 1 }
+                    : part);
             }
 
-            return [...parts, {
-                ...mapCatalogProduct(product),
-                ...extra,
-                price: hasPriceOverride ? nextPrice : Number(product.price ?? 0),
-            }];
+            if (!bundleKey && ordinaryLine) {
+                return parts.map((part) => part.lineKey === ordinaryLine.lineKey
+                    ? { ...part, quantity: Number(part.quantity || 1) + 1 }
+                    : part);
+            }
+
+            const line = mapCatalogProduct(product);
+            return [...parts, { ...line, ...extra, lineKey: createQuoteLineKey(), price: nextPrice, catalogPrice: Number(extra.catalogPrice ?? product.price ?? nextPrice) }];
         });
     };
 
-    const removePart = (id) => {
-        setSelectedParts((parts) => parts.filter((part) => part.id !== id));
-        if (focusedProduct?.id === id) {
-            setFocusedProduct(null);
-        }
+    const removePart = (identifier) => {
+        const selectedLine = selectedParts.find((part) => part.lineKey === identifier) || selectedParts.find((part) => part.id === identifier);
+        if (!selectedLine) return;
+        if (selectedLine.bundleKey && !breakBundle(selectedLine.bundleKey)) return;
+        markQuoteDirty();
+        setSelectedParts((parts) => parts.filter((part) => part.lineKey !== selectedLine.lineKey));
+        if (focusedProduct?.id === selectedLine.id) setFocusedProduct(null);
     };
 
-    const updatePartQuantity = (id, quantity) => {
+    const updatePartQuantity = (identifier, quantity) => {
+        const selectedLine = selectedParts.find((part) => part.lineKey === identifier) || selectedParts.find((part) => part.id === identifier);
+        if (!selectedLine) return;
         if (quantity < 1) {
-            removePart(id);
+            removePart(selectedLine.lineKey);
             return;
         }
-
-        setSelectedParts((parts) => parts.map((part) => (part.id === id ? { ...part, quantity } : part)));
+        if (selectedLine.bundleKey && !breakBundle(selectedLine.bundleKey)) return;
+        markQuoteDirty();
+        setSelectedParts((parts) => parts.map((part) => (part.lineKey === selectedLine.lineKey ? { ...part, quantity } : part)));
     };
 
     const toggleService = (service) => {
-        const existing = selectedServices.find((selected) => selected.id === service.id);
+        markQuoteDirty();
+        const existing = selectedServices.find((selected) => selected.id === service.id && !selected.bundleKey);
         if (existing) {
-            setSelectedServices((services) => services.filter((selected) => selected.id !== service.id));
+            setSelectedServices((services) => services.filter((selected) => selected.lineKey !== existing.lineKey));
         } else {
             setSelectedServices((services) => [...services, {
+                lineKey: createQuoteLineKey(),
                 id: service.id,
                 name: service.name,
                 price: Number(service.price ?? 0),
+                catalogPrice: Number(service.price ?? 0),
                 quantity: 1,
             }]);
         }
@@ -473,6 +498,7 @@ const QuoteBuilder = () => {
         if (!tier?.items?.length) {
             return;
         }
+        markQuoteDirty();
 
         buildBundleLineItems(pkg, tier).forEach((lineItem) => {
             const recommendation = {
@@ -484,6 +510,7 @@ const QuoteBuilder = () => {
 
             if (lineItem.kind === 'service') {
                 const nextService = {
+                    lineKey: createQuoteLineKey(),
                     id: recommendation.recommendedServiceId,
                     name: recommendation.recommendedServiceName,
                     price: Number(recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? 0),
@@ -495,10 +522,15 @@ const QuoteBuilder = () => {
                 };
 
                 setSelectedServices((services) => {
-                    const existing = services.find((service) => service.id === nextService.id);
-                    return existing
-                        ? services.map((service) => (service.id === nextService.id ? { ...service, ...nextService, price: Math.min(Number(service.price ?? 0), Number(nextService.price ?? 0)) } : service))
-                        : [...services, nextService];
+                    const bundleKey = nextService.bundleKey || '';
+                    if (bundleKey && services.some((service) => service.id === nextService.id && service.bundleKey === bundleKey)) return services;
+                    const ordinaryLine = services.find((service) => service.id === nextService.id && !service.bundleKey);
+                    if (bundleKey && ordinaryLine) {
+                        return services.map((service) => service.lineKey === ordinaryLine.lineKey
+                            ? { ...service, ...nextService, lineKey: service.lineKey, price: nextService.price, catalogPrice: nextService.catalogPrice }
+                            : service);
+                    }
+                    return [...services, nextService];
                 });
                 return;
             }
@@ -528,6 +560,7 @@ const QuoteBuilder = () => {
             setSelectedParts(nextState.selectedParts);
             setSelectedServices(nextState.selectedServices);
             setFocusedProduct(nextState.selectedParts[0] || null);
+            setQuoteDirty(false);
             const revisionHistory = await getEstimateRevisions(estimateId);
             setRevisions(revisionHistory);
             info(`Loaded quote ${nextState.currentEstimateNumber || estimateId}`);
@@ -547,6 +580,7 @@ const QuoteBuilder = () => {
         setSelectedServices([]);
         setFocusedProduct(null);
         setRevisions([]);
+        setQuoteDirty(false);
     };
 
     const confirmDeleteQuote = async () => {
@@ -617,6 +651,7 @@ const QuoteBuilder = () => {
 
             if (currentEstimateId) {
                 await updateEstimate(currentEstimateId, payload, changeNote);
+                setQuoteDirty(false);
                 success('Quotation updated and revision saved.');
                 const revisionHistory = await getEstimateRevisions(currentEstimateId);
                 setRevisions(revisionHistory);
@@ -634,6 +669,7 @@ const QuoteBuilder = () => {
                 setCurrentEstimateId(estimateId);
                 setCurrentEstimateNumber(estimate?.estimate?.estimate_number || '');
                 setCurrentEstimateStatus(String(estimate?.estimate?.status || 'draft').toLowerCase());
+                setQuoteDirty(false);
                 success('Quotation saved successfully.');
                 const revisionHistory = await getEstimateRevisions(estimateId);
                 setRevisions(revisionHistory);
@@ -651,6 +687,10 @@ const QuoteBuilder = () => {
     const hasQuoteItems = selectedParts.length > 0 || selectedServices.length > 0;
 
     const handlePrint = () => {
+        if (currentEstimateId && quoteDirty) {
+            showError('Save this quotation revision before printing, so the document matches the saved record.');
+            return;
+        }
         if (!hasQuoteItems) {
             showError('Add at least one part or service before printing.');
             return;
@@ -681,6 +721,67 @@ const QuoteBuilder = () => {
                 printWindow.print();
             }
         }, 350);
+    };
+
+    const handleDownloadPdf = async () => {
+        if (currentEstimateId && quoteDirty) {
+            showError('Save this quotation revision before downloading, so the PDF matches the saved record.');
+            return;
+        }
+        if (!hasQuoteItems) {
+            showError('Add at least one part or service before downloading the quotation.');
+            return;
+        }
+        const toastId = showToastLoading('Preparing your quotation PDF…');
+        try {
+            await downloadQuotationPdf({
+                referenceValue: currentEstimateNumber || 'Draft Quotation',
+                customerName: customerName || 'Walk-in Customer',
+                customerPhone,
+                issuedAt: new Date().toLocaleDateString('en-PH'),
+                validUntil: new Date(Date.now() + (30 * 24 * 60 * 60 * 1000)).toLocaleDateString('en-PH'),
+                note: notes,
+                subtotalBeforeDiscount: totals.subtotalBeforeDiscount,
+                subtotalAfterDiscount: totals.subtotal,
+                discountTotal: totals.bundleDiscountTotal,
+                vat: totals.vat,
+                total: totals.total,
+                items: [
+                    ...selectedParts.map((part) => ({
+                        kind: 'Part',
+                        partNumber: getProductPartNumber(part),
+                        name: part.name,
+                        subtitle: part.bundleKey ? `${part.bundleName || 'Package'} · ${part.bundleTierLabel || 'Bundle'}` : '',
+                        quantity: Number(part.quantity ?? 1),
+                        unitPrice: Number(part.price ?? 0),
+                        catalogUnitPrice: Number(part.catalogPrice ?? part.price ?? 0),
+                        lineTotal: Number(part.price ?? 0) * Number(part.quantity ?? 1),
+                    })),
+                    ...selectedServices.map((service) => ({
+                        kind: 'Service',
+                        name: service.name,
+                        subtitle: service.bundleKey ? `${service.bundleName || 'Package'} · ${service.bundleTierLabel || 'Bundle labor'}` : 'Service / labor',
+                        quantity: Number(service.quantity ?? 1),
+                        unitPrice: Number(service.price ?? 0),
+                        catalogUnitPrice: Number(service.catalogPrice ?? service.price ?? 0),
+                        lineTotal: Number(service.price ?? 0) * Number(service.quantity ?? 1),
+                    })),
+                ],
+            });
+            updateToast(toastId, { type: 'success', message: 'Quotation PDF downloaded.' });
+        } catch (pdfError) {
+            updateToast(toastId, { type: 'error', message: pdfError.message || 'Unable to create the quotation PDF.' });
+        }
+    };
+
+    const handleCopyQuoteNumber = async () => {
+        if (!currentEstimateNumber) return;
+        try {
+            await navigator.clipboard.writeText(currentEstimateNumber);
+            success('Quotation number copied!');
+        } catch {
+            showError('Unable to copy the quotation number.');
+        }
     };
 
     const handleAddToPos = () => {
@@ -811,9 +912,16 @@ const QuoteBuilder = () => {
 
                             <div className="rounded-2xl border border-primary-200 bg-primary-50/70 p-5">
                                 <div className="flex flex-wrap items-start justify-between gap-4">
-                                    <div>
+                                    <div className="min-w-0">
                                         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary-400">Editable quotation workflow</p>
-                                        <h3 className="mt-2 text-xl font-display font-semibold text-primary-950">{currentEstimateNumber || 'New quotation draft'}</h3>
+                                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                                            <h3 className="text-xl font-display font-semibold text-primary-950">{currentEstimateNumber || 'New quotation draft'}</h3>
+                                            {currentEstimateNumber && (
+                                                <button type="button" onClick={handleCopyQuoteNumber} className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-primary-200 bg-white px-3 text-xs font-semibold text-primary-700 transition hover:border-accent-blue hover:text-accent-blue" aria-label="Copy quotation number">
+                                                    <Copy className="h-3.5 w-3.5" /> Copy number
+                                                </button>
+                                            )}
+                                        </div>
                                         <p className="mt-1 text-sm text-primary-500">
                                             Save revisions without creating a brand new quotation. Customers can retrieve the same quotation for 30 days using the quote number and phone.
                                         </p>
@@ -845,14 +953,14 @@ const QuoteBuilder = () => {
                                         label="Customer Name"
                                         placeholder="Enter customer name"
                                         value={customerName}
-                                        onChange={(e) => setCustomerName(e.target.value)}
+                                        onChange={(e) => { markQuoteDirty(); setCustomerName(e.target.value); }}
                                         leftIcon={<User className="w-4 h-4" />}
                                     />
                                     <Input
                                         label="Phone Number"
                                         placeholder="09XX XXX XXXX"
                                         value={customerPhone}
-                                        onChange={(e) => setCustomerPhone(e.target.value)}
+                                        onChange={(e) => { markQuoteDirty(); setCustomerPhone(e.target.value); }}
                                         leftIcon={<Phone className="w-4 h-4" />}
                                     />
                                 </div>
@@ -862,7 +970,7 @@ const QuoteBuilder = () => {
                                         label="Revision Note"
                                         placeholder="What changed in this quote?"
                                         value={changeNote}
-                                        onChange={(e) => setChangeNote(e.target.value)}
+                                        onChange={(e) => { markQuoteDirty(); setChangeNote(e.target.value); }}
                                         leftIcon={<FileClock className="w-4 h-4" />}
                                     />
                                 </div>
@@ -870,7 +978,7 @@ const QuoteBuilder = () => {
                         </div>
                     </Card>
 
-                    <Card title="Select Mitsubishi Parts" subtitle="Find a part by number, name, or model, then select it to add it to your quote.">
+                    <Card title="Order Parts" subtitle="Search by part number, product name, or vehicle model, then choose the parts for this quotation.">
                         <div className="relative mb-4">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                             <input
@@ -900,9 +1008,10 @@ const QuoteBuilder = () => {
                             )}
                         </div>
 
+                        <div className="mb-3 flex items-end justify-between gap-3"><div><h3 className="text-sm font-semibold text-primary-950">Matched Components</h3><p className="text-xs text-primary-500">Review part numbers and fitment notes before adding items.</p></div><span className="shrink-0 text-xs text-primary-500">{availableProducts.length} shown</span></div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                             {productsLoading ? (
-                                <div className="col-span-full rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-500">Loading the current price list from Supabase...</div>
+                                <div className="col-span-full rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-500">Loading parts and current prices…</div>
                             ) : productsError ? (
                                 <div className="col-span-full rounded-lg border border-accent-danger/20 bg-accent-danger/5 p-4 text-sm text-accent-danger">{productsError}</div>
                             ) : availableProducts.length === 0 ? (
@@ -941,7 +1050,7 @@ const QuoteBuilder = () => {
                                             className="min-h-11 rounded-xl border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-900 outline-none focus:border-accent-blue"
                                         >
                                             {selectedParts.map((part) => (
-                                                <option key={`${part.id}-quote-bundle-anchor`} value={part.id}>{part.name}</option>
+                                                <option key={`${part.lineKey}-quote-bundle-anchor`} value={part.id}>{part.name}</option>
                                             ))}
                                         </select>
                                     )}
@@ -974,6 +1083,7 @@ const QuoteBuilder = () => {
                                     return;
                                 }
 
+                                markQuoteDirty();
                                 setSelectedServices((services) => {
                                     const nextService = {
                                         id: recommendation.recommendedServiceId,
@@ -1003,8 +1113,8 @@ const QuoteBuilder = () => {
                                     }}
                                     selectedProductIds={selectedParts.map((part) => part.id)}
                                     selectedServiceIds={selectedServices.map((service) => service.id)}
-                                    title="Smart Mitsubishi Bundles"
-                                    subtitle="Smart upsell bundles of matched parts and services, ranked by exact model first and family fallback second."
+                                    title="Recommended Packages"
+                                    subtitle="Review package items and savings before adding them to this quotation."
                                 />
                             )}
                         </div>
@@ -1017,7 +1127,7 @@ const QuoteBuilder = () => {
                             ) : servicesError ? (
                                 <div className="col-span-full rounded-lg border border-accent-danger/20 bg-accent-danger/5 p-4 text-sm text-accent-danger">{servicesError}</div>
                             ) : availableServices.length === 0 ? (
-                                <div className="col-span-full rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-500">No active services were returned from the database.</div>
+                                <div className="col-span-full rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-500">No services are available right now.</div>
                             ) : availableServices.map((service) => {
                                 const isSelected = selectedServices.some((selected) => selected.id === service.id);
                                 return (
@@ -1043,7 +1153,7 @@ const QuoteBuilder = () => {
                     <Card title="Additional Notes">
                         <textarea
                             value={notes}
-                            onChange={(e) => setNotes(e.target.value)}
+                            onChange={(e) => { markQuoteDirty(); setNotes(e.target.value); }}
                             placeholder="Add special requests, exclusions, or compatibility notes..."
                             rows={4}
                             className="w-full px-4 py-3 bg-white border border-primary-200 rounded-lg text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue shadow-sm resize-none"
@@ -1052,15 +1162,15 @@ const QuoteBuilder = () => {
                 </div>
 
                 <div className="xl:col-span-1">
-                    <div className="rounded-xl border border-primary-200 bg-white p-4 shadow-sm xl:sticky xl:top-20">
-                        <h3 className="text-lg font-display font-bold text-primary-950 mb-4 pb-3 border-b border-primary-100">Quote Summary</h3>
+                    <div className="rounded-xl border border-primary-200 bg-white p-4 shadow-sm xl:sticky xl:top-20 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-primary-100 pb-3"><h3 className="text-lg font-display font-bold text-primary-950">Quotation Summary</h3>{quoteDirty && <span role="status" className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">{currentEstimateId ? 'Unsaved changes' : 'Unsaved draft'}</span>}</div>
 
                         {selectedParts.length > 0 && (
                             <div className="mb-4">
                                 <p className="text-sm font-semibold text-primary-500 uppercase tracking-widest mb-2">Parts</p>
                                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                                     {selectedParts.map((part) => (
-                                        <div key={part.id} className="flex items-center justify-between p-2 bg-primary-50 rounded-lg border border-primary-100">
+                                        <div key={part.lineKey} className="flex items-center justify-between p-2 bg-primary-50 rounded-lg border border-primary-100">
                                             <div className="flex-1 min-w-0 mr-2">
                                                 <p className="text-sm font-semibold text-primary-950 truncate">{part.name}</p>
                                                 <p className="text-[10px] text-primary-500 font-mono">{getProductPartNumber(part) || 'No part number'}</p>
@@ -1071,13 +1181,13 @@ const QuoteBuilder = () => {
                                                 <input
                                                     type="number"
                                                     value={part.quantity}
-                                                    onChange={(e) => updatePartQuantity(part.id, parseInt(e.target.value, 10) || 0)}
+                                                    onChange={(e) => updatePartQuantity(part.lineKey, parseInt(e.target.value, 10) || 0)}
                                                     className="w-14 px-2 py-1 bg-white border border-primary-200 rounded text-sm text-center font-bold text-primary-950 focus:outline-none focus:border-accent-blue shadow-sm"
                                                     min="1"
                                                 />
                                                 <button
                                                     type="button"
-                                                    onClick={() => removePart(part.id)}
+                                                    onClick={() => removePart(part.lineKey)}
                                                     className="p-1 text-accent-danger hover:bg-accent-danger/10 rounded-md transition-colors"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
@@ -1094,7 +1204,7 @@ const QuoteBuilder = () => {
                                 <p className="text-sm font-semibold text-primary-500 uppercase tracking-widest mb-2">Services</p>
                                 <div className="space-y-2">
                                     {selectedServices.map((service) => (
-                                        <div key={service.id} className="flex items-center justify-between p-2 bg-primary-50 rounded-lg border border-primary-100">
+                                        <div key={service.lineKey} className="flex items-center justify-between p-2 bg-primary-50 rounded-lg border border-primary-100">
                                             <p className="text-sm font-semibold text-primary-950">{service.name}</p>
                                             {service.bundleKey && <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent-success">{service.bundleTierLabel} bundle labor</p>}
                                             <p className="text-sm font-bold text-accent-blue">{formatCurrency(service.price)}</p>
@@ -1115,11 +1225,11 @@ const QuoteBuilder = () => {
                         <div className="border-t border-primary-200 pt-4 mt-4 space-y-2">
                             <div className="flex justify-between text-sm text-primary-600 font-medium">
                                 <span>Parts Subtotal</span>
-                                <span>{formatCurrency(totals.partsTotal)}</span>
+                                <span>{formatCurrency(totals.partsCatalogTotal)}</span>
                             </div>
                             <div className="flex justify-between text-sm text-primary-600 font-medium">
                                 <span>Services Subtotal</span>
-                                <span>{formatCurrency(totals.servicesTotal)}</span>
+                                <span>{formatCurrency(totals.servicesCatalogTotal)}</span>
                             </div>
                             {totals.bundleDiscountTotal > 0 && (
                                 <div className="flex justify-between text-sm text-accent-success font-medium">
@@ -1127,6 +1237,10 @@ const QuoteBuilder = () => {
                                     <span>-{formatCurrency(totals.bundleDiscountTotal)}</span>
                                 </div>
                             )}
+                            <div className="flex justify-between text-sm text-primary-600 font-medium">
+                                <span>Subtotal after savings</span>
+                                <span>{formatCurrency(totals.subtotal)}</span>
+                            </div>
                             <div className="flex justify-between text-sm text-primary-600 font-medium">
                                 <span>VAT (12%)</span>
                                 <span>{formatCurrency(totals.vat)}</span>
@@ -1155,6 +1269,15 @@ const QuoteBuilder = () => {
                                 disabled={!hasQuoteItems}
                             >
                                 Print Quotation
+                            </Button>
+                            <Button
+                                variant="outline"
+                                fullWidth
+                                leftIcon={<Download className="w-4 h-4" />}
+                                onClick={handleDownloadPdf}
+                                disabled={!hasQuoteItems}
+                            >
+                                Download PDF
                             </Button>
                             <Button
                                 variant="secondary"

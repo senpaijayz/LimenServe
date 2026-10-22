@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/useAuth';
 import { useTheme } from '../../context/ThemeContext';
+import usePublicCmsSite from '../../hooks/usePublicCmsSite';
 import { NAV_ITEMS } from '../../utils/constants';
 
 // Icon mapping
@@ -44,7 +45,9 @@ const Sidebar = () => {
     const MotionSpan = motion.span;
     const { user, logout } = useAuth();
     const { sidebarCollapsed, sidebarOpen, toggleSidebar, closeMobileSidebar } = useTheme();
+    const { settings } = usePublicCmsSite();
     const location = useLocation();
+    const logoUrl = settings?.logo_url || '/LogoLimen.jpg';
 
     // Filter nav items based on user role
     const filterByRole = (items) => {
@@ -110,7 +113,7 @@ const Sidebar = () => {
             >
                 {/* Logo */}
                 <div className="sidebar-logo pb-6 border-b border-primary-200">
-                    <img src="/LogoLimen.jpg" alt="Limen Logo" className="w-10 h-10 object-contain rounded-lg bg-white p-1 flex-shrink-0 border border-primary-200" />
+                    <img src={logoUrl} alt="Limen Logo" onError={(event) => { event.currentTarget.src = '/LogoLimen.jpg'; }} className="w-10 h-10 object-contain rounded-lg bg-white p-1 flex-shrink-0 border border-primary-200" />
                     <AnimatePresence>
                         {!sidebarCollapsed && (
                             <MotionDiv

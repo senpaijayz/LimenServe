@@ -78,6 +78,8 @@ const POSTerminal = () => {
     const { findProduct } = useDataStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
+    const [sortBy, setSortBy] = useState('available-stock-desc');
+    const [stockFilter, setStockFilter] = useState('all');
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showServiceModal, setShowServiceModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -101,7 +103,8 @@ const POSTerminal = () => {
         pageSize: PAGE_SIZE,
         searchQuery,
         selectedCategory: 'all',
-        sortBy: 'name-asc',
+        sortBy,
+        stockFilter,
         includeCategories: false,
     });
 
@@ -317,6 +320,30 @@ const POSTerminal = () => {
                     >
                         Add Service
                     </Button>
+                </div>
+
+                <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                    <label className="min-w-0 text-xs font-semibold uppercase tracking-wide text-primary-500">
+                        Product order
+                        <select value={sortBy} onChange={(event) => { setSortBy(event.target.value); setCurrentPage(1); }} className="input mt-1 text-sm normal-case tracking-normal">
+                            <option value="available-stock-desc">Available first</option>
+                            <option value="unavailable-stock-desc">Unavailable first</option>
+                            <option value="name-asc">Name: A to Z</option>
+                            <option value="name-desc">Name: Z to A</option>
+                            <option value="stock-desc">Stock: High to Low</option>
+                            <option value="stock-asc">Stock: Low to High</option>
+                            <option value="price-asc">Price: Low to High</option>
+                            <option value="price-desc">Price: High to Low</option>
+                        </select>
+                    </label>
+                    <label className="min-w-0 text-xs font-semibold uppercase tracking-wide text-primary-500">
+                        Stock filter
+                        <select value={stockFilter} onChange={(event) => { setStockFilter(event.target.value); setCurrentPage(1); }} className="input mt-1 text-sm normal-case tracking-normal">
+                            <option value="all">All products</option>
+                            <option value="available">Available stock only</option>
+                            <option value="out">Out of stock only</option>
+                        </select>
+                    </label>
                 </div>
 
                 {/* Products Grid */}
