@@ -154,11 +154,11 @@ const ServiceOrderList = () => {
         <Card padding="sm" className="border-primary-200 bg-white">
             <div className="flex items-center justify-between gap-4">
                 <div>
-                    <p className="text-xs font-mono font-semibold uppercase tracking-[0.22em] text-primary-400">{label}</p>
+                    <p className="text-xs font-mono font-semibold uppercase tracking-[0.16em] text-primary-800">{label}</p>
                     <p className="mt-1 text-2xl font-display font-bold text-primary-950">{value}</p>
-                    <p className="mt-1 text-xs text-primary-500">{helper}</p>
+                    <p className="mt-1 text-xs leading-snug text-primary-700">{helper}</p>
                 </div>
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary-200 bg-primary-50 text-primary-600">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary-300 bg-accent-blue/10 text-primary-800">
                     {icon}
                 </span>
             </div>
@@ -273,7 +273,7 @@ const ServiceOrderList = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-4 2xl:grid-cols-7">
                 <StatusMetric label="Active Jobs" value={statusCounts.all} helper="Open work" icon={<Wrench className="h-5 w-5" />} />
                 <StatusMetric label="Awaiting Assignment" value={statusCounts.awaitingAssignment} helper="Needs a mechanic" icon={<Wrench className="h-5 w-5" />} />
                 <StatusMetric label="Pending" value={statusCounts.pending} helper="Needs workshop review" icon={<Clock className="h-5 w-5" />} />
