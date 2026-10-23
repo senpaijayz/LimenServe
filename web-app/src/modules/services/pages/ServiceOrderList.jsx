@@ -307,8 +307,8 @@ const ServiceOrderList = () => {
             {/* Content Area */}
             <div className="surface p-4 sm:p-6">
                 {/* Search */}
-                <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                    <div className="w-full max-w-xl">
+                <div className="mb-6 grid min-w-0 gap-4 xl:grid-cols-[minmax(280px,0.85fr)_minmax(0,1.5fr)] xl:items-end">
+                    <div className="w-full min-w-0">
                         <label className="mb-2 block text-xs font-mono font-semibold uppercase tracking-[0.2em] text-primary-500">
                             Find a service order
                         </label>
@@ -324,12 +324,18 @@ const ServiceOrderList = () => {
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
-                        <label className="text-xs font-semibold text-primary-600">Job date<input type="date" aria-label="Filter service orders by job date" className="input mt-1 min-w-36" value={dateFilter} onChange={(e) => { setDateFilter(e.target.value); setPage(1); }} /></label>
-                        {dateFilter && <button type="button" className="btn self-end" onClick={() => { setDateFilter(''); setPage(1); }}>Clear date</button>}
-                        <select aria-label="Filter by mechanic" className="input min-w-36" value={mechanicFilter} onChange={(e) => { setMechanicFilter(e.target.value); setPage(1); }}><option value="">All mechanics</option>{mechanics.map((mechanic) => <option key={mechanic.id} value={mechanic.id}>{mechanic.full_name || mechanic.fullName}</option>)}</select>
-                        <select aria-label="Filter by priority" className="input min-w-32" value={priorityFilter} onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}><option value="all">All priorities</option>{['urgent','high','normal','low'].map((value) => <option key={value} value={value}>{value}</option>)}</select>
-                        <select aria-label="Sort service orders" className="input min-w-32" value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }}><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="due">Due soonest</option><option value="urgency">Urgency</option></select>
+                    <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
+                        <div className="block min-w-0 text-xs font-semibold text-primary-600">
+                            <label htmlFor="service-job-date">Job date</label>
+                            <span className={`relative mt-1 flex h-11 min-w-0 items-center rounded-xl border bg-white shadow-sm transition focus-within:border-accent-blue focus-within:ring-2 focus-within:ring-accent-blue/20 ${dateFilter ? 'border-accent-blue/50' : 'border-primary-200'}`}>
+                                <CalendarDays className="ml-3 h-4 w-4 shrink-0 text-primary-400" aria-hidden="true" />
+                                <input id="service-job-date" type="date" aria-label="Filter service orders by job date" className="h-full min-w-0 w-full border-0 bg-transparent px-2 text-sm text-primary-900 outline-none focus:ring-0" value={dateFilter} onChange={(e) => { setDateFilter(e.target.value); setPage(1); }} />
+                                {dateFilter && <button type="button" aria-label="Clear job date filter" title="Clear date filter" className="mr-2 shrink-0 rounded-md px-1.5 py-1 text-xs font-semibold text-primary-500 hover:bg-primary-100 hover:text-primary-900" onClick={() => { setDateFilter(''); setPage(1); }}>Clear</button>}
+                            </span>
+                        </div>
+                        <label className="block min-w-0 text-xs font-semibold text-primary-600">Mechanic<select aria-label="Filter by mechanic" className="input mt-1 w-full min-w-0" value={mechanicFilter} onChange={(e) => { setMechanicFilter(e.target.value); setPage(1); }}><option value="">All mechanics</option>{mechanics.map((mechanic) => <option key={mechanic.id} value={mechanic.id}>{mechanic.full_name || mechanic.fullName}</option>)}</select></label>
+                        <label className="block min-w-0 text-xs font-semibold text-primary-600">Priority<select aria-label="Filter by priority" className="input mt-1 w-full min-w-0" value={priorityFilter} onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}><option value="all">All priorities</option>{['urgent','high','normal','low'].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+                        <label className="block min-w-0 text-xs font-semibold text-primary-600">Sort by<select aria-label="Sort service orders" className="input mt-1 w-full min-w-0" value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }}><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="due">Due soonest</option><option value="urgency">Urgency</option></select></label>
                     </div>
                 </div>
 
