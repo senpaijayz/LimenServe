@@ -13,6 +13,7 @@ import {
     ShoppingCart,
     Trash2,
     User,
+    Wrench,
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
@@ -29,6 +30,7 @@ import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../u
 import { downloadQuotationPdf } from '../utils/downloadQuotationPdf';
 import {
     createEstimate,
+    convertEstimateToServiceOrder,
     archiveEstimate,
     deleteEstimate,
     getEstimateDetail,
@@ -360,6 +362,8 @@ const QuoteBuilder = () => {
     const [deletingQuoteId, setDeletingQuoteId] = useState(null);
     const [quoteToArchive, setQuoteToArchive] = useState(null);
     const [archivingQuoteId, setArchivingQuoteId] = useState(null);
+    const [quoteToConvert, setQuoteToConvert] = useState(null);
+    const [convertingQuote, setConvertingQuote] = useState(false);
 
     const {
         products: availableProducts,
@@ -628,6 +632,21 @@ const QuoteBuilder = () => {
             showError(archiveError.message || 'Unable to archive the quotation.');
         } finally {
             setArchivingQuoteId(null);
+        }
+    };
+
+    const confirmConvertQuote = async () => {
+        if (!quoteToConvert?.id || convertingQuote) return;
+        setConvertingQuote(true);
+        try {
+            const orderId = await convertEstimateToServiceOrder(quoteToConvert.id);
+            success('Service order created from the approved quotation.');
+            setQuoteToConvert(null);
+            navigate(`/services/${orderId}`);
+        } catch (conversionError) {
+            showError(conversionError.message || 'Unable to create the service order from this quotation.');
+        } finally {
+            setConvertingQuote(false);
         }
     };
 
@@ -926,6 +945,22 @@ const QuoteBuilder = () => {
                                             Save revisions without creating a brand new quotation. Customers can retrieve the same quotation for 30 days using the quote number and phone.
                                         </p>
                                     </div>
+                                    {currentEstimateId && currentEstimateStatus === 'approved' && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (quoteDirty) {
+                                                    showError('Save your quotation changes before creating a service order.');
+                                                    return;
+                                                }
+                                                setQuoteToConvert({ id: currentEstimateId, estimate_number: currentEstimateNumber });
+                                            }}
+                                            className="inline-flex items-center gap-2 rounded-xl bg-primary-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                                        >
+                                            <Wrench className="h-4 w-4" aria-hidden="true" />
+                                            Create service order
+                                        </button>
+                                    )}
                                     {currentEstimateId && currentEstimateStatus === 'draft' && (
                                         <button
                                             type="button"
@@ -949,6 +984,22 @@ const QuoteBuilder = () => {
                                 </div>
 
                                 <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                                    {currentEstimateId && !currentEstimateStatus.startsWith('converted_') && (
+                                        <label className="text-sm font-semibold text-primary-700">
+                                            Quotation status
+                                            <select
+                                                className="mt-2 w-full rounded-lg border border-primary-200 bg-white px-4 py-3 text-primary-950"
+                                                value={currentEstimateStatus}
+                                                onChange={(event) => { markQuoteDirty(); setCurrentEstimateStatus(event.target.value); }}
+                                            >
+                                                <option value="draft">Draft</option>
+                                                <option value="sent">Sent to customer</option>
+                                                <option value="approved">Approved by customer</option>
+                                                <option value="rejected">Rejected</option>
+                                            </select>
+                                            <span className="mt-1 block text-xs font-normal text-primary-500">Save the quotation after changing its status.</span>
+                                        </label>
+                                    )}
                                     <Input
                                         label="Customer Name"
                                         placeholder="Enter customer name"
@@ -1293,6 +1344,17 @@ const QuoteBuilder = () => {
                     </div>
                 </div>
             </div>
+
+            <ConfirmDialog
+                isOpen={Boolean(quoteToConvert)}
+                title="Create service order?"
+                message={`Use approved quotation ${quoteToConvert?.estimate_number || ''} to open a new service order? Its estimated parts and services will be copied, but stock will not be deducted until the final sale.`}
+                confirmLabel="Create service order"
+                confirmVariant="primary"
+                isLoading={convertingQuote}
+                onConfirm={confirmConvertQuote}
+                onClose={() => { if (!convertingQuote) setQuoteToConvert(null); }}
+            />
 
             <ConfirmDialog
                 isOpen={Boolean(quoteToDelete)}

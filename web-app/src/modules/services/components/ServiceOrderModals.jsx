@@ -9,6 +9,8 @@ import { StatusBadge } from '../../../components/ui/Badge';
 import useDataStore from '../../../store/useDataStore';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 import { listMechanics } from '../../../services/mechanicsApi';
+import { getServiceScheduleSlots } from '../../../services/serviceOrdersApi';
+import { isServiceOrderOverdue } from '../utils/serviceOrderDisplay';
 
 const PRIORITY_STYLES = {
     low: 'border-slate-200 bg-slate-50 text-slate-700',
@@ -66,16 +68,14 @@ function validateManilaSchedule(startValue, endValue) {
     const today = manilaDateInputValue(new Date());
     if (startDate < today) return 'Start date cannot be in the past.';
     if (startDate === today && new Date(manilaDateTimeToIso(startValue)).getTime() <= Date.now()) return 'Start time cannot be in the past.';
-    if (startTime < 8 * 60 || startTime >= 17 * 60 || endTime > 17 * 60) return 'Workshop hours are 8:00 AM–5:00 PM.';
     if (endDate !== startDate) return 'End time must be on the same workday. Schedule separate workday assignments for multi-day jobs.';
     if (endTime <= startTime) return 'End time must be later than the start time.';
+    const sunday = new Date(`${startDate}T12:00:00Z`).getUTCDay() === 0;
+    const closing = sunday ? 12 * 60 : 17 * 60;
+    if (startTime < 8 * 60 || startTime >= closing || endTime > closing) return sunday
+        ? 'Sunday appointments must be between 8:00 AM and 12:00 PM.'
+        : 'Workshop hours are 8:00 AM–5:00 PM.';
     return '';
-}
-
-export function isServiceOrderOverdue(order) {
-    if (!order || ['completed', 'cancelled'].includes(order.status)) return false;
-    const plannedEnd = order.scheduledEnd ?? order.scheduled_end ?? order.assignment?.scheduledEnd;
-    return Boolean(plannedEnd && new Date(plannedEnd).getTime() < Date.now());
 }
 
 const escapeHtml = (value) => String(value ?? '')
@@ -223,7 +223,7 @@ const printServiceOrderDocument = ({ order, serviceItems, partItems, orderTotal,
 };
 
 // ── Parts search sub-component ────────────────────────────────────────────────
-function PartSearch({ onAdd }) {
+export function PartSearch({ onAdd }) {
     const { findProduct, products } = useDataStore();
     const [query, setQuery] = useState('');
     const [result, setResult] = useState(null);
@@ -622,7 +622,9 @@ const toDateTimeLocalValue = (value, fallbackOffsetHours = 0) => {
     if (!value) {
         date.setMinutes(0, 0, 0);
         const parts = manilaDateTimeParts(date);
-        if (Number(parts.hour) < 8 || Number(parts.hour) >= 17) {
+        const localDay = `${parts.year}-${parts.month}-${parts.day}`;
+        const sunday = new Date(`${localDay}T12:00:00Z`).getUTCDay() === 0;
+        if (Number(parts.hour) < 8 || Number(parts.hour) >= (sunday ? 12 : 17)) {
             const nextDay = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day) + 1, 9 - 8));
             return manilaDateTimeInputValue(nextDay);
         }
@@ -632,6 +634,8 @@ const toDateTimeLocalValue = (value, fallbackOffsetHours = 0) => {
 
 export const ServiceOrderDetailModal = ({
     isOpen,
+    pageMode = false,
+    workshopMode = false,
     onClose,
     order,
     onStatusUpdate,
@@ -655,6 +659,11 @@ export const ServiceOrderDetailModal = ({
     const [mechanicId, setMechanicId] = useState('');
     const [scheduledStart, setScheduledStart] = useState('');
     const [scheduledEnd, setScheduledEnd] = useState('');
+    const [scheduleDate, setScheduleDate] = useState('');
+    const [appointmentMinutes, setAppointmentMinutes] = useState(60);
+    const [scheduleSlots, setScheduleSlots] = useState([]);
+    const [scheduleHours, setScheduleHours] = useState(null);
+    const [slotsLoading, setSlotsLoading] = useState(false);
 
     useEffect(() => {
         if (!isOpen || !order) return;
@@ -667,8 +676,29 @@ export const ServiceOrderDetailModal = ({
         setMechanicId(order.assignment?.mechanicId ?? order.assignedMechanic?.id ?? '');
         setScheduledStart(nextStart);
         setScheduledEnd(nextEnd > nextStart ? nextEnd : manilaDateTimeInputValue(new Date(Date.parse(manilaDateTimeToIso(nextStart)) + 60 * 60 * 1000)));
+        setScheduleDate(nextStart.slice(0, 10));
+        const storedDuration = storedStart && storedEnd ? (Date.parse(storedEnd) - Date.parse(storedStart)) / 60000 : 60;
+        setAppointmentMinutes([30, 60, 90, 120, 180, 240].includes(storedDuration) ? storedDuration : 60);
         setAssignmentError('');
     }, [isOpen, order]);
+
+    useEffect(() => {
+        if (!isOpen || !canAssignMechanic || !scheduleDate) return undefined;
+        let active = true;
+        setSlotsLoading(true);
+        getServiceScheduleSlots({ date: scheduleDate, duration: appointmentMinutes, mechanicId: mechanicId || undefined, orderId: order?.id })
+            .then((data) => {
+                if (!active) return;
+                setScheduleSlots(data?.slots || []);
+                setScheduleHours(data?.hours || null);
+                setAssignmentError('');
+            })
+            .catch((error) => {
+                if (active) { setScheduleSlots([]); setAssignmentError(error.message || 'Unable to load appointment times.'); }
+            })
+            .finally(() => { if (active) setSlotsLoading(false); });
+        return () => { active = false; };
+    }, [isOpen, canAssignMechanic, scheduleDate, appointmentMinutes, mechanicId, order?.id]);
 
     useEffect(() => {
         if (!isOpen || !canAssignMechanic || !scheduledStart || !scheduledEnd) return undefined;
@@ -714,7 +744,6 @@ export const ServiceOrderDetailModal = ({
     const mechanicName = order.assignedMechanic?.name ?? order.assignment?.mechanic?.name ?? order.mechanicName ?? order.assignedMechanicName ?? order.assigned_to_name ?? order.assignedToName ?? '';
     const isOverdue = isServiceOrderOverdue(order);
     const todayManila = manilaDateInputValue(new Date());
-    const currentManilaInput = manilaDateTimeInputValue(new Date());
 
     const statusLabels = {
         pending: 'Pending',
@@ -821,17 +850,17 @@ export const ServiceOrderDetailModal = ({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4"
-                onClick={onClose}
+                className={pageMode ? 'relative w-full' : 'fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4'}
+                onClick={pageMode ? undefined : onClose}
             >
                 <Motion.div
                     initial={{ scale: 0.95, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.95, opacity: 0 }}
-                    className="w-full max-w-4xl overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-xl"
+                    className={pageMode ? 'w-full overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-sm' : 'w-full max-w-4xl overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-xl'}
                     onClick={e => e.stopPropagation()}
-                    role="dialog"
-                    aria-modal="true"
+                    role={pageMode ? undefined : 'dialog'}
+                    aria-modal={pageMode ? undefined : 'true'}
                     aria-labelledby="service-order-detail-title"
                 >
                     <div className="flex items-start justify-between gap-4 border-b border-primary-100 bg-primary-50 px-5 py-4 sm:px-6">
@@ -850,8 +879,8 @@ export const ServiceOrderDetailModal = ({
                         </button>
                     </div>
 
-                    <div className="max-h-[78vh] overflow-y-auto p-5 sm:p-6">
-                        <div className="mb-5 grid gap-3 rounded-2xl border border-primary-100 bg-white p-3 sm:grid-cols-3">
+                    <div className={pageMode ? 'p-4 sm:p-6' : 'max-h-[78vh] overflow-y-auto p-5 sm:p-6'}>
+                        {!workshopMode && <div className="mb-5 grid gap-3 rounded-2xl border border-primary-100 bg-white p-3 sm:grid-cols-3">
                             {statusFlow.map((status, i) => (
                                 <div key={status} className={`rounded-xl border px-3 py-3 ${currentIndex >= i ? 'border-accent-primary/25 bg-accent-primary/5' : 'border-primary-100 bg-primary-50'}`}>
                                     <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${currentIndex >= i ? 'bg-accent-primary text-white' : 'bg-white text-primary-400'}`}>
@@ -863,7 +892,7 @@ export const ServiceOrderDetailModal = ({
                                     </p>
                                 </div>
                             ))}
-                        </div>
+                        </div>}
 
                         <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
                             <div className="space-y-4">
@@ -896,12 +925,12 @@ export const ServiceOrderDetailModal = ({
                                 <div className="grid gap-4 md:grid-cols-2">
                                     <div className="rounded-2xl border border-primary-100 bg-white p-4">
                                         <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary-500">
-                                            <Wrench className="h-4 w-4" /> Services
+                                            <Wrench className="h-4 w-4" /> {workshopMode ? 'Estimated labor at intake' : 'Services'}
                                         </div>
                                         <div className="space-y-2">
                                             {serviceItems.length > 0 ? serviceItems.map(renderItemRow) : (
                                                 <div className="rounded-xl border border-dashed border-primary-200 bg-primary-50 px-3 py-4 text-sm text-primary-500">
-                                                    No itemized services recorded. The job note is used as the sales service line.
+                                                    No itemized labor estimate recorded. Add actual labor before billing.
                                                 </div>
                                             )}
                                         </div>
@@ -909,7 +938,7 @@ export const ServiceOrderDetailModal = ({
 
                                     <div className="rounded-2xl border border-primary-100 bg-white p-4">
                                         <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary-500">
-                                            <Package className="h-4 w-4" /> Parts used
+                                            <Package className="h-4 w-4" /> {workshopMode ? 'Estimated parts at intake' : 'Parts used'}
                                         </div>
                                         <div className="space-y-2">
                                             {partItems.length > 0 ? partItems.map(renderItemRow) : (
@@ -924,9 +953,9 @@ export const ServiceOrderDetailModal = ({
 
                             <aside className="space-y-4">
                                 <div className="rounded-2xl border border-primary-100 bg-primary-950 p-5 text-white">
-                                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/45">Final amount</p>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/45">{workshopMode ? 'Intake estimate' : 'Final amount'}</p>
                                     <p className="mt-2 text-3xl font-display font-bold">{formatCurrency(orderTotal)}</p>
-                                    <p className="mt-2 text-sm text-white/60">Receipt review and payment confirmation are required before posting.</p>
+                                    <p className="mt-2 text-sm text-white/60">{workshopMode ? 'Actual parts and labor are recorded below. Estimates do not deduct stock.' : 'Receipt review and payment confirmation are required before posting.'}</p>
                                 </div>
 
                                 <div className="grid gap-3">
@@ -943,20 +972,34 @@ export const ServiceOrderDetailModal = ({
                                             <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-800">Admin mechanic assignment</p>
                                             {assignmentError && <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800" role="alert">{assignmentError}</p>}
                                             <label className="mt-3 block text-xs font-semibold text-primary-700">Mechanic
-                                                <select className="input mt-1" value={mechanicId} onChange={(event) => setMechanicId(event.target.value)} disabled={mechanicsLoading} required>
+                                                <select className="input mt-1" value={mechanicId} onChange={(event) => { setMechanicId(event.target.value); setScheduledStart(''); setScheduledEnd(''); }} disabled={mechanicsLoading} required>
                                                     <option value="">{mechanicsLoading ? 'Loading mechanics…' : 'Choose active mechanic'}</option>
                                                     {mechanics.map((mechanic) => (
-                                                        <option key={mechanic.id} value={mechanic.id} disabled={!mechanic.availableForRequestedWindow}>
-                                                            {mechanic.full_name || mechanic.fullName} · {mechanic.specialization} · {mechanic.currentWorkload} active{mechanic.hasScheduleConflict ? ' · conflict' : ''}
+                                                        <option key={mechanic.id} value={mechanic.id} disabled={!mechanic.isActive || mechanic.availability_status === 'off_duty'}>
+                                                            {mechanic.full_name || mechanic.fullName} · {mechanic.specialization} · {mechanic.currentWorkload} booked
                                                         </option>
                                                     ))}
                                                 </select>
                                             </label>
                                             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                                <label className="text-xs font-semibold text-primary-700">Start <span className="text-red-600">*</span><input type="datetime-local" className="input mt-1" value={scheduledStart} min={currentManilaInput} max={`${scheduledStart.slice(0, 10)}T16:59`} onChange={(event) => setScheduledStart(event.target.value)} required /></label>
-                                                <label className="text-xs font-semibold text-primary-700">End <span className="text-red-600">*</span><input type="datetime-local" className="input mt-1" value={scheduledEnd} min={scheduledStart || `${todayManila}T08:00`} max={`${scheduledStart.slice(0, 10)}T17:00`} onChange={(event) => setScheduledEnd(event.target.value)} required /></label>
+                                                <label className="text-xs font-semibold text-primary-700">Date <span className="text-red-600">*</span><input type="date" className="input mt-1" value={scheduleDate} min={todayManila} onChange={(event) => { setScheduleDate(event.target.value); setScheduledStart(''); setScheduledEnd(''); }} required /></label>
+                                                <label className="text-xs font-semibold text-primary-700">Appointment length
+                                                    <select className="input mt-1" value={appointmentMinutes} onChange={(event) => { setAppointmentMinutes(Number(event.target.value)); setScheduledStart(''); setScheduledEnd(''); }}>
+                                                        {[30, 60, 90, 120, 180, 240].map((minutes) => <option key={minutes} value={minutes}>{minutes < 60 ? `${minutes} minutes` : `${minutes / 60} hour${minutes === 60 ? '' : 's'}`}</option>)}
+                                                    </select>
+                                                </label>
                                             </div>
-                                            <p className="mt-2 text-xs text-blue-800">Schedule in Philippine time, 8:00 AM–5:00 PM. Each assignment must fit within one workday.</p>
+                                            <p className="mt-2 text-xs text-blue-800">{scheduleHours?.closesAt?.startsWith('12') ? 'Sunday half-day hours: 8:00 AM – 12:00 PM.' : 'Workshop hours: 8:00 AM – 5:00 PM.'} Philippine time.</p>
+                                            <div className="mt-3 grid max-h-40 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3" aria-label="Available appointment times">
+                                                {scheduleSlots.map((slot) => {
+                                                    const selected = scheduledStart && manilaDateTimeToIso(scheduledStart) === slot.start;
+                                                    const label = `${new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' }).format(new Date(slot.start))} – ${new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' }).format(new Date(slot.end))}`;
+                                                    return <button key={slot.start} type="button" disabled={!slot.available || !mechanicId} title={slot.reason || undefined} aria-pressed={Boolean(selected)} onClick={() => { setScheduledStart(manilaDateTimeInputValue(new Date(slot.start))); setScheduledEnd(manilaDateTimeInputValue(new Date(slot.end))); }} className={`rounded-lg border px-2 py-2 text-xs font-medium ${selected ? 'border-blue-700 bg-blue-700 text-white' : 'border-primary-200 bg-white text-primary-800 hover:border-blue-500'} disabled:cursor-not-allowed disabled:opacity-40`}>{label}</button>;
+                                                })}
+                                            </div>
+                                            {slotsLoading && <p className="mt-2 text-xs text-primary-600">Checking available times…</p>}
+                                            {!slotsLoading && !scheduleSlots.some((slot) => slot.available) && <p className="mt-2 text-xs text-primary-700">No available schedule remains for this day. Choose another date.</p>}
+                                            {scheduledStart && <p className="mt-2 text-xs font-semibold text-blue-900">Selected: {formatManilaDateTime(manilaDateTimeToIso(scheduledStart))} – {new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' }).format(new Date(manilaDateTimeToIso(scheduledEnd)))}</p>}
                                             <div className="mt-3 flex flex-wrap gap-2">
                                                 <Button type="submit" size="sm" variant="confirm" isLoading={assignmentSaving} leftIcon={<UserCheck className="h-4 w-4" />}>{order.assignment ? 'Change assignment' : 'Assign mechanic'}</Button>
                                                 {order.assignment && <Button size="sm" variant="delete" isLoading={assignmentRemoving} onClick={() => setRemoveConfirmationOpen(true)}>Remove</Button>}
@@ -981,11 +1024,11 @@ export const ServiceOrderDetailModal = ({
                         </div>
 
                         <div className="mt-5 flex flex-col gap-3 border-t border-primary-100 pt-4 sm:flex-row sm:justify-end">
-                            <Button variant="outline" leftIcon={<Printer className="w-4 h-4" />} onClick={handlePrint}>
+                            {!workshopMode && <Button variant="outline" leftIcon={<Printer className="w-4 h-4" />} onClick={handlePrint}>
                                 Print / Save PDF
-                            </Button>
+                            </Button>}
                             <Button variant="cancel" onClick={onClose}>Close</Button>
-                            {nextStatus === 'in_progress' && (
+                            {!workshopMode && nextStatus === 'in_progress' && (
                                 <Button
                                     variant="primary"
                                     isLoading={updating}
@@ -995,7 +1038,7 @@ export const ServiceOrderDetailModal = ({
                                     Start Work
                                 </Button>
                             )}
-                            {order.status !== 'completed' && order.status !== 'cancelled' && (
+                            {!workshopMode && order.status !== 'completed' && order.status !== 'cancelled' && (
                                 <Button
                                     variant="success"
                                     isDisabled={completing}

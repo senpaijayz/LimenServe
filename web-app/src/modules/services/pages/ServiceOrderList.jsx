@@ -1,165 +1,86 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Clock, AlertCircle, RefreshCw, Wrench, Archive } from 'lucide-react';
+import { Plus, Search, Clock, AlertCircle, RefreshCw, Wrench, Archive, ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { StatusBadge } from '../../../components/ui/Badge';
 import Tabs from '../../../components/ui/Tabs';
 import { formatCurrency, formatRelativeTime } from '../../../utils/formatters';
-import { CreateServiceOrderModal, ServiceOrderDetailModal, PriorityBadge, isServiceOrderOverdue } from '../components/ServiceOrderModals';
-import { useToast } from '../../../components/ui/Toast';
-import {
-    assignMechanicToServiceOrder,
-    completeServiceOrder,
-    createServiceOrder,
-    listServiceOrders,
-    removeMechanicFromServiceOrder,
-    updateServiceOrder,
-} from '../../../services/serviceOrdersApi';
-import { useAuth } from '../../../context/useAuth';
-import { ROLES } from '../../../utils/constants';
+import { PriorityBadge } from '../components/ServiceOrderModals';
+import { isServiceOrderOverdue } from '../utils/serviceOrderDisplay';
+import { getServiceOrderQueue } from '../../../services/serviceOrdersApi';
+import { useNavigate } from 'react-router';
+import { listMechanics } from '../../../services/mechanicsApi';
 
 /**
  * Service Order List Page
  * View and manage service orders
  */
 const ServiceOrderList = () => {
-    const { success, error: showError } = useToast();
-    const { user } = useAuth();
+    const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
-    const [showCreateModal, setShowCreateModal] = useState(false);
-    const [selectedOrder, setSelectedOrder] = useState(null);
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [reloadNonce, setReloadNonce] = useState(0);
+    const [page, setPage] = useState(1);
+    const [total, setTotal] = useState(0);
+    const [priorityFilter, setPriorityFilter] = useState('all');
+    const [mechanicFilter, setMechanicFilter] = useState('');
+    const [sort, setSort] = useState('newest');
+    const [mechanics, setMechanics] = useState([]);
+    const [summary, setSummary] = useState({});
 
     useEffect(() => {
+        listMechanics({ activeOnly: false }).then(setMechanics).catch(() => setMechanics([]));
+    }, []);
+
+    useEffect(() => {
+        let active = true;
         const timer = window.setTimeout(() => {
             const loadOrders = async () => {
                 setLoading(true);
                 setLoadError('');
 
                 try {
-                    const rows = await listServiceOrders({
-                        search: searchQuery || null,
-                        status: 'all',
-                        limit: 100,
-                        includeArchived: true,
+                    const result = await getServiceOrderQueue({
+                        search: searchQuery,
+                        stage: statusFilter === 'all' ? 'active' : statusFilter === 'archive' ? 'completed' : statusFilter,
+                        priority: priorityFilter,
+                        mechanicId: mechanicFilter || undefined,
+                        sort,
+                        page,
+                        pageSize: 18,
                     });
-                    setOrders(rows);
+                    if (!active) return;
+                    setOrders(result.orders || []);
+                    setSummary(result.summary || {});
+                    setTotal(result.total || 0);
                 } catch (error) {
+                    if (!active) return;
                     setOrders([]);
                     setLoadError(error.message || 'Unable to load service orders.');
                 } finally {
-                    setLoading(false);
+                    if (active) setLoading(false);
                 }
             };
 
             void loadOrders();
         }, 180);
 
-        return () => window.clearTimeout(timer);
-    }, [searchQuery, reloadNonce]);
+        return () => { active = false; window.clearTimeout(timer); };
+    }, [searchQuery, statusFilter, priorityFilter, mechanicFilter, sort, page, reloadNonce]);
 
-    // Filter orders
-    const searchedOrders = useMemo(() => orders.filter((order) => {
-        const matchesSearch =
-            String(order.customerName || '').toLowerCase().includes(searchQuery.toLowerCase())
-            || String(order.orderNumber || order.id).toLowerCase().includes(searchQuery.toLowerCase())
-            || String(order.vehicle?.plate || '').toLowerCase().includes(searchQuery.toLowerCase())
-            || String(order.description || '').toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesSearch;
-    }), [orders, searchQuery]);
-
-    // Group by status
-    const activeOrders = searchedOrders.filter(o => o.status !== 'completed');
-    const pendingOrders = searchedOrders.filter(o => o.status === 'pending');
-    const inProgressOrders = searchedOrders.filter(o => o.status === 'in_progress');
-    const archivedOrders = searchedOrders.filter(o => o.status === 'completed');
-    const visibleMobileOrders = statusFilter === 'archive'
-        ? archivedOrders
-        : statusFilter === 'overdue'
-            ? searchedOrders.filter(isServiceOrderOverdue)
-        : statusFilter === 'all'
-            ? activeOrders
-            : searchedOrders.filter((order) => order.status === statusFilter && order.status !== 'completed');
+    const visibleMobileOrders = orders;
     const statusCounts = useMemo(() => ({
-        all: orders.filter((order) => order.status !== 'completed').length,
-        pending: orders.filter((order) => order.status === 'pending').length,
-        inProgress: orders.filter((order) => order.status === 'in_progress').length,
-        archived: orders.filter((order) => order.status === 'completed').length,
-        overdue: orders.filter(isServiceOrderOverdue).length,
-    }), [orders]);
-
-    // Handle status update
-    const handleStatusUpdate = async (orderId, newStatus) => {
-        try {
-            const updatedOrder = await updateServiceOrder(orderId, { status: newStatus });
-            setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
-            setSelectedOrder(null);
-            success(`Order ${updatedOrder.orderNumber || orderId} status updated to ${newStatus.replace('_', ' ')}`);
-        } catch (error) {
-            showError(error.message || 'Unable to update service order status.');
-            throw error;
-        }
-    };
-
-    const handleCompleteOrder = async (orderId, paymentDetails) => {
-        try {
-            const result = await completeServiceOrder(orderId, paymentDetails);
-            const completedOrder = result?.order;
-
-            if (completedOrder) {
-                setOrders(prev => prev.map(o => o.id === orderId ? completedOrder : o));
-                setSelectedOrder(completedOrder);
-            } else {
-                setReloadNonce((value) => value + 1);
-                setSelectedOrder(null);
-            }
-
-            if (result?.saleCreated) {
-                success('Sales record added successfully');
-            }
-            success('Service order completed and archived successfully');
-        } catch (error) {
-            showError(error.message || 'Unable to finish, archive, and post the service order to Sales.');
-            throw error;
-        }
-    };
-
-    const handleAssignMechanic = async (orderId, payload) => {
-        try {
-            const updatedOrder = await assignMechanicToServiceOrder(orderId, payload);
-            setOrders((current) => current.map((order) => order.id === orderId ? updatedOrder : order));
-            setSelectedOrder(updatedOrder);
-            success(`${updatedOrder.assignedMechanic?.name || 'Mechanic'} assigned successfully.`);
-            return updatedOrder;
-        } catch (error) {
-            showError(error.message || 'Unable to assign the mechanic.');
-            throw error;
-        }
-    };
-
-    const handleRemoveMechanic = async (orderId) => {
-        try {
-            const updatedOrder = await removeMechanicFromServiceOrder(orderId);
-            setOrders((current) => current.map((order) => order.id === orderId ? updatedOrder : order));
-            setSelectedOrder(updatedOrder);
-            success('Mechanic assignment removed.');
-            return updatedOrder;
-        } catch (error) {
-            showError(error.message || 'Unable to remove the assignment.');
-            throw error;
-        }
-    };
-
-    // Handle new order creation
-    const handleCreateOrder = async (payload) => {
-        const newOrder = await createServiceOrder(payload);
-        setOrders(prev => [newOrder, ...prev]);
-        success(`Service order ${newOrder.orderNumber || newOrder.id} created successfully!`);
-    };
+        all: summary.active ?? 0,
+        pending: summary.pending ?? 0,
+        inProgress: summary.inProgress ?? 0,
+        archived: summary.completed ?? 0,
+        overdue: summary.overdue ?? 0,
+        awaitingAssignment: summary.awaitingAssignment ?? 0,
+        awaitingPayment: summary.awaitingPayment ?? 0,
+    }), [summary]);
 
     // Order card component
     const OrderCard = ({ order }) => {
@@ -169,8 +90,11 @@ const ServiceOrderList = () => {
 
         return (
         <div
+            role="link"
+            tabIndex={0}
             className={`group relative overflow-hidden rounded-xl border bg-white cursor-pointer transition-all duration-300 shadow-sm hover:shadow-md ${isArchived ? 'border-accent-success/25 hover:border-accent-success/50' : 'border-primary-200 hover:border-red-500/50'}`}
-            onClick={() => setSelectedOrder(order)}
+            onClick={() => navigate(`/services/${order.id}`)}
+            onKeyDown={(event) => { if (event.key === 'Enter') navigate(`/services/${order.id}`); }}
         >
             <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent to-transparent transition-all duration-500 ${isArchived ? 'via-accent-success/30 group-hover:via-accent-success/70' : 'via-red-500/0 group-hover:via-red-500/50'}`} />
 
@@ -262,10 +186,10 @@ const ServiceOrderList = () => {
         {
             id: 'all',
             label: 'Active Queue',
-            badge: activeOrders.length,
+            badge: statusCounts.all,
             content: (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                    {activeOrders.map((order) => (
+                    {visibleMobileOrders.map((order) => (
                         <OrderCard key={order.id} order={order} />
                     ))}
                 </div>
@@ -278,7 +202,7 @@ const ServiceOrderList = () => {
             icon: <Clock className="w-4 h-4 text-red-700" />,
             content: (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                    {searchedOrders.filter(isServiceOrderOverdue).map((order) => (
+                    {visibleMobileOrders.map((order) => (
                         <OrderCard key={order.id} order={order} />
                     ))}
                 </div>
@@ -287,11 +211,11 @@ const ServiceOrderList = () => {
         {
             id: 'pending',
             label: 'Pending',
-            badge: pendingOrders.length,
+            badge: statusCounts.pending,
             icon: <Clock className="w-4 h-4" />,
             content: (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                    {pendingOrders.map((order) => (
+                    {visibleMobileOrders.map((order) => (
                         <OrderCard key={order.id} order={order} />
                     ))}
                 </div>
@@ -300,11 +224,11 @@ const ServiceOrderList = () => {
         {
             id: 'in_progress',
             label: 'In Progress',
-            badge: inProgressOrders.length,
+            badge: statusCounts.inProgress,
             icon: <AlertCircle className="w-4 h-4" />,
             content: (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                    {inProgressOrders.map((order) => (
+                    {visibleMobileOrders.map((order) => (
                         <OrderCard key={order.id} order={order} />
                     ))}
                 </div>
@@ -313,11 +237,11 @@ const ServiceOrderList = () => {
         {
             id: 'archive',
             label: 'Archive',
-            badge: archivedOrders.length,
+            badge: statusCounts.archived,
             icon: <Archive className="w-4 h-4" />,
             content: (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                    {archivedOrders.map((order) => (
+                    {visibleMobileOrders.map((order) => (
                         <OrderCard key={order.id} order={order} />
                     ))}
                 </div>
@@ -337,23 +261,24 @@ const ServiceOrderList = () => {
                         </span>
                         Service Orders
                     </h1>
-                    <p className="text-primary-500 mt-2 font-mono text-sm max-w-2xl leading-relaxed">
-                        Live workshop queue for customer repairs, labor tracking, and service follow-through.
-                    </p>
+                    <p className="text-primary-500 mt-2 text-sm max-w-2xl leading-relaxed">Manage repair jobs, workshop scheduling, mechanic assignments, and customer billing.</p>
                 </div>
-                <div className="relative z-10 w-full sm:w-auto">
-                    <button className="btn w-full border-none bg-gradient-to-r from-red-600 to-red-800 text-white shadow-lg shadow-red-600/40 sm:w-auto" onClick={() => setShowCreateModal(true)}>
+                <div className="relative z-10 flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                    <button className="btn w-full border border-primary-200 bg-white text-primary-900 sm:w-auto" onClick={() => navigate('/services/schedule')}><CalendarDays className="h-4 w-4" /> View Schedule</button>
+                    <button className="btn w-full border-none bg-gradient-to-r from-red-600 to-red-800 text-white shadow-lg shadow-red-600/40 sm:w-auto" onClick={() => navigate('/services/new')}>
                         <Plus className="w-4 h-4" /> NEW SERVICE ORDER
                     </button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                <StatusMetric label="Active Queue" value={statusCounts.all} helper="Pending and in-progress only" icon={<Wrench className="h-5 w-5" />} />
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+                <StatusMetric label="Active Jobs" value={statusCounts.all} helper="Open work" icon={<Wrench className="h-5 w-5" />} />
+                <StatusMetric label="Awaiting Assignment" value={statusCounts.awaitingAssignment} helper="Needs a mechanic" icon={<Wrench className="h-5 w-5" />} />
                 <StatusMetric label="Pending" value={statusCounts.pending} helper="Needs workshop review" icon={<Clock className="h-5 w-5" />} />
                 <StatusMetric label="In Progress" value={statusCounts.inProgress} helper="Currently being handled" icon={<AlertCircle className="h-5 w-5" />} />
                 <StatusMetric label="Overdue" value={statusCounts.overdue} helper="Unfinished after scheduled end" icon={<Clock className="h-5 w-5 text-red-700" />} />
-                <StatusMetric label="Archive" value={statusCounts.archived} helper="Completed and posted to Sales" icon={<Archive className="h-5 w-5" />} />
+                <StatusMetric label="Awaiting Payment" value={statusCounts.awaitingPayment} helper="Repairs finished, not yet paid" icon={<Archive className="h-5 w-5" />} />
+                <StatusMetric label="Completed" value={statusCounts.archived} helper="Archived jobs" icon={<Archive className="h-5 w-5" />} />
             </div>
 
             {loadError && (
@@ -391,15 +316,16 @@ const ServiceOrderList = () => {
                             type="text"
                             placeholder="SEARCH BY CUSTOMER, ORDER ID, OR PLATE..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
                             className="w-full bg-white border border-primary-200 rounded-xl px-12 py-4 text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all font-mono text-sm tracking-wide shadow-sm"
                         />
                         </div>
                     </div>
 
-                    <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600">
-                        <p className="font-semibold text-primary-900">Showing {visibleMobileOrders.length} active/archive matches</p>
-                        <p className="text-xs">Completed jobs move to Archive and are removed from the active queue.</p>
+                    <div className="flex flex-wrap gap-2">
+                        <select aria-label="Filter by mechanic" className="input min-w-36" value={mechanicFilter} onChange={(e) => { setMechanicFilter(e.target.value); setPage(1); }}><option value="">All mechanics</option>{mechanics.map((mechanic) => <option key={mechanic.id} value={mechanic.id}>{mechanic.full_name || mechanic.fullName}</option>)}</select>
+                        <select aria-label="Filter by priority" className="input min-w-32" value={priorityFilter} onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}><option value="all">All priorities</option>{['urgent','high','normal','low'].map((value) => <option key={value} value={value}>{value}</option>)}</select>
+                        <select aria-label="Sort service orders" className="input min-w-32" value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }}><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="due">Due soonest</option><option value="urgency">Urgency</option></select>
                     </div>
                 </div>
 
@@ -408,7 +334,7 @@ const ServiceOrderList = () => {
                         <button
                             key={status}
                             type="button"
-                            onClick={() => setStatusFilter(status)}
+                            onClick={() => { setStatusFilter(status); setPage(1); }}
                             className={`min-h-10 rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide ${statusFilter === status ? 'border-accent-blue bg-accent-blue text-white' : 'border-primary-200 bg-white text-primary-600'}`}
                         >
                             {status === 'all' ? 'Active' : status.replace('_', ' ')}
@@ -418,7 +344,7 @@ const ServiceOrderList = () => {
 
                 {!loading && (
                 <div className="hidden sm:block">
-                    <Tabs tabs={tabs} defaultTab="all" variant="pills" onChange={setStatusFilter} />
+                    <Tabs tabs={tabs} defaultTab="all" variant="pills" onChange={(next) => { setStatusFilter(next); setPage(1); }} />
                 </div>
                 )}
 
@@ -446,32 +372,16 @@ const ServiceOrderList = () => {
                         <AlertCircle className="w-16 h-16 text-primary-300 mx-auto mb-6" />
                         <h3 className="text-xl font-display font-semibold text-primary-900 mb-2 tracking-wide uppercase">No orders found</h3>
                         <p className="mx-auto max-w-md text-primary-500 text-sm">Adjust the search/filter or create a new service order for a customer repair job. Completed jobs are stored in Archive.</p>
-                        <Button className="mt-6" variant="primary" leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowCreateModal(true)}>
+                        <Button className="mt-6" variant="primary" leftIcon={<Plus className="w-4 h-4" />} onClick={() => navigate('/services/new')}>
                             Create Service Order
                         </Button>
                     </div>
                 )}
 
+                {!loading && total > 0 && <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-primary-100 pt-4 text-sm text-primary-600"><span>Showing {(page - 1) * 18 + 1}–{Math.min(page * 18, total)} of {total} orders</span><div className="flex items-center gap-2"><button type="button" className="btn" disabled={page === 1} onClick={() => setPage((value) => value - 1)}><ChevronLeft className="h-4 w-4" /> Previous</button><span>Page {page} of {Math.ceil(total / 18)}</span><button type="button" className="btn" disabled={page * 18 >= total} onClick={() => setPage((value) => value + 1)}>Next <ChevronRight className="h-4 w-4" /></button></div></div>}
+
             </div>
 
-            {/* Create Service Order Modal */}
-            <CreateServiceOrderModal
-                isOpen={showCreateModal}
-                onClose={() => setShowCreateModal(false)}
-                onSave={handleCreateOrder}
-            />
-
-            {/* Service Order Detail Modal */}
-            <ServiceOrderDetailModal
-                isOpen={!!selectedOrder}
-                onClose={() => setSelectedOrder(null)}
-                order={selectedOrder}
-                onStatusUpdate={handleStatusUpdate}
-                onComplete={handleCompleteOrder}
-                canAssignMechanic={user?.role === ROLES.ADMIN}
-                onAssignMechanic={handleAssignMechanic}
-                onRemoveMechanic={handleRemoveMechanic}
-            />
         </div>
     );
 };

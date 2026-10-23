@@ -6,8 +6,6 @@ import { supabaseAdmin } from '../config/supabase.js';
 const router = Router();
 const ALLOWED_STATUSES = new Set(['pending', 'in_progress', 'completed', 'cancelled']);
 const ALLOWED_PRIORITIES = new Set(['low', 'normal', 'high', 'urgent']);
-const SALES_SCHEMA_CANDIDATES = ['operations', 'app'];
-const SERVICE_ORDER_SCHEMA_CANDIDATES = ['operations', 'app'];
 
 function normalizeStatus(value, fallback = 'pending') {
   return ALLOWED_STATUSES.has(value) ? value : fallback;
@@ -24,6 +22,11 @@ function normalizeAssignmentError(error) {
     message.includes('required')
     || message.includes('cannot be assigned')
     || message.includes('Only active')
+    || message.includes('appointments must')
+    || message.includes('Appointments must')
+    || message.includes('Past dates')
+    || message.includes('Schedule each work session')
+    || message.includes('This mechanic')
     || message.includes('not found')
   ) {
     error.statusCode = message.includes('not found') ? 404 : 400;
@@ -234,6 +237,11 @@ async function loadCustomerOrders(userId) {
 function normalizeServiceOrderError(error) {
   const message = String(error?.message || '');
 
+  if (error?.code === '42501') error.statusCode = 403;
+  if (error?.code === 'P0002') error.statusCode = 404;
+  if (error?.code === '22023') error.statusCode = 400;
+  if (error?.code === 'PT409') error.statusCode = 409;
+
   if (
     message.includes('Service order not found') ||
     message.includes('A sale must include at least one line item') ||
@@ -276,7 +284,7 @@ function manilaParts(value) {
   return Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
 }
 
-function validateAssignmentWindow(start, end) {
+async function validateAssignmentWindow(start, end) {
   if (!(start instanceof Date) || !(end instanceof Date) || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
     return 'Choose a mechanic and valid service schedule.';
   }
@@ -290,12 +298,33 @@ function validateAssignmentWindow(start, end) {
   const todayDate = `${todayLocal.year}-${todayLocal.month}-${todayLocal.day}`;
   if (startDate < todayDate) return 'Start date cannot be in the past.';
   if (startDate !== endDate) return 'End time must be on the same workday. Schedule separate workday assignments for multi-day jobs.';
+  const hours = await callRpc('limen_workshop_hours', { p_day: startDate });
   const startMinutes = Number(startLocal.hour) * 60 + Number(startLocal.minute);
   const endMinutes = Number(endLocal.hour) * 60 + Number(endLocal.minute);
-  if (startMinutes < 8 * 60 || startMinutes >= 17 * 60 || endMinutes > 17 * 60) {
-    return 'Workshop hours are 8:00 AM–5:00 PM, Philippine time.';
+  const openMinutes = Number(hours.opensAt.slice(0, 2)) * 60 + Number(hours.opensAt.slice(3, 5));
+  const closeMinutes = Number(hours.closesAt.slice(0, 2)) * 60 + Number(hours.closesAt.slice(3, 5));
+  if (startMinutes < openMinutes || startMinutes >= closeMinutes || endMinutes > closeMinutes) {
+    return closeMinutes === 720
+      ? 'Sunday appointments must be between 8:00 AM and 12:00 PM, Philippine time.'
+      : 'Appointments must be between 8:00 AM and 5:00 PM, Philippine time.';
   }
   return '';
+}
+
+function manilaDateIso(day, minutes) {
+  const [year, month, date] = day.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, date, Math.floor(minutes / 60) - 8, minutes % 60)).toISOString();
+}
+
+function mechanicAllowsWindow(mechanic, date, startMinutes, endMinutes) {
+  if (!mechanic || mechanic.is_active === false || mechanic.availability_status === 'off_duty') return false;
+  let profile = {};
+  try { profile = JSON.parse(mechanic.location_name || '{}'); } catch { /* legacy location text */ }
+  if (profile.available_date && profile.available_date !== date) return false;
+  const shift = String(profile.shift_type || mechanic.shift_label || '').toLowerCase();
+  if (shift.includes('morning') && endMinutes > 720) return false;
+  if (shift.includes('afternoon') && startMinutes < 780) return false;
+  return true;
 }
 
 function pickFirstString(...values) {
@@ -338,137 +367,7 @@ function normalizeServiceOrderItems(order) {
     })
     .filter((item) => item.quantity > 0 && item.unitPrice >= 0 && (item.productId || item.serviceId || item.displayName));
 
-  const tax = Math.max(toNumber(order?.taxTotal ?? order?.tax_total), 0);
-  const discount = Math.max(toNumber(order?.discountTotal ?? order?.discount_total), 0);
-  const savedSubtotal = order?.subtotal ?? order?.subtotalAmount ?? order?.estimatedCost ?? order?.estimated_cost;
-  const orderTotal = Math.max(toNumber(
-    savedSubtotal
-      ?? (toNumber(order?.totalAmount ?? order?.total_amount ?? order?.amount ?? order?.total) - tax + discount),
-  ), 0);
-
-  if (normalizedItems.length > 0) {
-    const itemSubtotal = normalizedItems.reduce((sum, item) => sum + toNumber(item.lineTotal), 0);
-    const remainingLabor = Number((orderTotal - itemSubtotal).toFixed(2));
-    if (remainingLabor > 0.01) {
-      normalizedItems.push({
-        lineType: 'service',
-        productId: null,
-        serviceId: null,
-        quantity: 1,
-        unitPrice: remainingLabor,
-        lineTotal: remainingLabor,
-        displayName: 'Service labor / additional work',
-        sku: 'LABOR',
-      });
-    }
-    return normalizedItems;
-  }
-
-  return [{
-    lineType: 'service',
-    productId: null,
-    serviceId: null,
-    quantity: 1,
-    unitPrice: orderTotal,
-    lineTotal: orderTotal,
-    displayName: pickFirstString(order?.description, order?.note, 'Completed service order'),
-    sku: order?.orderNumber || order?.order_number || 'SERVICE',
-  }];
-}
-
-function buildServiceSalePayload(order, paymentDetails) {
-  const items = normalizeServiceOrderItems(order);
-  const rawSubtotal = items.reduce((sum, item) => sum + toNumber(item.lineTotal), 0);
-  const tax = Math.max(toNumber(order?.taxTotal ?? order?.tax_total), 0);
-  const discountAmount = Math.max(toNumber(order?.discountTotal ?? order?.discount_total), 0);
-  const total = Math.max(rawSubtotal - discountAmount + tax, 0);
-
-  return {
-    customerName: pickFirstString(order?.customerName, order?.customer_name, 'Walk-in Customer'),
-    paymentMethod: paymentDetails.paymentMethod,
-    cashReceived: paymentDetails.paymentMethod === 'cash' ? Number(paymentDetails.cashReceived) : 0,
-    changeDue: paymentDetails.paymentMethod === 'cash' ? Number(paymentDetails.changeDue ?? 0) : 0,
-    discountPercent: rawSubtotal > 0 ? Number(((discountAmount / rawSubtotal) * 100).toFixed(2)) : 0,
-    totals: {
-      rawSubtotal: Number(rawSubtotal.toFixed(2)),
-      discountAmount: Number(discountAmount.toFixed(2)),
-      tax: Number(tax.toFixed(2)),
-      total: Number(total.toFixed(2)),
-    },
-    items,
-  };
-}
-
-async function findExistingServiceSale(reference) {
-  for (const schema of SALES_SCHEMA_CANDIDATES) {
-    const { data, error } = await supabaseAdmin
-      .schema(schema)
-      .from('sales_transactions')
-      .select('id, transaction_number, total_amount, status, created_at, original_reference, source_type')
-      .eq('original_reference', reference)
-      .maybeSingle();
-
-    if (!error) {
-      return data;
-    }
-  }
-
-  return null;
-}
-
-async function tagServiceSale(saleId, reference) {
-  for (const schema of SALES_SCHEMA_CANDIDATES) {
-    const { data, error } = await supabaseAdmin
-      .schema(schema)
-      .from('sales_transactions')
-      .update({
-        source_type: 'service_order',
-        original_reference: reference,
-        inventory_applied: true,
-        sale_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', saleId)
-      .select('id, transaction_number, total_amount, status, created_at, original_reference, source_type')
-      .maybeSingle();
-
-    if (!error) {
-      return data;
-    }
-  }
-
-  return null;
-}
-
-async function persistServiceCompletion(orderId, paymentDetails) {
-  const patch = {
-    status: 'completed',
-    payment_status: 'paid',
-    payment_method: paymentDetails.paymentMethod,
-    completed_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-
-  for (const schema of SERVICE_ORDER_SCHEMA_CANDIDATES) {
-    const { error } = await supabaseAdmin
-      .schema(schema)
-      .from('service_orders')
-      .update(patch)
-      .eq('id', orderId);
-
-    if (!error) {
-      return;
-    }
-    if (error.code === '42703') {
-      const { error: legacyError } = await supabaseAdmin.schema(schema).from('service_orders').update({
-        status: patch.status,
-        completed_at: patch.completed_at,
-        updated_at: patch.updated_at,
-      }).eq('id', orderId);
-      if (!legacyError) return;
-    }
-  }
-  throw new Error('The service order could not be marked complete. The posted sale is safely linked and can be retried.');
+  return normalizedItems;
 }
 
 async function completeServiceOrder(orderId, operatorId, paymentDetails = {}) {
@@ -491,72 +390,20 @@ async function completeServiceOrder(orderId, operatorId, paymentDetails = {}) {
     throw error;
   }
 
-  const reference = buildServiceSaleReference(currentOrder);
-  let sale = await findExistingServiceSale(reference);
-  let saleCreated = false;
-
-  if (currentOrder.status === 'completed' && sale) {
-    return { order: currentOrder, sale, saleCreated: false, archiveReference: reference };
-  }
-
-  const paymentPayload = {
-    ...paymentDetails,
-    cashReceived: toNumber(paymentDetails.cashReceived),
-    changeDue: toNumber(paymentDetails.changeDue),
-  };
-  const payload = buildServiceSalePayload(currentOrder, paymentPayload);
-  if (paymentPayload.paymentMethod === 'cash') {
-    const total = payload.totals.total;
-    if (paymentPayload.cashReceived < total) {
-      const error = new Error('Cash received must be greater than or equal to the service total.');
-      error.statusCode = 400;
-      throw error;
-    }
-  }
-
-  if (!sale) {
-    let saleId;
-    try {
-      saleId = await callRpc('create_service_order_sale', {
-        payload,
-        p_operator_id: operatorId ?? null,
-        p_original_reference: reference,
-      });
-      sale = await findExistingServiceSale(reference) || { id: saleId };
-    } catch (error) {
-      const migrationPending = error?.code === 'PGRST202'
-        || error?.code === '42883';
-      if (!migrationPending) throw error;
-      const legacySaleId = await callRpc('create_pos_sale', { payload, p_operator_id: operatorId ?? null });
-      sale = await tagServiceSale(legacySaleId, reference) || { id: legacySaleId };
-    }
-    saleCreated = true;
-  }
-
-  await callRpc('limen_update_service_order', {
+  const posted = await callRpc('limen_finalize_service_order', {
     p_order_id: orderId,
-    p_payload: {
-      status: 'completed',
-      completedAt: new Date().toISOString(),
-      paymentStatus: 'paid',
-      archived: true,
-      salesReference: reference,
-      saleId: sale?.id ?? null,
-    },
-  });
-
-  await persistServiceCompletion(orderId, paymentPayload);
-  await callRpc('finish_mechanic_assignment', {
-    p_service_order_id: orderId,
-    p_actor_user_id: operatorId ?? null,
-    p_outcome: 'completed',
+    p_actor: operatorId,
+    p_payment_method: paymentDetails.paymentMethod,
+    p_cash_received: toNumber(paymentDetails.cashReceived),
+    p_payment_reference: String(paymentDetails.paymentReference || '').trim() || null,
+    p_payment_verified: paymentDetails.paymentReceivedConfirmed === true,
   });
 
   return {
     order: await loadOrder(orderId),
-    sale,
-    saleCreated,
-    archiveReference: reference,
+    sale: { id: posted.saleId, totalAmount: posted.total },
+    saleCreated: posted.saleCreated,
+    archiveReference: buildServiceSaleReference(currentOrder),
   };
 }
 
@@ -569,6 +416,123 @@ router.get('/customer/mine', requireRole('customer'), async (req, res, next) => 
 });
 
 router.use(requireRole('admin', 'cashier'));
+
+router.get('/queue', async (req, res, next) => {
+  try {
+    const stage = String(req.query.stage || 'active');
+    const priority = String(req.query.priority || 'all');
+    const sort = String(req.query.sort || 'newest');
+    if (!['active', 'pending', 'in_progress', 'overdue', 'completed', 'cancelled', 'all'].includes(stage)
+      || !['all', 'low', 'normal', 'high', 'urgent'].includes(priority)
+      || !['newest', 'oldest', 'due', 'urgency'].includes(sort)) {
+      res.status(400).json({ error: 'Choose valid queue filters.' });
+      return;
+    }
+    const queue = await callRpc('limen_service_order_queue', {
+      p_search: String(req.query.search || '').trim().slice(0, 120),
+      p_stage: stage,
+      p_mechanic_id: String(req.query.mechanicId || '').trim() || null,
+      p_priority: priority,
+      p_sort: sort,
+      p_page: Number(req.query.page || 1),
+      p_page_size: Number(req.query.pageSize || 18),
+    });
+    const { count: awaitingPayment, error: paymentCountError } = await supabaseAdmin
+      .schema('operations').from('service_work_state')
+      .select('service_order_id', { count: 'exact', head: true })
+      .eq('stage', 'work_completed');
+    if (paymentCountError) throw paymentCountError;
+    res.json({ ...queue,
+      summary: { ...(queue?.summary || {}), awaitingPayment: awaitingPayment || 0 },
+      orders: await enrichOrdersWithAssignments(queue?.orders || []),
+    });
+  } catch (error) {
+    next(normalizeServiceOrderError(error));
+  }
+});
+
+router.get('/schedule/slots', async (req, res, next) => {
+  try {
+    const day = String(req.query.date || '');
+    const duration = Number(req.query.duration || 60);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)
+      || !Number.isInteger(duration) || duration < 15 || duration > 540
+      || Number.isNaN(Date.parse(`${day}T00:00:00Z`))) {
+      res.status(400).json({ error: 'Choose a valid date and appointment length.' });
+      return;
+    }
+    const hours = await callRpc('limen_workshop_hours', { p_day: day });
+    const opening = Number(hours.opensAt.slice(0, 2)) * 60 + Number(hours.opensAt.slice(3, 5));
+    const closing = Number(hours.closesAt.slice(0, 2)) * 60 + Number(hours.closesAt.slice(3, 5));
+    const mechanicId = String(req.query.mechanicId || '').trim();
+    const orderId = String(req.query.orderId || '').trim();
+    const [mechanicResult, assignmentResult] = await Promise.all([
+      mechanicId ? supabaseAdmin.schema('operations').from('mechanics')
+        .select('id, is_active, availability_status, shift_label, location_name').eq('id', mechanicId).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      mechanicId ? supabaseAdmin.schema('operations').from('mechanic_assignments')
+        .select('service_order_id, scheduled_start, scheduled_end')
+        .eq('mechanic_id', mechanicId).eq('status', 'assigned')
+        .lt('scheduled_start', manilaDateIso(day, closing))
+        .gt('scheduled_end', manilaDateIso(day, opening))
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (mechanicResult.error) throw mechanicResult.error;
+    if (assignmentResult.error) throw assignmentResult.error;
+    const slots = [];
+    for (let start = opening; start + duration <= closing; start += 15) {
+      const startIso = manilaDateIso(day, start);
+      const endIso = manilaDateIso(day, start + duration);
+      const past = Date.parse(startIso) <= Date.now();
+      const shiftAllowed = !mechanicId || mechanicAllowsWindow(mechanicResult.data, day, start, start + duration);
+      const occupied = (assignmentResult.data || []).some((assignment) =>
+        assignment.service_order_id !== orderId
+        && Date.parse(assignment.scheduled_start) < Date.parse(endIso)
+        && Date.parse(assignment.scheduled_end) > Date.parse(startIso));
+      slots.push({ start: startIso, end: endIso, available: !past && shiftAllowed && !occupied,
+        reason: past ? 'Already passed' : !shiftAllowed ? 'Outside mechanic shift' : occupied ? 'Mechanic booked' : null });
+    }
+    res.json({ hours, slots });
+  } catch (error) {
+    next(normalizeAssignmentError(error));
+  }
+});
+
+router.get('/schedule/day', async (req, res, next) => {
+  try {
+    const day = String(req.query.date || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`))) {
+      res.status(400).json({ error: 'Choose a valid schedule date.' }); return;
+    }
+    const hours = await callRpc('limen_workshop_hours', { p_day: day });
+    const dayStart = manilaDateIso(day, 0);
+    const dayEnd = manilaDateIso(day, 24 * 60);
+    const { data: assignments, error } = await supabaseAdmin.schema('operations')
+      .from('mechanic_assignments')
+      .select('id, service_order_id, mechanic_id, scheduled_start, scheduled_end, status, note')
+      .lt('scheduled_start', dayEnd).gt('scheduled_end', dayStart)
+      .order('scheduled_start', { ascending: true }).limit(200);
+    if (error) throw error;
+    const orderIds = [...new Set((assignments || []).map((row) => row.service_order_id))];
+    const mechanicIds = [...new Set((assignments || []).map((row) => row.mechanic_id))];
+    const [ordersResult, mechanicsResult] = await Promise.all([
+      orderIds.length ? supabaseAdmin.schema('operations').from('service_orders')
+        .select('id, order_number, note, status').in('id', orderIds)
+        : Promise.resolve({ data: [], error: null }),
+      mechanicIds.length ? supabaseAdmin.schema('operations').from('mechanics')
+        .select('id, full_name, specialization').in('id', mechanicIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (ordersResult.error) throw ordersResult.error;
+    if (mechanicsResult.error) throw mechanicsResult.error;
+    const orders = new Map((ordersResult.data || []).map((row) => [row.id, row]));
+    const mechanics = new Map((mechanicsResult.data || []).map((row) => [row.id, row]));
+    res.json({ date: day, hours, bookings: (assignments || []).map((row) => ({
+      ...row, order: orders.get(row.service_order_id) || null,
+      mechanic: mechanics.get(row.mechanic_id) || null,
+    })) });
+  } catch (error) { next(normalizeServiceOrderError(error)); }
+});
 
 router.get('/', async (req, res, next) => {
   try {
@@ -601,13 +565,84 @@ router.get('/:orderId', async (req, res, next) => {
   }
 });
 
+router.get('/:orderId/work', async (req, res, next) => {
+  try {
+    const order = await loadOrder(req.params.orderId);
+    if (!order) { res.status(404).json({ error: 'Service order not found.' }); return; }
+    const [stateResult, linesResult, eventsResult, assignmentsResult] = await Promise.all([
+      supabaseAdmin.schema('operations').from('service_work_state').select('*')
+        .eq('service_order_id', order.id).maybeSingle(),
+      supabaseAdmin.schema('operations').from('service_work_lines').select('*')
+        .eq('service_order_id', order.id).order('created_at', { ascending: true }),
+      supabaseAdmin.schema('operations').from('service_work_events').select('*')
+        .eq('service_order_id', order.id).order('occurred_at', { ascending: false }).limit(200),
+      supabaseAdmin.schema('operations').from('mechanic_assignments')
+        .select('id, mechanic_id, status, scheduled_start, scheduled_end, assigned_at, ended_at, note')
+        .eq('service_order_id', order.id).order('assigned_at', { ascending: false }).limit(100),
+    ]);
+    for (const result of [stateResult, linesResult, eventsResult, assignmentsResult]) {
+      if (result.error) throw result.error;
+    }
+    const { data: sale, error: saleError } = await supabaseAdmin.schema('operations')
+      .from('sales_transactions')
+      .select('id, transaction_number, total_amount, subtotal, discount_total, tax_total, payment_method, cash_received, change_due, created_at, original_reference')
+      .eq('original_reference', buildServiceSaleReference(order)).order('created_at', { ascending: true }).limit(1).maybeSingle();
+    if (saleError) throw saleError;
+    const { data: saleLines, error: saleLinesError } = sale
+      ? await supabaseAdmin.schema('operations').from('sales_transaction_items')
+        .select('line_type, item_name_snapshot, item_sku_snapshot, quantity, unit_price, line_total')
+        .eq('transaction_id', sale.id)
+      : { data: [], error: null };
+    if (saleLinesError) throw saleLinesError;
+    res.json({
+      state: stateResult.data || { stage: order.status === 'completed' ? 'released' : order.status === 'cancelled' ? 'cancelled' : order.status === 'in_progress' ? 'in_progress' : 'intake' },
+      lines: linesResult.data || [],
+      events: eventsResult.data || [],
+      assignments: assignmentsResult.data || [],
+      sale: sale ? { ...sale, lines: saleLines || [] } : null,
+    });
+  } catch (error) { next(normalizeServiceOrderError(error)); }
+});
+
+router.post('/:orderId/work/events', async (req, res, next) => {
+  try {
+    await callRpc('limen_record_service_work_event', {
+      p_order_id: req.params.orderId,
+      p_actor: req.user.id,
+      p_event_type: String(req.body?.eventType || ''),
+      p_note: String(req.body?.note || '').trim().slice(0, 2000) || null,
+    });
+    res.json({ saved: true, order: await loadOrder(req.params.orderId) });
+  } catch (error) { next(normalizeServiceOrderError(error)); }
+});
+
+router.put('/:orderId/work/lines', async (req, res, next) => {
+  try {
+    if (!Array.isArray(req.body?.lines)) {
+      res.status(400).json({ error: 'Send the actual parts and labor lines to save.' }); return;
+    }
+    const result = await callRpc('limen_replace_service_work_lines', {
+      p_order_id: req.params.orderId,
+      p_actor: req.user.id,
+      p_lines: req.body.lines,
+    });
+    res.json({ saved: true, ...result });
+  } catch (error) { next(normalizeServiceOrderError(error)); }
+});
+
 router.post('/:orderId/assignment', requireRole('admin'), async (req, res, next) => {
   try {
     const mechanicId = String(req.body?.mechanicId || '').trim();
+    const explicitTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/i;
+    if (!explicitTimestamp.test(String(req.body?.scheduledStart || ''))
+      || !explicitTimestamp.test(String(req.body?.scheduledEnd || ''))) {
+      res.status(400).json({ error: 'Send start and end times with an explicit time zone.' });
+      return;
+    }
     const scheduledStart = new Date(req.body?.scheduledStart);
     const scheduledEnd = new Date(req.body?.scheduledEnd);
 
-    const scheduleError = validateAssignmentWindow(scheduledStart, scheduledEnd);
+    const scheduleError = await validateAssignmentWindow(scheduledStart, scheduledEnd);
     if (!mechanicId || scheduleError) {
       res.status(400).json({ error: scheduleError || 'Choose a mechanic and valid service schedule.' });
       return;

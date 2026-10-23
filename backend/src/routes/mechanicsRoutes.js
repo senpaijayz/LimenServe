@@ -153,9 +153,7 @@ async function uploadMechanicPhoto(payload = {}) {
   };
 }
 
-router.use(requireRole('admin'));
-
-router.get('/', async (req, res, next) => {
+router.get('/', requireRole('admin', 'cashier'), async (req, res, next) => {
   try {
     const mechanics = await callRpc('list_mechanics');
     const { data: assignments, error: assignmentsError } = await supabaseAdmin
@@ -176,6 +174,27 @@ router.get('/', async (req, res, next) => {
     const hasRequestedWindow = Number.isFinite(requestedStart)
       && Number.isFinite(requestedEnd)
       && requestedEnd > requestedStart;
+    let windowAllowed = true;
+    let requestedDay = '';
+    let startMinute = 0;
+    let endMinute = 0;
+    if (hasRequestedWindow) {
+      const partsFor = (value) => Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+      }).formatToParts(value).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+      const startLocal = partsFor(new Date(requestedStart));
+      const endLocal = partsFor(new Date(requestedEnd));
+      requestedDay = `${startLocal.year}-${startLocal.month}-${startLocal.day}`;
+      const endDay = `${endLocal.year}-${endLocal.month}-${endLocal.day}`;
+      startMinute = Number(startLocal.hour) * 60 + Number(startLocal.minute);
+      endMinute = Number(endLocal.hour) * 60 + Number(endLocal.minute);
+      const hours = await callRpc('limen_workshop_hours', { p_day: requestedDay });
+      const openMinute = Number(hours.opensAt.slice(0, 2)) * 60 + Number(hours.opensAt.slice(3, 5));
+      const closeMinute = Number(hours.closesAt.slice(0, 2)) * 60 + Number(hours.closesAt.slice(3, 5));
+      windowAllowed = requestedStart > now && requestedDay === endDay
+        && startMinute >= openMinute && startMinute < closeMinute && endMinute <= closeMinute;
+    }
 
     const normalized = (mechanics ?? [])
       .map(normalizeMechanic)
@@ -189,6 +208,12 @@ router.get('/', async (req, res, next) => {
           const end = Date.parse(assignment.scheduled_end);
           return start < requestedEnd && end > requestedStart;
         });
+        const shift = String(mechanic.shift_type || mechanic.shift_label || '').toLowerCase();
+        const shiftAllowed = !hasRequestedWindow || (
+          (!mechanic.available_date || mechanic.available_date === requestedDay)
+          && (!shift.includes('morning') || endMinute <= 720)
+          && (!shift.includes('afternoon') || startMinute >= 780)
+        );
 
         return {
           ...mechanic,
@@ -199,6 +224,7 @@ router.get('/', async (req, res, next) => {
           hasScheduleConflict: hasConflict,
           availableForRequestedWindow: mechanic.is_active !== false
             && mechanic.availability_status !== 'off_duty'
+            && windowAllowed && shiftAllowed
             && !hasConflict,
         };
       })
@@ -217,6 +243,8 @@ router.get('/', async (req, res, next) => {
     next(error);
   }
 });
+
+router.use(requireRole('admin'));
 
 router.post('/', async (req, res, next) => {
   try {

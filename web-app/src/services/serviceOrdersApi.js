@@ -9,12 +9,66 @@ export async function listServiceOrders(params = {}) {
   }
 }
 
+export async function getServiceOrderQueue(params = {}) {
+  try {
+    const { data } = await apiClient.get('/service-orders/queue', { params });
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Failed to load the service queue.');
+  }
+}
+
 export async function getServiceOrder(orderId) {
   try {
     const { data } = await apiClient.get(`/service-orders/${orderId}`);
     return data.order ?? null;
   } catch (error) {
     extractApiError(error, 'Failed to load the service order.');
+  }
+}
+
+export async function getServiceScheduleSlots(params) {
+  try {
+    const { data } = await apiClient.get('/service-orders/schedule/slots', { params });
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to load appointment times.');
+  }
+}
+
+export async function getServiceScheduleDay(date) {
+  try {
+    const { data } = await apiClient.get('/service-orders/schedule/day', { params: { date } });
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to load the daily schedule.');
+  }
+}
+
+export async function getServiceWork(orderId) {
+  try {
+    const { data } = await apiClient.get(`/service-orders/${orderId}/work`);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to load workshop progress.');
+  }
+}
+
+export async function recordServiceWorkEvent(orderId, eventType, note = '') {
+  try {
+    const { data } = await apiClient.post(`/service-orders/${orderId}/work/events`, { eventType, note });
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to save this work update.');
+  }
+}
+
+export async function saveServiceWorkLines(orderId, lines) {
+  try {
+    const { data } = await apiClient.put(`/service-orders/${orderId}/work/lines`, { lines });
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to save actual parts and labor.');
   }
 }
 

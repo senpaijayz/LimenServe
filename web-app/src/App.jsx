@@ -26,6 +26,9 @@ const SupplierManagement = lazy(() => import('./modules/suppliers/pages/Supplier
 const POSTerminal = lazy(() => import('./modules/pos/pages/POSTerminal'));
 const QuoteBuilder = lazy(() => import('./modules/quotation/pages/QuoteBuilder'));
 const ServiceOrderList = lazy(() => import('./modules/services/pages/ServiceOrderList'));
+const ServiceOrderNew = lazy(() => import('./modules/services/pages/ServiceOrderNew'));
+const ServiceOrderDetails = lazy(() => import('./modules/services/pages/ServiceOrderDetails'));
+const ServiceSchedule = lazy(() => import('./modules/services/pages/ServiceSchedule'));
 const SalesReport = lazy(() => import('./modules/reports/pages/SalesReport'));
 const InventoryReport = lazy(() => import('./modules/reports/pages/InventoryReport'));
 const UserManagement = lazy(() => import('./modules/users/pages/UserManagement'));
@@ -118,6 +121,9 @@ function App() {
                   <Route path="/pos" element={renderRoute(POSTerminal, <WorkspaceRouteFallback title="Loading point of sale" />)} />
                   <Route path="/quotation" element={renderRoute(QuoteBuilder, <WorkspaceRouteFallback title="Loading quotation builder" />)} />
                   <Route path="/services" element={renderRoute(ServiceOrderList, <WorkspaceRouteFallback title="Loading service orders" />)} />
+                  <Route path="/services/new" element={renderRoute(ServiceOrderNew, <WorkspaceRouteFallback title="Loading service intake" />)} />
+                  <Route path="/services/schedule" element={renderRoute(ServiceSchedule, <WorkspaceRouteFallback title="Loading workshop schedule" />)} />
+                  <Route path="/services/:orderId" element={renderRoute(ServiceOrderDetails, <WorkspaceRouteFallback title="Loading service order" />)} />
                   <Route path="/reports" element={renderRoute(SalesReport, <WorkspaceRouteFallback title="Loading reports" />)} />
                   <Route path="/reports/sales" element={renderRoute(SalesReport, <WorkspaceRouteFallback title="Loading reports" />)} />
                   <Route path="/reports/inventory" element={renderRoute(InventoryReport, <WorkspaceRouteFallback title="Loading inventory report" />)} />
