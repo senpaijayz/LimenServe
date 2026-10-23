@@ -27,6 +27,7 @@ const ServiceOrderList = () => {
     const [total, setTotal] = useState(0);
     const [priorityFilter, setPriorityFilter] = useState('all');
     const [mechanicFilter, setMechanicFilter] = useState('');
+    const [dateFilter, setDateFilter] = useState('');
     const [sort, setSort] = useState('newest');
     const [mechanics, setMechanics] = useState([]);
     const [summary, setSummary] = useState({});
@@ -48,6 +49,7 @@ const ServiceOrderList = () => {
                         stage: statusFilter === 'all' ? 'active' : statusFilter === 'archive' ? 'completed' : statusFilter,
                         priority: priorityFilter,
                         mechanicId: mechanicFilter || undefined,
+                        date: dateFilter || undefined,
                         sort,
                         page,
                         pageSize: 18,
@@ -69,7 +71,7 @@ const ServiceOrderList = () => {
         }, 180);
 
         return () => { active = false; window.clearTimeout(timer); };
-    }, [searchQuery, statusFilter, priorityFilter, mechanicFilter, sort, page, reloadNonce]);
+    }, [searchQuery, statusFilter, priorityFilter, mechanicFilter, dateFilter, sort, page, reloadNonce]);
 
     const visibleMobileOrders = orders;
     const statusCounts = useMemo(() => ({
@@ -323,6 +325,8 @@ const ServiceOrderList = () => {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
+                        <label className="text-xs font-semibold text-primary-600">Job date<input type="date" aria-label="Filter service orders by job date" className="input mt-1 min-w-36" value={dateFilter} onChange={(e) => { setDateFilter(e.target.value); setPage(1); }} /></label>
+                        {dateFilter && <button type="button" className="btn self-end" onClick={() => { setDateFilter(''); setPage(1); }}>Clear date</button>}
                         <select aria-label="Filter by mechanic" className="input min-w-36" value={mechanicFilter} onChange={(e) => { setMechanicFilter(e.target.value); setPage(1); }}><option value="">All mechanics</option>{mechanics.map((mechanic) => <option key={mechanic.id} value={mechanic.id}>{mechanic.full_name || mechanic.fullName}</option>)}</select>
                         <select aria-label="Filter by priority" className="input min-w-32" value={priorityFilter} onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}><option value="all">All priorities</option>{['urgent','high','normal','low'].map((value) => <option key={value} value={value}>{value}</option>)}</select>
                         <select aria-label="Sort service orders" className="input min-w-32" value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }}><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="due">Due soonest</option><option value="urgency">Urgency</option></select>

@@ -422,13 +422,18 @@ router.get('/queue', async (req, res, next) => {
     const stage = String(req.query.stage || 'active');
     const priority = String(req.query.priority || 'all');
     const sort = String(req.query.sort || 'newest');
+    const date = String(req.query.date || '').trim();
     if (!['active', 'pending', 'in_progress', 'overdue', 'completed', 'cancelled', 'all'].includes(stage)
       || !['all', 'low', 'normal', 'high', 'urgent'].includes(priority)
       || !['newest', 'oldest', 'due', 'urgency'].includes(sort)) {
       res.status(400).json({ error: 'Choose valid queue filters.' });
       return;
     }
-    const queue = await callRpc('limen_service_order_queue', {
+    if (date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`)))) {
+      res.status(400).json({ error: 'Choose a valid service order date.' });
+      return;
+    }
+    const queue = await callRpc(date ? 'limen_service_order_queue_by_date' : 'limen_service_order_queue', {
       p_search: String(req.query.search || '').trim().slice(0, 120),
       p_stage: stage,
       p_mechanic_id: String(req.query.mechanicId || '').trim() || null,
@@ -436,8 +441,9 @@ router.get('/queue', async (req, res, next) => {
       p_sort: sort,
       p_page: Number(req.query.page || 1),
       p_page_size: Number(req.query.pageSize || 18),
+      ...(date ? { p_date: date } : {}),
     });
-    const { count: awaitingPayment, error: paymentCountError } = await supabaseAdmin
+    const { count: awaitingPayment, error: paymentCountError } = date ? { count: queue?.summary?.awaitingPayment ?? 0, error: null } : await supabaseAdmin
       .schema('operations').from('service_work_state')
       .select('service_order_id', { count: 'exact', head: true })
       .eq('stage', 'work_completed');
