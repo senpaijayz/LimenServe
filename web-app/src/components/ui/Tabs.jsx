@@ -40,7 +40,7 @@ const Tabs = ({
             container: 'bg-primary-800/50 rounded-lg p-1 inline-flex',
             tab: 'px-4 py-2 text-sm font-medium rounded-md transition-all',
             active: 'bg-accent-primary text-white shadow',
-            inactive: 'text-primary-400 hover:text-primary-100 hover:bg-primary-700/50',
+            inactive: 'text-primary-800 hover:text-primary-950 hover:bg-primary-100',
         },
         underline: {
             container: 'space-x-8',
@@ -72,8 +72,8 @@ const Tabs = ({
                         <span className="flex items-center gap-2">
                             {tab.icon}
                             {tab.label}
-                            {tab.badge && (
-                                <span className="px-1.5 py-0.5 text-xs bg-accent-primary/20 text-accent-primary rounded-full">
+                            {tab.badge !== undefined && tab.badge !== null && (
+                                <span className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-primary-200 text-primary-900'}`}>
                                     {tab.badge}
                                 </span>
                             )}
