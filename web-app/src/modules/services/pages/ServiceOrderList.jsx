@@ -19,6 +19,7 @@ const ServiceOrderList = () => {
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [mobileMetricId, setMobileMetricId] = useState('all');
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
@@ -165,6 +166,17 @@ const ServiceOrderList = () => {
         </Card>
     );
 
+    const statusMetrics = [
+        { id: 'all', label: 'Active Jobs', value: statusCounts.all, helper: 'Open work', icon: <Wrench className="h-5 w-5" /> },
+        { id: 'awaiting-assignment', label: 'Awaiting Assignment', value: statusCounts.awaitingAssignment, helper: 'Needs a mechanic', icon: <Wrench className="h-5 w-5" /> },
+        { id: 'pending', label: 'Pending', value: statusCounts.pending, helper: 'Needs workshop review', icon: <Clock className="h-5 w-5" /> },
+        { id: 'in-progress', label: 'In Progress', value: statusCounts.inProgress, helper: 'Currently being handled', icon: <AlertCircle className="h-5 w-5" /> },
+        { id: 'overdue', label: 'Overdue', value: statusCounts.overdue, helper: 'Unfinished after scheduled end', icon: <Clock className="h-5 w-5 text-red-700" /> },
+        { id: 'awaiting-payment', label: 'Awaiting Payment', value: statusCounts.awaitingPayment, helper: 'Repairs finished, not yet paid', icon: <Archive className="h-5 w-5" /> },
+        { id: 'completed', label: 'Completed', value: statusCounts.archived, helper: 'Archived jobs', icon: <Archive className="h-5 w-5" /> },
+    ];
+    const selectedMobileMetric = statusMetrics.find(({ id }) => id === mobileMetricId) || statusMetrics[0];
+
     const OrderSkeleton = () => (
         <div className="animate-pulse rounded-xl border border-primary-200 bg-white p-5 shadow-sm">
             <div className="mb-5 flex items-start justify-between gap-4">
@@ -273,14 +285,22 @@ const ServiceOrderList = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-4 2xl:grid-cols-7">
-                <StatusMetric label="Active Jobs" value={statusCounts.all} helper="Open work" icon={<Wrench className="h-5 w-5" />} />
-                <StatusMetric label="Awaiting Assignment" value={statusCounts.awaitingAssignment} helper="Needs a mechanic" icon={<Wrench className="h-5 w-5" />} />
-                <StatusMetric label="Pending" value={statusCounts.pending} helper="Needs workshop review" icon={<Clock className="h-5 w-5" />} />
-                <StatusMetric label="In Progress" value={statusCounts.inProgress} helper="Currently being handled" icon={<AlertCircle className="h-5 w-5" />} />
-                <StatusMetric label="Overdue" value={statusCounts.overdue} helper="Unfinished after scheduled end" icon={<Clock className="h-5 w-5 text-red-700" />} />
-                <StatusMetric label="Awaiting Payment" value={statusCounts.awaitingPayment} helper="Repairs finished, not yet paid" icon={<Archive className="h-5 w-5" />} />
-                <StatusMetric label="Completed" value={statusCounts.archived} helper="Archived jobs" icon={<Archive className="h-5 w-5" />} />
+            <div className="space-y-3 lg:hidden">
+                <label htmlFor="service-status-overview" className="block text-xs font-bold uppercase tracking-wider text-primary-800">Status overview</label>
+                <select
+                    id="service-status-overview"
+                    className="input min-h-12 w-full font-semibold text-primary-900"
+                    value={mobileMetricId}
+                    onChange={(event) => setMobileMetricId(event.target.value)}
+                >
+                    {statusMetrics.map(({ id, label, value }) => (
+                        <option key={id} value={id}>{label} ({value})</option>
+                    ))}
+                </select>
+                <StatusMetric {...selectedMobileMetric} />
+            </div>
+            <div className="hidden gap-3 lg:grid lg:grid-cols-4 2xl:grid-cols-7">
+                {statusMetrics.map((metric) => <StatusMetric key={metric.id} {...metric} />)}
             </div>
 
             {loadError && (
