@@ -141,7 +141,7 @@ const ServiceOrderList = () => {
                 </div>
                 {isArchived && (
                     <div className="mt-3 rounded-lg border border-accent-success/20 bg-accent-success/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-accent-success">
-                        Archived and posted to Sales
+                        Completed · Open for billing details
                     </div>
                 )}
                 {overdue && (order.scheduledEnd || order.scheduled_end || order.assignment?.scheduledEnd) && <p className="mt-2 text-xs font-medium text-red-700">Scheduled completion has passed.</p>}
