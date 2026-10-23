@@ -95,8 +95,43 @@ export default function ServiceWorkPanel({ order, onOrderUpdated }) {
     </section>
 
     <section className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:p-6"><div className="flex items-center gap-2"><Package className="h-5 w-5 text-blue-700" /><h2 className="text-lg font-bold text-primary-950">Actual parts & labor</h2></div><p className="mt-1 text-sm text-primary-600">Intake estimates are separate. Parts are deducted once, when confirmed payment posts to Sales.</p>
-      {editable && <div className="mt-5 grid gap-5 lg:grid-cols-2"><div className="rounded-xl border border-primary-200 p-4"><h3 className="mb-3 text-sm font-semibold text-primary-950">Add a part used</h3><PartSearch onAdd={(part) => { setLines((current) => [...current, { id: crypto.randomUUID(), kind: 'part', productId: part.productId, description: part.itemName, quantity: String(part.quantity), unitPrice: String(part.unitPrice) }]); setDirty(true); }} /></div><div className="rounded-xl border border-primary-200 p-4"><h3 className="mb-3 text-sm font-semibold text-primary-950">Add labor performed</h3><div className="grid gap-2 sm:grid-cols-2"><input className="input sm:col-span-2" placeholder="Labor description" value={laborDescription} onChange={(e) => setLaborDescription(e.target.value)} /><input className="input" type="number" min="0.01" step="0.01" aria-label="Labor hours or quantity" placeholder="Hours / qty" value={laborQuantity} onChange={(e) => setLaborQuantity(e.target.value)} /><input className="input" type="number" min="0" step="0.01" aria-label="Labor rate" placeholder="Rate (₱)" value={laborRate} onChange={(e) => setLaborRate(e.target.value)} /></div><button type="button" className="btn mt-3" disabled={!laborDescription.trim() || Number(laborQuantity)<=0 || Number(laborRate)<0 || laborRate===''} onClick={() => { setLines((current) => [...current, { id: crypto.randomUUID(), kind:'labor',productId:null,description:laborDescription.trim(),quantity:laborQuantity,unitPrice:laborRate }]); setLaborDescription(''); setLaborQuantity('1'); setLaborRate(''); setDirty(true); }}><Plus className="h-4 w-4" /> Add labor</button></div></div>}
-      <div className="mt-4 space-y-2">{lines.length===0 && <p className="rounded-xl border border-dashed border-primary-200 p-4 text-sm text-primary-500">No actual charges recorded yet.</p>}{lines.map((line) => <div key={line.id} className="grid gap-2 rounded-xl border border-primary-200 p-3 sm:grid-cols-[minmax(0,1fr)_6rem_7rem_7rem_auto] sm:items-end"><div className="min-w-0"><span className="text-xs font-bold uppercase text-primary-500">{line.kind}</span><p className="truncate text-sm font-semibold text-primary-950">{line.description}</p></div><label className="text-xs text-primary-600">Quantity<input className="input mt-1" type="number" min={line.kind==='part'?'1':'0.01'} step={line.kind==='part'?'1':'0.01'} value={line.quantity} disabled={!editable} onChange={(e) => changeLine(line.id,'quantity',e.target.value)} /></label><label className="text-xs text-primary-600">Unit price<input className="input mt-1" type="number" min="0" step="0.01" value={line.unitPrice} disabled={!editable || line.kind==='part'} onChange={(e) => changeLine(line.id,'unitPrice',e.target.value)} /></label><strong className="text-sm text-primary-950">{formatCurrency(money(line.quantity)*money(line.unitPrice))}</strong>{editable && <button type="button" className="btn" aria-label={`Remove ${line.description}`} onClick={() => { setLines((current) => current.filter((item) => item.id!==line.id)); setDirty(true); }}><Trash2 className="h-4 w-4 text-red-600" /></button>}</div>)}</div>
+      {editable && <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <div className="rounded-xl border border-primary-200 p-4">
+          <h3 className="mb-3 text-sm font-semibold text-primary-950">Add a part used</h3>
+          <PartSearch onAdd={(part) => { setLines((current) => [...current, { id: crypto.randomUUID(), kind: 'part', productId: part.productId, description: part.itemName, quantity: String(part.quantity), unitPrice: String(part.unitPrice) }]); setDirty(true); }} />
+        </div>
+        <div className="rounded-xl border border-primary-200 p-4">
+          <h3 className="mb-3 text-sm font-semibold text-primary-950">Add labor performed</h3>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input className="input sm:col-span-2" placeholder="Labor description" value={laborDescription} onChange={(e) => setLaborDescription(e.target.value)} />
+            <input className="input text-right tabular-nums" type="number" min="0.01" step="0.01" aria-label="Labor hours or quantity" placeholder="Hours / qty" value={laborQuantity} onChange={(e) => setLaborQuantity(e.target.value)} />
+            <input className="input text-right tabular-nums" type="number" min="0" step="0.01" aria-label="Labor rate" placeholder="Rate (₱)" value={laborRate} onChange={(e) => setLaborRate(e.target.value)} />
+          </div>
+          <button
+            type="button"
+            className="mt-3 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border-2 border-primary-800 bg-primary-800 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:border-primary-950 hover:bg-primary-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 disabled:cursor-not-allowed disabled:border-primary-500 disabled:bg-primary-500 disabled:text-white disabled:opacity-75"
+            disabled={!laborDescription.trim() || Number(laborQuantity) <= 0 || Number(laborRate) < 0 || laborRate === ''}
+            onClick={() => { setLines((current) => [...current, { id: crypto.randomUUID(), kind: 'labor', productId: null, description: laborDescription.trim(), quantity: laborQuantity, unitPrice: laborRate }]); setLaborDescription(''); setLaborQuantity('1'); setLaborRate(''); setDirty(true); }}
+          >
+            <Plus className="h-4 w-4" /> Add labor
+          </button>
+        </div>
+      </div>}
+      <div className="mt-4 space-y-2">
+        {lines.length === 0 && <p className="rounded-xl border border-dashed border-primary-200 p-4 text-sm text-primary-500">No actual charges recorded yet.</p>}
+        {lines.map((line) => (
+          <div key={line.id} className="grid gap-3 rounded-xl border border-primary-200 p-3 sm:grid-cols-[minmax(0,1fr)_6rem_7rem_8rem_auto] sm:items-center">
+            <div className="flex min-h-11 min-w-0 flex-col justify-center">
+              <span className="text-xs font-bold uppercase text-primary-500">{line.kind}</span>
+              <p className="truncate text-sm font-semibold text-primary-950">{line.description}</p>
+            </div>
+            <label className="text-xs text-primary-600">Quantity<input className="input mt-1 text-right tabular-nums" type="number" min={line.kind === 'part' ? '1' : '0.01'} step={line.kind === 'part' ? '1' : '0.01'} value={line.quantity} disabled={!editable} onChange={(e) => changeLine(line.id, 'quantity', e.target.value)} /></label>
+            <label className="text-xs text-primary-600">Unit price<input className="input mt-1 text-right tabular-nums" type="number" min="0" step="0.01" value={line.unitPrice} disabled={!editable || line.kind === 'part'} onChange={(e) => changeLine(line.id, 'unitPrice', e.target.value)} /></label>
+            <strong className="self-center text-right text-sm tabular-nums text-primary-950">{formatCurrency(money(line.quantity) * money(line.unitPrice))}</strong>
+            {editable && <button type="button" className="inline-flex h-10 w-10 items-center justify-center justify-self-end rounded-lg border border-red-200 bg-white text-red-600 transition hover:border-red-300 hover:bg-red-50" aria-label={`Remove ${line.description}`} onClick={() => { setLines((current) => current.filter((item) => item.id !== line.id)); setDirty(true); }}><Trash2 className="h-4 w-4" /></button>}
+          </div>
+        ))}
+      </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-primary-100 pt-4"><p className="text-sm text-primary-600">Estimate: {formatCurrency(estimate)} · Actual: <strong className="text-primary-950">{formatCurrency(actualTotal)}</strong></p>{editable && <button type="button" className="btn bg-blue-700 text-white" disabled={saving || !dirty} onClick={saveLines}><Save className="h-4 w-4" /> Save actuals</button>}</div>
       {approvalNeeded && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><strong>Actual charges exceed the estimate by {formatCurrency(actualTotal-estimate)}.</strong><p className="mt-1">Record the customer's approval before posting. An approval is cleared if actual charges change.</p>{work?.state?.customer_approval_note && <p className="mt-2">Recorded approval: {work.state.customer_approval_note}</p>}{editable && <button type="button" className="btn mt-3" disabled={saving || dirty || !note.trim()} onClick={() => event('customer_approval',note)}>Record approval note above</button>}</div>}
     </section>
