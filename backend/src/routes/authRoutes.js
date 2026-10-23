@@ -14,6 +14,7 @@ import {
 const router = Router();
 const RECOVERY_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RECOVERY_TOKEN_PATTERN = /^[a-f0-9]{64}$/i;
+const RECOVERY_CODE_PATTERN = /^\d{6,8}$/;
 const DUMMY_ADMIN_EMAIL = 'admin@limen.com';
 const GENERIC_RECOVERY_RESPONSE = 'If a recovery method is available for this account, password reset instructions will be sent.';
 
@@ -136,16 +137,23 @@ router.get('/security', requireAuth, async (req, res) => {
       return;
     }
 
+    let otpRecovery = null;
+    if (security.is_protected_admin) {
+      const { data: otpData, error: otpError } = await supabaseAdmin.rpc('get_limen_admin_otp_recovery', { p_account_id: req.user.id });
+      if (otpError) throw otpError;
+      otpRecovery = firstRow(otpData);
+    }
+
     res.json({
       security: {
         loginEmail: security.login_email,
         role: security.profile_role,
         protectedAdmin: Boolean(security.is_protected_admin),
-        recoveryEmail: security.verified_email,
-        recoveryVerifiedAt: security.verified_at,
-        pendingRecoveryEmail: security.pending_email,
-        pendingExpiresAt: security.pending_expires_at,
-        recoveryEmailDeliveryReady: env.recoveryEmailConfigured,
+        recoveryEmail: otpRecovery?.verified_email || security.verified_email,
+        recoveryVerifiedAt: otpRecovery?.verified_at || security.verified_at,
+        pendingRecoveryEmail: otpRecovery?.pending_email || security.pending_email,
+        pendingExpiresAt: otpRecovery?.pending_expires_at || security.pending_expires_at,
+        recoveryEmailDeliveryReady: Boolean(security.is_protected_admin || env.recoveryEmailConfigured),
       },
     });
   } catch {
@@ -164,6 +172,19 @@ router.post('/recovery/request', async (req, res) => {
   try {
     await consumeSharedRateLimit('auth.recovery.request.ip', req.ip, 3600, 10);
     await consumeSharedRateLimit('auth.recovery.request.email', email, 3600, 4);
+
+    const { data: adminOtpData, error: adminOtpError } = await supabaseAdmin.rpc('lookup_limen_admin_otp_recovery', { p_email: email });
+    if (adminOtpError) throw adminOtpError;
+    const adminOtp = firstRow(adminOtpData);
+    if (adminOtp) {
+      const { error: deliveryError } = await supabaseAuth.auth.signInWithOtp({
+        email: adminOtp.recovery_email,
+        options: { shouldCreateUser: false },
+      });
+      if (deliveryError) req.log?.warn?.('auth.recovery.admin_otp_delivery_unavailable', { requestId: req.requestId });
+      res.status(202).json({ message: GENERIC_RECOVERY_RESPONSE });
+      return;
+    }
 
     const account = await lookupAccount(email);
     if (isEligibleActiveAccount(account)) {
@@ -203,6 +224,76 @@ router.post('/recovery/request', async (req, res) => {
 
     req.log?.warn?.('auth.recovery.request_unavailable', { requestId: req.requestId });
     res.status(202).json({ message: GENERIC_RECOVERY_RESPONSE });
+  }
+});
+
+router.post('/recovery/code/reset', async (req, res) => {
+  setNoStore(res);
+  const email = normalizeEmail(req.body?.email);
+  const code = String(req.body?.code || '').trim();
+  const password = req.body?.password;
+  if (!RECOVERY_EMAIL_PATTERN.test(email) || email.length > 254 || !RECOVERY_CODE_PATTERN.test(code)) {
+    res.status(400).json({ error: 'Enter your account or recovery email and the code sent to your inbox.' });
+    return;
+  }
+  if (!validateStrongPassword(password)) {
+    res.status(400).json({ error: 'Choose a password with at least 12 characters, including uppercase and lowercase letters, a number, and a symbol.' });
+    return;
+  }
+
+  try {
+    await consumeSharedRateLimit('auth.recovery.code.ip', req.ip, 3600, 12);
+    await consumeSharedRateLimit('auth.recovery.code.email', email, 3600, 5);
+    const { data: lookupData, error: lookupError } = await supabaseAdmin.rpc('lookup_limen_admin_otp_recovery', { p_email: email });
+    if (lookupError) throw lookupError;
+    const recovery = firstRow(lookupData);
+    if (!recovery) {
+      res.status(400).json({ error: 'The code is incorrect or expired. Request a new one.' });
+      return;
+    }
+
+    const client = createEphemeralAuthClient();
+    const { data: proof, error: verifyError } = await client.auth.verifyOtp({
+      email: recovery.recovery_email,
+      token: code,
+      type: 'email',
+    });
+    if (verifyError || proof?.user?.id !== recovery.identity_id) {
+      res.status(400).json({ error: 'The code is incorrect or expired. Request a new one.' });
+      return;
+    }
+    await client.auth.signOut({ scope: 'local' });
+
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(recovery.account_id, { password });
+    if (updateError) {
+      req.log?.warn?.('auth.recovery.admin_code_password_update_rejected', { requestId: req.requestId });
+      res.status(503).json({ error: 'The password could not be changed. Request a new code and try again.' });
+      return;
+    }
+    const revokeClient = createEphemeralAuthClient();
+    const { data: signIn, error: signInError } = await revokeClient.auth.signInWithPassword({
+      email: recovery.login_email,
+      password,
+    });
+    let refreshSessionsRevoked = false;
+    if (!signInError && signIn?.session) {
+      const { error: signOutError } = await revokeClient.auth.signOut({ scope: 'global' });
+      refreshSessionsRevoked = !signOutError;
+    }
+    clearAuthUserCache();
+    res.json({
+      passwordUpdated: true,
+      loginEmail: recovery.login_email,
+      refreshSessionsRevoked,
+      message: 'Password changed. Sign in with admin@limen.com and your new password.',
+    });
+  } catch (error) {
+    if (Number.isInteger(error?.statusCode)) {
+      sendRouteError(res, error, 'Password recovery is temporarily unavailable.');
+      return;
+    }
+    req.log?.warn?.('auth.recovery.admin_code_reset_unavailable', { requestId: req.requestId });
+    res.status(503).json({ error: 'Password recovery is temporarily unavailable. Try again shortly.' });
   }
 });
 

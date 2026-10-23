@@ -4,6 +4,18 @@ This document covers recovery for the existing LimenServe Auth users. It does no
 
 ## Production email setup
 
+### Administrator recovery without a custom sender domain
+
+The protected `admin@limen.com` login can use a separate, verified Gmail recovery inbox. In **User Management → Recovery email**, enter the Gmail address and the current administrator password. LimenServe creates a recovery-only Supabase Auth identity for that mailbox and sends a numeric code using Supabase's built-in email sender. Enter the code in the same dialog to verify ownership. This does not change the administrator's sign-in email, Auth ID, role, or business records. The recovery-only identity is hidden from the staff list.
+
+When locked out, open **Forgot password**, enter either `admin@limen.com` or the verified Gmail address, and follow **Have a code? Reset your password**. Enter the emailed code and a new strong password. Then sign in with `admin@limen.com`.
+
+The Gmail address must be a member of the LimenServe Supabase organization for Supabase's built-in sender. The current organization owner address meets this requirement. The built-in sender has a very small hourly limit (about two messages per hour) and is not dependable production email delivery; code requests may be delayed or refused. This is a limited administrator recovery method, not a replacement for a production email service. No Resend account, Gmail App Password, or purchased domain is needed for this limited flow.
+
+The Supabase **Magic link or OTP** email template must contain `{{ .Token }}`. It currently retains `{{ .ConfirmationURL }}` so link-based sign-in remains usable. Never paste received codes into chat, logs, or support tickets.
+
+### Other staff / optional production sender
+
 The backend supports the Resend transactional email API for verified recovery addresses. Before enabling it:
 
 1. Verify a sender domain with Resend and create a restricted API key for the LimenServe backend.

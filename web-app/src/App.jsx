@@ -13,6 +13,7 @@ import { recordRouteLoad } from './observability/performance';
 
 const LoginPage = lazy(() => import('./modules/auth/pages/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('./modules/auth/pages/ForgotPasswordPage'));
+const ResetPasswordCodePage = lazy(() => import('./modules/auth/pages/ResetPasswordCodePage'));
 const ResetPasswordPage = lazy(() => import('./modules/auth/pages/ResetPasswordPage'));
 const RecoveryEmailVerificationPage = lazy(() => import('./modules/auth/pages/RecoveryEmailVerificationPage'));
 const AccountSecurityPage = lazy(() => import('./modules/auth/pages/AccountSecurityPage'));
@@ -102,6 +103,7 @@ function App() {
 
                 <Route path="/login" element={renderRoute(LoginPage, <PageLoader />)} />
                 <Route path="/forgot-password" element={renderRoute(ForgotPasswordPage, <PageLoader />)} />
+                <Route path="/reset-password-code" element={renderRoute(ResetPasswordCodePage, <PageLoader />)} />
                 <Route path="/reset-password" element={renderRoute(ResetPasswordPage, <PageLoader />)} />
                 <Route path="/verify-recovery-email" element={renderRoute(RecoveryEmailVerificationPage, <PageLoader />)} />
 

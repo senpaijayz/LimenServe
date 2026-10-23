@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Mail } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
-import { getUserRecoveryEmail, requestUserRecoveryEmail } from '../../../services/usersApi';
+import { getUserRecoveryEmail, requestUserRecoveryEmail, verifyUserRecoveryEmailCode } from '../../../services/usersApi';
 
 export default function RecoveryEmailModal({ user, onClose }) {
     const [recovery, setRecovery] = useState(null);
@@ -9,6 +9,7 @@ export default function RecoveryEmailModal({ user, onClose }) {
     const [isSaving, setIsSaving] = useState(false);
     const [email, setEmail] = useState('');
     const [currentPassword, setCurrentPassword] = useState('');
+    const [code, setCode] = useState('');
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
 
@@ -50,6 +51,24 @@ export default function RecoveryEmailModal({ user, onClose }) {
         }
     };
 
+    const handleVerifyCode = async (event) => {
+        event.preventDefault();
+        if (isSaving) return;
+        setError('');
+        setMessage('');
+        setIsSaving(true);
+        try {
+            const result = await verifyUserRecoveryEmailCode(user.id, code.trim());
+            setRecovery(await getUserRecoveryEmail(user.id));
+            setCode('');
+            setMessage(result.message || 'Recovery email verified.');
+        } catch (verifyError) {
+            setError(verifyError.message || 'The code could not be verified.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const pendingExpired = recovery?.pendingExpiresAt
         ? Date.parse(recovery.pendingExpiresAt) <= Date.now()
         : false;
@@ -82,9 +101,9 @@ export default function RecoveryEmailModal({ user, onClose }) {
                         )}
                         {recovery?.pendingEmail && (
                             <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                                {pendingExpired ? 'The verification link expired for ' : 'Waiting for verification from '}
+                                {pendingExpired ? 'The verification expired for ' : 'Waiting for verification from '}
                                 <span className="break-all font-semibold">{recovery.pendingEmail}</span>.
-                                {pendingExpired ? ' Send a new link below.' : ' The current verified email stays active until then.'}
+                                {pendingExpired ? ' Send a new code or link below.' : ' The current verified email stays active until then.'}
                             </p>
                         )}
                         {!recovery?.deliveryReady && (
@@ -97,6 +116,14 @@ export default function RecoveryEmailModal({ user, onClose }) {
 
                 {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
                 {message && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{message}</p>}
+
+                {recovery?.deliveryMode === 'supabase_code' && recovery?.pendingEmail && !pendingExpired && (
+                    <form onSubmit={handleVerifyCode} className="flex flex-col gap-2 sm:flex-row">
+                        <label htmlFor="staff-recovery-code" className="sr-only">Email verification code</label>
+                        <input id="staff-recovery-code" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,8}" maxLength={8} required value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} placeholder="Email code" className="min-h-11 min-w-0 flex-1 rounded-xl border border-primary-200 px-3 text-primary-950" />
+                        <button type="submit" disabled={isSaving} className="min-h-11 rounded-xl bg-primary-800 px-4 font-semibold text-white disabled:opacity-60">Verify code</button>
+                    </form>
+                )}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
@@ -127,14 +154,14 @@ export default function RecoveryEmailModal({ user, onClose }) {
                             onChange={(event) => setCurrentPassword(event.target.value)}
                             className="min-h-11 w-full rounded-xl border border-primary-200 bg-white px-3 py-3 text-primary-950 focus:border-accent-blue focus:outline-none focus:ring-2 focus:ring-accent-blue/20"
                         />
-                        <p className="mt-1 text-xs text-primary-500">Confirm your password before sending the verification link.</p>
+                        <p className="mt-1 text-xs text-primary-500">Confirm your password before sending the verification {recovery?.deliveryMode === 'supabase_code' ? 'code' : 'link'}.</p>
                     </div>
                     <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row sm:justify-end">
                         <button type="button" onClick={onClose} disabled={isSaving} className="min-h-11 rounded-xl border border-primary-200 px-5 font-semibold text-primary-700 hover:bg-primary-50 disabled:opacity-60">
                             Close
                         </button>
                         <button type="submit" disabled={isSaving || isLoading || !recovery?.deliveryReady} className="min-h-11 rounded-xl bg-primary-800 px-5 font-semibold text-white hover:bg-primary-950 disabled:cursor-not-allowed disabled:opacity-60">
-                            {isSaving ? 'Sending…' : 'Send verification link'}
+                            {isSaving ? 'Sending…' : recovery?.deliveryMode === 'supabase_code' ? 'Send verification code' : 'Send verification link'}
                         </button>
                     </div>
                 </form>

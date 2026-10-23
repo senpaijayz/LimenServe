@@ -22,6 +22,15 @@ export async function requestPasswordRecovery(email) {
   }
 }
 
+export async function resetPasswordWithRecoveryCode({ email, code, password }) {
+  try {
+    const { data } = await apiClient.post('/auth/recovery/code/reset', { email, code, password });
+    return data;
+  } catch (error) {
+    extractApiError(error, 'The code could not be verified. Request a new one and try again.');
+  }
+}
+
 export async function getAccountSecurity() {
   try {
     const { data } = await apiClient.get('/auth/security');

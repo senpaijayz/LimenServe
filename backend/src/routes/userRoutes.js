@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import { env } from '../config/env.js';
-import { supabaseAdmin } from '../config/supabase.js';
+import { supabaseAdmin, supabaseAuth } from '../config/supabase.js';
 import { clearAuthUserCache, requireRole } from '../middleware/auth.js';
 import {
   createEphemeralAuthClient,
@@ -264,6 +264,7 @@ router.get('/', async (_req, res, next) => {
     const authUsers = data?.users ?? [];
     const profiles = await loadProfilesForUsers(authUsers);
     const users = (data?.users ?? [])
+      .filter((user) => user.app_metadata?.limen_recovery_only !== true)
       .map((user) => mapUser(user, profiles.get(user.id)))
       .sort((left, right) => String(left.email).localeCompare(String(right.email)));
 
@@ -292,14 +293,24 @@ router.get('/:userId/recovery-email', async (req, res, next) => {
       return;
     }
 
+    let otpRecovery = null;
+    if (security.is_protected_admin) {
+      const { data: otpData, error: otpError } = await supabaseAdmin.rpc('get_limen_admin_otp_recovery', {
+        p_account_id: userId,
+      });
+      if (otpError) throw otpError;
+      otpRecovery = firstRow(otpData);
+    }
+
     res.json({
       recovery: {
         loginEmail: security.login_email,
-        verifiedEmail: security.verified_email,
-        verifiedAt: security.verified_at,
-        pendingEmail: security.pending_email,
-        pendingExpiresAt: security.pending_expires_at,
-        deliveryReady: env.recoveryEmailConfigured,
+        verifiedEmail: otpRecovery?.verified_email || security.verified_email,
+        verifiedAt: otpRecovery?.verified_at || security.verified_at,
+        pendingEmail: otpRecovery?.pending_email || security.pending_email,
+        pendingExpiresAt: otpRecovery?.pending_expires_at || security.pending_expires_at,
+        deliveryMode: security.is_protected_admin ? 'supabase_code' : 'resend_link',
+        deliveryReady: Boolean(security.is_protected_admin || env.recoveryEmailConfigured),
       },
     });
   } catch (error) {
@@ -317,11 +328,6 @@ router.post('/:userId/recovery-email', async (req, res, next) => {
       res.status(400).json({ error: 'Enter a valid recovery email and confirm your administrator password.' });
       return;
     }
-    if (!env.recoveryEmailConfigured) {
-      res.status(503).json({ error: 'Recovery email delivery is not set up yet. Configure the email sender first.' });
-      return;
-    }
-
     const [ipLimit, actorLimit, targetLimit] = await Promise.all([
       limitRecoverySetup('users.recovery.ip', req.ip, 10),
       limitRecoverySetup('users.recovery.actor', req.user.id, 5),
@@ -353,6 +359,16 @@ router.post('/:userId/recovery-email', async (req, res, next) => {
       return;
     }
 
+    const { data: targetSecurityData, error: targetSecurityError } = await supabaseAdmin.rpc('get_limen_account_security', {
+      p_account_id: userId,
+    });
+    if (targetSecurityError) throw targetSecurityError;
+    const isProtectedAdmin = Boolean(firstRow(targetSecurityData)?.is_protected_admin);
+    if (!isProtectedAdmin && !env.recoveryEmailConfigured) {
+      res.status(503).json({ error: 'Recovery email delivery is not set up for this staff account yet.' });
+      return;
+    }
+
     const authClient = createEphemeralAuthClient();
     const { data: verified, error: passwordError } = await authClient.auth.signInWithPassword({
       email: actorData.user.email,
@@ -360,6 +376,44 @@ router.post('/:userId/recovery-email', async (req, res, next) => {
     });
     if (passwordError || verified?.user?.id !== req.user.id) {
       res.status(401).json({ error: 'Your administrator password could not be confirmed.' });
+      return;
+    }
+
+    if (isProtectedAdmin) {
+      let { data: recoveryIdentityId, error: identityLookupError } = await supabaseAdmin.rpc('find_limen_recovery_identity', {
+        p_email: email,
+      });
+      if (identityLookupError) throw identityLookupError;
+      if (!recoveryIdentityId) {
+        const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
+          email,
+          email_confirm: true,
+          app_metadata: { role: 'customer', limen_recovery_only: true },
+          user_metadata: { full_name: 'Recovery mailbox' },
+        });
+        if (createError || !created?.user) {
+          res.status(409).json({ error: 'This address is already used by another account or could not be prepared for recovery.' });
+          return;
+        }
+        recoveryIdentityId = created.user.id;
+      }
+
+      const { error: beginOtpError } = await supabaseAdmin.rpc('begin_limen_admin_otp_recovery', {
+        p_account_id: userId,
+        p_identity_id: recoveryIdentityId,
+        p_email: email,
+      });
+      if (beginOtpError) throw beginOtpError;
+
+      const { error: sendOtpError } = await supabaseAuth.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: false },
+      });
+      if (sendOtpError) {
+        res.status(503).json({ error: 'Supabase could not send the code. Its built-in sender only emails organization members and has a small hourly limit. Try later.' });
+        return;
+      }
+      res.status(202).json({ message: 'Check your Gmail for the code. Enter it here to activate this recovery address.' });
       return;
     }
 
@@ -395,6 +449,61 @@ router.post('/:userId/recovery-email', async (req, res, next) => {
       return;
     }
     res.status(202).json({ message: 'Verification sent. This recovery email will become active after the recipient confirms it.' });
+  } catch (error) {
+    next(normalizeUserSaveError(error));
+  }
+});
+
+router.post('/:userId/recovery-email/code/verify', async (req, res, next) => {
+  noStore(res);
+  try {
+    const { userId } = req.params;
+    const code = String(req.body?.code || '').trim();
+    if (!UUID_PATTERN.test(userId) || !/^\d{6,8}$/.test(code)) {
+      res.status(400).json({ error: 'Enter the code from your recovery email.' });
+      return;
+    }
+    const [ipLimit, actorLimit] = await Promise.all([
+      limitRecoverySetup('users.recovery.verify.ip', req.ip, 20),
+      limitRecoverySetup('users.recovery.verify.actor', req.user.id, 10),
+    ]);
+    if (!ipLimit.allowed || !actorLimit.allowed) {
+      res.status(429).json({ error: 'Too many code attempts. Please wait before trying again.' });
+      return;
+    }
+
+    const { data: statusData, error: statusError } = await supabaseAdmin.rpc('get_limen_admin_otp_recovery', {
+      p_account_id: userId,
+    });
+    if (statusError) throw statusError;
+    const status = firstRow(statusData);
+    if (!status?.pending_email || Date.parse(status.pending_expires_at) <= Date.now()) {
+      res.status(400).json({ error: 'The code expired. Send a new code and try again.' });
+      return;
+    }
+
+    const client = createEphemeralAuthClient();
+    const { data: proof, error: verifyError } = await client.auth.verifyOtp({
+      email: status.pending_email,
+      token: code,
+      type: 'email',
+    });
+    if (verifyError || !proof?.user?.id) {
+      res.status(400).json({ error: 'That code is incorrect or expired.' });
+      return;
+    }
+    await client.auth.signOut({ scope: 'local' });
+
+    const { data: completed, error: completeError } = await supabaseAdmin.rpc('complete_limen_admin_otp_recovery', {
+      p_account_id: userId,
+      p_identity_id: proof.user.id,
+      p_email: status.pending_email,
+    });
+    if (completeError || completed !== true) {
+      res.status(400).json({ error: 'The code could not be matched to this recovery address. Send a new code.' });
+      return;
+    }
+    res.json({ verified: true, message: 'Recovery email verified. The administrator still signs in with admin@limen.com.' });
   } catch (error) {
     next(normalizeUserSaveError(error));
   }

@@ -64,14 +64,14 @@ const ForgotPasswordPage = () => {
                 </div>
                 <h1 className="font-display text-2xl font-bold text-primary-950">Forgot your password?</h1>
                 <p className="mt-2 text-sm leading-6 text-primary-600">
-                    Enter the email address you use to sign in, and we’ll help you get back into LimenServe.
+                    Enter your sign-in email or verified recovery Gmail, and we’ll help you get back into LimenServe.
                 </p>
 
                 {requestSent && (
                     <div role="status" className="mt-5 rounded-xl border border-accent-success/30 bg-accent-success/10 p-4 text-sm text-primary-800">
                         <div className="flex items-start gap-3">
                             <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-accent-success" aria-hidden="true" />
-                            <p>If a recovery method is available for this account, instructions will be sent. Check your inbox and spam folder. If nothing arrives, contact your LimenServe administrator for help.</p>
+                            <p>If a recovery method is available, check your inbox and spam folder for a link or code. The administrator can enter the emailed code below.</p>
                         </div>
                     </div>
                 )}
@@ -95,7 +95,7 @@ const ForgotPasswordPage = () => {
                                 maxLength={254}
                                 value={email}
                                 onChange={(event) => setEmail(event.target.value)}
-                        placeholder="Your sign-in email"
+                                placeholder="Sign-in email or recovery Gmail"
                                 className="w-full rounded-xl border border-primary-200 bg-white py-3 pl-10 pr-4 text-primary-950 placeholder:text-primary-400 focus:border-accent-blue focus:outline-none focus:ring-2 focus:ring-accent-blue/20"
                             />
                         </div>
@@ -106,9 +106,12 @@ const ForgotPasswordPage = () => {
                         disabled={isSubmitting || cooldown > 0}
                         className="flex w-full items-center justify-center rounded-xl bg-primary-800 px-4 py-3 font-semibold text-white transition hover:bg-primary-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                        {isSubmitting ? 'Checking recovery options…' : cooldown > 0 ? `Try again in ${cooldown}s` : requestSent ? 'Send another link' : 'Continue'}
+                        {isSubmitting ? 'Checking recovery options…' : cooldown > 0 ? `Try again in ${cooldown}s` : requestSent ? 'Send again' : 'Continue'}
                     </button>
                 </form>
+                <Link to="/reset-password-code" state={{ email: email.trim().toLowerCase() }} className="mt-5 block text-center text-sm font-semibold text-primary-800 hover:underline">
+                    Have a code? Reset your password
+                </Link>
             </section>
         </main>
     );

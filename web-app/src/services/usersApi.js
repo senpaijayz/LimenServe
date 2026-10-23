@@ -63,6 +63,15 @@ export async function requestUserRecoveryEmail(userId, payload) {
   }
 }
 
+export async function verifyUserRecoveryEmailCode(userId, code) {
+  try {
+    const { data } = await apiClient.post(`/users/${userId}/recovery-email/code/verify`, { code });
+    return data;
+  } catch (error) {
+    extractApiError(error, 'The code could not be verified. Check it and try again.');
+  }
+}
+
 export async function permanentlyDeleteUser(userId) {
   try {
     const { data } = await apiClient.delete(`/users/${userId}/permanent`);

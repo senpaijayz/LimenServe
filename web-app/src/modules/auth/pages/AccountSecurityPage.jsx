@@ -250,6 +250,12 @@ export default function AccountSecurityPage() {
                     </p>
                 )}
 
+                {security?.protectedAdmin ? (
+                    <p className="mt-5 rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm text-primary-700">
+                        To add or change the administrator’s recovery Gmail, open User Management and select Recovery email for your account. Enter the code sent to that inbox to finish setup.
+                    </p>
+                ) : (
+                <>
                 <SecurityNotice notice={recoveryNotice} />
                 <form onSubmit={handleRecoverySubmit} className="mt-5 grid gap-4 sm:grid-cols-2">
                     <div className="sm:col-span-2">
@@ -287,6 +293,8 @@ export default function AccountSecurityPage() {
                         </button>
                     </div>
                 </form>
+                </>
+                )}
             </section>
 
             <section className="rounded-2xl border border-primary-200 bg-white p-5 shadow-sm sm:p-7" aria-labelledby="password-security-heading">
