@@ -724,23 +724,30 @@ router.post('/:userId/restore', async (req, res, next) => {
       return;
     }
 
-    // Restore the profile while the trusted Auth marker still denies staff access.
-    const restoredProfile = await syncUserProfile({
-      userId,
-      email: target.email,
-      fullName: target.user_metadata?.full_name || profile.full_name,
-      role: formerRole,
-    }) ?? await fetchProfileByUserId(userId);
+    if (target.app_metadata?.role !== 'customer' || profile.role !== 'customer') {
+      res.status(409).json({ error: 'This inactive account’s role records do not match. Contact support before restoring it.' });
+      return;
+    }
 
-    if (normalizeStaffRole(restoredProfile?.role) !== formerRole) {
-      res.status(503).json({ error: 'The staff profile could not be restored safely. Access remains disabled; try again later.' });
+    // Supabase may write ban duration and app metadata separately. Unban first
+    // while the trusted deactivated marker still denies staff access; then
+    // reactivate the role. The Auth update trigger syncs the profile atomically.
+    const { data: unbanned, error: unbanError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      ban_duration: 'none',
+    });
+    if (unbanError || !unbanned?.user) {
+      throw unbanError || new Error('Supabase did not confirm account unban.');
+    }
+    if (isCurrentlyBanned(unbanned.user)
+      || unbanned.user.app_metadata?.account_status !== 'deactivated'
+      || unbanned.user.app_metadata?.role !== 'customer') {
+      res.status(503).json({ error: 'This account could not be prepared for restoration safely. Access remains disabled.' });
       return;
     }
 
     const { data: updated, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-      ban_duration: 'none',
       app_metadata: {
-        ...target.app_metadata,
+        ...unbanned.user.app_metadata,
         role: formerRole,
         former_staff_role: null,
         account_status: 'active',
@@ -753,6 +760,10 @@ router.post('/:userId/restore', async (req, res, next) => {
 
     clearAuthUserCache();
     const savedProfile = await fetchProfileByUserId(userId).catch(() => null);
+    if (savedProfile?.role !== formerRole) {
+      res.status(503).json({ error: 'The account changed, but its staff profile did not match. Contact support before signing in.' });
+      return;
+    }
     res.json({ user: mapUser(updated.user, savedProfile), restored: true });
   } catch (error) {
     next(normalizeUserSaveError(error));
