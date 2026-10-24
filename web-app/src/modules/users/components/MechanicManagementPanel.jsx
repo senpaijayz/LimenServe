@@ -239,20 +239,16 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
             return;
         }
 
-        const removedMechanic = mechanicToRemove;
         setDeletingIds((current) => new Set(current).add(mechanicId));
-        onRemoved?.(mechanicId);
 
         try {
             const deleted = await deleteMechanic(mechanicId);
             if (!deleted) throw new Error('The server did not confirm this mechanic was removed.');
+            onRemoved?.(mechanicId);
             void onReload?.();
             notifySuccess('Mechanic removed successfully');
             setMechanicToRemove(null);
         } catch (error) {
-            if (removedMechanic) {
-                onSaved?.(removedMechanic);
-            }
             showError(error?.message || 'Unable to remove mechanic.');
         } finally {
             setDeletingIds((current) => {
@@ -395,7 +391,7 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
             >
                 <div className="space-y-4">
                     <p className="text-sm text-primary-600">
-                        Confirm removing <span className="font-semibold text-primary-950">{mechanicToRemove?.full_name}</span> from public mechanic visibility.
+                        Remove <span className="font-semibold text-primary-950">{mechanicToRemove?.full_name}</span> from staff and public lists? Past service history stays intact. Finish or reassign any open jobs first.
                     </p>
                     <div className="flex justify-end gap-3 border-t border-primary-200 pt-4">
                         <Button

@@ -168,6 +168,8 @@ router.get('/', requireRole('admin', 'cashier'), async (req, res, next) => {
 
     const now = Date.now();
     const activeOnly = String(req.query.activeOnly || '').toLowerCase() === 'true';
+    const includeInactive = req.user?.role === 'admin'
+      && String(req.query.includeInactive || '').toLowerCase() === 'true';
     const excludedServiceOrderId = String(req.query.orderId || '').trim();
     const requestedStart = Date.parse(String(req.query.start || ''));
     const requestedEnd = Date.parse(String(req.query.end || ''));
@@ -228,7 +230,7 @@ router.get('/', requireRole('admin', 'cashier'), async (req, res, next) => {
             && !hasConflict,
         };
       })
-      .filter((mechanic) => !activeOnly || mechanic.isActive);
+      .filter((mechanic) => mechanic.isActive || (includeInactive && !activeOnly));
 
     res.json({ mechanics: normalized });
   } catch (error) {
@@ -299,23 +301,42 @@ router.patch('/:mechanicId', async (req, res, next) => {
 
 router.delete('/:mechanicId', async (req, res, next) => {
   try {
-    const deleted = await callRpc('delete_mechanic', {
-      p_mechanic_id: req.params.mechanicId,
-    });
-    if (!deleted) {
-      res.status(404).json({ error: 'Mechanic was not found and was not removed.' });
+    const { data: openOrder, error: openOrderError } = await supabaseAdmin.schema('operations')
+      .from('service_orders').select('order_number')
+      .eq('assigned_mechanic_id', req.params.mechanicId)
+      .in('status', ['pending', 'in_progress']).limit(1).maybeSingle();
+    if (openOrderError) throw openOrderError;
+    if (openOrder) {
+      res.status(409).json({ error: `Finish or reassign service order ${openOrder.order_number} before removing this mechanic.` });
       return;
     }
-    const { data: remaining, error: verifyError } = await supabaseAdmin.schema('operations')
-      .from('mechanics').select('id').eq('id', req.params.mechanicId).maybeSingle();
-    if (verifyError) throw verifyError;
-    if (remaining) {
-      res.status(409).json({ error: 'Mechanic is still present after removal. Please try again.' });
+    const { data: assigned, error: assignmentError } = await supabaseAdmin.schema('operations')
+      .from('mechanic_assignments').select('service_order_id')
+      .eq('mechanic_id', req.params.mechanicId).eq('status', 'assigned').limit(1).maybeSingle();
+    if (assignmentError) throw assignmentError;
+    if (assigned) {
+      res.status(409).json({ error: 'Finish or reassign this mechanic’s open service work before removing the profile.' });
+      return;
+    }
+    // Keep past assignments intact. A hard delete is blocked by their foreign
+    // key and would erase the mechanic's history.
+    const { data: archived, error } = await supabaseAdmin.schema('operations')
+      .from('mechanics')
+      .update({ is_active: false, is_public: false, availability_status: 'off_duty' })
+      .eq('id', req.params.mechanicId).eq('is_active', true)
+      .select('id').maybeSingle();
+    if (error) throw error;
+    if (!archived) {
+      res.status(404).json({ error: 'This mechanic is already removed or could not be found.' });
       return;
     }
     clearPublicResponseCache('public-mechanics');
-    res.json({ deleted: true });
+    res.json({ deleted: true, mechanicId: archived.id, historyPreserved: true });
   } catch (error) {
+    if (error?.code === '23503' && String(error?.message || '').includes('IN_USE')) {
+      res.status(409).json({ error: 'Finish or reassign this mechanic’s open service work before removing the profile.' });
+      return;
+    }
     if (isMissingLegacyMechanicsError(error)) {
       res.status(503).json(mechanicsMigrationError());
       return;
