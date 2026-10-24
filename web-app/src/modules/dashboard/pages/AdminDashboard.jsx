@@ -261,9 +261,9 @@ const AdminDashboard = () => {
             <section className="space-y-3" aria-label="Sales forecasts">
                 <div>
                     <h2 className="text-base font-semibold text-primary-950">Sales outlook</h2>
-                    <p className="mt-1 text-xs text-primary-500">Estimates based on recorded sales. Forecasts are not confirmed revenue.</p>
-                    <p className="mt-1 text-xs text-primary-500">Six-completed-month average, including months with no sales. Requires at least three active months and activity within the last three months. Demo sales and uncompleted service orders are excluded.</p>
-                    {forecastMetadata?.targetMonth && <p className="mt-1 text-xs text-primary-500">Target: {new Date(`${forecastMetadata.targetMonth}T12:00:00`).toLocaleDateString('en-PH', {month:'long',year:'numeric'})} · History: {forecastMetadata.historyStart} to {forecastMetadata.historyEnd}</p>}
+                    <p className="mt-1 text-xs text-primary-600">Your sales history gives us a rough idea of next month’s sales. It’s a guide, not guaranteed income.</p>
+                    <p className="mt-1 text-xs text-primary-600">We look at the last six full months and count months with no sales as zero. We show an estimate only if you had sales in at least three of those months and within the last three months. Test sales and unfinished service jobs don’t count.</p>
+                    {forecastMetadata?.targetMonth && <p className="mt-1 text-xs text-primary-600">This estimate is for {new Date(`${forecastMetadata.targetMonth}T12:00:00`).toLocaleDateString('en-PH', {month:'long',year:'numeric'})}, using sales from {new Date(`${forecastMetadata.historyStart}T12:00:00`).toLocaleDateString('en-PH', {month:'short',day:'numeric',year:'numeric'})} to {new Date(`${forecastMetadata.historyEnd}T12:00:00`).toLocaleDateString('en-PH', {month:'short',day:'numeric',year:'numeric'})}.</p>}
                     {!loading && !forecastSourceVerified && <p role="note" className="mt-2 text-sm text-amber-700">Current forecast data could not be confirmed. Recorded sales remain available.</p>}
                 </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
