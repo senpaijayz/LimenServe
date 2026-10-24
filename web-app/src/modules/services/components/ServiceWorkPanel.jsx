@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Clock, CreditCard, FileText, Package, Pause, Play, Plus, Printer, Save, Trash2 } from 'lucide-react';
+import { CheckCircle2, Clock, CreditCard, Download, FileText, Package, Pause, Play, Plus, Printer, Save, Trash2 } from 'lucide-react';
 import { completeServiceOrder, getServiceWork, recordServiceWorkEvent, saveServiceWorkLines } from '../../../services/serviceOrdersApi';
 import { formatCurrency } from '../../../utils/formatters';
 import { useToast } from '../../../components/ui/Toast';
@@ -29,6 +29,7 @@ export default function ServiceWorkPanel({ order, onOrderUpdated }) {
   const [lines, setLines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [note, setNote] = useState('');
   const [laborDescription, setLaborDescription] = useState('');
@@ -83,6 +84,18 @@ export default function ServiceWorkPanel({ order, onOrderUpdated }) {
     finally { setSaving(false); }
   };
   const changeLine = (id, key, value) => { setLines((current) => current.map((line) => line.id === id ? { ...line, [key]: value } : line)); setDirty(true); };
+  const saveReceiptPdf = async () => {
+    setDownloadingPdf(true);
+    try {
+      const { downloadServiceReceiptPdf } = await import('../utils/downloadServicePdf');
+      downloadServiceReceiptPdf(order, work.sale);
+      toast.success('Service receipt PDF saved.');
+    } catch (err) {
+      toast.error(err.message || 'Unable to save the service receipt PDF.');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   if (loading) return <section className="rounded-xl border border-primary-200 bg-white p-5 text-sm text-primary-600">Loading workshop progress…</section>;
   if (!work) return <section role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">{error || 'Workshop progress could not be loaded.'} <button type="button" className="ml-2 underline" onClick={() => { setLoading(true); reload().then(() => setError('')).catch((err) => setError(err.message || 'Unable to reload workshop progress.')).finally(() => setLoading(false)); }}>Try again</button></section>;
@@ -136,7 +149,7 @@ export default function ServiceWorkPanel({ order, onOrderUpdated }) {
       {approvalNeeded && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><strong>Actual charges exceed the estimate by {formatCurrency(actualTotal-estimate)}.</strong><p className="mt-1">Record the customer's approval before posting. An approval is cleared if actual charges change.</p>{work?.state?.customer_approval_note && <p className="mt-2">Recorded approval: {work.state.customer_approval_note}</p>}{editable && <button type="button" className="btn mt-3" disabled={saving || dirty || !note.trim()} onClick={() => event('customer_approval',note)}>Record approval note above</button>}</div>}
     </section>
 
-    <section className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:p-6"><div className="flex items-center gap-2"><CreditCard className="h-5 w-5 text-blue-700" /><h2 className="text-lg font-bold text-primary-950">Billing & receipt</h2></div>{work?.sale ? <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-900"><span>Paid · {work.sale.transaction_number} · {formatCurrency(work.sale.total_amount)}</span><button type="button" className="btn" onClick={() => printReceipt(order,work)}><Printer className="h-4 w-4" /> Print / Save PDF</button></div> : <>
+    <section className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:p-6"><div className="flex items-center gap-2"><CreditCard className="h-5 w-5 text-blue-700" /><h2 className="text-lg font-bold text-primary-950">Billing & receipt</h2></div>{work?.sale ? <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-900"><span>Paid · {work.sale.transaction_number} · {formatCurrency(work.sale.total_amount)}</span><div className="flex flex-wrap gap-2"><button type="button" className="btn" disabled={downloadingPdf} onClick={saveReceiptPdf}><Download className="h-4 w-4" /> {downloadingPdf ? 'Saving PDF…' : 'Save PDF'}</button><button type="button" className="btn" onClick={() => printReceipt(order,work)}><Printer className="h-4 w-4" /> Print receipt</button></div></div> : <>
       <p className="mt-2 text-sm text-primary-600">Payment is separate from repair completion. Review the final lines above before confirming money received.</p>
       {stage==='work_completed' && <div className="mt-4 space-y-4"><div className="rounded-xl bg-primary-950 p-4 text-white"><span>Final amount due</span><strong className="float-right text-xl">{formatCurrency(actualTotal)}</strong></div><div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-semibold text-primary-700">Payment method<select className="input mt-1" value={paymentMethod} onChange={(e) => { setPaymentMethod(e.target.value); setPaymentVerified(false); }}><option value="cash">Cash</option><option value="gcash">GCash</option><option value="bank_transfer">Bank Transfer</option></select></label>{paymentMethod==='cash'?<label className="text-sm font-semibold text-primary-700">Cash received<input className="input mt-1" type="number" min={actualTotal} step="0.01" value={cashReceived} onChange={(e) => setCashReceived(e.target.value)} /></label>:<label className="text-sm font-semibold text-primary-700">Verified transaction reference<input className="input mt-1" value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="Reference from confirmed payment" /></label>}</div>{paymentMethod==='cash' && Number(cashReceived)>=actualTotal && <p className="text-sm text-primary-700">Change due: {formatCurrency(Number(cashReceived)-actualTotal)}</p>}<label className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><input type="checkbox" className="mt-1" checked={paymentVerified} onChange={(e) => setPaymentVerified(e.target.checked)} /><span>I verified that the customer paid this final amount. Posting creates the sale and deducts actual parts once.</span></label><button type="button" className="btn bg-emerald-700 text-white" disabled={saving || dirty || !lines.length || !paymentVerified || (paymentMethod==='cash' && Number(cashReceived)<actualTotal) || (paymentMethod!=='cash' && !paymentReference.trim()) || (approvalNeeded && !work?.state?.customer_approval_note)} onClick={pay}>Confirm payment & post to Sales</button></div>}
       {stage!=='work_completed' && <p className="mt-3 rounded-xl bg-primary-50 p-3 text-sm text-primary-600">Mark the repair work finished to begin billing review. The job remains unpaid until payment is confirmed.</p>}

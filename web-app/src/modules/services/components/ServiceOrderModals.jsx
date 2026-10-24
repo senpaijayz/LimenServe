@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
-import { X, Wrench, User, Phone, Car, FileText, Save, CheckCircle, ArrowRight, Archive, CreditCard, Package, CalendarDays, UserCheck, Printer, Search, Plus, Trash2, Clock } from 'lucide-react';
+import { X, Wrench, User, Phone, Car, FileText, Save, CheckCircle, ArrowRight, Archive, CreditCard, Package, CalendarDays, UserCheck, Printer, Download, Search, Plus, Trash2, Clock } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import Input from '../../../components/ui/Input';
@@ -11,6 +11,7 @@ import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../u
 import { listMechanics } from '../../../services/mechanicsApi';
 import { getServiceScheduleSlots } from '../../../services/serviceOrdersApi';
 import { isServiceOrderOverdue } from '../utils/serviceOrderDisplay';
+import { useToast } from '../../../components/ui/Toast';
 
 const PRIORITY_STYLES = {
     low: 'border-slate-200 bg-slate-50 text-slate-700',
@@ -644,7 +645,9 @@ export const ServiceOrderDetailModal = ({
     onAssignMechanic,
     onRemoveMechanic,
 }) => {
+    const toast = useToast();
     const [updating, setUpdating] = useState(false);
+    const [downloadingPdf, setDownloadingPdf] = useState(false);
     const [completing, setCompleting] = useState(false);
     const [mechanics, setMechanics] = useState([]);
     const [mechanicsLoading, setMechanicsLoading] = useState(false);
@@ -787,6 +790,19 @@ export const ServiceOrderDetailModal = ({
             completedAt,
             mechanicName,
         });
+    };
+
+    const handleSavePdf = async () => {
+        setDownloadingPdf(true);
+        try {
+            const { downloadServiceOrderPdf } = await import('../utils/downloadServicePdf');
+            downloadServiceOrderPdf({ order, serviceItems, partItems, orderTotal, mechanicName });
+            toast.success('Service order PDF saved.');
+        } catch (error) {
+            toast.error(error.message || 'Unable to save the service order PDF.');
+        } finally {
+            setDownloadingPdf(false);
+        }
     };
 
     const handleAssignmentSubmit = async (event) => {
@@ -1024,8 +1040,11 @@ export const ServiceOrderDetailModal = ({
                         </div>
 
                         <div className="mt-5 flex flex-col gap-3 border-t border-primary-100 pt-4 sm:flex-row sm:justify-end">
+                            {!workshopMode && <Button variant="outline" leftIcon={<Download className="w-4 h-4" />} isLoading={downloadingPdf} loadingLabel="Saving PDF…" onClick={handleSavePdf}>
+                                Save PDF
+                            </Button>}
                             {!workshopMode && <Button variant="outline" leftIcon={<Printer className="w-4 h-4" />} onClick={handlePrint}>
-                                Print / Save PDF
+                                Print service order
                             </Button>}
                             <Button variant="cancel" onClick={onClose}>Close</Button>
                             {!workshopMode && nextStatus === 'in_progress' && (
