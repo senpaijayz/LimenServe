@@ -399,8 +399,15 @@ async function completeServiceOrder(orderId, operatorId, paymentDetails = {}) {
     p_payment_verified: paymentDetails.paymentReceivedConfirmed === true,
   });
 
+  const order = await loadOrder(orderId);
+  if (!posted?.saleId || order?.paymentStatus !== 'paid') {
+    const error = new Error('Payment could not be verified in Sales. Please reload the order before trying again.');
+    error.statusCode = 409;
+    throw error;
+  }
+
   return {
-    order: await loadOrder(orderId),
+    order,
     sale: { id: posted.saleId, totalAmount: posted.total },
     saleCreated: posted.saleCreated,
     archiveReference: buildServiceSaleReference(currentOrder),

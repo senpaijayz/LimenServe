@@ -43,6 +43,13 @@ function isDemoSale(sale) {
         || originalReference.toUpperCase().startsWith('DEMO-');
 }
 
+function getSaleSourceLabel(sale) {
+    const source = sale?.sourceType || sale?.source_type;
+    if (source === 'historical_encoded') return 'Historical';
+    if (source === 'service_order' || String(sale?.originalReference || sale?.original_reference || '').startsWith('SERVICE-')) return 'Service order';
+    return 'POS';
+}
+
 function getSaleTimestamp(sale) {
     return sale?.saleAt || sale?.sale_at || sale?.business_date || sale?.created_at || null;
 }
@@ -109,7 +116,7 @@ function buildPrintableSalesReport({
         formatDateTime(getSaleTimestamp(sale)),
         sale.customer_name || '',
         sale.cashier_name || '',
-        sale.sourceType === 'historical_encoded' || sale.source_type === 'historical_encoded' ? 'Historical' : 'POS',
+        getSaleSourceLabel(sale),
         formatNumber(toReportNumber(sale.item_count)),
         PAYMENT_LABELS[sale.payment_method] || sale.payment_method || '',
         sale.status || '',
@@ -1022,7 +1029,7 @@ const SalesReport = () => {
                                     ? 'border-amber-200 bg-amber-50 text-amber-700'
                                     : 'border-accent-success/20 bg-accent-success/10 text-accent-success'
                                     }`}>
-                                    {sale.sourceType === 'historical_encoded' ? 'Historical' : 'POS'}
+                                    {getSaleSourceLabel(sale)}
                                 </span>
                             </div>
                         </button>
@@ -1077,7 +1084,7 @@ const SalesReport = () => {
                                             ? 'border-amber-200 bg-amber-50 text-amber-700'
                                             : 'border-accent-success/20 bg-accent-success/10 text-accent-success'
                                             }`}>
-                                            {sale.sourceType === 'historical_encoded' ? 'Historical' : 'POS'}
+                                            {getSaleSourceLabel(sale)}
                                         </span>
                                     </td>
                                     <td className="text-right">{formatNumber(sale.item_count)}</td>

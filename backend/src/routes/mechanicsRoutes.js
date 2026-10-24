@@ -302,8 +302,19 @@ router.delete('/:mechanicId', async (req, res, next) => {
     const deleted = await callRpc('delete_mechanic', {
       p_mechanic_id: req.params.mechanicId,
     });
+    if (!deleted) {
+      res.status(404).json({ error: 'Mechanic was not found and was not removed.' });
+      return;
+    }
+    const { data: remaining, error: verifyError } = await supabaseAdmin.schema('operations')
+      .from('mechanics').select('id').eq('id', req.params.mechanicId).maybeSingle();
+    if (verifyError) throw verifyError;
+    if (remaining) {
+      res.status(409).json({ error: 'Mechanic is still present after removal. Please try again.' });
+      return;
+    }
     clearPublicResponseCache('public-mechanics');
-    res.json({ deleted: Boolean(deleted) });
+    res.json({ deleted: true });
   } catch (error) {
     if (isMissingLegacyMechanicsError(error)) {
       res.status(503).json(mechanicsMigrationError());

@@ -687,6 +687,16 @@ router.delete('/:userId/permanent', async (req, res, next) => {
       throw deleteError;
     }
 
+    // A BEFORE DELETE trigger can silently skip a row while the Auth API still
+    // reports success. Never tell the UI the account is gone until it is.
+    const { data: remaining, error: verifyError } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (remaining?.user) {
+      res.status(409).json({ error: 'The account is still present after deletion. Please retry or contact an administrator.' });
+      return;
+    }
+    if (verifyError && !/not found|404/i.test(String(verifyError.message || ''))
+      && verifyError.status !== 404) throw verifyError;
+
     clearAuthUserCache();
     res.json({ deleted: true, userId, businessHistoryPreserved: true });
   } catch (error) {

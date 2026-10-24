@@ -244,7 +244,8 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
         onRemoved?.(mechanicId);
 
         try {
-            await deleteMechanic(mechanicId);
+            const deleted = await deleteMechanic(mechanicId);
+            if (!deleted) throw new Error('The server did not confirm this mechanic was removed.');
             void onReload?.();
             notifySuccess('Mechanic removed successfully');
             setMechanicToRemove(null);
