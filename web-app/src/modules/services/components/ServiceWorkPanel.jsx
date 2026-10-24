@@ -56,6 +56,14 @@ export default function ServiceWorkPanel({ order, onOrderUpdated }) {
   const editable = Boolean(work) && !['released','cancelled'].includes(stage) && order.status !== 'completed' && order.status !== 'cancelled';
   const actualTotal = useMemo(() => money(lines.reduce((sum, line) => sum + money(line.quantity) * money(line.unitPrice), 0)), [lines]);
   const estimate = money(work?.state?.estimate_total ?? order.estimatedCost ?? order.totalAmount ?? order.total_amount);
+  const estimatedLines = useMemo(() => (order.items || []).map((item) => ({
+    id: crypto.randomUUID(),
+    kind: item.lineType === 'service' ? 'labor' : 'part',
+    productId: item.productId || null,
+    description: item.displayName || item.itemName || '',
+    quantity: String(item.quantity),
+    unitPrice: String(item.unitPrice),
+  })).filter((item) => item.description && (item.kind === 'labor' || item.productId)), [order.items]);
   const approvalNeeded = actualTotal > estimate + 0.01;
 
   const event = async (eventType, eventNote = note) => {
@@ -108,6 +116,7 @@ export default function ServiceWorkPanel({ order, onOrderUpdated }) {
     </section>
 
     <section className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:p-6"><div className="flex items-center gap-2"><Package className="h-5 w-5 text-blue-700" /><h2 className="text-lg font-bold text-primary-950">Actual parts & labor</h2></div><p className="mt-1 text-sm text-primary-600">Intake estimates are separate. Parts are deducted once, when confirmed payment posts to Sales.</p>
+      {editable && lines.length === 0 && estimatedLines.length > 0 && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3"><p className="text-sm text-blue-950">Used the parts and labor estimated at intake? Copy them here, remove anything not used, then save the actual charges.</p><button type="button" className="btn border-blue-300 bg-white text-blue-900" disabled={saving} onClick={() => { setLines(estimatedLines); setDirty(true); }}><Plus className="h-4 w-4" /> Use intake estimate</button></div>}
       {editable && <div className="mt-5 grid gap-5 lg:grid-cols-2">
         <div className="rounded-xl border border-primary-200 p-4">
           <h3 className="mb-3 text-sm font-semibold text-primary-950">Add a part used</h3>
