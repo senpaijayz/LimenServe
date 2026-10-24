@@ -445,53 +445,53 @@ const UserManagement = () => {
     const clerkCount = activeUsers.filter((user) => user.role === 'stock_clerk').length;
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-display font-bold text-primary-950">User Management</h1>
-                    <p className="text-primary-500 font-medium mt-1">Manage staff access, roles, and public mechanic profiles.</p>
+        <div className="space-y-4 sm:space-y-6">
+            <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                    <h1 className="text-xl font-display font-bold text-primary-950 sm:text-2xl">User Management</h1>
+                    <p className="mt-0.5 text-sm font-medium text-primary-500 sm:mt-1">Manage staff accounts and mechanic profiles.</p>
                 </div>
-                <Button variant="primary" leftIcon={<Plus className="w-4 h-4" />} onClick={handleAddUser}>
+                <Button variant="primary" className="shrink-0 !min-h-10 !px-3 sm:!px-4" leftIcon={<Plus className="w-4 h-4" />} onClick={handleAddUser}>
                     Add User
                 </Button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Card padding="default" className="flex items-center gap-4">
-                    <div className="p-3 rounded-xl bg-accent-danger/20"><Shield className="w-6 h-6 text-accent-danger" /></div>
-                    <div>
-                        <p className="text-2xl font-bold font-display text-primary-950">{adminCount}</p>
-                        <p className="text-sm text-primary-500">Administrators</p>
+            <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                <Card padding="sm" className="flex min-w-0 items-center gap-2 border-l-2 border-l-accent-danger sm:gap-3 sm:p-5">
+                    <div className="shrink-0 rounded-lg bg-accent-danger/10 p-2"><Shield className="h-4 w-4 text-accent-danger sm:h-5 sm:w-5" /></div>
+                    <div className="min-w-0">
+                        <p className="text-xl font-bold font-display leading-none text-primary-950 sm:text-2xl">{adminCount}</p>
+                        <p className="mt-1 text-xs leading-tight text-primary-600 sm:text-sm">Administrators</p>
                     </div>
                 </Card>
-                <Card padding="default" className="flex items-center gap-4">
-                    <div className="p-3 rounded-xl bg-accent-info/20"><UserCheck className="w-6 h-6 text-accent-info" /></div>
-                    <div>
-                        <p className="text-2xl font-bold font-display text-primary-950">{cashierCount}</p>
-                        <p className="text-sm text-primary-500">Cashiers</p>
+                <Card padding="sm" className="flex min-w-0 items-center gap-2 border-l-2 border-l-accent-info sm:gap-3 sm:p-5">
+                    <div className="shrink-0 rounded-lg bg-accent-info/10 p-2"><UserCheck className="h-4 w-4 text-accent-info sm:h-5 sm:w-5" /></div>
+                    <div className="min-w-0">
+                        <p className="text-xl font-bold font-display leading-none text-primary-950 sm:text-2xl">{cashierCount}</p>
+                        <p className="mt-1 text-xs leading-tight text-primary-600 sm:text-sm">Cashiers</p>
                     </div>
                 </Card>
-                <Card padding="default" className="flex items-center gap-4">
-                    <div className="p-3 rounded-xl bg-accent-success/20"><User className="w-6 h-6 text-accent-success" /></div>
-                    <div>
-                        <p className="text-2xl font-bold font-display text-primary-950">{clerkCount}</p>
-                        <p className="text-sm text-primary-500">Clerks</p>
+                <Card padding="sm" className="flex min-w-0 items-center gap-2 border-l-2 border-l-accent-success sm:gap-3 sm:p-5">
+                    <div className="shrink-0 rounded-lg bg-accent-success/10 p-2"><User className="h-4 w-4 text-accent-success sm:h-5 sm:w-5" /></div>
+                    <div className="min-w-0">
+                        <p className="text-xl font-bold font-display leading-none text-primary-950 sm:text-2xl">{clerkCount}</p>
+                        <p className="mt-1 text-xs leading-tight text-primary-600 sm:text-sm">Clerks</p>
                     </div>
                 </Card>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative flex-1 max-w-md">
+            <div className="grid gap-2 min-[500px]:grid-cols-[minmax(0,1fr)_auto] min-[500px]:items-center sm:gap-3">
+                <div className="relative min-w-0">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                     <input
                         type="text"
                         placeholder="Search users..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-primary-200 rounded-lg text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue shadow-sm"
+                        className="w-full rounded-lg border border-primary-200 bg-white py-2.5 pl-10 pr-4 text-primary-950 shadow-sm placeholder:text-primary-400 focus:border-accent-blue focus:outline-none focus:ring-1 focus:ring-accent-blue"
                     />
                 </div>
-                <div role="tablist" aria-label="Staff account status" className="inline-flex w-full rounded-xl border border-primary-200 bg-white p-1 sm:w-auto">
+                <div role="tablist" aria-label="Staff account status" className="inline-flex w-full rounded-xl border border-primary-200 bg-primary-50/70 p-1 min-[500px]:w-auto">
                     <button
                         type="button"
                         role="tab"
