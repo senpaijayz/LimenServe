@@ -21,6 +21,8 @@ it('requires confirmation before deleting an archived product and removes it aft
   fireEvent.click(await screen.findByRole('button', { name: 'Delete permanently' }));
   expect(api.deleteArchivedCatalogProduct).not.toHaveBeenCalled();
   expect(screen.getByText(/This cannot be undone/)).toBeTruthy();
+  expect(screen.getByText(/Inventory-only movement and receiving logs will be removed/)).toBeTruthy();
+  expect(screen.getByText(/Products with sales, reservations, quotes, service orders/)).toBeTruthy();
   fireEvent.click(screen.getAllByRole('button', { name: 'Delete permanently' }).find((button) => button.closest('[role="dialog"]')));
   await waitFor(() => expect(api.deleteArchivedCatalogProduct).toHaveBeenCalledWith(archived.id, archived.sku));
   await screen.findByText('No archived products yet.');

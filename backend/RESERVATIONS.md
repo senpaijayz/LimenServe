@@ -26,7 +26,7 @@ The matching backend and frontend use order checkout. The database rejects the p
 
 ## Archived product deletion
 
-`20261014110716_delete_unused_archived_products.sql` adds an administrator-only deletion function. Archived Products shows **Delete permanently** with an explicit confirmation. Stock, reservation/sales/quotation/service history, receiving records, active locations, configured recommendations, and linked processing records block deletion. The server verifies the selected part number before deleting. An archive/restore audit entry alone does not block an otherwise unused product.
+`20261014110716_delete_unused_archived_products.sql` adds an administrator-only deletion function; `20261024121232_allow_inventory_only_archived_product_delete.sql` lets unused archived products be removed after inventory-only activity. Archived Products shows **Delete permanently** with an explicit confirmation. Stock, reservations, sales, quotations, service orders, active locations, configured recommendations, and linked processing records block deletion. Inventory-only movement and receiving logs are removed with the product; supplier invoice lines retain their captured part number, description, quantity, and cost with the catalog link cleared. The server verifies the selected part number before deleting. An archive/restore audit entry alone does not block an otherwise unused product.
 
 Eligible deletion removes product-owned prices, images, supplier links, empty stock metadata, and its current catalog staging entry in one transaction. Historical pricelist entries retain their SKU and price. Deployment enables the action without automatically deleting any products.
 

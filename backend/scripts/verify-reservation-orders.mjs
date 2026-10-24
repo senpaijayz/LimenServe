@@ -48,7 +48,7 @@ try {
     create table catalog.suppliers(id uuid primary key);
     create table catalog.product_supplier_links(product_id uuid, supplier_id uuid);
     create table catalog.stock_receipts(id uuid primary key, supplier_id uuid);
-    create table catalog.stock_receiving_logs(id uuid primary key, supplier_id uuid);
+    create table catalog.stock_receiving_logs(id uuid primary key, supplier_id uuid, product_id uuid references catalog.products(id) on delete cascade);
     create table stockroom.zones(id uuid primary key);
     create table stockroom.aisles(id uuid primary key);
     create table stockroom.shelves(id uuid primary key);
@@ -152,8 +152,7 @@ try {
   // dependency fixture tables and preserve real transaction safeguards.
   await db.exec(`
     create schema cms; create schema reco;
-    create table catalog.stock_receipt_items(product_id uuid);
-    alter table catalog.stock_receiving_logs add column product_id uuid;
+    create table catalog.stock_receipt_items(id uuid primary key default gen_random_uuid(), product_id uuid not null references catalog.products(id) on delete restrict, movement_id uuid references catalog.inventory_movements(id) on delete set null, part_number text not null, description text not null, quantity numeric not null, unit_cost numeric not null);
     create table public.product_locations(product_id uuid);
     create table stockroom.items(product_id uuid primary key references catalog.products(id) on delete cascade);
     create table cms.featured_catalog_items(product_id uuid);
@@ -168,6 +167,7 @@ try {
     create table catalog.pricelist_import_staging(sku text);
   `);
   await db.exec(await read('20261014110716_delete_unused_archived_products.sql'));
+  await db.exec(await read('20261024121232_allow_inventory_only_archived_product_delete.sql'));
   const unusedId = '88888888-8888-4888-8888-888888888888';
   await db.exec(`insert into catalog.products(id,sku,name,is_active) values ('${unusedId}','UNUSED','Unused test product',true); insert into catalog.product_prices(product_id,amount) values ('${unusedId}',25); insert into catalog.inventory_balances(product_id,on_hand) values ('${unusedId}',0); insert into catalog.pricelist_import_staging values ('UNUSED');`);
   const deleteUnused = (sku = 'UNUSED', actor = admin) => db.query('select public.delete_archived_catalog_product($1,$2,$3) result', [unusedId,actor,sku]);
@@ -181,11 +181,20 @@ try {
   await db.exec(`update catalog.inventory_balances set on_hand=0 where product_id='${unusedId}'; insert into cms.featured_catalog_items values ('${unusedId}')`);
   await assert.rejects(() => deleteUnused(), /configured product recommendations/);
   await db.exec(`delete from cms.featured_catalog_items where product_id='${unusedId}'`);
+  const receiptMovementId = '99999999-9999-4999-8999-999999999999';
+  await db.exec(`insert into catalog.inventory_movements(id,product_id,movement_type,quantity,reference_type) values ('${receiptMovementId}','${unusedId}','stock_in',1,'supplier_receipt'); insert into catalog.stock_receiving_logs(id,product_id) values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','${unusedId}'); insert into catalog.stock_receipt_items(id,product_id,movement_id,part_number,description,quantity,unit_cost) values ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','${unusedId}','${receiptMovementId}','UNUSED','Unused test product',1,25);`);
+  await db.exec(`insert into operations.sales_transaction_items(id,product_id,line_type,quantity,unit_price,line_total,business_date,item_name_snapshot,item_sku_snapshot) values ('cccccccc-cccc-4ccc-8ccc-cccccccccccc','${unusedId}','product',1,25,25,current_date,'Unused test product','UNUSED')`);
+  await assert.rejects(() => deleteUnused(), /sales history/);
+  assert.equal((await scalar('select count(*)::int count from operations.sales_transaction_items where product_id=$1',[unusedId])).count, 1);
+  await db.exec(`delete from operations.sales_transaction_items where product_id='${unusedId}'`);
   assert.equal((await deleteUnused()).rows[0].result.deleted, true);
   assert.equal((await scalar('select count(*)::int count from catalog.products where id=$1',[unusedId])).count, 0);
   assert.equal((await scalar("select count(*)::int count from catalog.pricelist_import_staging where sku='UNUSED'")).count, 0);
   assert.equal((await scalar('select count(*)::int count from catalog.product_prices where product_id=$1',[unusedId])).count, 0);
+  assert.deepEqual((await scalar('select product_id,part_number,description,quantity::int quantity,unit_cost::int unit_cost from catalog.stock_receipt_items where id=$1',['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'])), { product_id: null, part_number: 'UNUSED', description: 'Unused test product', quantity: 1, unit_cost: 25 });
+  assert.equal((await scalar('select count(*)::int count from catalog.inventory_movements where product_id=$1',[unusedId])).count, 0);
+  assert.equal((await scalar('select count(*)::int count from catalog.stock_receiving_logs where product_id=$1',[unusedId])).count, 0);
   await db.exec(`update catalog.products set is_active=false where id='${product1}'`);
   await assert.rejects(() => db.query('select public.delete_archived_catalog_product($1,$2,$3)',[product1,admin,'PART-1']), /reservation history|sales history/);
-  console.log('PASS: PostgreSQL migrations, grouped totals, backfill, dependency guards, allocation, reserved-stock protection, changed-price rejection, sale-failure rollback, cancellation, atomic sale, replay, legacy compatibility, and safe archived-product deletion.');
+  console.log('PASS: PostgreSQL migrations, grouped totals, backfill, dependency guards, allocation, reserved-stock protection, changed-price rejection, sale-failure rollback, cancellation, atomic sale, replay, legacy compatibility, and safe archived-product deletion with protected sale history and retained supplier invoice snapshots.');
 } finally { await db.close(); }

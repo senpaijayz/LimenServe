@@ -506,7 +506,7 @@ export default function ProductManagement() {
 
       <Card
         title="Archived Products"
-        subtitle="Restore archived products or permanently delete unused ones. Products with stock or linked records are protected. Showing the 250 most recently archived items."
+        subtitle="Restore archived products or permanently remove unused ones. Products with sales, reservations, quotes, service work, or stock stay protected. Inventory-only logs are cleared; supplier invoice lines keep their saved details. Showing the 250 most recently archived items."
         headerAction={(
           <Button variant="outline" size="sm" leftIcon={<RefreshCw className="h-4 w-4" />} isLoading={archivedLoading} onClick={refreshArchivedProducts}>
             Refresh
@@ -552,7 +552,7 @@ export default function ProductManagement() {
         )}
       </Card>
 
-      <ConfirmDialog isOpen={Boolean(deleteTarget)} title="Delete archived product?" message={`Permanently delete "${deleteTarget?.name || ''}" (${deleteTarget?.sku || ''})? Its product details, selling prices, images, and supplier links will be removed. This cannot be undone. Products used by other records cannot be deleted.`} confirmLabel="Delete permanently" confirmVariant="danger" isLoading={Boolean(deletingProductId)} onConfirm={confirmDeleteArchived} onClose={() => { if (!deleteLock.current) setDeleteTarget(null); }} />
+      <ConfirmDialog isOpen={Boolean(deleteTarget)} title="Delete archived product?" message={`Permanently delete "${deleteTarget?.name || ''}" (${deleteTarget?.sku || ''})? Inventory-only movement and receiving logs will be removed. Supplier invoice lines keep their saved part details. Products with sales, reservations, quotes, service orders, or active stockroom locations cannot be deleted, so those records stay untouched. This cannot be undone.`} confirmLabel="Delete permanently" confirmVariant="danger" isLoading={Boolean(deletingProductId)} onConfirm={confirmDeleteArchived} onClose={() => { if (!deleteLock.current) setDeleteTarget(null); }} />
 
       <Modal isOpen={isModalOpen} onClose={closeModal} title={editingProduct ? 'Edit Product' : 'Register New Product'} size="xl">
         <form onSubmit={handleSave} className="space-y-5" noValidate>
