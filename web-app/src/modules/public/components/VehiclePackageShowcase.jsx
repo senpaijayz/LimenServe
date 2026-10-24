@@ -6,6 +6,7 @@ import {
   buildPackageTiers,
   getDefaultHighlightedTier,
   normalizePackage,
+  pricePackageForPublicQuote,
 } from '../utils/smartBundleUtils';
 
 const serviceGroupIconMap = {
@@ -17,30 +18,14 @@ const serviceGroupIconMap = {
   filter_service: Filter,
 };
 
-function summarizeIncluded(items = [], kind) {
+function IncludedItems({ items = [], kind }) {
   const relevantItems = items.filter((item) => ((item.consequentKind || item.consequent_kind) === 'service') === (kind === 'service'));
-  return relevantItems.map((item) => item.recommendedProductName || item.recommendedServiceName).filter(Boolean);
-}
-
-function renderPreviewList(items = []) {
-  if (items.length === 0) {
-    return 'None yet';
-  }
-
-  const preview = items.slice(0, 2).join(' / ');
-  return items.length > 2 ? `${preview} +${items.length - 2} more` : preview;
-}
-
-function isTierSelected(tier, selectedProductIds = [], selectedServiceIds = []) {
-  if (!tier?.items?.length) {
-    return false;
-  }
-
-  return tier.items.every((item) => {
-    const isService = (item.consequentKind || item.consequent_kind) === 'service';
-    const id = isService ? item.recommendedServiceId : item.recommendedProductId;
-    return isService ? selectedServiceIds.includes(id) : selectedProductIds.includes(id);
-  });
+  if (!relevantItems.length) return <p className="mt-2 text-sm text-primary-600">None included</p>;
+  return <ul className="mt-2 space-y-2 text-sm text-primary-950">{relevantItems.map((item, index) => {
+    const sku = kind === 'service' ? item.recommendedServiceCode : item.recommendedProductSku;
+    const name = kind === 'service' ? item.recommendedServiceName : item.recommendedProductName;
+    return <li key={item.packageItemId || sku || index} className="flex justify-between gap-3"><span><strong>{sku}</strong>{sku && name ? ' — ' : ''}{name}</span><span className="shrink-0 font-semibold">{formatCurrency(item.catalogPrice ?? item.resolvedPrice ?? 0)}</span></li>;
+  })}</ul>;
 }
 
 export default function VehiclePackageShowcase({
@@ -51,8 +36,6 @@ export default function VehiclePackageShowcase({
   mode = 'catalog',
   onAddBundle = null,
   buildBundleHref = null,
-  selectedProductIds = [],
-  selectedServiceIds = [],
   selectedBundleKeys = [],
   title = 'Recommended service bundles',
   subtitle = 'Visual Mitsubishi service-led bundles tuned to the vehicle you selected.',
@@ -62,7 +45,7 @@ export default function VehiclePackageShowcase({
 }) {
   const [activeTierByPackage, setActiveTierByPackage] = useState({});
   const [activePackageKey, setActivePackageKey] = useState('');
-  const normalizedPackages = useMemo(() => packages.map((pkg, index) => normalizePackage(pkg, index)), [packages]);
+  const normalizedPackages = useMemo(() => packages.map((pkg, index) => pricePackageForPublicQuote(normalizePackage(pkg, index))), [packages]);
   const defaultPackageKey = (
     highlightPackageKey
       ? normalizedPackages.find((pkg) => pkg.packageKey === highlightPackageKey)?.packageKey
@@ -97,7 +80,7 @@ export default function VehiclePackageShowcase({
       ) : error ? (
         <div className="rounded-2xl border border-accent-danger/20 bg-accent-danger/5 p-4 text-sm text-accent-danger">{error}</div>
       ) : normalizedPackages.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-primary-200 bg-white p-5 text-sm text-primary-500">{emptyLabel}</div>
+        <div className="rounded-2xl border border-dashed border-primary-200 bg-white p-5 text-sm text-primary-700">{emptyLabel}</div>
       ) : (
         <div className="space-y-4">
           {compactTabs && normalizedPackages.length > 1 && (
@@ -132,8 +115,7 @@ export default function VehiclePackageShowcase({
             const activeTierKey = activeTierByPackage[pkg.packageKey] || highlightedTierKey;
             const activeTier = tiers.find((tier) => tier.tierKey === activeTierKey) || tiers[0];
             const bundleKey = activeTier ? `${pkg.packageKey}:${activeTier.tierKey}` : '';
-            const activeTierSelected = Boolean(bundleKey && selectedBundleKeys.includes(bundleKey))
-              || isTierSelected(activeTier, selectedProductIds, selectedServiceIds);
+            const activeTierSelected = Boolean(bundleKey && selectedBundleKeys.includes(bundleKey));
             const ctaLabel = mode === 'estimate' ? (activeTierSelected ? 'Package added' : 'Add Bundle') : 'Build This Bundle';
             const linkTarget = typeof buildBundleHref === 'function' ? buildBundleHref(pkg, activeTier) : '#';
 
@@ -152,30 +134,19 @@ export default function VehiclePackageShowcase({
                       <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70">{pkg.packageDescription}</p>
                     </div>
                     <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-3 text-left lg:min-w-[180px] lg:text-right">
-                      <span className="block text-[0.68rem] font-bold uppercase tracking-[0.22em] text-white/55">Package total</span>
-                      <span className="mt-2 block text-2xl font-bold text-white">{formatCurrency(pkg.smartTotal || 0)}</span>
-                      {pkg.savingsAmount > 0 && (
-                        <span className="mt-1 block text-sm font-semibold text-accent-success">Save {formatCurrency(pkg.savingsAmount)}</span>
+                      <span className="block text-[0.68rem] font-bold uppercase tracking-[0.22em] text-white/70">{tiers.length > 1 ? activeTier?.badgeLabel : 'Package'} total</span>
+                      <span className="mt-2 block text-2xl font-bold text-white">{formatCurrency(activeTier?.smartTotal || 0)}</span>
+                      {activeTier?.savingsAmount > 0 && (
+                        <span className="mt-1 block text-sm font-semibold text-accent-success">Save {formatCurrency(activeTier.savingsAmount)}</span>
                       )}
                     </div>
                   </div>
                 </div>
 
                 <div className="px-5 py-5">
-                  <div className="mb-4 grid gap-3 md:grid-cols-2">
-                    <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-4 py-3">
-                      <span className="block text-[0.68rem] font-bold uppercase tracking-[0.22em] text-primary-400">Included parts</span>
-                      <span className="mt-2 block text-sm font-semibold text-primary-950">{renderPreviewList(summarizeIncluded(pkg.parts, 'product'))}</span>
-                    </div>
-                    <div className="rounded-2xl border border-primary-200 bg-primary-50/70 px-4 py-3">
-                      <span className="block text-[0.68rem] font-bold uppercase tracking-[0.22em] text-primary-400">Included labor</span>
-                      <span className="mt-2 block text-sm font-semibold text-primary-950">{renderPreviewList(summarizeIncluded(pkg.services, 'service'))}</span>
-                    </div>
-                  </div>
-
                   {activeTier && (
                     <div>
-                      <div className="mb-4 grid grid-cols-3 gap-2 rounded-2xl border border-primary-200 bg-primary-50 p-1.5">
+                      {tiers.length > 1 && <div className="mb-4 grid grid-cols-3 gap-2 rounded-2xl border border-primary-200 bg-primary-50 p-1.5">
                         {tiers.map((tier) => {
                           const isActive = tier.tierKey === activeTier.tierKey;
 
@@ -198,13 +169,13 @@ export default function VehiclePackageShowcase({
                             </button>
                           );
                         })}
-                      </div>
+                      </div>}
 
                       <div className="rounded-[24px] border border-accent-blue bg-accent-blue/5 p-4 shadow-sm">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div>
                             <span className="inline-flex rounded-full bg-accent-blue px-3 py-1 text-[0.65rem] font-bold uppercase tracking-[0.22em] text-white">
-                              {activeTier.badgeLabel}
+                              {tiers.length > 1 ? activeTier.badgeLabel : 'Package'}
                             </span>
                             <h5 className="mt-3 text-lg font-display font-semibold text-primary-950">{activeTier.title}</h5>
                             <p className="mt-2 text-sm leading-relaxed text-primary-500">{activeTier.description}</p>
@@ -219,18 +190,18 @@ export default function VehiclePackageShowcase({
                         <div className="mt-4 grid gap-3 md:grid-cols-2">
                           <div className="rounded-2xl bg-white/85 p-3">
                             <span className="block text-[0.64rem] font-bold uppercase tracking-[0.2em] text-primary-400">Parts</span>
-                            <span className="mt-1 block text-sm font-semibold text-primary-950">{renderPreviewList(summarizeIncluded(activeTier.parts, 'product'))}</span>
+                            <IncludedItems items={activeTier.items} kind="product" />
                           </div>
                           <div className="rounded-2xl bg-white/85 p-3">
                             <span className="block text-[0.64rem] font-bold uppercase tracking-[0.2em] text-primary-400">Labor</span>
-                            <span className="mt-1 block text-sm font-semibold text-primary-950">{renderPreviewList(summarizeIncluded(activeTier.services, 'service'))}</span>
+                            <IncludedItems items={activeTier.items} kind="service" />
                           </div>
                         </div>
 
                         <div className="mt-4 grid gap-3 rounded-2xl border border-primary-200 bg-white px-3 py-3 sm:grid-cols-2">
-                          <div className="flex items-center justify-between text-sm text-primary-500">
-                            <span>Normal total</span>
-                            <span className="font-semibold text-primary-400 line-through">{formatCurrency(activeTier.catalogTotal || 0)}</span>
+                          <div className="flex items-center justify-between text-sm text-primary-600">
+                            <span>{activeTier.savingsAmount > 0 ? 'Normal total' : 'Parts and labor'}</span>
+                            <span className={`font-semibold ${activeTier.savingsAmount > 0 ? 'text-primary-500 line-through' : 'text-primary-900'}`}>{formatCurrency(activeTier.catalogTotal || 0)}</span>
                           </div>
                           <div className="flex items-center justify-between text-sm font-semibold text-primary-950">
                             <span>Package total</span>

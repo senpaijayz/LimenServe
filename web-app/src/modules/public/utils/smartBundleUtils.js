@@ -9,7 +9,7 @@ const tierCopy = {
   better: {
     badge: 'Better',
     title: 'Recommended Care',
-    description: 'Best-value bundle with stronger coverage and savings.',
+    description: 'Includes more of the listed parts and labor.',
   },
   best: {
     badge: 'Best',
@@ -89,11 +89,17 @@ export function normalizePackage(pkg = {}, index = 0) {
   const parts = Array.isArray(pkg.parts) ? pkg.parts : [];
   const services = Array.isArray(pkg.services) ? pkg.services : [];
   const summary = summarizePackageItems(parts, services);
-  const packageCopy = getPublicPackageCopy(
-    pkg.serviceGroup ?? pkg.service_group ?? null,
-    pkg.packageName ?? pkg.package_name ?? null,
-    pkg.packageDescription ?? pkg.package_description ?? null,
-  );
+  const isVehicleBundle = (pkg.recommendationMode ?? pkg.recommendation_mode) === 'vehicle_bundle';
+  const packageCopy = isVehicleBundle
+    ? {
+      packageName: pkg.packageName ?? pkg.package_name ?? 'Service package',
+      packageDescription: pkg.packageDescription ?? pkg.package_description ?? '',
+    }
+    : getPublicPackageCopy(
+      pkg.serviceGroup ?? pkg.service_group ?? null,
+      pkg.packageName ?? pkg.package_name ?? null,
+      pkg.packageDescription ?? pkg.package_description ?? null,
+    );
 
   return {
     packageId: pkg.packageId ?? pkg.package_id ?? null,
@@ -115,6 +121,21 @@ export function normalizePackage(pkg = {}, index = 0) {
     parts,
     services,
   };
+}
+
+// The quote API accepts discounted prices only for persisted recommendation
+// rules. Synthetic suggestions remain useful, but must show their real catalog
+// price before a customer adds them.
+export function pricePackageForPublicQuote(pkg = {}) {
+  const validRuleId = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
+  const reprice = (item) => {
+    if (validRuleId(item.packageItemId || item.ruleId)) return item;
+    const price = toNumber(item.catalogPrice ?? item.catalog_price ?? item.recommendedPrice ?? item.resolvedPrice, 0);
+    return { ...item, catalogPrice: price, recommendedPrice: price, resolvedPrice: price, savingsAmount: 0, discountPercent: 0 };
+  };
+  const parts = (pkg.parts || []).map(reprice);
+  const services = (pkg.services || []).map(reprice);
+  return normalizePackage({ ...pkg, parts, services, catalogTotal: null, smartTotal: null, savingsAmount: null, savingsPercent: null });
 }
 
 export function groupRecommendations(recommendations = []) {
@@ -233,6 +254,39 @@ export function buildPackageTiers(pkg) {
 
   if (allItemCount === 0) {
     return [];
+  }
+
+  if (pkg.recommendationMode === 'vehicle_bundle') {
+    const partByFunction = (key) => sortedParts.find((item) => item.partFunction === key);
+    const firstAvailable = (keys) => keys.map(partByFunction).find(Boolean);
+    const requiredParts = (() => {
+      switch (pkg.serviceGroup) {
+        case 'oil_change': return [partByFunction('oil_filter'), partByFunction('engine_oil')];
+        case 'filter_service': return [firstAvailable(['air_filter', 'cabin_filter', 'fuel_filter'])];
+        case 'brake_service': return [firstAvailable(['brake_pad', 'brake_shoe'])];
+        case 'cooling_service': return [partByFunction('coolant'), firstAvailable(['radiator', 'thermostat'])];
+        case 'battery_service': return [partByFunction('battery')];
+        case 'tune_up': return [firstAvailable(['spark_plug', 'fuel_injector'])];
+        default: return [];
+      }
+    })();
+    if (!requiredParts.length || requiredParts.some((item) => !item) || !sortedServices.length) return [];
+
+    const core = distinctItems([...requiredParts, sortedServices[0]]);
+    const coreIds = new Set(core.map((item) => item.recommendedProductId || item.recommendedServiceId));
+    const extras = [...sortedParts, ...sortedServices].filter((item) => !coreIds.has(item.recommendedProductId || item.recommendedServiceId));
+    const candidateTiers = [
+      createTier('good', pkg, core),
+      createTier('better', pkg, distinctItems([...core, ...extras.slice(0, 1)])),
+      createTier('best', pkg, distinctItems([...core, ...extras])),
+    ];
+    const seen = new Set();
+    return candidateTiers.filter((tier) => {
+      const signature = tier.items.map((item) => item.recommendedProductId || item.recommendedServiceId).join('|');
+      if (seen.has(signature)) return false;
+      seen.add(signature);
+      return true;
+    });
   }
 
   let goodPartCount = sortedParts.length > 0 ? 1 : 0;

@@ -11,6 +11,7 @@ import { annotatePriceListImportError, classifyPriceListItem, parsePriceListActi
 import { selectByInChunks } from '../utils/supabaseBatchSelect.js';
 import { createPriceHistoryRouter } from './priceHistoryRoutes.js';
 import { applyEstimatePricelistScope, getActiveEstimatePricelist } from '../services/estimatePricelistScope.js';
+import { classifyVehiclePackagePart, hasRequiredVehiclePackageParts, isVehiclePackagePartFit } from '../services/vehiclePackageEligibility.js';
 import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
@@ -145,8 +146,16 @@ const VEHICLE_PACKAGE_ORDER = [
   'brake_service',
   'cooling_service',
   'battery_service',
-  'general_service',
 ];
+
+const VEHICLE_PACKAGE_SERVICE_CODES = {
+  oil_change: ['SVC-OIL'],
+  filter_service: ['SVC-FILTER'],
+  tune_up: ['SVC-TUNE'],
+  brake_service: ['SVC-BRAKE-INSTALL', 'SVC-BRAKE-CLEAN'],
+  cooling_service: ['SVC-COOL'],
+  battery_service: ['SVC-BATT'],
+};
 
 const PART_FUNCTION_RULES = [
   { partFunction: 'oil_filter', serviceGroup: 'oil_change', keywords: ['oil filter'] },
@@ -1307,7 +1316,7 @@ async function enrichPricelistCatalogProducts(products = []) {
       client: supabaseAdmin,
       schema: 'catalog',
       table: 'products',
-      select: 'id, sku, brand, uom, status, metadata, created_at',
+      select: 'id, sku, brand, uom, status, is_active, metadata, created_at',
       column: 'sku',
       values: skus,
       chunkSize: PRICE_LIST_LOOKUP_BATCH_SIZE,
@@ -1351,6 +1360,7 @@ async function enrichPricelistCatalogProducts(products = []) {
     return {
       ...product,
       id: catalogProduct?.id || product.id,
+      quoteEligible: catalogProduct?.is_active === true,
       brand: catalogProduct?.brand || product.brand,
       uom: product.uom || catalogProduct?.uom || 'PC',
       status: product.status || catalogProduct?.status || 'out_of_stock',
@@ -1817,12 +1827,12 @@ function buildVehiclePackageCopy(serviceGroup, fallbackName) {
     case 'oil_change':
       return {
         packageName: 'Oil Change Package',
-        packageDescription: 'Fresh oil, filter, washer, and labor grouped for a cleaner maintenance stop.',
+        packageDescription: 'Engine oil, an oil filter, and the listed labor. Check the exact parts below before adding.',
       };
     case 'brake_service':
       return {
         packageName: 'Brake Refresh Package',
-        packageDescription: 'Brake parts and labor bundled to restore stopping confidence for this Mitsubishi.',
+        packageDescription: 'Brake replacement parts with the listed service work.',
       };
     case 'cooling_service':
       return {
@@ -1832,7 +1842,7 @@ function buildVehiclePackageCopy(serviceGroup, fallbackName) {
     case 'battery_service':
       return {
         packageName: 'Battery + Charging Check',
-        packageDescription: 'Battery support parts and electrical labor grouped into one practical service package.',
+        packageDescription: 'A battery with the listed check and cleaning service.',
       };
     case 'tune_up':
       return {
@@ -1880,12 +1890,19 @@ function scoreVehiclePackageCandidate(candidate) {
 
 function pickVehiclePackageProducts({ catalog, vehicleContext, serviceGroup, limitCount = 4 }) {
   const candidates = catalog
-    .map((product) => ({
-      product,
-      profile: inferProductProfile(product),
-      matchLevel: getVehicleProductMatchLevel(product, vehicleContext),
-    }))
-    .filter((candidate) => candidate.profile.serviceGroup === serviceGroup && candidate.matchLevel && matchesVehicleFilters(candidate.product, vehicleContext))
+    .map((product) => {
+      const profile = classifyVehiclePackagePart(product);
+      return {
+        product,
+        profile,
+        matchLevel: getVehicleProductMatchLevel(product, vehicleContext),
+      };
+    })
+    .filter((candidate) => candidate.product.quoteEligible
+      && candidate.profile?.serviceGroup === serviceGroup
+      && candidate.matchLevel
+      && isVehiclePackagePartFit(candidate.product, vehicleContext.rawModel, candidate.profile.partFunction)
+      && matchesVehicleFilters(candidate.product, vehicleContext))
     .sort((left, right) => scoreVehiclePackageCandidate(left) - scoreVehiclePackageCandidate(right));
 
   const selected = [];
@@ -1905,35 +1922,11 @@ function pickVehiclePackageProducts({ catalog, vehicleContext, serviceGroup, lim
     selected.push(candidate);
   });
 
-  if (selected.length < Math.min(limitCount, candidates.length)) {
-    candidates.forEach((candidate) => {
-      if (selected.length >= limitCount) {
-        return;
-      }
-
-      if (selected.some((picked) => picked.product.id === candidate.product.id)) {
-        return;
-      }
-
-      selected.push(candidate);
-    });
-  }
-
   return selected;
 }
 
 function buildVehiclePackageProductItem(candidate, vehicleContext, serviceGroup, index) {
-  const pricing = resolveSmartPricing({
-    recommendation: {
-      catalogPrice: candidate.product.price,
-      recommendedPrice: candidate.product.price,
-    },
-    matchedProduct: candidate.product,
-    consequentKind: 'product',
-    serviceGroup,
-    matchLevel: candidate.matchLevel,
-    minAnchorQuantity: 1,
-  });
+  const price = Number(candidate.product.price);
 
   return {
     consequentKind: 'product',
@@ -1950,32 +1943,21 @@ function buildVehiclePackageProductItem(candidate, vehicleContext, serviceGroup,
     vehicleModelName: vehicleContext.rawModel,
     vehicleFamily: vehicleContext.family,
     serviceGroup,
+    partFunction: candidate.profile.partFunction,
     matchLevel: candidate.matchLevel,
     displayPriority: index + 1,
-    pricingMode: pricing.pricingMode,
-    catalogPrice: pricing.catalogPrice,
-    recommendedPrice: pricing.resolvedPrice,
-    resolvedPrice: pricing.resolvedPrice,
-    displayPriceLabel: pricing.displayPriceLabel,
-    savingsAmount: pricing.savingsAmount,
-    discountPercent: pricing.discountPercent,
+    pricingMode: 'catalog',
+    catalogPrice: price,
+    recommendedPrice: price,
+    resolvedPrice: price,
+    displayPriceLabel: 'Current price',
+    savingsAmount: 0,
+    discountPercent: 0,
   };
 }
 
 function buildVehiclePackageServiceItem(service, vehicleContext, serviceGroup, index) {
-  const pricing = resolveSmartPricing({
-    recommendation: {
-      catalogPrice: service.price,
-      recommendedPrice: service.price,
-      recommendedServiceCode: service.code,
-      complimentaryEligible: Boolean(service.complimentaryEligible),
-    },
-    matchedService: service,
-    consequentKind: 'service',
-    serviceGroup,
-    matchLevel: 'service_bundle',
-    minAnchorQuantity: 1,
-  });
+  const price = Number(service.price);
 
   return {
     consequentKind: 'service',
@@ -1990,13 +1972,13 @@ function buildVehiclePackageServiceItem(service, vehicleContext, serviceGroup, i
     serviceGroup,
     matchLevel: 'service_bundle',
     displayPriority: index + 1,
-    pricingMode: pricing.pricingMode,
-    catalogPrice: pricing.catalogPrice,
-    recommendedPrice: pricing.resolvedPrice,
-    resolvedPrice: pricing.resolvedPrice,
-    displayPriceLabel: pricing.displayPriceLabel,
-    savingsAmount: pricing.savingsAmount,
-    discountPercent: pricing.discountPercent,
+    pricingMode: 'catalog',
+    catalogPrice: price,
+    recommendedPrice: price,
+    resolvedPrice: price,
+    displayPriceLabel: 'Current price',
+    savingsAmount: 0,
+    discountPercent: 0,
   };
 }
 
@@ -2004,19 +1986,13 @@ function buildVehiclePackages({ catalog, serviceCatalog, vehicleContext }) {
   return VEHICLE_PACKAGE_ORDER
     .map((serviceGroup, index) => {
       const products = pickVehiclePackageProducts({ catalog, vehicleContext, serviceGroup, limitCount: 4 });
-      const hasDedicatedOil = serviceGroup !== 'oil_change'
-        || products.some((candidate) => candidate.profile.partFunction === 'engine_oil');
-      const hasOilFilter = serviceGroup !== 'oil_change'
-        || products.some((candidate) => candidate.profile.partFunction === 'oil_filter');
-      const services = findMatchingServices({ serviceCatalog, serviceGroup, limitCount: 2 })
-        .map((service) => ({
-          ...service,
-          complimentaryEligible: serviceGroup === 'oil_change'
-            && service.code === 'SVC-OIL'
-            && hasDedicatedOil,
-        }));
+      const allowedCodes = VEHICLE_PACKAGE_SERVICE_CODES[serviceGroup] || [];
+      const services = allowedCodes
+        .map((code) => serviceCatalog.find((service) => service.code === code))
+        .filter((service) => service && Number(service.price) >= 0);
 
-      if (products.length === 0 || (serviceGroup === 'oil_change' && (!hasDedicatedOil || !hasOilFilter))) {
+      if (!hasRequiredVehiclePackageParts(serviceGroup, products.map((candidate) => candidate.profile.partFunction))
+          || services.length === 0) {
         return null;
       }
 
@@ -3156,18 +3132,18 @@ router.get('/vehicle-packages', async (req, res, next) => {
       vehicleYear,
       vehicleFamily: extractVehicleFamily(vehicleModel),
     });
-    const [vehiclePricelist, serviceCatalog] = await Promise.all([
-      fetchVehiclePricelistCatalog({
-        searchQuery: '',
-        selectedCategory: 'all',
-        sortBy: 'name-asc',
-        vehicleContext,
-      }),
+    const [estimateScope, serviceCatalog] = await Promise.all([
+      getActiveEstimatePricelist(supabaseAdmin),
       getCachedServiceCatalog(),
     ]);
-    const catalog = vehiclePricelist?.sourceAvailable && vehiclePricelist.categoryScopedProducts.length > 0
-      ? vehiclePricelist.categoryScopedProducts
-      : await getCachedProductCatalog();
+    const vehiclePricelist = await fetchVehiclePricelistCatalog({
+      estimateScope,
+      searchQuery: '',
+      selectedCategory: 'all',
+      sortBy: 'name-asc',
+      vehicleContext,
+    });
+    const catalog = vehiclePricelist?.categoryScopedProducts || [];
     const packages = buildVehiclePackages({ catalog, serviceCatalog, vehicleContext });
 
     res.json({

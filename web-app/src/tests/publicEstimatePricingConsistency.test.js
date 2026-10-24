@@ -7,6 +7,7 @@ import {
 } from '../modules/public/pages/PublicEstimate';
 import { buildSmartQuoteModel } from '../modules/public/utils/quoteRecommendationModel';
 import { getAppliedBundleDisplaySummaries, getAppliedBundleSummaries } from '../modules/public/utils/bundleQuotePricing';
+import { buildPackageTiers, pricePackageForPublicQuote } from '../modules/public/utils/smartBundleUtils';
 
 const PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -102,5 +103,17 @@ describe('public estimate pricing consistency', () => {
       },
     ]);
     expect(getAppliedBundleSummaries([selectedPart])).toEqual([]);
+  });
+
+  it('does not advertise an unsaveable synthetic package discount', () => {
+    const packageForQuote = pricePackageForPublicQuote({
+      packageKey: 'synthetic-package',
+      parts: [{ consequentKind: 'product', packageItemId: `vehicle-part-${PRODUCT_ID}`, recommendedProductId: PRODUCT_ID, catalogPrice: 100, resolvedPrice: 95 }],
+      services: [],
+    });
+    const [tier] = buildPackageTiers(packageForQuote);
+    expect(tier.catalogTotal).toBe(100);
+    expect(tier.smartTotal).toBe(100);
+    expect(tier.savingsAmount).toBe(0);
   });
 });

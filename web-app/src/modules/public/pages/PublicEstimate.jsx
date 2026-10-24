@@ -801,7 +801,16 @@ const PublicEstimate = () => {
     const addBundleToEstimate = (pkg, tier) => {
         const lineItems = buildBundleLineItems(pkg, tier);
         const bundleKey = lineItems[0]?.bundleMeta?.bundleKey;
-        if (!bundleKey || addedBundleKeysRef.current.has(bundleKey)) {
+        if (!bundleKey || !lineItems.length) {
+            showToastError('This package has no quotable parts or services. Choose another package.');
+            return;
+        }
+        if (lineItems.some((item) => !isUuid(item.id)
+            || (item.kind === 'product' && !item.raw?.recommendedProduct))) {
+            showToastError('A package item is no longer available in the current price list. Please refresh and choose again.');
+            return;
+        }
+        if (addedBundleKeysRef.current.has(bundleKey)) {
             return;
         }
 
@@ -815,6 +824,7 @@ const PublicEstimate = () => {
             return;
         }
 
+        setSaveError('');
         addedBundleKeysRef.current.add(bundleKey);
         lineItems.forEach((lineItem) => {
             const recommendation = {
@@ -831,6 +841,7 @@ const PublicEstimate = () => {
 
             addSuggestedPart(recommendation);
         });
+        success(`${tier.badgeLabel || 'Package'} package added to your quote.`);
     };
 
     useEffect(() => {
@@ -1239,7 +1250,7 @@ const PublicEstimate = () => {
                                                 <button
                                                     type="button"
                                                     onClick={() => removePart(part.lineKey)}
-                                                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-primary-400 transition hover:bg-accent-danger/10 hover:text-accent-danger"
+                                                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                                                     aria-label={`Remove ${part.name}`}
                                                 >
                                                     <X className="h-4 w-4" />
@@ -1284,7 +1295,7 @@ const PublicEstimate = () => {
                                                 <button
                                                     type="button"
                                                     onClick={() => removeService(service.lineKey)}
-                                                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-primary-400 transition hover:bg-accent-danger/10 hover:text-accent-danger"
+                                                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                                                     aria-label={`Remove ${service.name}`}
                                                 >
                                                     <X className="h-4 w-4" />
@@ -1793,34 +1804,6 @@ const PublicEstimate = () => {
                             </div>
                             )}
 
-                            {estimatePhase === 'catalog' && hasVehicle && (
-                                <div ref={packageShelfRef}>
-                                    <div className="mb-3 flex justify-end">
-                                        <Button variant="secondary" onClick={() => setShowVehiclePackages((value) => !value)}>
-                                            {showVehiclePackages ? 'Hide Vehicle Packages' : 'Show Vehicle Packages'}
-                                        </Button>
-                                    </div>
-                                    {showVehiclePackages && (
-                                        <VehiclePackageShowcase
-                                            vehicle={vehicle}
-                                            packages={vehiclePackages}
-                                            loading={vehiclePackagesLoading}
-                                            error={vehiclePackagesError}
-                                            mode="estimate"
-                                            onAddBundle={addBundleToEstimate}
-                                            selectedProductIds={selectedProductIds}
-                                            selectedServiceIds={selectedServiceIds}
-                                            selectedBundleKeys={appliedBundleDisplays.map((bundle) => bundle.bundleKey)}
-                                            title="Vehicle-first service bundles"
-                                            subtitle="Visual package cards for the vehicle you selected, complete with included parts, included labor, normal total, package total, and savings."
-                                            emptyLabel={`No featured packages are ready for ${vehicle.displayLabel} yet.`}
-                                            highlightPackageKey={highlightedVehiclePackageKey}
-                                            compactTabs
-                                        />
-                                    )}
-                                </div>
-                            )}
-
                             {estimatePhase === 'catalog' && (
                             <div className="surface p-4 sm:p-5">
                                 <div className="mb-4 flex flex-col gap-4">
@@ -1941,79 +1924,17 @@ const PublicEstimate = () => {
                                     </button>
 
                                     <div className="flex items-center gap-3">
-                                        {canGoNext && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                                                className="inline-flex items-center gap-2 rounded-xl bg-primary-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-800"
-                                            >
-                                                Show More <ChevronRight className="h-4 w-4" />
-                                            </button>
-                                        )}
                                         <button
                                             type="button"
                                             onClick={() => canGoNext && setCurrentPage((page) => Math.min(totalPages, page + 1))}
                                             disabled={!canGoNext}
                                             className="inline-flex items-center gap-2 rounded-xl border border-primary-200 px-4 py-2 text-sm font-semibold text-primary-700 transition disabled:cursor-not-allowed disabled:opacity-40 hover:border-primary-300 hover:bg-primary-50"
                                         >
-                                            Next <ChevronRight className="h-4 w-4" />
+                                            Next page <ChevronRight className="h-4 w-4" />
                                         </button>
                                     </div>
                                 </div>
                             </div>
-                            )}
-
-                            {estimatePhase === 'catalog' && focusedProduct && (
-                                <div className="space-y-3">
-                                    <div className="flex flex-col gap-3 rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary-400">Selected bundle anchor</p>
-                                            <p className="mt-1 font-semibold text-primary-950">{focusedProduct.name}</p>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {selectedParts.length > 1 && (
-                                                <select
-                                                    value={focusedProduct.id}
-                                                    onChange={(event) => {
-                                                        const nextProduct = selectedParts.find((part) => part.id === event.target.value);
-                                                        if (nextProduct) setFocusedProduct(nextProduct);
-                                                    }}
-                                                    className="min-h-11 rounded-xl border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-900 outline-none focus:border-accent-blue"
-                                                >
-                                                    {selectedParts.map((part) => (
-                                                        <option key={`${part.lineKey}-bundle-anchor`} value={part.id}>{part.name}</option>
-                                                    ))}
-                                                </select>
-                                            )}
-                                            <Button variant="secondary" onClick={() => setShowSmartBundles((value) => !value)}>
-                                                {showSmartBundles ? 'Hide Smart Bundles' : 'Show Smart Bundles'}
-                                            </Button>
-                                        </div>
-                                    </div>
-                                    {showSmartBundles && (
-                                        <ProductPackageSuggestions
-                                            product={focusedProduct}
-                                            vehicleModelId={vehicle.model || focusedProduct.model || focusedProduct.vehicleModelName || ''}
-                                            vehicleContext={hasVehicle ? vehicle : null}
-                                            anchorQuantity={focusedPartSelection?.quantity ?? 1}
-                                            onAddProduct={addSuggestedPart}
-                                            onAddService={addSuggestedService}
-                                            onAddBundle={addBundleToEstimate}
-                                            onRemoveProduct={removePart}
-                                            onRemoveService={removeService}
-                                            selectedProductIds={selectedProductIds}
-                                            selectedServiceIds={selectedServiceIds}
-                                            selectedBundleKeys={appliedBundleDisplays.map((bundle) => bundle.bundleKey)}
-                                            title={hasVehicle ? 'Good / Better / Best smart bundles' : 'Part-based Good / Better / Best bundles'}
-                                            subtitle={hasVehicle
-                                                ? 'Vehicle-aware smart upsell bundles of matched Mitsubishi parts and labor for the selected anchor part.'
-                                                : 'Vehicle selection is optional. These recommendations use the selected part as the bundle anchor.'}
-                                            highlightedPackageKey={incomingPackageKey}
-                                            bundleMode="estimate"
-                                            smartQuote
-                                        />
-                                    )}
-                                </div>
                             )}
 
                             {estimatePhase === 'catalog' && (
@@ -2074,6 +1995,84 @@ const PublicEstimate = () => {
                                     })}
                                 </div>
                             </div>
+                            )}
+
+                            {estimatePhase === 'catalog' && hasVehicle && (
+                                <div ref={packageShelfRef} className="space-y-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <h3 className="text-lg font-semibold text-primary-950">Packages for your vehicle</h3>
+                                        <Button variant="secondary" onClick={() => setShowVehiclePackages((value) => !value)}>
+                                            {showVehiclePackages ? 'Hide packages' : 'Show packages'}
+                                        </Button>
+                                    </div>
+                                    {showVehiclePackages && (
+                                        <VehiclePackageShowcase
+                                            vehicle={vehicle}
+                                            packages={vehiclePackages}
+                                            loading={vehiclePackagesLoading}
+                                            error={vehiclePackagesError}
+                                            mode="estimate"
+                                            onAddBundle={addBundleToEstimate}
+                                            selectedBundleKeys={appliedBundleDisplays.map((bundle) => bundle.bundleKey)}
+                                            title="Service packages"
+                                            subtitle="Each package lists exactly what would be added to your quote. Please confirm vehicle fitment with the shop."
+                                            emptyLabel={`No verified package is available for ${vehicle.displayLabel} in the current price list. You can still choose parts and services above.`}
+                                            highlightPackageKey={highlightedVehiclePackageKey}
+                                            compactTabs
+                                        />
+                                    )}
+                                </div>
+                            )}
+
+                            {estimatePhase === 'catalog' && focusedProduct && (
+                                <div className="space-y-3">
+                                    <div className="flex flex-col gap-3 rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary-600">Packages for selected part</p>
+                                            <p className="mt-1 font-semibold text-primary-950">{focusedProduct.name}</p>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {selectedParts.length > 1 && (
+                                                <select
+                                                    value={focusedProduct.id}
+                                                    onChange={(event) => {
+                                                        const nextProduct = selectedParts.find((part) => part.id === event.target.value);
+                                                        if (nextProduct) setFocusedProduct(nextProduct);
+                                                    }}
+                                                    className="min-h-11 rounded-xl border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-900 outline-none focus:border-accent-blue"
+                                                >
+                                                    {selectedParts.map((part) => (
+                                                        <option key={`${part.lineKey}-bundle-anchor`} value={part.id}>{part.name}</option>
+                                                    ))}
+                                                </select>
+                                            )}
+                                            <Button variant="secondary" onClick={() => setShowSmartBundles((value) => !value)}>
+                                                {showSmartBundles ? 'Hide packages' : 'Show packages'}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    {showSmartBundles && (
+                                        <ProductPackageSuggestions
+                                            product={focusedProduct}
+                                            vehicleModelId={vehicle.model || focusedProduct.model || focusedProduct.vehicleModelName || ''}
+                                            vehicleContext={hasVehicle ? vehicle : null}
+                                            anchorQuantity={focusedPartSelection?.quantity ?? 1}
+                                            onAddProduct={addSuggestedPart}
+                                            onAddService={addSuggestedService}
+                                            onAddBundle={addBundleToEstimate}
+                                            onRemoveProduct={removePart}
+                                            onRemoveService={removeService}
+                                            selectedProductIds={selectedProductIds}
+                                            selectedServiceIds={selectedServiceIds}
+                                            selectedBundleKeys={appliedBundleDisplays.map((bundle) => bundle.bundleKey)}
+                                            title="More options for this part"
+                                            subtitle="Review the exact parts and labor before adding an option."
+                                            highlightedPackageKey={incomingPackageKey}
+                                            bundleMode="estimate"
+                                            smartQuote
+                                        />
+                                    )}
+                                </div>
                             )}
 
                             {estimatePhase === 'details' && (
@@ -2217,7 +2216,7 @@ const PublicEstimate = () => {
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => removePart(part.lineKey)}
-                                                                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-primary-400 transition hover:bg-accent-danger/10 hover:text-accent-danger"
+                                                                            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                                                                             aria-label={`Remove ${part.name}`}
                                                                         >
                                                                             <X className="h-4 w-4" />
@@ -2264,7 +2263,7 @@ const PublicEstimate = () => {
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => removeService(service.lineKey)}
-                                                                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-primary-400 transition hover:bg-accent-danger/10 hover:text-accent-danger"
+                                                                            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                                                                             aria-label={`Remove ${service.name}`}
                                                                         >
                                                                             <X className="h-4 w-4" />

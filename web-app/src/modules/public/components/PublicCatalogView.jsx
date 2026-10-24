@@ -657,24 +657,13 @@ const PublicCatalogView = () => {
                     <ChevronLeft className="h-4 w-4" /> Previous
                   </button>
 
-                  {canGoNext && (
-                    <button
-                      type="button"
-                      onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                      className="inline-flex items-center gap-2 rounded-xl bg-primary-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-800"
-                    >
-                      See More
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  )}
-
                   <button
                     type="button"
                     onClick={canGoNext ? () => setCurrentPage((page) => Math.min(totalPages, page + 1)) : undefined}
                     disabled={!canGoNext}
                     className="inline-flex items-center gap-2 rounded-xl border border-primary-200 px-4 py-2 text-sm font-semibold text-primary-700 transition disabled:cursor-not-allowed disabled:opacity-40 hover:border-primary-300 hover:bg-primary-50"
                   >
-                    Next <ChevronRight className="h-4 w-4" />
+                    Next page <ChevronRight className="h-4 w-4" />
                   </button>
                 </div>
               </div>

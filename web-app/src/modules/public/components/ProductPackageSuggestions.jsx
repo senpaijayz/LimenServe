@@ -9,6 +9,7 @@ import {
   getDefaultHighlightedTier,
   groupRecommendations,
   normalizePackage,
+  pricePackageForPublicQuote,
 } from '../utils/smartBundleUtils';
 import { buildSmartQuoteModel } from '../utils/quoteRecommendationModel';
 
@@ -40,18 +41,6 @@ function renderItemList(items = [], kind, limit = 4) {
 
   const visibleNames = names.slice(0, limit);
   return names.length > limit ? [...visibleNames, `+${names.length - limit} more`] : visibleNames;
-}
-
-function isTierAdded(tier, selectedProductIds = [], selectedServiceIds = []) {
-  if (!tier?.items?.length) {
-    return false;
-  }
-
-  return tier.items.every((item) => {
-    const isService = (item.consequentKind || item.consequent_kind) === 'service';
-    const id = isService ? item.recommendedServiceId : item.recommendedProductId;
-    return isService ? selectedServiceIds.includes(id) : selectedProductIds.includes(id);
-  });
 }
 
 const ProductPackageSuggestions = ({
@@ -142,9 +131,10 @@ const ProductPackageSuggestions = ({
       : groupRecommendations(recommendations).map((pkg, index) => normalizePackage(pkg, index));
 
     return sourcePackages
+      .map((pkg) => bundleMode === 'estimate' ? pricePackageForPublicQuote(pkg) : pkg)
       .filter((pkg) => (pkg.parts?.length ?? 0) > 0 || (pkg.services?.length ?? 0) > 0)
       .sort((left, right) => Number(left.priority ?? 100) - Number(right.priority ?? 100));
-  }, [packages, recommendations]);
+  }, [packages, recommendations, bundleMode]);
 
   useEffect(() => {
     const next = {};
@@ -231,8 +221,7 @@ const ProductPackageSuggestions = ({
     const activeBundleKey = activeTier && smartQuoteModel.bestPackage
       ? `${smartQuoteModel.bestPackage.packageKey}:${activeTier.tierKey}`
       : '';
-    const activeTierAdded = Boolean(activeBundleKey && selectedBundleKeys.includes(activeBundleKey))
-      || (activeTier ? isTierAdded(activeTier, selectedProductIds, selectedServiceIds) : false);
+    const activeTierAdded = Boolean(activeBundleKey && selectedBundleKeys.includes(activeBundleKey));
     const bundleCtaLabel = activeTierAdded ? 'Package added' : activeTier ? `Add ${activeTier.badgeLabel} Bundle` : 'Add Bundle';
 
     return (
@@ -540,8 +529,7 @@ const ProductPackageSuggestions = ({
               : 'Bundle-ready';
             const isQuantityEligible = Number(anchorQuantity ?? 1) >= Number(pkg.minAnchorQuantity ?? 1);
             const bundleKey = activeTier ? `${pkg.packageKey}:${activeTier.tierKey}` : '';
-            const added = Boolean(bundleKey && selectedBundleKeys.includes(bundleKey))
-              || isTierAdded(activeTier, selectedProductIds, selectedServiceIds);
+            const added = Boolean(bundleKey && selectedBundleKeys.includes(bundleKey));
             const ctaLabel = bundleMode === 'catalog' ? 'Build This Bundle' : added ? 'Package added' : 'Add Bundle';
             const linkTarget = typeof buildBundleHref === 'function' ? buildBundleHref(pkg, activeTier) : '#';
             const activeParts = renderItemList(activeTier?.items || [], 'product', compact ? 2 : 4);
