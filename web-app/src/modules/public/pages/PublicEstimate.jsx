@@ -350,6 +350,7 @@ const buildRetrievedPrintableQuote = (quote) => {
         items: (quote.items ?? []).map((item, index) => ({
             id: item.id || `${item.line_type || 'item'}-${item.product_name || item.service_name || 'line'}-${index}`,
             quantity: Number(item.quantity ?? 1),
+            partNumber: item.product_sku || null,
             name: item.product_name || item.service_name || 'Quotation line',
             subtitle: item.bundle_name
                 ? `${item.bundle_name}${item.bundle_tier_label ? ` (${item.bundle_tier_label})` : ''}`
@@ -1043,6 +1044,8 @@ const PublicEstimate = () => {
         if (!printableQuote) return;
         const toastId = showToastLoading('Preparing your quotation PDF…');
         try {
+            // Load PDF generation only when requested; the estimate page stays light.
+            const { downloadQuotationPdf } = await import('../../quotation/utils/downloadQuotationPdf');
             await downloadQuotationPdf({
                 ...printableQuote,
                 issuedAt: formatPrintDate(printableQuote.issuedAt),
@@ -2403,6 +2406,7 @@ const PublicEstimate = () => {
                                         <tr key={item.id}>
                                             <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>{item.quantity}</td>
                                             <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>
+                                                {item.partNumber && <span style={{ display: 'block', fontSize: '10px', fontWeight: '700' }}>{item.partNumber}</span>}
                                                 {item.name}
                                                 {item.subtitle && <span style={{ display: 'block', fontSize: '10px', color: '#888' }}>{item.subtitle}</span>}
                                                 {item.catalogUnitPrice > item.unitPrice && (

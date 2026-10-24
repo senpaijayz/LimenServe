@@ -98,6 +98,13 @@ npm run test:responsive
 ```
 
 Set `RESPONSIVE_TEST_URL=http://127.0.0.1:4173` first (`$env:RESPONSIVE_TEST_URL=...` in PowerShell). The exact script name is defined in `web-app/package.json`.
+By default this checks public pages. To include the dashboard, inventory, receiving, POS,
+quotation, service orders, reports, users, CMS, and 3D locator, set both
+`RESPONSIVE_TEST_STAFF_EMAIL` and `RESPONSIVE_TEST_STAFF_PASSWORD` for a dedicated
+admin test account before running the same command. Keep those credentials out of
+the repository; the audit uses a temporary browser profile and does not print them.
+`RESPONSIVE_TEST_STAFF_ROUTES` and `RESPONSIVE_TEST_WIDTHS` can narrow a run. A staff
+route now fails the audit if it redirects to login or shows a permission-denied page.
 
 `npm run build` writes a Vite manifest and automatically checks gzip budgets for
 the initial and major feature-route static closures. The graph check rejects

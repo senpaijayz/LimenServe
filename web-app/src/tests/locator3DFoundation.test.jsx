@@ -72,7 +72,7 @@ describe('3D Locator foundation', () => {
         expect(useLocator3DStore.getState().selectedObjectId).toBeNull();
     });
 
-    it('renders a search-first locator with the 3D scene as the primary workspace', () => {
+    it('renders a search-first locator with the 3D scene as the primary workspace', async () => {
         renderLocator();
 
         expect(screen.getByRole('heading', { name: '3D Stockroom' })).toBeTruthy();
@@ -81,7 +81,7 @@ describe('3D Locator foundation', () => {
         expect(screen.getByRole('button', { name: 'Floor 1' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Floor 2' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Top-down 2D floor view' })).toBeTruthy();
-        expect(screen.getByTestId('locator-3d-scene')).toBeTruthy();
+        expect(await screen.findByTestId('locator-3d-scene')).toBeTruthy();
         expect(screen.getByTestId('locator-3d-scene').closest('main')?.getAttribute('aria-label')).toBe('3D stockroom canvas');
         expect(screen.queryByText('Located Products')).toBeNull();
     });

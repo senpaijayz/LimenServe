@@ -36,6 +36,8 @@ const ROUTE_BUDGETS = [
   { name: 'sales report', entry: 'src/modules/reports/pages/SalesReport.jsx', maxKiB: 390 },
   { name: '3D locator', entry: 'src/modules/locator3d/pages/Locator3DAdmin.jsx', maxKiB: 580 },
 ];
+const LOCATOR_SCENE_ENTRY = 'src/modules/locator3d/components/Locator3DScene.jsx';
+const LOCATOR_SCENE_BUDGET_KIB = 340;
 
 const FEATURE_BOUNDARIES = [
   'src/modules/locator3d/pages/Locator3DAdmin.jsx',
@@ -147,6 +149,17 @@ async function main() {
         `${route.name} route is ${routeKiB.toFixed(1)} KiB gzip; budget is ${route.maxKiB} KiB.`,
       );
     }
+  }
+
+  // The WebGL scene is deliberately separate from the ordinary locator route.
+  // Guard its own transfer size so mobile users do not inherit silent growth.
+  const locatorSceneClosure = collectStaticClosure(manifest, LOCATOR_SCENE_ENTRY);
+  const locatorRouteClosure = collectStaticClosure(manifest, 'src/modules/locator3d/pages/Locator3DAdmin.jsx');
+  const incrementalSceneEntries = new Set([...locatorSceneClosure].filter((entry) => !locatorRouteClosure.has(entry)));
+  const locatorSceneKiB = toKiB(await gzipBytesForEntries(manifest, incrementalSceneEntries));
+  measurements.push(`on-demand 3D scene transfer ${locatorSceneKiB.toFixed(1)} KiB gzip`);
+  if (locatorSceneKiB > LOCATOR_SCENE_BUDGET_KIB) {
+    failures.push(`On-demand 3D scene is ${locatorSceneKiB.toFixed(1)} KiB gzip; budget is ${LOCATOR_SCENE_BUDGET_KIB} KiB.`);
   }
 
   if (failures.length > 0) {

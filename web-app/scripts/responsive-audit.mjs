@@ -8,6 +8,8 @@ import process from 'node:process';
 const DEFAULT_VIEWPORT_WIDTHS = [320, 360, 375, 390, 430, 768, 844, 1024, 1440];
 const MOBILE_NAV_MAX_WIDTH = 1279;
 const DEFAULT_PUBLIC_ROUTES = ['/', '/catalog', '/estimate', '/service-orders', '/about'];
+const DEFAULT_STAFF_ROUTES = ['/dashboard', '/inventory', '/inventory/receive', '/inventory/logs', '/pos', '/quotation', '/services', '/services/schedule', '/reports', '/users', '/cms', '/locator-3d'];
+const STAFF_NAV_MAX_WIDTH = 1023;
 const VIEWPORT_HEIGHT = 900;
 const DEFAULT_TIMEOUT_MS = 20_000;
 const ANIMATION_SETTLE_MS = 600;
@@ -145,6 +147,17 @@ function getRoutes() {
   return configured?.length ? configured : DEFAULT_PUBLIC_ROUTES;
 }
 
+function getStaffAudit() {
+  const email = process.env.RESPONSIVE_TEST_STAFF_EMAIL?.trim();
+  const password = process.env.RESPONSIVE_TEST_STAFF_PASSWORD;
+  if (Boolean(email) !== Boolean(password)) {
+    throw new Error('Set both RESPONSIVE_TEST_STAFF_EMAIL and RESPONSIVE_TEST_STAFF_PASSWORD, or neither.');
+  }
+  if (!email) return null;
+  const configured = process.env.RESPONSIVE_TEST_STAFF_ROUTES?.split(',').map((value) => value.trim()).filter(Boolean);
+  return { email, password, routes: configured?.length ? configured : DEFAULT_STAFF_ROUTES };
+}
+
 function decodeMessage(data) {
   if (typeof data === 'string') return data;
   if (data instanceof ArrayBuffer) return new TextDecoder().decode(data);
@@ -252,12 +265,59 @@ async function waitForPageReady(pageClient, timeoutMs) {
   throw new Error('Page load timed out.');
 }
 
-async function readResponsiveState(pageClient) {
+async function evaluateValue(pageClient, expression) {
+  const { result, exceptionDetails } = await pageClient.send('Runtime.evaluate', { expression, returnByValue: true });
+  if (exceptionDetails) throw new Error(exceptionDetails.text || 'Browser evaluation failed.');
+  return result.value;
+}
+
+async function waitForValue(pageClient, expression, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await evaluateValue(pageClient, expression)) return;
+    await delay(150);
+  }
+  throw new Error('Timed out waiting for the signed-in workspace.');
+}
+
+async function signInForStaffAudit(pageClient, baseUrl, timeoutMs, { email, password }) {
+  const navigation = await pageClient.send('Page.navigate', { url: new URL('/login', baseUrl).href });
+  if (navigation.errorText) throw new Error(`Could not open staff login (${navigation.errorText}).`);
+  await waitForPageReady(pageClient, timeoutMs);
+  await waitForValue(pageClient, 'Boolean(document.querySelector("input[name=email]") && document.querySelector("input[name=password]"))', timeoutMs);
+
+  // Credentials stay in this process and the temporary browser profile; never print them.
+  const submitted = await evaluateValue(pageClient, `(() => {
+    const email = document.querySelector('input[name=email]');
+    const password = document.querySelector('input[name=password]');
+    const form = email?.form;
+    if (!email || !password || !form) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(email, ${JSON.stringify(email)});
+    email.dispatchEvent(new Event('input', { bubbles: true }));
+    setter.call(password, ${JSON.stringify(password)});
+    password.dispatchEvent(new Event('input', { bubbles: true }));
+    form.requestSubmit();
+    return true;
+  })()`);
+  if (!submitted) throw new Error('Staff login form is unavailable.');
+  try {
+    await waitForValue(pageClient, 'location.pathname !== "/login" && Boolean(document.querySelector("header.header"))', timeoutMs);
+  } catch {
+    throw new Error('Staff sign-in did not complete. Check the test account and its access without sharing credentials.');
+  }
+}
+
+async function waitForStaffPage(pageClient, timeoutMs) {
+  await waitForValue(pageClient, 'Boolean(document.querySelector("header.header")) || (location.pathname === "/login" && Boolean(document.querySelector("form")))', timeoutMs);
+}
+
+async function readResponsiveState(pageClient, isStaff = false) {
   const { result, exceptionDetails } = await pageClient.send('Runtime.evaluate', {
     expression: `(() => {
       const root = document.documentElement;
       const body = document.body;
-      const toggle = document.querySelector('button[aria-label="Toggle menu"]');
+      const toggle = document.querySelector(${JSON.stringify(isStaff ? 'button[aria-label="Open navigation menu"]' : 'button[aria-label="Toggle menu"]')});
       const viewportWidth = window.innerWidth;
       const scrollWidth = Math.max(root?.scrollWidth || 0, body?.scrollWidth || 0);
       const overflowElements = scrollWidth > viewportWidth + 1
@@ -272,7 +332,6 @@ async function readResponsiveState(pageClient) {
               right: Math.round(rect.right),
               width: Math.round(rect.width),
               scrollWidth: element.scrollWidth,
-              text: (element.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 70),
               position: style.position,
             };
           })
@@ -282,7 +341,7 @@ async function readResponsiveState(pageClient) {
         : [];
 
       if (!toggle) {
-        return { viewportWidth, scrollWidth, toggleFound: false, overflowElements };
+        return { viewportWidth, scrollWidth, pathname: location.pathname, bodyEmpty: !(document.body.innerText || '').trim(), accessDenied: document.body.textContent.includes('This workspace is restricted'), toggleFound: false, overflowElements };
       }
 
       const rect = toggle.getBoundingClientRect();
@@ -296,6 +355,8 @@ async function readResponsiveState(pageClient) {
       return {
         viewportWidth,
         scrollWidth,
+        pathname: location.pathname,
+        accessDenied: document.body.textContent.includes('This workspace is restricted'),
         toggleFound: true,
         toggleVisible,
         toggleWidth: rect.width,
@@ -313,6 +374,24 @@ async function readResponsiveState(pageClient) {
   }
 
   return result.value;
+}
+
+async function exerciseStaffMenu(pageClient) {
+  const opened = await evaluateValue(pageClient, `(() => {
+    const toggle = document.querySelector('button[aria-label="Open navigation menu"]');
+    toggle?.click();
+    return Boolean(toggle);
+  })()`);
+  await delay(ANIMATION_SETTLE_MS);
+  const visible = await evaluateValue(pageClient, `(() => {
+    const sidebar = document.querySelector('aside.sidebar');
+    const rect = sidebar?.getBoundingClientRect();
+    return Boolean(sidebar?.classList.contains('sidebar-open') && rect && rect.right > 0 && rect.left < innerWidth);
+  })()`);
+  await evaluateValue(pageClient, `document.querySelector('button[aria-label="Close navigation menu"]')?.click()`);
+  await delay(ANIMATION_SETTLE_MS);
+  const closed = await evaluateValue(pageClient, `!document.querySelector('aside.sidebar')?.classList.contains('sidebar-open')`);
+  return { opened, visible, closed };
 }
 
 async function exerciseMobileMenu(pageClient) {
@@ -379,13 +458,13 @@ async function exerciseMobileMenu(pageClient) {
   };
 }
 
-function validateResponsiveState(route, width, state) {
+function validateResponsiveState(route, width, state, isStaff = false) {
   const failures = [];
 
   if (state.scrollWidth > state.viewportWidth + 1) {
     failures.push(`document width ${state.scrollWidth}px exceeds viewport ${state.viewportWidth}px`);
   }
-  if (width > MOBILE_NAV_MAX_WIDTH) {
+  if (width > (isStaff ? STAFF_NAV_MAX_WIDTH : MOBILE_NAV_MAX_WIDTH)) {
     return failures;
   }
 
@@ -432,7 +511,9 @@ async function run() {
   const baseUrl = getBaseUrl();
   const timeoutMs = getTimeoutMs();
   const viewportWidths = getViewportWidths();
-  const routes = getRoutes();
+  const staffAudit = getStaffAudit();
+  const publicRoutes = getRoutes().map((route) => ({ route, isStaff: false }));
+  const staffRoutes = (staffAudit?.routes || []).map((route) => ({ route, isStaff: true }));
   const launched = await launchChrome(timeoutMs);
   let browserClient;
   let pageClient;
@@ -447,38 +528,54 @@ async function run() {
     pageClient = new CdpClient(pageWebSocketUrl, timeoutMs);
     await pageClient.send('Page.enable');
     const failures = [];
+    if (!staffAudit) {
+      console.log('Staff routes skipped; set the two RESPONSIVE_TEST_STAFF_* variables to audit signed-in pages.');
+    }
 
-    for (const width of viewportWidths) {
-      const height = getViewportHeight(width);
-      await pageClient.send('Emulation.setDeviceMetricsOverride', {
-        width,
-        height,
-        deviceScaleFactor: 1,
-        mobile: width <= 768,
-        screenWidth: width,
-        screenHeight: height,
-      });
+    // Public pages redirect signed-in staff, so finish them before logging in.
+    for (const routeGroup of [publicRoutes, staffRoutes]) {
+      if (!routeGroup.length) continue;
+      if (routeGroup[0].isStaff) await signInForStaffAudit(pageClient, baseUrl, timeoutMs, staffAudit);
+      for (const width of viewportWidths) {
+        const height = getViewportHeight(width);
+        await pageClient.send('Emulation.setDeviceMetricsOverride', {
+          width,
+          height,
+          deviceScaleFactor: 1,
+          mobile: width <= 768,
+          screenWidth: width,
+          screenHeight: height,
+        });
 
-      for (const route of routes) {
-        const targetUrl = new URL(route, baseUrl).href;
-        const navigation = await pageClient.send('Page.navigate', { url: targetUrl });
-        if (navigation.errorText) {
-          failures.push(`${route} at ${width}px: navigation failed (${navigation.errorText})`);
-          continue;
-        }
+        for (const { route, isStaff } of routeGroup) {
+          const targetUrl = new URL(route, baseUrl).href;
+          const navigation = await pageClient.send('Page.navigate', { url: targetUrl });
+          if (navigation.errorText) {
+            failures.push(`${route} at ${width}px: navigation failed (${navigation.errorText})`);
+            continue;
+          }
 
-        await waitForPageReady(pageClient, timeoutMs);
-        await delay(ANIMATION_SETTLE_MS);
-        const state = await readResponsiveState(pageClient);
-        const routeFailures = validateResponsiveState(route, width, state);
-        if (route === '/' && width <= MOBILE_NAV_MAX_WIDTH) {
-          const menuState = await exerciseMobileMenu(pageClient);
-          routeFailures.push(...validateMobileMenu(width, menuState));
-        }
-        failures.push(...routeFailures);
-        console.log(`${routeFailures.length ? 'FAIL' : 'PASS'} ${route} at ${width}px`);
-        if (routeFailures.some((failure) => failure.includes('document width')) && state.overflowElements?.length) {
-          console.log(`  Overflowing elements: ${JSON.stringify(state.overflowElements)}`);
+          await waitForPageReady(pageClient, timeoutMs);
+          if (isStaff) await waitForStaffPage(pageClient, timeoutMs);
+          await delay(ANIMATION_SETTLE_MS);
+          const state = await readResponsiveState(pageClient, isStaff);
+          const routeFailures = validateResponsiveState(route, width, state, isStaff);
+          if (isStaff && state.pathname !== new URL(route, baseUrl).pathname) routeFailures.push(`${route} at ${width}px: redirected to ${state.pathname}`);
+          if (isStaff && state.accessDenied) routeFailures.push(`${route} at ${width}px: test account cannot access this page`);
+          if (isStaff && width <= STAFF_NAV_MAX_WIDTH && route === staffAudit.routes[0] && !routeFailures.length) {
+            const menu = await exerciseStaffMenu(pageClient);
+            if (!menu.opened || !menu.visible || !menu.closed) routeFailures.push(`${route} at ${width}px: staff navigation menu did not open and close`);
+          }
+          if (!isStaff && route === '/' && width <= MOBILE_NAV_MAX_WIDTH) {
+            const menuState = await exerciseMobileMenu(pageClient);
+            routeFailures.push(...validateMobileMenu(width, menuState));
+          }
+          failures.push(...routeFailures);
+          console.log(`${routeFailures.length ? 'FAIL' : 'PASS'} ${route} at ${width}px`);
+          if (!state.toggleFound) console.log(`  Page: ${state.pathname}${state.bodyEmpty ? ' (empty page)' : ''}`);
+          if (routeFailures.some((failure) => failure.includes('document width')) && state.overflowElements?.length) {
+            console.log(`  Overflowing elements: ${JSON.stringify(state.overflowElements)}`);
+          }
         }
       }
     }
@@ -487,7 +584,7 @@ async function run() {
       throw new Error(`Responsive audit failed:\n- ${failures.join('\n- ')}`);
     }
 
-    console.log(`Responsive audit passed for ${routes.length * viewportWidths.length} route/viewport combinations.`);
+    console.log(`Responsive audit passed for ${(publicRoutes.length + staffRoutes.length) * viewportWidths.length} route/viewport combinations.`);
   } finally {
     pageClient?.close();
     if (browserClient) {

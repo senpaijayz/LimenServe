@@ -135,6 +135,8 @@ const Sidebar = () => {
                     <button
                         onClick={closeMobileSidebar}
                         className="lg:hidden ml-auto p-1 rounded hover:bg-primary-100"
+                        aria-label="Close navigation menu"
+                        type="button"
                     >
                         <X className="w-5 h-5 text-primary-500" />
                     </button>

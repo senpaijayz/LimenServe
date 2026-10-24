@@ -9,7 +9,7 @@ vi.mock('../modules/locator3d/components/Locator3DScene', () => ({
     default: () => <div data-testid="locator-3d-scene" />,
 }));
 
-vi.mock('../services/catalogApi', () => ({ getFullProductCatalog: vi.fn(async () => []) }));
+vi.mock('../services/catalogApi', () => ({ getProductCatalog: vi.fn(async () => ({ products: [] })) }));
 vi.mock('../modules/locator3d/services/locator3DApi', () => ({
     assignProductLocation: vi.fn(), getProductLocations: vi.fn(async () => []),
     listStoreLayouts: vi.fn(async () => []), loadStoreLayout: vi.fn(async () => null),

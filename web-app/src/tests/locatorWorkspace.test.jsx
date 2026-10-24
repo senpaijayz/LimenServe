@@ -8,7 +8,7 @@ import { LOCATOR_SCENE_OBJECTS } from '../modules/locator3d/data/locatorScene';
 import { configureLocatorRecovery } from '../modules/locator3d/utils/locatorRecovery';
 
 vi.mock('../modules/locator3d/components/Locator3DScene', () => ({ default: () => <div data-testid="scene" /> }));
-vi.mock('../services/catalogApi', () => ({ getFullProductCatalog: vi.fn(async () => [{ id: 'part-1', name: 'Oil Filter', sku: 'OF-1' }]) }));
+vi.mock('../services/catalogApi', () => ({ getProductCatalog: vi.fn(async () => ({ products: [{ id: 'part-1', name: 'Oil Filter', sku: 'OF-1' }] })) }));
 vi.mock('../modules/locator3d/services/locator3DApi', () => ({
     assignProductLocation: vi.fn(async (location) => location),
     removeProductLocation: vi.fn(),
@@ -18,7 +18,7 @@ vi.mock('../modules/locator3d/services/locator3DApi', () => ({
 }));
 import { assignProductLocation, listStoreLayouts, loadStoreLayout, removeProductLocation, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
 import Locator3DAdmin from '../modules/locator3d/pages/Locator3DAdmin';
-import { getFullProductCatalog } from '../services/catalogApi';
+import { getProductCatalog } from '../services/catalogApi';
 
 function mount(isAdmin = true) {
     return render(<MemoryRouter><AuthContext.Provider value={{ isAdmin, user: { id: 'test-admin' } }}><ToastProvider><Locator3DAdmin /></ToastProvider></AuthContext.Provider></MemoryRouter>);
@@ -84,17 +84,17 @@ describe('Stockroom workspace workflows', () => {
 
     it('loads the model and allows saving while the catalog is still pending', async () => {
         let releaseCatalog;
-        getFullProductCatalog.mockImplementationOnce(() => new Promise((resolve) => { releaseCatalog = resolve; }));
+        getProductCatalog.mockImplementationOnce(() => new Promise((resolve) => { releaseCatalog = resolve; }));
         mount(); await loaded();
         expect(screen.getByText('Workshop')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Design Mode' }));
         fireEvent.keyDown(window, { key: 's', ctrlKey: true });
         await waitFor(() => expect(saveStoreLayout).toHaveBeenCalledOnce());
-        await act(async () => releaseCatalog([]));
+        await act(async () => releaseCatalog({ products: [] }));
     });
 
     it('still loads the saved model when product lookup fails', async () => {
-        getFullProductCatalog.mockRejectedValueOnce(new Error('Catalog timeout'));
+        getProductCatalog.mockRejectedValueOnce(new Error('Catalog timeout'));
         mount(); await loaded();
         expect(screen.getByText('Workshop')).toBeTruthy();
         expect(screen.getByText(/Product search is unavailable/)).toBeTruthy();
@@ -149,7 +149,7 @@ describe('Stockroom workspace workflows', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }));
         await waitFor(() => expect(removeProductLocation).toHaveBeenCalledWith('part-1', { layoutId: 'layout-1', expectedRevision: 4 }));
         await waitFor(() => expect(within(dialog).getByText('No products assigned yet.')).toBeTruthy());
-        expect(getFullProductCatalog).toHaveBeenCalled();
+        expect(getProductCatalog).toHaveBeenCalled();
     });
     it('prevents duplicate assignments and layout saves while assignment is in flight', async () => {
         loadStoreLayout.mockResolvedValueOnce({ id: 'draft-1', revision: 7, status: 'draft', layoutName: 'Workshop', layoutData: { objects: LOCATOR_SCENE_OBJECTS }, locations: [] });

@@ -52,6 +52,7 @@ describe('3D Locator Phase 3 store behavior', () => {
                     shelfNumber: 3,
                     binNumber: 4,
                     floor: 2,
+                    layerNumber: 1,
                     shelfObjectId: 'shelf-4-b',
                 },
             ]);
@@ -63,6 +64,7 @@ describe('3D Locator Phase 3 store behavior', () => {
                 shelfNumber: 3,
                 binNumber: 4,
                 floor: 2,
+                layerNumber: 1,
                 shelfObjectId: 'shelf-4-b',
             });
         });

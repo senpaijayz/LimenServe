@@ -156,6 +156,7 @@ describe('Locator3DScene selection', () => {
                 aisle: 'B',
                 binNumber: 4,
                 floor: 1,
+                layerNumber: 1,
                 productId: 'product-1',
                 productName: 'Oil Filter',
                 shelfNumber: 2,
@@ -167,6 +168,7 @@ describe('Locator3DScene selection', () => {
             aisle: 'B',
             binNumber: 4,
             floor: 1,
+            layerNumber: 1,
             productId: 'product-1',
             productName: 'Oil Filter',
             shelfNumber: 2,
@@ -181,6 +183,11 @@ describe('Locator3DScene selection', () => {
         expect(screen.getByTestId('locator-label-shelf-4-a')).toBeTruthy();
         expect(screen.getByText('Aisle B Shelf 2')).toBeTruthy();
         expect(screen.getByText('Bin 4')).toBeTruthy();
+        expect(useLocator3DStore.getState().locatedProduct).toMatchObject({
+            binNumber: 4,
+            layerNumber: 1,
+            precise: true,
+        });
     });
 
     it('keeps an accessible location table available when WebGL cannot be used', () => {

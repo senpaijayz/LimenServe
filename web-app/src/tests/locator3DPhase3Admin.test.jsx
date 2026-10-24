@@ -10,9 +10,9 @@ vi.mock('../modules/locator3d/components/Locator3DScene', () => ({
 }));
 
 vi.mock('../services/catalogApi', () => ({
-    getFullProductCatalog: vi.fn(async () => [
+    getProductCatalog: vi.fn(async () => ({ products: [
         { id: 'product-1', name: 'Oil Filter', sku: 'OF-1' },
-    ]),
+    ] })),
 }));
 
 vi.mock('../modules/locator3d/services/locator3DApi', () => ({

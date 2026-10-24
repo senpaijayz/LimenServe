@@ -47,15 +47,16 @@ const Modal = ({
     useEffect(() => {
         if (isOpen) {
             const previousFocus = document.activeElement;
+            const modalElement = modalRef.current;
             const trapFocus = (event) => {
-                if (event.key !== 'Tab' || !modalRef.current) return;
-                const controls = [...modalRef.current.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')].filter((el) => el.getClientRects().length);
+                if (event.key !== 'Tab' || !modalElement) return;
+                const controls = [...modalElement.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')].filter((el) => el.getClientRects().length);
                 const first = controls[0], last = controls.at(-1);
                 if (!first) { event.preventDefault(); return; }
-                if (event.shiftKey && (document.activeElement === first || document.activeElement === modalRef.current)) { event.preventDefault(); last.focus(); }
+                if (event.shiftKey && (document.activeElement === first || document.activeElement === modalElement)) { event.preventDefault(); last.focus(); }
                 else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
             };
-            modalRef.current?.addEventListener('keydown', trapFocus);
+            modalElement?.addEventListener('keydown', trapFocus);
             document.addEventListener('keydown', handleEscape);
             if (openModalCount++ === 0) previousBodyOverflow = document.body.style.overflow;
             document.body.style.overflow = 'hidden';
@@ -65,7 +66,7 @@ const Modal = ({
             return () => {
                 window.cancelAnimationFrame(focusFrame);
                 document.removeEventListener('keydown', handleEscape);
-                modalRef.current?.removeEventListener('keydown', trapFocus);
+                modalElement?.removeEventListener('keydown', trapFocus);
                 if (previousFocus?.isConnected) previousFocus.focus();
                 if (--openModalCount === 0) document.body.style.overflow = previousBodyOverflow;
             };

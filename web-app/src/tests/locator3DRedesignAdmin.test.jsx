@@ -10,10 +10,10 @@ vi.mock('../modules/locator3d/components/Locator3DScene', () => ({
 }));
 
 vi.mock('../services/catalogApi', () => ({
-    getFullProductCatalog: vi.fn(async () => [
+    getProductCatalog: vi.fn(async () => ({ products: [
         { id: 'product-1', name: 'Oil Filter', quantity: 12, sku: 'OF-1', stock: 12 },
         { id: 'product-2', name: 'Brake Pad', quantity: 0, sku: 'BP-2', stock: 0 },
-    ]),
+    ] })),
 }));
 
 vi.mock('../modules/locator3d/services/locator3DApi', () => ({
@@ -23,6 +23,7 @@ vi.mock('../modules/locator3d/services/locator3DApi', () => ({
             aisle: 'B',
             binNumber: 4,
             floor: 1,
+            layerNumber: 1,
             productId: 'product-1',
             productName: 'Oil Filter',
             shelfNumber: 2,
@@ -33,7 +34,7 @@ vi.mock('../modules/locator3d/services/locator3DApi', () => ({
     loadStoreLayout: vi.fn(async () => ({
         id: 'layout-1', revision: 2, status: 'draft',
         layoutData: { objects: useLocator3DStore.getState().sceneObjects },
-        locations: [{ aisle: 'B', binNumber: 4, floor: 1, productId: 'product-1', productName: 'Oil Filter', shelfNumber: 2, shelfObjectId: 'shelf-4-a', sku: 'OF-1' }],
+        locations: [{ aisle: 'B', binNumber: 4, floor: 1, layerNumber: 1, productId: 'product-1', productName: 'Oil Filter', shelfNumber: 2, shelfObjectId: 'shelf-4-a', sku: 'OF-1' }],
     })),
     listStoreLayouts: vi.fn(async () => [{ layoutName: 'main-store' }]),
     saveStoreLayout: vi.fn(async () => ({ id: 'layout-1' })),
@@ -79,7 +80,7 @@ describe('3D Locator rebuild', () => {
         renderLocator();
 
         expect(screen.getByRole('heading', { name: '3D Stockroom' })).toBeTruthy();
-        expect(screen.getByTestId('locator-3d-scene').closest('main')?.getAttribute('aria-label')).toBe('3D stockroom canvas');
+        expect((await screen.findByTestId('locator-3d-scene')).closest('main')?.getAttribute('aria-label')).toBe('3D stockroom canvas');
         expect(screen.getByRole('button', { name: 'View' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Reset camera' })).toBeTruthy();
         expect(screen.queryByLabelText('Design toolbar')).toBeNull();
@@ -91,8 +92,8 @@ describe('3D Locator rebuild', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Locate Oil Filter' }));
 
         await waitFor(() => expect(useLocator3DStore.getState().locatedProduct?.productId).toBe('product-1'));
-        expect(screen.getByRole('status').textContent).toContain('Oil Filter');
-        expect(screen.getByRole('button', { name: 'Fit Selection' })).toBeTruthy();
+        expect(screen.getByText('Oil Filter').closest('[role="status"]')?.textContent).toContain('Oil Filter');
+        expect(screen.getByRole('button', { name: 'Focus on Product' })).toBeTruthy();
         expect(useLocator3DStore.getState().activeFloor).toBe(1);
     });
 
@@ -102,7 +103,7 @@ describe('3D Locator rebuild', () => {
         await waitFor(() => expect(useLocator3DStore.getState().locatedProduct?.productId).toBe('product-1'));
         expect(screen.getByText('Oil Filter')).toBeTruthy();
         expect(screen.getAllByText(/Floor 1 → Aisle B → Shelf 2 → Layer 1 → Bin 4/i).length).toBeGreaterThan(0);
-        expect(screen.getByRole('button', { name: 'Fit Selection' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Focus on Product' })).toBeTruthy();
         expect(useLocator3DStore.getState().selectedObjectId).toBe('shelf-4-a');
     });
 
