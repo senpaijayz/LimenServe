@@ -237,6 +237,11 @@ async function loadCustomerOrders(userId) {
 function normalizeServiceOrderError(error) {
   const message = String(error?.message || '');
 
+  if (error?.code === '23505' && message.includes('vehicles_plate_no_idx')) {
+    error.statusCode = 409;
+    error.message = 'This plate is already registered. Check the vehicle details and try again.';
+  }
+
   if (error?.code === '42501') error.statusCode = 403;
   if (error?.code === 'P0002') error.statusCode = 404;
   if (error?.code === '22023') error.statusCode = 400;
