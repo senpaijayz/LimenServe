@@ -53,7 +53,7 @@ const ESTIMATE_PHASES = [
         id: 'catalog',
         phase: 'Phase 2',
         label: 'Parts and Services',
-        description: 'Add parts, labor, and vehicle-matched bundles into the draft quote.',
+        description: 'Add parts and labor, then review any verified packages available for your vehicle.',
     },
     {
         id: 'summary',
@@ -1797,7 +1797,7 @@ const PublicEstimate = () => {
                                         onClear={handleVehicleClear}
                                         includePlate
                                         title="Tell us which Mitsubishi you are shopping for"
-                                        subtitle="Model-first browsing unlocks vehicle-matched parts, visual service packages, and smarter Good / Better / Best bundle offers."
+                                        subtitle="Choose your Mitsubishi to narrow the parts list. Packages appear only when their contents match the current price list."
                                     />
                                 </div>
 
@@ -1814,7 +1814,7 @@ const PublicEstimate = () => {
                                         <div>
                                             <h3 className="text-xl font-display font-semibold text-primary-950">Order Parts</h3>
                                             <p className="text-sm text-primary-500">{hasVehicle ? `Browse genuine parts for ${vehicle.displayLabel}. Please confirm vehicle fitment with the shop.` : 'Browse car parts from the current pricelist. Merchandise is not included.'}</p>
-                                            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary-400">Click a part to add it and reveal its Good / Better / Best bundle options.</p>
+                                            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary-600">Click a part to add it. Matching packages, when available, appear below.</p>
                                         </div>
                                     </div>
 
