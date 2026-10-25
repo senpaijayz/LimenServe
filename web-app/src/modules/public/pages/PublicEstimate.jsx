@@ -1113,9 +1113,7 @@ const PublicEstimate = () => {
     const handleModeSelect = (nextMode) => {
         setWorkflowStage('active');
         setMode(nextMode);
-        setEstimatePhase(nextMode === 'estimate'
-            ? (hasItems ? 'summary' : (hasVehicle || customerName || customerPhone ? 'catalog' : 'details'))
-            : 'details');
+        setEstimatePhase('details');
     };
 
     const goToModeChoice = () => {
