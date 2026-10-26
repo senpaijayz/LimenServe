@@ -717,7 +717,9 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
               </p>
               {pkg.hasUnpublishedChanges && (
                 <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                  Draft changes are not live. Current publication:{" "}
+                  {pkg.status === "published"
+                    ? "Draft changes are not live. Current published revision: "
+                    : `${pkg.status === "archived" ? "Archived" : "Unpublished"} — hidden from new quotations. Last published revision: `}
                   {pkg.publishedName} · revision {pkg.publishedRevisionNumber}.
                 </p>
               )}

@@ -281,7 +281,7 @@ export default function PackageEditor({
   ];
 
   return (
-    <section className="min-w-0 bg-white" aria-label="Package editor">
+    <section className="min-w-0 bg-white pb-32 sm:pb-0" aria-label="Package editor">
       <header className="space-y-4 border-b border-primary-200 p-4 sm:p-6">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -369,7 +369,18 @@ export default function PackageEditor({
                 determine the actual offer.
               </p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-3 sm:hidden">
+              <PackageField
+                label="Package type"
+                value={draft.type}
+                options={PACKAGE_TYPE_OPTIONS}
+                onChange={(type) => patch({ type })}
+              />
+              <p className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm leading-relaxed text-blue-950">
+                {PACKAGE_TYPE_OPTIONS.find((option) => option.value === draft.type)?.description}
+              </p>
+            </div>
+            <div className="hidden gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-3">
               {PACKAGE_TYPE_OPTIONS.map((option) => (
                 <button
                   key={option.value}
@@ -844,16 +855,17 @@ export default function PackageEditor({
           </div>
         )}
       </fieldset>
-      <footer className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-primary-200 bg-white/95 p-4 shadow-[0_-4px_20px_rgba(15,23,42,0.05)] backdrop-blur sm:px-6">
+      <footer className="fixed inset-x-0 bottom-0 z-30 flex flex-wrap items-center justify-between gap-3 border-t border-primary-200 bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_20px_rgba(15,23,42,0.05)] backdrop-blur sm:sticky sm:inset-x-auto sm:z-10 sm:p-4 sm:px-6">
         <div className="flex gap-2">
           <button
             type="button"
+            aria-label="Back"
             disabled={busy || step === 0}
             onClick={() => setStep((value) => value - 1)}
-            className="flex min-h-11 items-center gap-1 rounded-xl border border-primary-300 px-3 text-sm font-semibold text-primary-800 disabled:opacity-40"
+            className="flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-xl border border-primary-300 px-3 text-sm font-semibold text-primary-800 disabled:opacity-40"
           >
             <ChevronLeft className="h-4 w-4" />
-            Back
+            <span className="hidden sm:inline">Back</span>
           </button>
           <button
             type="button"
