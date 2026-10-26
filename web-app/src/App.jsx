@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import MainLayout from './components/layout/MainLayout';
 import PublicLayout from './components/layout/PublicLayout';
 import PageLoader from './components/ui/PageLoader';
+import PageLoadBoundary from './components/ui/PageLoadBoundary';
 import { ToastProvider } from './components/ui/Toast';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
@@ -66,9 +67,11 @@ function WorkspaceRouteFallback({ title = 'Loading workspace' }) {
 
 function renderRoute(Component, fallback) {
   return (
-    <Suspense fallback={fallback}>
-      <Component />
-    </Suspense>
+    <PageLoadBoundary resetKey={Component}>
+      <Suspense fallback={fallback}>
+        <Component />
+      </Suspense>
+    </PageLoadBoundary>
   );
 }
 
