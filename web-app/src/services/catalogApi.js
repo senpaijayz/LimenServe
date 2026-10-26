@@ -10,7 +10,6 @@ const CURRENT_YEAR = new Date().getFullYear();
 const MODEL_YEAR_LOOKAHEAD = 1;
 const FITMENT_CACHE_TTL_MS = 10 * 60 * 1000;
 const CATALOG_CACHE_TTL_MS = 2 * 60 * 1000;
-const PACKAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 const VEHICLE_MODEL_ALIASES = {
   'montero sport': ['montero qx', 'montero'],
   'montero sports': ['montero qx', 'montero'],
@@ -406,25 +405,7 @@ function getFallbackVehicleFitmentOptions(model = '') {
   };
 }
 
-function buildFallbackVehicleContext(vehicle = {}) {
-  const model = String(vehicle.vehicleModel || vehicle.model || '').trim();
-  const year = String(vehicle.vehicleYear || vehicle.year || '').trim();
-  const displayLabel = [model, year].filter(Boolean).join(' ');
 
-  return {
-    model,
-    year,
-    engine: '',
-    displayLabel: displayLabel || model || 'Selected vehicle',
-  };
-}
-
-function normalizeVehiclePackageParams(params = {}) {
-  return {
-    vehicleModel: cleanVehicleModelLabel(params.vehicleModel || params.model || ''),
-    vehicleYear: String(params.vehicleYear || params.year || '').trim(),
-  };
-}
 
 export async function getProductCatalog(params = {}) {
   try {
@@ -468,27 +449,6 @@ export async function getVehicleFitmentOptions(params = {}) {
   }
 }
 
-export async function getVehiclePackages(params = {}) {
-  try {
-    const requestParams = normalizeVehiclePackageParams(params);
-    const cacheKey = buildRequestKey('vehicle-packages', requestParams);
-    return await withCachedRequest(cacheKey, PACKAGE_CACHE_TTL_MS, async () => {
-      const { data } = await cachedApiGet('/catalog/vehicle-packages', { params: requestParams });
-      return {
-        vehicleContext: data.vehicleContext ?? null,
-        packages: data.packages ?? [],
-      };
-    });
-  } catch (error) {
-    if (isNetworkFailure(error)) {
-      return {
-        vehicleContext: buildFallbackVehicleContext(params),
-        packages: [],
-      };
-    }
-    extractApiError(error, 'Failed to load vehicle smart bundles.');
-  }
-}
 
 export async function getFullProductCatalog() {
   try {
@@ -750,10 +710,11 @@ export async function deleteArchivedCatalogProduct(productId, confirmSku) {
   }
 }
 
+const SERVICE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 export async function getServiceCatalog() {
   try {
     const cacheKey = buildRequestKey('service-catalog');
-    return await withCachedRequest(cacheKey, PACKAGE_CACHE_TTL_MS, async () => {
+    return await withCachedRequest(cacheKey, SERVICE_CATALOG_CACHE_TTL_MS, async () => {
       const { data } = await cachedApiGet('/catalog/services');
       return data.services ?? [];
     });

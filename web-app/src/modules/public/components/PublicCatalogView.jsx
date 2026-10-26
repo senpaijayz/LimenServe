@@ -16,15 +16,13 @@ import {
   CarFront,
   ScanLine,
 } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { formatCurrency } from '../../../utils/formatters';
 import { cleanVehicleModelLabel } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import usePublicVehicleSelection from '../../../hooks/usePublicVehicleSelection';
-import useVehiclePackages from '../../../hooks/useVehiclePackages';
-import ProductPackageSuggestions from './ProductPackageSuggestions';
+import ManagedQuotePackages from './ManagedQuotePackages';
 import PublicVehicleSelector from './PublicVehicleSelector';
-import VehiclePackageShowcase from './VehiclePackageShowcase';
 import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import { getPublicFeaturedCatalogItems } from '../../cms/api/cmsCatalogApi';
 import Button from '../../../components/ui/Button';
@@ -94,6 +92,7 @@ const FeaturedCatalogProductCard = ({ item, onSelect }) => (
 );
 
 const PublicCatalogView = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -129,10 +128,6 @@ const PublicCatalogView = () => {
     stockFilter,
     vehicleModel: deferredVehicleModel,
     vehicleYear: deferredVehicleYear,
-  });
-  const { packages: vehiclePackages, loading: vehiclePackagesLoading, error: vehiclePackagesError } = useVehiclePackages(vehicle, {
-    enabled: hasVehicle && !loading,
-    deferMs: 450,
   });
 
   useEffect(() => {
@@ -293,12 +288,17 @@ const PublicCatalogView = () => {
     setSelectedProduct(null);
   };
 
-  const buildEstimateHref = (packageKey = '', serviceGroup = '') => {
+  const buildEstimateHref = (packageId = '', variantId = '') => {
     const params = new URLSearchParams();
     if (vehicle.model) params.set('vehicleModel', vehicle.model);
     if (vehicle.year) params.set('vehicleYear', vehicle.year);
-    if (packageKey) params.set('packageKey', packageKey);
-    if (serviceGroup) params.set('serviceGroup', serviceGroup);
+    if (vehicle.engine) params.set('vehicleEngine', vehicle.engine);
+    if (vehicle.fitmentId) params.set('vehicleConfiguration', vehicle.fitmentId);
+    if (vehicle.variant) params.set('vehicleVariant', vehicle.variant);
+    if (packageId) params.set('packageId', packageId);
+    if (variantId) params.set('packageVariantId', variantId);
+    if (selectedProduct?.id) params.set('quoteProductId', selectedProduct.id);
+    if (selectedProduct?.sku) params.set('partNumber', selectedProduct.sku);
     return {
       pathname: '/estimate',
       search: params.toString() ? `?${params.toString()}` : '',
@@ -456,19 +456,8 @@ const PublicCatalogView = () => {
 
       <section className="relative z-10 px-4 pb-20 md:px-8 xl:px-12">
         <div className="mx-auto max-w-[1600px] space-y-5">
-          {hasVehicle && (
-            <VehiclePackageShowcase
-              vehicle={vehicle}
-              packages={vehiclePackages}
-              loading={vehiclePackagesLoading}
-              error={vehiclePackagesError}
-              mode="catalog"
-              buildBundleHref={(pkg) => buildEstimateHref(pkg.packageKey, pkg.serviceGroup)}
-              title="Vehicle-first service packages"
-              subtitle="Visual service-led offers tuned to the Mitsubishi you selected. Open a bundle to build it as an estimate with one click."
-              emptyLabel={`No featured packages are ready for ${vehicle.displayLabel} yet.`}
-              compactTabs
-            />
+          {hasVehicle && !selectedProduct && (
+            <ManagedQuotePackages vehicle={vehicle} onChoose={(publication, price) => navigate(buildEstimateHref(publication.definition.id, price.variantId))} />
           )}
 
           <div className="mb-4 flex flex-col gap-4 rounded-2xl border border-primary-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center">
@@ -756,16 +745,7 @@ const PublicCatalogView = () => {
                     </div>
 
                     <div className="mb-2">
-                      <ProductPackageSuggestions
-                        product={selectedProduct}
-                        vehicleModelId={vehicle.model || selectedProduct.model}
-                        vehicleContext={vehicle}
-                        bundleMode="catalog"
-                        buildBundleHref={(pkg) => buildEstimateHref(pkg.packageKey, pkg.serviceGroup)}
-                        title="Good / Better / Best smart bundles"
-                        subtitle="Pick a tier and jump straight into estimate with this vehicle and bundle already selected."
-                        compact
-                      />
+                      <ManagedQuotePackages parts={[selectedProduct]} vehicle={vehicle} onChoose={(publication, price) => navigate(buildEstimateHref(publication.definition.id, price.variantId))} />
                     </div>
 
                     <div className="mt-auto flex flex-col gap-3 border-t border-primary-200 pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">

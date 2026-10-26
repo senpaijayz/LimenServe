@@ -14,9 +14,14 @@ import {
   createPublicEstimateCreateHandler,
   getPublicEstimatePhoneRateLimitKey,
   isTrustedEstimateCreator,
+  parseInternalEstimateCreateInput,
 } from '../services/publicEstimateCreate.js';
 import { createPublicEstimateLookupHandler } from '../services/publicEstimateLookup.js';
 import { createPublicEstimatePricingResolver } from '../services/publicEstimatePricing.js';
+import { createUnifiedEstimatePricingResolver } from '../services/unifiedEstimatePricing.js';
+import { createManagedEstimate, reviseManagedEstimate } from '../services/managedEstimatePersistence.js';
+import { packageError } from '../services/managedPackageDomain.js';
+import { estimatePricingVehicle } from '../services/estimateVehicleContext.js';
 import { createPublicEstimateRevisionHandler } from '../services/publicEstimateRevision.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import { filterActiveEstimates } from '../services/estimateValidity.js';
@@ -63,25 +68,11 @@ function normalizeQuoteNumber(value) {
   return String(value || '').trim().toUpperCase();
 }
 
-async function createEstimatePersisted(payload) {
-  return callRpc('create_estimate', { payload });
+async function revisePublicEstimatePersisted(estimateId, payload, changeNote, options) {
+  return reviseManagedEstimate({ estimateId, payload, changeNote,
+    expectedRevision: options.expectedRevision, snapshots: options.snapshots, pricingVehicle: options.pricingVehicle });
 }
 
-async function revisePublicEstimatePersisted(estimateId, payload, changeNote) {
-  return callRpc('revise_estimate', {
-    p_estimate_id: estimateId,
-    p_payload: payload,
-    p_editor_id: null,
-    p_change_note: changeNote,
-  });
-}
-
-function isOptionalRecommendationSourceError(error) {
-  const message = String(error?.message || error || '').toLowerCase();
-  return message.includes('schema cache')
-    || message.includes('could not find the function')
-    || message.includes('does not exist');
-}
 
 async function loadActiveProducts(productIds) {
   if (productIds.length === 0) {
@@ -128,9 +119,6 @@ async function loadCurrentStagingPrices(skus) {
     .select('sku, price, status')
     .in('sku', skus);
   if (error) {
-    if (isOptionalRecommendationSourceError(error)) {
-      return [];
-    }
     throw error;
   }
   return data ?? [];
@@ -152,88 +140,18 @@ async function loadActiveServices(serviceIds) {
   return data ?? [];
 }
 
-async function callOptionalRecommendationRpc(name, params) {
-  try {
-    return await callRpc(name, params) ?? [];
-  } catch (error) {
-    if (isOptionalRecommendationSourceError(error)) {
-      return [];
-    }
-    throw error;
-  }
-}
 
-function normalizeApprovedRecommendation(row, anchorProductId, source) {
-  const catalogPrice = Number(row.catalog_price ?? row.recommended_price ?? 0);
-  let resolvedPrice = row.resolved_price;
-  if (resolvedPrice === undefined || resolvedPrice === null) {
-    const priceMode = row.price_mode ?? row.pricing_mode;
-    resolvedPrice = priceMode === 'complimentary'
-      ? 0
-      : priceMode === 'override'
-        ? row.price_override
-        : catalogPrice;
-  }
 
-  return {
-    id: row.package_item_id ?? row.rule_id,
-    item_kind: row.item_kind ?? row.consequent_kind,
-    product_id: row.recommended_product_id,
-    service_id: row.recommended_service_id,
-    package_key: row.package_key,
-    anchor_product_id: anchorProductId,
-    min_anchor_quantity: Number(row.min_anchor_quantity ?? 1),
-    price_mode: row.price_mode ?? row.pricing_mode ?? 'catalog',
-    price_override: row.price_override,
-    catalog_price: catalogPrice,
-    resolved_price: resolvedPrice === null || resolvedPrice === undefined
-      ? null
-      : Number(resolvedPrice),
-    is_active: true,
-    package_is_active: true,
-    source,
-  };
-}
 
-async function loadApprovedRecommendations({ anchorProductIds, vehicleModelName }) {
-  const rows = await Promise.all(anchorProductIds.map(async (anchorProductId) => {
-    const [cmsRows, generatedRows, curatedRows] = await Promise.all([
-      callOptionalRecommendationRpc('get_cms_recommendation_packages', {
-        p_anchor_product_id: anchorProductId,
-        p_vehicle_model_name: vehicleModelName,
-        p_part_limit: 100,
-        p_service_limit: 100,
-      }),
-      callOptionalRecommendationRpc('get_product_recommendation_packages', {
-        p_product_id: anchorProductId,
-        p_vehicle_model_name: vehicleModelName,
-        p_part_limit: 100,
-        p_service_limit: 100,
-      }),
-      callOptionalRecommendationRpc('get_curated_quote_recommendations', {
-        p_product_id: anchorProductId,
-        p_vehicle_model_name: vehicleModelName,
-        p_limit_count: 100,
-      }),
-    ]);
-
-    return [
-      ...cmsRows.map((row) => normalizeApprovedRecommendation(row, anchorProductId, 'cms')),
-      ...generatedRows.map((row) => normalizeApprovedRecommendation(row, anchorProductId, 'generated')),
-      ...curatedRows.map((row) => normalizeApprovedRecommendation(row, anchorProductId, 'curated')),
-    ];
-  }));
-
-  return rows.flat();
-}
-
-const resolvePublicEstimatePricing = createPublicEstimatePricingResolver({
+const resolveRegularEstimatePricing = createPublicEstimatePricingResolver({
   loadProducts: loadActiveProducts,
   loadProductPrices: loadCurrentProductPrices,
   loadStagingPrices: loadCurrentStagingPrices,
   loadServices: loadActiveServices,
-  loadRecommendations: loadApprovedRecommendations,
+  // Only published managed selections can approve a new package discount.
+  loadRecommendations: async () => [],
 });
+const resolvePublicEstimatePricing = createUnifiedEstimatePricingResolver({ resolveRegularPricing: resolveRegularEstimatePricing });
 
 function isDemoEstimate(estimate) {
   const estimateNumber = normalizeQuoteNumber(estimate?.estimate_number);
@@ -392,8 +310,7 @@ const publicEstimateCreatePhoneRateLimiter = createPublicEstimateRateLimiter({
   message: 'Too many quotation requests. Please try again later.',
 });
 const publicEstimateCreateHandler = createPublicEstimateCreateHandler({
-  createEstimate: createEstimatePersisted,
-  loadEstimate: loadEstimateSnapshot,
+  createEstimate: (payload, options) => createManagedEstimate({ payload, snapshots: options.snapshots }),
   resolvePricing: resolvePublicEstimatePricing,
   editTokenSecret: env.supabaseServiceRoleKey,
   notify: createQuotationNotification,
@@ -426,10 +343,10 @@ const publicUpsellActionRateLimiter = createPublicEstimateRateLimiter({
 
 async function createTrustedEstimate(req, res, next) {
   try {
-    const estimateId = await createEstimatePersisted(req.body);
-    const estimate = await loadEstimateSnapshot(estimateId);
+    const approved = await prepareTrustedEstimate(req.body);
+    const { estimateId, estimate, revisionId } = await createManagedEstimate({ payload: approved.payload, snapshots: approved.snapshots, actorId: req.user.id });
 
-    createQuotationNotification(estimate).catch((error) => {
+    Promise.resolve().then(() => createQuotationNotification(estimate)).catch((error) => {
       logger.error('estimate.notification_failed', {
         requestId: req.requestId,
         estimateId,
@@ -437,17 +354,33 @@ async function createTrustedEstimate(req, res, next) {
       });
     });
 
-    res.status(201).json({ estimateId, estimate });
+    res.status(201).json({ estimateId, revisionId, estimate });
   } catch (error) {
     next(error);
   }
+}
+
+async function prepareTrustedEstimate(body, existingQuote = null) {
+  const input = parseInternalEstimateCreateInput(body, { requireRecoveryPhone: existingQuote?.estimate?.source === 'public' });
+  if (!input.ok) throw packageError(input.error);
+  if (existingQuote && (input.expectedRevision === null || input.expectedRevision !== Number(existingQuote.estimate.revision_number ?? 0))) {
+    throw packageError('This quotation changed or needs to be refreshed. Reload it before saving.', 409, 'QUOTE_CONFLICT');
+  }
+  const pricingVehicle = estimatePricingVehicle(input.payload, existingQuote);
+  const pricing = await resolvePublicEstimatePricing({ items: input.payload.items, requestedItems: body.items,
+    requestedEstimate: body.estimate, vehicle: pricingVehicle,
+    selections: input.selections, repricePackageIds: input.repricePackageIds, existingQuote });
+  if (!pricing.ok) throw packageError(pricing.error, pricing.statusCode || 400, pricing.code || 'QUOTE_PRICE_INVALID');
+  return { payload: { ...input.payload, items: pricing.items,
+    estimate: { ...input.payload.estimate, ...pricing.totals, source: existingQuote?.estimate?.source || 'internal' } },
+  snapshots: pricing.snapshots, expectedRevision: input.expectedRevision, changeNote: input.changeNote, pricingVehicle };
 }
 
 router.post(
   '/',
   applyToPublicEstimateCreators(publicEstimateCreateIpRateLimiter),
   applyToPublicEstimateCreators(publicEstimateCreatePhoneRateLimiter),
-  (req, res, next) => (isTrustedEstimateCreator(req.user)
+  (req, res, next) => (isTrustedEstimateCreator(req.user) && req.body?.estimate?.source !== 'public'
     ? createTrustedEstimate(req, res, next)
     : publicEstimateCreateHandler(req, res, next)),
 );
@@ -553,35 +486,23 @@ router.get('/:estimateId/revisions', requireRole('admin'), async (req, res, next
   }
 });
 
-router.patch('/:estimateId', requireRole('admin'), async (req, res, next) => {
+async function reviseTrustedEstimate(req, res, next) {
   try {
-    const revisionId = await callRpc('revise_estimate', {
-      p_estimate_id: req.params.estimateId,
-      p_payload: req.body,
-      p_editor_id: req.user?.id || null,
-      p_change_note: req.body?.changeNote || null,
+    if (!UUID_PATTERN.test(req.params.estimateId)) throw packageError('Choose a valid quotation.');
+    const existingQuote = await loadEstimateSnapshot(req.params.estimateId);
+    if (!existingQuote?.estimate) throw packageError('Quotation not found.', 404, 'QUOTE_NOT_FOUND');
+    const approved = await prepareTrustedEstimate(req.body, existingQuote);
+    const saved = await reviseManagedEstimate({ estimateId: req.params.estimateId, payload: approved.payload,
+      snapshots: approved.snapshots, expectedRevision: approved.expectedRevision, actorId: req.user.id,
+      changeNote: approved.changeNote || 'Quotation updated', pricingVehicle: approved.pricingVehicle,
     });
-
-    res.json({ revisionId });
+    res.status(req.method === 'POST' ? 201 : 200).json(saved);
   } catch (error) {
     next(error);
   }
-});
-
-router.post('/:estimateId/revise', requireRole('admin'), async (req, res, next) => {
-  try {
-    const revisionId = await callRpc('revise_estimate', {
-      p_estimate_id: req.params.estimateId,
-      p_payload: req.body,
-      p_editor_id: req.user?.id || null,
-      p_change_note: req.body?.changeNote || null,
-    });
-
-    res.status(201).json({ revisionId });
-  } catch (error) {
-    next(error);
-  }
-});
+}
+router.patch('/:estimateId', requireRole('admin'), reviseTrustedEstimate);
+router.post('/:estimateId/revise', requireRole('admin'), reviseTrustedEstimate);
 
 router.post('/:estimateId/convert-sale', requireRole('admin'), async (req, res, next) => {
   try {

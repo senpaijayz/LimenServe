@@ -577,71 +577,12 @@ export async function listCmsRecommendationPackages() {
   }));
 }
 
-export async function saveCmsRecommendationPackage(payload, actorId) {
-  const packageRow = normalizeRecommendationPackagePayload(payload, actorId);
-  const itemRows = (Array.isArray(payload.items) ? payload.items : [])
-    .filter((item) => item?.isActive !== false)
-    .map((item, index) => normalizeRecommendationPackageItemPayload(item, null, actorId, index));
-
-  if (itemRows.length === 0) {
-    const error = new Error('Add at least one product or service item before saving this recommendation package.');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const { data: savedPackage, error: packageError } = await supabaseAdmin
-    .schema('cms')
-    .from('recommendation_packages')
-    .upsert(packageRow, { onConflict: packageRow.id ? 'id' : 'package_key' })
-    .select('id')
-    .single();
-
-  if (packageError) {
-    throw packageError;
-  }
-
-  const packageId = savedPackage.id;
-  const { error: deleteItemsError } = await supabaseAdmin
-    .schema('cms')
-    .from('recommendation_package_items')
-    .delete()
-    .eq('package_id', packageId);
-
-  if (deleteItemsError) {
-    throw deleteItemsError;
-  }
-
-  const packageItemRows = itemRows.map((item) => ({
-    ...item,
-    package_id: packageId,
-  }));
-
-  if (packageItemRows.length > 0) {
-    const { error: insertItemsError } = await supabaseAdmin
-      .schema('cms')
-      .from('recommendation_package_items')
-      .insert(packageItemRows);
-
-    if (insertItemsError) {
-      throw insertItemsError;
-    }
-  }
-
-  const packages = await listCmsRecommendationPackages();
-  return packages.find((item) => item.id === packageId) ?? null;
+export async function saveCmsRecommendationPackage() {
+  throw Object.assign(new Error('Use the revision-aware Packages & Bundles save endpoint.'), { statusCode: 410 });
 }
 
-export async function deleteCmsRecommendationPackage(id) {
-  const packageId = assertUuid(id, 'Recommendation package is required.');
-  const { error } = await supabaseAdmin
-    .schema('cms')
-    .from('recommendation_packages')
-    .delete()
-    .eq('id', packageId);
-
-  if (error) {
-    throw error;
-  }
+export async function deleteCmsRecommendationPackage() {
+  throw Object.assign(new Error('Archive packages through Packages & Bundles; published revisions are retained.'), { statusCode: 410 });
 }
 
 export async function getPublishedFeaturedCatalogItems(placementKey) {

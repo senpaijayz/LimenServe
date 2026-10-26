@@ -23,10 +23,8 @@ const publicGetCacheRules = [
   { pattern: /^\/public\/catalog\/featured$/, ttlMs: 60_000 },
   { pattern: /^\/public\/mechanics$/, ttlMs: 15_000 },
   { pattern: /^\/catalog\/vehicle-fitment\/options$/, ttlMs: 10 * 60_000 },
-  { pattern: /^\/catalog\/vehicle-packages$/, ttlMs: 5 * 60_000 },
   { pattern: /^\/catalog\/services$/, ttlMs: 5 * 60_000 },
   { pattern: /^\/catalog\/products$/, ttlMs: 2 * 60_000 },
-  { pattern: /^\/catalog\/products\/[^/]+\/recommendations$/, ttlMs: 5 * 60_000 },
 ];
 
 const getResponseCache = new Map();

@@ -1,5 +1,6 @@
 import { CarFront, CalendarRange, Sparkles, X } from 'lucide-react';
 import useVehicleFitmentOptions from '../../../hooks/useVehicleFitmentOptions';
+import usePackageVehicleConfigurations from '../../../hooks/usePackageVehicleConfigurations';
 
 const fieldBaseClassName = 'w-full rounded-2xl border border-primary-200 bg-white px-4 py-3 text-sm font-semibold text-primary-900 outline-none transition focus:border-accent-blue focus:bg-white';
 
@@ -9,21 +10,22 @@ export default function PublicVehicleSelector({
   onClear,
   includePlate = false,
   title = 'Choose your Mitsubishi first',
-  subtitle = 'Select your model and year from the current pricelist to unlock more relevant bundles, service packages, and fitment copy.',
+  subtitle = 'Choose your model and year to find relevant parts and approved packages. Check the part number and vehicle details before ordering.',
 }) {
   const { models, years, loading, error } = useVehicleFitmentOptions(vehicle?.model);
+  const engineOptions = usePackageVehicleConfigurations(vehicle?.model, vehicle?.year);
   const hasVehicle = Boolean(vehicle?.model);
   const isInitialLoading = loading && models.length === 0;
   const isUpdatingYears = loading && models.length > 0 && hasVehicle;
   const newestYear = years[0]?.label || '';
   const oldestYear = years[years.length - 1]?.label || '';
   const yearHelperText = !vehicle?.model
-    ? 'Choose a model first to see the compatible years found in the pricelist.'
+    ? 'Choose a model first to see the recorded years.'
     : years.length === 0
-      ? 'This model has no year-specific breakdown in the pricelist yet. Leave year blank to browse all compatible parts.'
+      ? 'No years are recorded for this model yet. You can browse parts, but please confirm compatibility before ordering.'
       : years.length === 1
-        ? `Pricelist entries for this model currently point to ${newestYear}.`
-        : `This model is compatible across multiple years. Leave it on All compatible years to browse everything from ${oldestYear} to ${newestYear}.`;
+        ? `The recorded year for this model is ${newestYear}.`
+        : `Recorded years run from ${oldestYear} to ${newestYear}. Choose your year for more specific results.`;
 
   return (
     <div className="surface p-5 md:p-6">
@@ -52,7 +54,7 @@ export default function PublicVehicleSelector({
             </span>
             <select
               value={vehicle?.model || ''}
-              onChange={(event) => onChange({ model: event.target.value, year: '' })}
+              onChange={(event) => onChange({ model: event.target.value, year: '', engine: '', fitmentId: '', variant: '' })}
               className={fieldBaseClassName}
             >
               <option value="">Select model</option>
@@ -68,17 +70,33 @@ export default function PublicVehicleSelector({
             </span>
             <select
               value={vehicle?.year || ''}
-              onChange={(event) => onChange({ year: event.target.value })}
+              onChange={(event) => onChange({ year: event.target.value, engine: '', fitmentId: '', variant: '' })}
               disabled={!vehicle?.model}
               className={`${fieldBaseClassName} disabled:cursor-not-allowed disabled:bg-primary-100 disabled:text-primary-400`}
             >
-              <option value="">{vehicle?.model ? 'All compatible years' : 'Select year'}</option>
+              <option value="">{vehicle?.model ? 'All recorded years' : 'Select year'}</option>
               {years.map((yearOption) => (
                 <option key={yearOption.value} value={yearOption.value}>{yearOption.label}</option>
               ))}
             </select>
             <p className="mt-2 text-xs leading-relaxed text-primary-500">{yearHelperText}</p>
           </label>
+
+          {vehicle?.model && vehicle?.year && (
+            <label className="block">
+              <span className="mb-2 block text-xs font-bold uppercase tracking-[0.22em] text-primary-700">Engine configuration (optional)</span>
+              <select value={vehicle?.fitmentId || ''} disabled={engineOptions.loading || Boolean(engineOptions.error)}
+                onChange={(event) => {
+                  const row = engineOptions.configurations.find((option) => option.id === event.target.value);
+                  onChange({ engine: row?.engine || '', fitmentId: row?.id || '' });
+                }}
+                className={`${fieldBaseClassName} disabled:bg-primary-100`}>
+                <option value="">{engineOptions.loading ? 'Loading recorded engines...' : 'Engine not selected'}</option>
+                {engineOptions.configurations.map((row) => <option key={row.id} value={row.id}>{row.engine || 'Engine details not recorded'}</option>)}
+              </select>
+              <p className="mt-2 text-xs leading-relaxed text-primary-600">{engineOptions.error || 'Choose the engine that matches your vehicle to see engine-specific packages. Leave it blank if you are unsure.'}</p>
+            </label>
+          )}
 
           {includePlate ? (
             <label className="block">
@@ -107,7 +125,7 @@ export default function PublicVehicleSelector({
 
         {includePlate && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary-200 bg-primary-50/60 px-4 py-3 text-sm text-primary-500">
-            <span>{hasVehicle ? `Recommended bundles and copy are now tuned for ${vehicle.displayLabel}.` : 'Choose a vehicle from the current pricelist to unlock compatible packages and fitment-first bundles.'}</span>
+            <span>{hasVehicle ? `Packages are checked against your selected model and year. Confirm the included parts before ordering.` : 'Choose a vehicle to see approved packages for that model and year.'}</span>
             <button
               type="button"
               onClick={onClear}
@@ -120,7 +138,7 @@ export default function PublicVehicleSelector({
 
         {(isInitialLoading || isUpdatingYears || error) && (
           <div className={`rounded-2xl border px-4 py-3 text-sm ${error ? 'border-accent-danger/20 bg-accent-danger/5 text-accent-danger' : 'border-primary-200 bg-primary-50/70 text-primary-500'}`}>
-            {error || (isUpdatingYears ? 'Updating compatible years...' : 'Loading available models from the pricelist...')}
+            {error || (isUpdatingYears ? 'Updating recorded years...' : 'Loading available models...')}
           </div>
         )}
       </div>

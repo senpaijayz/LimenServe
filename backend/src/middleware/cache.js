@@ -35,14 +35,6 @@ const publicCacheRules = [
     tags: ['vehicle-fitments'],
   },
   {
-    pattern: /^\/api\/catalog\/vehicle-packages$/,
-    browserMaxAge: 120,
-    sharedMaxAge: 900,
-    staleWhileRevalidate: 3600,
-    memoryTtlMs: 300_000,
-    tags: ['vehicle-packages'],
-  },
-  {
     pattern: /^\/api\/catalog\/services$/,
     browserMaxAge: 120,
     sharedMaxAge: 1800,
@@ -57,14 +49,6 @@ const publicCacheRules = [
     staleWhileRevalidate: 600,
     memoryTtlMs: 45_000,
     tags: ['catalog-products'],
-  },
-  {
-    pattern: /^\/api\/catalog\/products\/[^/]+\/recommendations$/,
-    browserMaxAge: 120,
-    sharedMaxAge: 900,
-    staleWhileRevalidate: 3600,
-    memoryTtlMs: 300_000,
-    tags: ['catalog-products', 'recommendations'],
   },
 ];
 

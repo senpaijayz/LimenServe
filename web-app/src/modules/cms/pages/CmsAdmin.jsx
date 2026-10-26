@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowDown,
@@ -20,6 +20,7 @@ import {
 import { Link } from 'react-router';
 import Modal from '../../../components/ui/Modal';
 import CatalogContentCmsPanel from '../catalog-content/CatalogContentCmsPanel';
+const PackageWorkspace = lazy(() => import('../packages/PackageWorkspace'));
 import DynamicPageRenderer from '../../public/components/DynamicPageRenderer';
 import {
   buildPageLinkOptions,
@@ -1156,6 +1157,7 @@ function CmsOverview({ onEditPage, onOpenTab, onRefresh, refreshing }) {
     { title: 'Edit Homepage', detail: 'Change the first page visitors see.', icon: <Globe2 className="h-5 w-5" />, onClick: () => onEditPage('home') },
     { title: 'Edit About Page', detail: 'Update the store story and information.', icon: <FileText className="h-5 w-5" />, onClick: () => onEditPage('about') },
     { title: 'Featured Products', detail: 'Choose parts to highlight on the website.', icon: <PackageSearch className="h-5 w-5" />, onClick: () => onOpenTab('catalog') },
+    { title: 'Packages & Bundles', detail: 'Create offers, review prices, and manage publication.', icon: <PackageSearch className="h-5 w-5" />, onClick: () => onOpenTab('packages') },
     { title: 'Contact Information', detail: 'Update phone, address, hours, and logo.', icon: <Settings className="h-5 w-5" />, onClick: () => onOpenTab('settings') },
     { title: 'Website Navigation', detail: 'Organize top-menu and footer links.', icon: <Navigation className="h-5 w-5" />, onClick: () => onOpenTab('navigation') },
   ];
@@ -1208,6 +1210,7 @@ const tabs = [
   { id: 'overview', label: 'Overview', icon: Globe2 },
   { id: 'pages', label: 'Pages', icon: FileText },
   { id: 'catalog', label: 'Catalog Content', icon: PackageSearch },
+  { id: 'packages', label: 'Packages & Bundles', icon: PackageSearch },
   { id: 'settings', label: 'Site Settings', icon: Settings },
   { id: 'navigation', label: 'Navigation', icon: Navigation },
 ];
@@ -1231,6 +1234,8 @@ export default function CmsAdmin() {
   const [previewViewport, setPreviewViewport] = useState('mobile');
   const [hasVisitedCatalog, setHasVisitedCatalog] = useState(false);
   const [catalogHasUnsavedChanges, setCatalogHasUnsavedChanges] = useState(false);
+  const [hasVisitedPackages, setHasVisitedPackages] = useState(false);
+  const [packagesHaveUnsavedChanges, setPackagesHaveUnsavedChanges] = useState(false);
   const [deletingSlug, setDeletingSlug] = useState('');
   const [uploadingKey, setUploadingKey] = useState('');
   const [pages, setPages] = useState([]);
@@ -1261,8 +1266,8 @@ export default function CmsAdmin() {
       ? settingsIsDirty
       : activeTab === 'navigation'
         ? navigationIsDirty
-        : activeTab === 'catalog' && catalogHasUnsavedChanges;
-  const hasUnsavedChanges = pageIsDirty || settingsIsDirty || navigationIsDirty || catalogHasUnsavedChanges;
+        : activeTab === 'packages' ? packagesHaveUnsavedChanges : activeTab === 'catalog' && catalogHasUnsavedChanges;
+  const hasUnsavedChanges = pageIsDirty || settingsIsDirty || navigationIsDirty || catalogHasUnsavedChanges || packagesHaveUnsavedChanges;
 
   const selectedPage = useMemo(
     () => pages.find((page) => page.slug === selectedSlug),
@@ -1491,6 +1496,7 @@ export default function CmsAdmin() {
     }
 
     if (nextTab === 'catalog') setHasVisitedCatalog(true);
+    if (nextTab === 'packages') setHasVisitedPackages(true);
     setActiveTab(nextTab);
   };
 
@@ -1857,7 +1863,7 @@ export default function CmsAdmin() {
             </div>
           ) : (
             <div className="rounded-2xl border border-primary-200 bg-white px-4 py-3 text-sm font-semibold text-primary-600">
-              {activeTab === 'overview' ? 'Website content and settings.' : 'Save each catalog item after editing.'}
+              {activeTab === 'overview' ? 'Website content and settings.' : activeTab === 'packages' ? 'Save drafts and publish offers inside the package editor.' : 'Save each catalog item after editing.'}
             </div>
           )}
         </div>
@@ -2088,7 +2094,7 @@ export default function CmsAdmin() {
               </div>
             </main>
           </div>
-        ) : activeTab === 'catalog' ? null : activeTab === 'settings' ? (
+        ) : activeTab === 'catalog' || activeTab === 'packages' ? null : activeTab === 'settings' ? (
           <div className="space-y-6 p-5 lg:p-6">
             {siteLoadError && <div role="alert" className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between"><span>{siteLoadError}</span><button type="button" onClick={() => { if (confirmDiscardChanges()) void loadCms(); }} className="min-h-10 shrink-0 rounded-lg border border-amber-300 bg-white px-3 font-semibold hover:bg-amber-100">Try again</button></div>}
             <section className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
@@ -2215,6 +2221,7 @@ export default function CmsAdmin() {
             <CatalogContentCmsPanel onUnsavedChange={setCatalogHasUnsavedChanges} />
           </div>
         )}
+        {hasVisitedPackages && <div hidden={activeTab !== 'packages'}><Suspense fallback={<p className="p-6 text-sm text-primary-700">Loading package workspace…</p>}><PackageWorkspace onUnsavedChange={setPackagesHaveUnsavedChanges} /></Suspense></div>}
       </div>
       {handleSaveActive && activeTabHasUnsavedChanges && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-primary-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:hidden">

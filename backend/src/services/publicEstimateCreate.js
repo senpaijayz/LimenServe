@@ -7,6 +7,7 @@ import {
 } from './publicEstimateLookup.js';
 import { PUBLIC_ESTIMATE_PRICING_INVALID_MESSAGE } from './publicEstimatePricing.js';
 import { createPublicEstimateEditToken } from './publicEstimateEdit.js';
+import { normalizeManagedPackageRepriceIds, normalizeManagedPackageSelections } from './managedPackageDomain.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/;
@@ -17,10 +18,10 @@ const MAX_ITEM_QUANTITY = 1_000;
 const MAX_MONEY_AMOUNT = 100_000_000;
 const MONEY_TOLERANCE = 0.01;
 
-const TOP_LEVEL_KEYS = new Set(['customer', 'vehicle', 'estimate', 'items']);
+const TOP_LEVEL_KEYS = new Set(['customer', 'vehicle', 'estimate', 'items', 'managed_packages', 'reprice_package_ids', 'expected_revision']);
 const CUSTOMER_KEYS = new Set(['customer_type', 'name', 'phone', 'metadata']);
 const CUSTOMER_METADATA_KEYS = new Set(['source']);
-const VEHICLE_KEYS = new Set(['make', 'model_name', 'year', 'plate_no', 'metadata']);
+const VEHICLE_KEYS = new Set(['make', 'model_name', 'year', 'plate_no', 'engine', 'variant', 'fitmentId', 'metadata']);
 const VEHICLE_METADATA_KEYS = new Set(['displayLabel', 'source']);
 const ESTIMATE_KEYS = new Set([
   'status',
@@ -200,7 +201,7 @@ function assertMoneyMatches(actual, expected, fieldName) {
   }
 }
 
-function normalizeCustomer(customer) {
+function normalizeCustomer(customer, { internal = false, requireRecoveryPhone = false } = {}) {
   const value = requireRecord(customer, 'customer');
   rejectUnknownKeys(value, CUSTOMER_KEYS, 'customer');
 
@@ -211,7 +212,7 @@ function normalizeCustomer(customer) {
     maxLength: 120,
   }) || 'Walk-in Customer';
   const phone = normalizePhilippinePhoneNumber(value.phone);
-  if (!phone) {
+  if (!phone && (!internal || requireRecoveryPhone || (value.phone != null && value.phone !== ''))) {
     invalid('customer.phone must be an 11-digit Philippine mobile number starting with 09.');
   }
 
@@ -226,13 +227,13 @@ function normalizeCustomer(customer) {
     name,
     phone,
     metadata: {
-      source: 'public_estimate_page',
+      source: internal ? 'quotation_builder' : 'public_estimate_page',
     },
   };
 }
 
-function normalizeVehicle(vehicle, currentYear) {
-  if (vehicle === undefined) {
+function normalizeVehicle(vehicle, currentYear, { internal = false } = {}) {
+  if (vehicle === undefined || vehicle === null) {
     return null;
   }
 
@@ -251,6 +252,9 @@ function normalizeVehicle(vehicle, currentYear) {
     required: true,
   });
   const year = normalizeYear(value.year, 'vehicle.year', currentYear);
+  const engine = boundedText(value.engine, { fieldName: 'vehicle.engine', maxLength: 120 });
+  const variant = boundedText(value.variant, { fieldName: 'vehicle.variant', maxLength: 120 });
+  const fitmentId = optionalUuid(value.fitmentId, 'vehicle.fitmentId');
   let displayLabel = null;
 
   if (value.metadata !== undefined) {
@@ -265,12 +269,18 @@ function normalizeVehicle(vehicle, currentYear) {
   }
 
   return {
-    make: 'Mitsubishi',
+    make: internal ? value.make?.trim() || 'Mitsubishi' : 'Mitsubishi',
     model_name: modelName,
     year,
+    ...(engine ? { engine } : {}),
+    ...(variant ? { variant } : {}),
+    ...(fitmentId ? { fitmentId } : {}),
+    ...(internal && value.plate_no ? { plate_no: value.plate_no.trim().toUpperCase() } : {}),
     metadata: {
       ...(displayLabel ? { displayLabel } : {}),
-      source: 'public_estimate_page',
+      source: internal ? 'quotation_builder' : 'public_estimate_page',
+      ...(variant ? { variant } : {}),
+      ...(fitmentId ? { fitmentId } : {}),
     },
   };
 }
@@ -282,7 +292,7 @@ function validateIgnoredItemLabels(item, index) {
     ['service_name', 200],
     ['bundle_key', 100],
     ['bundle_name', 200],
-    ['bundle_tier_label', 100],
+    ['bundle_tier_label', 120],
   ]) {
     if (item[key] !== undefined && item[key] !== null) {
       boundedText(item[key], {
@@ -350,21 +360,24 @@ function normalizeItem(item, index) {
   };
 }
 
-function normalizeEstimate(estimate, items, nowDate) {
+function normalizeEstimate(estimate, items, nowDate, { internal = false } = {}) {
   const value = requireRecord(estimate, 'estimate');
-  rejectUnknownKeys(value, ESTIMATE_KEYS, 'estimate');
+  rejectUnknownKeys(value, internal ? new Set([...ESTIMATE_KEYS, 'estimate_number']) : ESTIMATE_KEYS, 'estimate');
 
   assertIgnoredTextIfPresent(value.status, 'estimate.status', 32);
   assertIgnoredTextIfPresent(value.source, 'estimate.source', 32);
   assertIgnoredTextIfPresent(value.issued_at, 'estimate.issued_at', 64);
   assertIgnoredTextIfPresent(value.valid_until, 'estimate.valid_until', 32);
   assertIgnoredTextIfPresent(value.revision_note, 'estimate.revision_note', 200);
+  if (internal) assertIgnoredTextIfPresent(value.estimate_number, 'estimate.estimate_number', 80);
+  const status = internal ? value.status || 'draft' : 'sent';
+  if (internal && !['draft', 'sent', 'approved', 'rejected', 'expired'].includes(status)) invalid('Choose an editable quotation status.');
 
   const note = boundedText(value.note, {
     fieldName: 'estimate.note',
     maxLength: 1_000,
     nullable: true,
-  }) || 'Public estimate generated from LimenServe quote builder.';
+  }) || 'Quotation prepared in LimenServe.';
   const discountTotal = boundedNumber(value.discount_total, {
     fieldName: 'estimate.discount_total',
     money: true,
@@ -382,8 +395,8 @@ function normalizeEstimate(estimate, items, nowDate) {
   validUntil.setUTCDate(validUntil.getUTCDate() + PUBLIC_QUOTE_VALID_DAYS);
 
   return {
-    status: 'sent',
-    source: 'public',
+    status,
+    source: internal ? 'internal' : 'public',
     note,
     subtotal,
     discount_total: discountTotal,
@@ -391,7 +404,7 @@ function normalizeEstimate(estimate, items, nowDate) {
     grand_total: grandTotal,
     issued_at: nowDate.toISOString(),
     valid_until: validUntil.toISOString().slice(0, 10),
-    revision_note: 'Public quote created',
+    revision_note: internal ? 'Quotation created' : 'Public quote created',
   };
 }
 
@@ -405,30 +418,45 @@ function resolveNow(now) {
   return date;
 }
 
-export function parsePublicEstimateCreateInput(body, { now = () => new Date() } = {}) {
+function parseEstimateCreateInput(body, { now = () => new Date(), internal = false, requireRecoveryPhone = false } = {}) {
   try {
     const value = requireRecord(body, 'request');
-    rejectUnknownKeys(value, TOP_LEVEL_KEYS, 'request');
+    rejectUnknownKeys(value, internal ? new Set([...TOP_LEVEL_KEYS, 'changeNote']) : TOP_LEVEL_KEYS, 'request');
 
-    const customer = normalizeCustomer(value.customer);
+    const customer = normalizeCustomer(value.customer, { internal, requireRecoveryPhone });
     const nowDate = resolveNow(now);
-    const vehicle = normalizeVehicle(value.vehicle, nowDate.getUTCFullYear());
+    const vehicle = normalizeVehicle(value.vehicle, nowDate.getUTCFullYear(), { internal });
 
     if (!Array.isArray(value.items) || value.items.length < 1 || value.items.length > MAX_PUBLIC_QUOTE_ITEMS) {
       invalid(`items must contain between 1 and ${MAX_PUBLIC_QUOTE_ITEMS} entries.`);
     }
 
     const items = value.items.map(normalizeItem);
-    const estimate = normalizeEstimate(value.estimate, items, nowDate);
+    const estimate = normalizeEstimate(value.estimate, items, nowDate, { internal });
+    let selections; let repricePackageIds;
+    try {
+      selections = normalizeManagedPackageSelections(value.managed_packages);
+      repricePackageIds = normalizeManagedPackageRepriceIds(value.reprice_package_ids);
+    } catch (error) {
+      if (error.statusCode === 400) invalid(error.publicMessage || error.message);
+      throw error;
+    }
+    const expectedRevision = value.expected_revision === undefined ? null : boundedNumber(value.expected_revision, {
+      fieldName: 'expected_revision', min: 0, max: 1000000, integer: true,
+    });
 
     return {
       ok: true,
       payload: {
         customer,
-        ...(vehicle ? { vehicle } : {}),
+        ...(value.vehicle !== undefined ? { vehicle } : {}),
         estimate,
         items,
       },
+      selections,
+      repricePackageIds,
+      expectedRevision,
+      ...(internal ? { changeNote: boundedText(value.changeNote, { fieldName: 'changeNote', maxLength: 200, nullable: true }) } : {}),
     };
   } catch (error) {
     if (!(error instanceof PublicEstimateCreateValidationError)) {
@@ -442,6 +470,14 @@ export function parsePublicEstimateCreateInput(body, { now = () => new Date() } 
       reason: error.message,
     };
   }
+}
+
+export function parsePublicEstimateCreateInput(body, { now } = {}) {
+  return parseEstimateCreateInput(body, { now });
+}
+
+export function parseInternalEstimateCreateInput(body, { now, requireRecoveryPhone = false } = {}) {
+  return parseEstimateCreateInput(body, { now, internal: true, requireRecoveryPhone });
 }
 
 function setNoStore(res) {
@@ -484,7 +520,6 @@ export function getPublicEstimatePhoneRateLimitKey(req) {
 
 export function createPublicEstimateCreateHandler({
   createEstimate,
-  loadEstimate,
   resolvePricing,
   notify = () => undefined,
   onNotificationError = () => undefined,
@@ -493,7 +528,6 @@ export function createPublicEstimateCreateHandler({
 } = {}) {
   if (
     typeof createEstimate !== 'function'
-    || typeof loadEstimate !== 'function'
     || typeof resolvePricing !== 'function'
   ) {
     throw new TypeError('Public estimate persistence dependencies are required.');
@@ -518,10 +552,13 @@ export function createPublicEstimateCreateHandler({
         requestedItems: req.body.items,
         requestedEstimate: req.body.estimate,
         vehicle: input.payload.vehicle ?? null,
+        selections: input.selections,
+        repricePackageIds: input.repricePackageIds,
       });
       if (!pricing?.ok) {
-        res.status(400).json({
-          error: PUBLIC_ESTIMATE_PRICING_INVALID_MESSAGE,
+        res.status(pricing?.statusCode || 400).json({
+          error: pricing?.error || PUBLIC_ESTIMATE_PRICING_INVALID_MESSAGE,
+          ...(pricing?.code ? { code: pricing.code } : {}),
         });
         return;
       }
@@ -534,15 +571,14 @@ export function createPublicEstimateCreateHandler({
         },
         items: pricing.items,
       };
-      const estimateId = await createEstimate(persistedPayload);
-      const estimate = await loadEstimate(estimateId);
+      const { estimateId, estimate } = await createEstimate(persistedPayload, { snapshots: pricing.snapshots || [] });
       const publicEstimate = buildPublicEstimateLookupResult(estimate);
 
       if (!publicEstimate) {
         throw new Error('Public estimate persistence returned an invalid snapshot.');
       }
 
-      Promise.resolve(notify(estimate)).catch(onNotificationError);
+      Promise.resolve().then(() => notify(estimate)).catch(onNotificationError);
       const response = { estimate: publicEstimate };
       if (editTokenSecret) {
         response.editToken = createPublicEstimateEditToken({
@@ -554,6 +590,10 @@ export function createPublicEstimateCreateHandler({
 
       res.status(201).json(response);
     } catch (error) {
+      if (error.publicMessage && error.statusCode >= 400 && error.statusCode < 500) {
+        res.status(error.statusCode).json({ error: error.publicMessage, code: error.code });
+        return;
+      }
       const safeError = new Error(PUBLIC_ESTIMATE_CREATE_UNAVAILABLE_MESSAGE);
       safeError.statusCode = 503;
       safeError.cause = error;

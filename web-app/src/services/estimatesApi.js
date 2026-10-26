@@ -63,7 +63,7 @@ export async function updateEstimate(estimateId, payload, changeNote = null) {
       ...payload,
       changeNote,
     });
-    return data.revisionId;
+    return { revisionId: data.revisionId, estimate: data.estimate ?? null };
   } catch (error) {
     extractApiError(error, 'Failed to update quotation.');
   }

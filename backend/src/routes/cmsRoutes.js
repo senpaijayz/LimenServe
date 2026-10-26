@@ -2,23 +2,22 @@ import { Router } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireRole } from '../middleware/auth.js';
 import { clearPublicResponseCache } from '../middleware/cache.js';
+import managedPackageRoutes from './managedPackageRoutes.js';
 import {
   deleteCmsFeaturedCatalogItem,
   deleteCmsPage,
-  deleteCmsRecommendationPackage,
   getCmsPage,
   listCmsFeaturedCatalogItems,
   listCmsPages,
-  listCmsRecommendationPackages,
   saveCmsNavigation,
   saveCmsPage,
   saveCmsRenamedPage,
   saveCmsFeaturedCatalogItem,
-  saveCmsRecommendationPackage,
   saveCmsSiteSettings,
 } from '../services/cmsService.js';
 
 const router = Router();
+router.use('/packages', managedPackageRoutes);
 const CMS_ASSET_BUCKET = 'public-assets';
 const CMS_ASSET_MAX_BYTES = 5 * 1024 * 1024;
 const CMS_ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']);
@@ -149,12 +148,8 @@ router.get('/pages', requireRole('admin'), async (_req, res, next) => {
 
 router.get('/catalog-content', requireRole('admin'), async (_req, res, next) => {
   try {
-    const [featuredItems, recommendationPackages] = await Promise.all([
-      listCmsFeaturedCatalogItems(),
-      listCmsRecommendationPackages(),
-    ]);
-
-    res.json({ featuredItems, recommendationPackages });
+    const featuredItems = await listCmsFeaturedCatalogItems();
+    res.json({ featuredItems, recommendationPackages: [] });
   } catch (error) {
     next(error);
   }
@@ -184,28 +179,11 @@ router.delete('/featured-catalog-items/:id', requireRole('admin'), async (req, r
   }
 });
 
-router.post('/recommendation-packages', requireRole('admin'), async (req, res, next) => {
-  try {
-    if (!requireObjectPayload(req, res)) {
-      return;
-    }
-
-    const recommendationPackage = await saveCmsRecommendationPackage(req.body, req.user?.id);
-    clearPublicResponseCache();
-    res.status(201).json({ package: recommendationPackage });
-  } catch (error) {
-    next(error);
-  }
+router.post('/recommendation-packages', requireRole('admin'), (_req, res) => {
+  res.status(410).json({ error: 'Use CMS → Packages & Bundles to save and publish packages.' });
 });
-
-router.delete('/recommendation-packages/:id', requireRole('admin'), async (req, res, next) => {
-  try {
-    await deleteCmsRecommendationPackage(req.params.id);
-    clearPublicResponseCache();
-    res.status(204).send();
-  } catch (error) {
-    next(error);
-  }
+router.delete('/recommendation-packages/:id', requireRole('admin'), (_req, res) => {
+  res.status(410).json({ error: 'Packages are archived in CMS → Packages & Bundles. Existing quote history is retained.' });
 });
 
 router.get('/pages/:slug', requireRole('admin'), async (req, res, next) => {

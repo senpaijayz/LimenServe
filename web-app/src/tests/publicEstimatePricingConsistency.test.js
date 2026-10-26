@@ -5,9 +5,8 @@ import {
   buildEstimatePayload,
   normalizePublicRecommendationPricing,
 } from '../modules/public/pages/PublicEstimate';
-import { buildSmartQuoteModel } from '../modules/public/utils/quoteRecommendationModel';
-import { getAppliedBundleDisplaySummaries, getAppliedBundleSummaries } from '../modules/public/utils/bundleQuotePricing';
-import { buildPackageTiers, pricePackageForPublicQuote } from '../modules/public/utils/smartBundleUtils';
+import { calculateQuoteTotals, getAppliedBundleDisplaySummaries, getAppliedBundleSummaries } from '../modules/public/utils/bundleQuotePricing';
+import { makeManagedOffer } from '../modules/public/utils/managedQuotePackages';
 
 const PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -40,11 +39,7 @@ describe('public estimate pricing consistency', () => {
       catalogPrice: pricing.catalogPrice,
       ...pricing.bundleMeta,
     };
-    const displayed = buildSmartQuoteModel({
-      selectedProduct: selectedPart,
-      selectedParts: [selectedPart],
-      selectedServices: [],
-    });
+    const totals = calculateQuoteTotals([selectedPart], []);
     const submitted = buildEstimatePayload({
       customerName: 'Customer',
       customerPhone: '09171234567',
@@ -60,16 +55,16 @@ describe('public estimate pricing consistency', () => {
     });
     expect(pricing.bundleMeta.bundleKey).toBeNull();
     expect(getAppliedBundleSummaries([selectedPart])).toEqual([]);
-    expect(displayed.totals).toMatchObject({
+    expect(totals).toMatchObject({
       subtotal: 100,
       vat: 12,
-      estimatedTotal: 112,
+      total: 112,
     });
     expect(submitted.estimate).toMatchObject({
-      subtotal: displayed.totals.subtotal,
+      subtotal: totals.subtotal,
       discount_total: 0,
-      tax_total: displayed.totals.vat,
-      grand_total: displayed.totals.estimatedTotal,
+      tax_total: totals.vat,
+      grand_total: totals.total,
     });
     expect(submitted.items[0]).toMatchObject({
       unit_price: 100,
@@ -106,14 +101,10 @@ describe('public estimate pricing consistency', () => {
   });
 
   it('does not advertise an unsaveable synthetic package discount', () => {
-    const packageForQuote = pricePackageForPublicQuote({
+    expect(() => makeManagedOffer({ definition: {
       packageKey: 'synthetic-package',
       parts: [{ consequentKind: 'product', packageItemId: `vehicle-part-${PRODUCT_ID}`, recommendedProductId: PRODUCT_ID, catalogPrice: 100, resolvedPrice: 95 }],
       services: [],
-    });
-    const [tier] = buildPackageTiers(packageForQuote);
-    expect(tier.catalogTotal).toBe(100);
-    expect(tier.smartTotal).toBe(100);
-    expect(tier.savingsAmount).toBe(0);
+    } }, {})).toThrow('Choose a published package with an available price.');
   });
 });

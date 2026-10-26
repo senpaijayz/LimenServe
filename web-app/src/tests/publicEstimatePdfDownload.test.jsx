@@ -12,8 +12,14 @@ vi.mock('../hooks/useServiceCatalog', () => ({
 vi.mock('../hooks/usePublicVehicleSelection', () => ({
     default: () => ({ vehicle: { model: '', year: '', displayLabel: '' }, updateVehicle: vi.fn(), clearVehicle: vi.fn(), hasVehicle: false }),
 }));
-vi.mock('../hooks/useVehiclePackages', () => ({
-    default: () => ({ packages: [], loading: false, error: null }),
+vi.mock('../hooks/usePackageVehicleConfigurations', () => ({
+    default: () => ({ configurations: [], loading: false, error: null }),
+}));
+vi.mock('../hooks/useManagedQuotePackages', () => ({
+    default: () => ({ offers: [], repriceIds: [], reset: vi.fn(), acknowledge: vi.fn(), hydrate: vi.fn() }),
+}));
+vi.mock('../modules/public/components/ManagedQuotePackages', () => ({
+    default: () => null,
 }));
 vi.mock('../services/estimatesApi', () => ({
     createEstimate: vi.fn(),

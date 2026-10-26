@@ -6,18 +6,17 @@ import { formatCurrency } from '../../../utils/formatters';
 import { normalizePhilippinePhoneNumber, sanitizePhilippineMobileInput } from '../../../utils/phone';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
+import useManagedQuotePackages from '../../../hooks/useManagedQuotePackages';
+import ManagedQuotePackages from '../components/ManagedQuotePackages';
+import { isManagedBundle, managedSelectionsFromLines } from '../utils/managedQuotePackages';
 import usePublicVehicleSelection from '../../../hooks/usePublicVehicleSelection';
-import useVehiclePackages from '../../../hooks/useVehiclePackages';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import { useToast } from '../../../components/ui/Toast';
 import { createEstimate, lookupPublicEstimate, revisePublicEstimate } from '../../../services/estimatesApi';
-import ProductPackageSuggestions from '../components/ProductPackageSuggestions';
 import PublicQuoteLookupCard from '../components/PublicQuoteLookupCard';
 import PublicVehicleSelector from '../components/PublicVehicleSelector';
-import VehiclePackageShowcase from '../components/VehiclePackageShowcase';
-import { buildSmartQuoteModel } from '../utils/quoteRecommendationModel';
-import { buildBundleLineItems, clearBundlePricing, createQuoteLineKey, getAppliedBundleDisplaySummaries, getAppliedBundleSummaries, roundCurrency } from '../utils/bundleQuotePricing';
+import { calculateQuoteTotals, clearBundlePricing, createQuoteLineKey, getAppliedBundleDisplaySummaries, getAppliedBundleSummaries, roundCurrency } from "../utils/bundleQuotePricing";
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 
 const SORT_OPTIONS = [
@@ -102,6 +101,7 @@ const formatVehicleSummary = (vehicle) => {
         vehicle.make,
         vehicle.model,
         vehicle.variant,
+        vehicle.engine,
         vehicle.year,
         vehicle.plate_number || vehicle.plateNumber,
     ].filter(Boolean);
@@ -220,18 +220,21 @@ export const buildEstimatePayload = ({
         make: 'Mitsubishi',
         model_name: vehicle.model,
         year: vehicle.year || null,
+        engine: vehicle.engine || null,
+        fitmentId: vehicle.fitmentId || null,
+        variant: vehicle.variant || null,
         plate_no: vehicle.plateNo || null,
         metadata: {
             displayLabel: vehicle.displayLabel || null,
             source: 'public_estimate_page',
         },
-    } : undefined;
+    } : null;
 
     const items = [
         ...selectedParts.map((part) => {
             const quantity = Number(part.quantity ?? 1);
             const catalogUnitPrice = Number(part.catalogPrice ?? part.price ?? 0);
-            const hasVerifiableBundle = Boolean(part.bundleKey) && isUuid(part.recommendationRuleId);
+            const hasVerifiableBundle = isManagedBundle(part.bundleKey) || (Boolean(part.bundleKey) && isUuid(part.recommendationRuleId));
             const unitPrice = hasVerifiableBundle ? Number(part.price ?? 0) : catalogUnitPrice;
 
             return {
@@ -242,7 +245,7 @@ export const buildEstimatePayload = ({
                 quantity,
                 unit_price: unitPrice,
                 line_total: Number((unitPrice * quantity).toFixed(2)),
-                recommendation_rule_id: hasVerifiableBundle ? part.recommendationRuleId : null,
+                recommendation_rule_id: isUuid(part.recommendationRuleId) ? part.recommendationRuleId : null,
                 is_upsell: Boolean(part.isUpsell),
                 bundle_key: hasVerifiableBundle ? part.bundleKey : null,
                 bundle_name: hasVerifiableBundle ? part.bundleName || null : null,
@@ -251,18 +254,19 @@ export const buildEstimatePayload = ({
             };
         }),
         ...selectedServices.map((service) => {
+            const quantity = Number(service.quantity ?? 1);
             const catalogUnitPrice = Number(service.catalogPrice ?? service.price ?? 0);
-            const hasVerifiableBundle = Boolean(service.bundleKey) && isUuid(service.recommendationRuleId);
+            const hasVerifiableBundle = isManagedBundle(service.bundleKey) || (Boolean(service.bundleKey) && isUuid(service.recommendationRuleId));
             const unitPrice = hasVerifiableBundle ? Number(service.price ?? 0) : catalogUnitPrice;
 
             return {
                 line_type: 'service',
                 service_id: isUuid(service.id) ? service.id : null,
                 service_name: service.name,
-                quantity: 1,
+                quantity,
                 unit_price: unitPrice,
-                line_total: Number(unitPrice.toFixed(2)),
-                recommendation_rule_id: hasVerifiableBundle ? service.recommendationRuleId : null,
+                line_total: roundCurrency(unitPrice * quantity),
+                recommendation_rule_id: isUuid(service.recommendationRuleId) ? service.recommendationRuleId : null,
                 is_upsell: Boolean(service.isUpsell),
                 bundle_key: hasVerifiableBundle ? service.bundleKey : null,
                 bundle_name: hasVerifiableBundle ? service.bundleName || null : null,
@@ -288,7 +292,7 @@ export const buildEstimatePayload = ({
 
     return {
         customer,
-        ...(vehiclePayload ? { vehicle: vehiclePayload } : {}),
+        vehicle: vehiclePayload,
         estimate: {
             status: 'sent',
             source: 'public',
@@ -305,29 +309,6 @@ export const buildEstimatePayload = ({
     };
 };
 
-const enrichCreatedQuoteWithRequestedLabels = (quote, requestedItems = []) => {
-    if (!quote) {
-        return null;
-    }
-
-    return {
-        ...quote,
-        items: (quote.items ?? []).map((item, index) => {
-            const requestedItem = requestedItems[index] ?? {};
-
-            return {
-                ...item,
-                product_name: item.product_name || requestedItem.product_name || null,
-                product_sku: item.product_sku || requestedItem.product_sku || null,
-                service_name: item.service_name || requestedItem.service_name || null,
-                bundle_key: item.bundle_key || requestedItem.bundle_key || null,
-                bundle_name: item.bundle_name || requestedItem.bundle_name || null,
-                bundle_tier_label: item.bundle_tier_label || requestedItem.bundle_tier_label || null,
-                catalog_unit_price: item.catalog_unit_price ?? requestedItem.catalog_unit_price ?? null,
-            };
-        }),
-    };
-};
 
 const buildRetrievedPrintableQuote = (quote) => {
     if (!quote) {
@@ -374,30 +355,32 @@ const PhaseBackButton = ({ onClick, label }) => (
 );
 
 function getIncomingPartSearch(searchParams) {
-    return String(searchParams.get('part') || searchParams.get('q') || '').trim();
+    return String(searchParams.get('part') || searchParams.get('partNumber') || searchParams.get('q') || '').trim();
 }
 
 const PublicEstimate = () => {
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const { loading: showToastLoading, updateToast, success, error: showToastError } = useToast();
     const incomingPartSearch = getIncomingPartSearch(searchParams);
+    const incomingPackageId = searchParams.get('packageId') || '';
+    const incomingVariantId = searchParams.get('packageVariantId') || '';
+    const incomingProductId = searchParams.get('quoteProductId') || '';
     const packageShelfRef = useRef(null);
     const addedBundleKeysRef = useRef(new Set());
-    const [workflowStage, setWorkflowStage] = useState(() => (incomingPartSearch ? 'active' : 'choice'));
+    const quoteMutationVersion = useRef(0);
+    const quoteSaveBusy = useRef(false);
+    const [workflowStage, setWorkflowStage] = useState(() => (incomingPartSearch || incomingPackageId ? 'active' : 'choice'));
     const [mode, setMode] = useState('estimate');
-    const [estimatePhase, setEstimatePhase] = useState(() => (incomingPartSearch ? 'catalog' : 'details'));
+    const [estimatePhase, setEstimatePhase] = useState('details');
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
     const { vehicle, updateVehicle, clearVehicle, hasVehicle } = usePublicVehicleSelection({ includePlate: true, syncToSearch: true });
-    const { packages: vehiclePackages, loading: vehiclePackagesLoading, error: vehiclePackagesError } = useVehiclePackages(vehicle);
     const [selectedParts, setSelectedParts] = useState([]);
     const [selectedServices, setSelectedServices] = useState([]);
     const [partSearch, setPartSearch] = useState(() => incomingPartSearch);
     const [sortBy, setSortBy] = useState('name-asc');
     const [currentPage, setCurrentPage] = useState(1);
     const [focusedProduct, setFocusedProduct] = useState(null);
-    const [showVehiclePackages, setShowVehiclePackages] = useState(true);
-    const [showSmartBundles, setShowSmartBundles] = useState(true);
     const [showPrintPreview, setShowPrintPreview] = useState(false);
     const [showSummaryDrawer, setShowSummaryDrawer] = useState(false);
     const [printSource, setPrintSource] = useState('draft');
@@ -438,10 +421,20 @@ const PublicEstimate = () => {
     }, [localQuoteHistory]);
 
     const markSavedQuoteDirty = () => {
+        quoteMutationVersion.current += 1;
         if (savedDraftQuote?.estimate?.estimate_number) {
             setQuoteHasChanges(true);
         }
     };
+
+    const managedPackages = useManagedQuotePackages({
+        parts: selectedParts,
+        services: selectedServices,
+        setParts: setSelectedParts,
+        setServices: setSelectedServices,
+        onDirty: markSavedQuoteDirty,
+        onError: setSaveError,
+    });
 
     const {
         products: priceListProducts,
@@ -472,7 +465,6 @@ const PublicEstimate = () => {
         setPartSearch(incomingPartSearch);
         setWorkflowStage('active');
         setMode('estimate');
-        setEstimatePhase('catalog');
         setCurrentPage(1);
     }, [incomingPartSearch]);
 
@@ -548,15 +540,14 @@ const PublicEstimate = () => {
 
         setWorkflowStage('active');
         setMode('estimate');
-        setEstimatePhase('catalog');
     }, [hasVehicle, highlightedVehiclePackageKey]);
 
     useEffect(() => {
-        if (mode !== 'estimate' || !hasVehicle) {
+        if (mode !== 'estimate' || estimatePhase !== 'catalog' || !hasVehicle) {
             return;
         }
 
-        if (!highlightedVehiclePackageKey || vehiclePackagesLoading || vehiclePackages.length === 0) {
+        if (!highlightedVehiclePackageKey) {
             return;
         }
 
@@ -564,7 +555,7 @@ const PublicEstimate = () => {
             behavior: 'smooth',
             block: 'start',
         });
-    }, [mode, hasVehicle, highlightedVehiclePackageKey, vehiclePackagesLoading, vehiclePackages.length]);
+    }, [mode, estimatePhase, hasVehicle, highlightedVehiclePackageKey]);
 
     const filteredProducts = priceListProducts.map((product) => ({
         id: product.id,
@@ -586,6 +577,10 @@ const PublicEstimate = () => {
 
     const breakBundle = (bundleKey) => {
         if (!bundleKey) return true;
+        if (isManagedBundle(bundleKey)) {
+            setSaveError('Use the package controls to change this package. Its included items stay together.');
+            return false;
+        }
         if (!window.confirm('Changing or removing this package item will remove the package discount from the remaining items. Continue?')) return false;
         setSelectedParts((parts) => parts.map((part) => part.bundleKey === bundleKey ? clearBundlePricing(part) : part));
         setSelectedServices((services) => services.map((service) => service.bundleKey === bundleKey ? clearBundlePricing(service) : service));
@@ -635,6 +630,10 @@ const PublicEstimate = () => {
     const removePart = (identifier) => {
         const selectedLine = selectedParts.find((part) => part.lineKey === identifier) || selectedParts.find((part) => part.id === identifier);
         if (!selectedLine) return;
+        if (isManagedBundle(selectedLine.bundleKey)) {
+            managedPackages.remove(selectedLine.bundleKey.slice(4));
+            return;
+        }
         if (selectedLine.bundleKey && !breakBundle(selectedLine.bundleKey)) return;
         markSavedQuoteDirty();
         setSelectedParts((parts) => parts.filter((part) => part.lineKey !== selectedLine.lineKey));
@@ -657,6 +656,10 @@ const PublicEstimate = () => {
     const removeService = (identifier) => {
         const selectedLine = selectedServices.find((service) => service.lineKey === identifier) || selectedServices.find((service) => service.id === identifier);
         if (!selectedLine) return;
+        if (isManagedBundle(selectedLine.bundleKey)) {
+            managedPackages.remove(selectedLine.bundleKey.slice(4));
+            return;
+        }
         if (selectedLine.bundleKey && !breakBundle(selectedLine.bundleKey)) return;
         markSavedQuoteDirty();
         setSelectedServices((services) => services.filter((service) => service.lineKey !== selectedLine.lineKey));
@@ -680,169 +683,8 @@ const PublicEstimate = () => {
         });
     };
 
-    const addSuggestedPart = (recommendation) => {
-        markSavedQuoteDirty();
-        const matchedProduct = recommendation.recommendedProduct || null;
-        const productId = recommendation.recommendedProductId || matchedProduct?.id;
 
-        if (!productId || !matchedProduct) {
-            return;
-        }
 
-        const recommendedPrice = Number(
-            recommendation.resolvedPrice
-            ?? recommendation.recommendedPrice
-            ?? matchedProduct.price
-            ?? 0
-        );
-        const recommendationRuleId = recommendation.packageItemId || recommendation.ruleId || null;
-        const catalogPrice = Number(recommendation.catalogPrice ?? recommendation.catalog_price ?? matchedProduct.price ?? recommendedPrice);
-        const approvedPricing = normalizePublicRecommendationPricing({
-            recommendationRuleId,
-            resolvedPrice: recommendedPrice,
-            catalogPrice,
-            bundleMeta: recommendation.bundleMeta,
-        });
-        const displayBundleMeta = recommendation.bundleMeta?.bundleKey
-            ? {
-                bundleKey: recommendation.bundleMeta.bundleKey,
-                bundleName: recommendation.bundleMeta.bundleName || 'Smart bundle',
-                bundleTierLabel: recommendation.bundleMeta.bundleTierLabel || 'Bundle',
-            }
-            : null;
-
-        setSelectedParts((parts) => {
-            const bundleKey = approvedPricing.bundleMeta?.bundleKey || '';
-            if (bundleKey && parts.some((part) => part.id === productId && part.bundleKey === bundleKey)) return parts;
-            const ordinaryLine = parts.find((part) => part.id === productId && !part.bundleKey);
-
-            if (!bundleKey && ordinaryLine) return parts;
-            if (bundleKey && ordinaryLine && Number(ordinaryLine.quantity || 1) === 1) {
-                return parts.map((part) => part.lineKey === ordinaryLine.lineKey ? {
-                    ...part,
-                    isUpsell: true,
-                    recommendationRuleId: approvedPricing.recommendationRuleId || null,
-                    catalogPrice: approvedPricing.catalogPrice,
-                    ...approvedPricing.bundleMeta,
-                    ...(displayBundleMeta ? { displayBundleMeta } : {}),
-                    price: approvedPricing.price,
-                } : part);
-            }
-
-            return [...parts, {
-                lineKey: createQuoteLineKey(),
-                id: matchedProduct.id,
-                name: matchedProduct.name,
-                sku: matchedProduct.sku,
-                price: approvedPricing.price,
-                category: matchedProduct.category,
-                model: matchedProduct.model,
-                quantity: 1,
-                isUpsell: true,
-                recommendationRuleId: approvedPricing.recommendationRuleId,
-                catalogPrice: approvedPricing.catalogPrice,
-                ...approvedPricing.bundleMeta,
-                ...(displayBundleMeta ? { displayBundleMeta } : {}),
-            }];
-        });
-    };
-
-    const addSuggestedService = (recommendation) => {
-        markSavedQuoteDirty();
-        const recommendedService = recommendation.recommendedService || null;
-        const serviceId = recommendation.recommendedServiceId || recommendedService?.id;
-
-        if (!serviceId) {
-            return;
-        }
-
-        const recommendationRuleId = recommendation.packageItemId || recommendation.ruleId || null;
-        const resolvedPrice = Number(recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? recommendedService?.price ?? 0);
-        const catalogPrice = Number(recommendation.catalogPrice ?? recommendation.catalog_price ?? recommendation.recommendedPrice ?? recommendedService?.price ?? resolvedPrice);
-        const approvedPricing = normalizePublicRecommendationPricing({
-            recommendationRuleId,
-            resolvedPrice,
-            catalogPrice,
-            bundleMeta: recommendation.bundleMeta,
-        });
-        const displayBundleMeta = recommendation.bundleMeta?.bundleKey
-            ? {
-                bundleKey: recommendation.bundleMeta.bundleKey,
-                bundleName: recommendation.bundleMeta.bundleName || 'Smart bundle',
-                bundleTierLabel: recommendation.bundleMeta.bundleTierLabel || 'Bundle',
-            }
-            : null;
-        const service = {
-            lineKey: createQuoteLineKey(),
-            id: serviceId,
-            name: recommendation.recommendedServiceName || recommendedService?.name || 'Recommended service',
-            price: approvedPricing.price,
-            quantity: 1,
-            isUpsell: true,
-            recommendationRuleId: approvedPricing.recommendationRuleId,
-            catalogPrice: approvedPricing.catalogPrice,
-            ...approvedPricing.bundleMeta,
-            ...(displayBundleMeta ? { displayBundleMeta } : {}),
-        };
-
-        setSelectedServices((services) => {
-            const bundleKey = service.bundleKey || '';
-            if (bundleKey && services.some((selected) => selected.id === service.id && selected.bundleKey === bundleKey)) return services;
-            const ordinaryLine = services.find((selected) => selected.id === service.id && !selected.bundleKey);
-            if (!bundleKey && ordinaryLine) return services;
-            if (bundleKey && ordinaryLine) return services.map((selected) => selected.lineKey === ordinaryLine.lineKey
-                ? { ...selected, ...service, lineKey: selected.lineKey, price: service.price, catalogPrice: service.catalogPrice }
-                : selected);
-
-            return [...services, service];
-        });
-    };
-
-    const addBundleToEstimate = (pkg, tier) => {
-        const lineItems = buildBundleLineItems(pkg, tier);
-        const bundleKey = lineItems[0]?.bundleMeta?.bundleKey;
-        if (!bundleKey || !lineItems.length) {
-            showToastError('This package has no quotable parts or services. Choose another package.');
-            return;
-        }
-        if (lineItems.some((item) => !isUuid(item.id)
-            || (item.kind === 'product' && !item.raw?.recommendedProduct))) {
-            showToastError('A package item is no longer available in the current price list. Please refresh and choose again.');
-            return;
-        }
-        if (addedBundleKeysRef.current.has(bundleKey)) {
-            return;
-        }
-
-        const selectedBundleKeys = new Set(
-            [...selectedParts, ...selectedServices]
-                .map((line) => line.displayBundleMeta?.bundleKey || line.bundleKey)
-                .filter(Boolean),
-        );
-        if (selectedBundleKeys.has(bundleKey)) {
-            addedBundleKeysRef.current.add(bundleKey);
-            return;
-        }
-
-        setSaveError('');
-        addedBundleKeysRef.current.add(bundleKey);
-        lineItems.forEach((lineItem) => {
-            const recommendation = {
-                ...lineItem.raw,
-                resolvedPrice: lineItem.price,
-                catalogPrice: lineItem.catalogPrice,
-                bundleMeta: lineItem.bundleMeta,
-            };
-
-            if (lineItem.kind === 'service') {
-                addSuggestedService(recommendation);
-                return;
-            }
-
-            addSuggestedPart(recommendation);
-        });
-        success(`${tier.badgeLabel || 'Package'} package added to your quote.`);
-    };
 
     useEffect(() => {
         const activeBundleKeys = new Set(
@@ -859,27 +701,18 @@ const PublicEstimate = () => {
     }, [selectedParts, selectedServices]);
 
     const hasItems = selectedParts.length > 0 || selectedServices.length > 0;
-    const focusedPartSelection = selectedParts.find((part) => part.id === focusedProduct?.id);
-    const totalItemCount = selectedParts.reduce((sum, part) => sum + part.quantity, 0) + selectedServices.length;
+    const totalItemCount = [...selectedParts, ...selectedServices].reduce((sum, line) => sum + Number(line.quantity ?? 1), 0);
     const totalLineCount = selectedParts.length + selectedServices.length;
-    const selectedProductIds = selectedParts.map((part) => part.id);
-    const selectedServiceIds = selectedServices.map((service) => service.id);
-    const summaryFocusProduct = focusedProduct || selectedParts[selectedParts.length - 1] || null;
-    const summaryFocusSelection = selectedParts.find((part) => part.id === summaryFocusProduct?.id);
-    const quoteFinancialModel = useMemo(() => buildSmartQuoteModel({
-        selectedProduct: summaryFocusProduct,
-        selectedParts,
-        selectedServices,
-    }), [summaryFocusProduct, selectedParts, selectedServices]);
+    const quoteTotals = useMemo(() => calculateQuoteTotals(selectedParts, selectedServices), [selectedParts, selectedServices]);
     const appliedBundles = useMemo(() => getAppliedBundleSummaries([...selectedParts, ...selectedServices]), [selectedParts, selectedServices]);
     const appliedBundleDisplays = useMemo(() => getAppliedBundleDisplaySummaries([...selectedParts, ...selectedServices]), [selectedParts, selectedServices]);
     const bundleDiscountTotal = useMemo(() => roundCurrency(appliedBundles.reduce((sum, bundle) => sum + Number(bundle.savings ?? 0), 0)), [appliedBundles]);
-    const partsTotal = quoteFinancialModel.totals.partsSubtotal;
-    const servicesTotal = quoteFinancialModel.totals.servicesSubtotal;
-    const subtotal = quoteFinancialModel.totals.subtotal;
+    const partsTotal = quoteTotals.partsSubtotal;
+    const servicesTotal = quoteTotals.servicesSubtotal;
+    const subtotal = quoteTotals.subtotal;
     const subtotalBeforeDiscount = roundCurrency(subtotal + bundleDiscountTotal);
-    const vat = quoteFinancialModel.totals.vat;
-    const total = quoteFinancialModel.totals.estimatedTotal;
+    const vat = quoteTotals.vat;
+    const total = quoteTotals.total;
     const savedDraftPrintableQuote = buildRetrievedPrintableQuote(savedDraftQuote);
     const retrievedPrintableQuote = buildRetrievedPrintableQuote(retrievedQuote);
     const printableQuote = printSource === 'retrieved' ? retrievedPrintableQuote : savedDraftPrintableQuote;
@@ -931,6 +764,7 @@ const PublicEstimate = () => {
     };
 
     const saveDraftQuote = async () => {
+        if (quoteSaveBusy.current) return null;
         const existingQuoteNumber = savedDraftQuote?.estimate?.estimate_number;
         if (existingQuoteNumber && !quoteHasChanges) {
             return savedDraftQuote;
@@ -953,6 +787,7 @@ const PublicEstimate = () => {
             return null;
         }
 
+        const submittedVersion = quoteMutationVersion.current;
         const payload = buildEstimatePayload({
             customerName,
             customerPhone,
@@ -966,16 +801,20 @@ const PublicEstimate = () => {
             vat,
             total,
         });
+        if (existingQuoteNumber) payload.expected_revision = savedDraftQuote?.estimate?.revision_number ?? 0;
 
+        quoteSaveBusy.current = true;
         setSavingQuote(true);
         setSaveError('');
         const toastId = showToastLoading(existingQuoteNumber ? 'Saving your quote...' : 'Creating your quote...');
 
         try {
+            payload.managed_packages = managedSelectionsFromLines([...selectedParts, ...selectedServices]);
+            payload.reprice_package_ids = managedPackages.repriceIds;
             const response = existingQuoteNumber
                 ? await revisePublicEstimate(savedQuoteEditToken, payload)
                 : await createEstimate(payload);
-            const persistedQuote = enrichCreatedQuoteWithRequestedLabels(response?.estimate, payload.items);
+            const persistedQuote = response?.estimate;
 
             if (!persistedQuote?.estimate?.estimate_number) {
                 throw new Error(existingQuoteNumber
@@ -984,6 +823,7 @@ const PublicEstimate = () => {
             }
 
             setSavedDraftQuote(persistedQuote);
+            managedPackages.acknowledge(persistedQuote);
             const recentQuotes = saveLocalQuoteHistory(persistedQuote);
             setLocalQuoteHistory(recentQuotes);
             if (!existingQuoteNumber) {
@@ -992,7 +832,7 @@ const PublicEstimate = () => {
                     setSaveError('Quote saved. Editing is unavailable until the server update finishes deploying.');
                 }
             }
-            setQuoteHasChanges(false);
+            setQuoteHasChanges(quoteMutationVersion.current !== submittedVersion);
             updateToast(toastId, {
                 title: existingQuoteNumber ? 'Quote updated' : 'Quote created',
                 message: `${persistedQuote.estimate.estimate_number} is saved in Recent Quotes on this device for 30 days.`,
@@ -1005,6 +845,7 @@ const PublicEstimate = () => {
             updateToast(toastId, { title: 'Quote not saved', message, type: 'error' });
             return null;
         } finally {
+            quoteSaveBusy.current = false;
             setSavingQuote(false);
         }
     };
@@ -1071,11 +912,18 @@ const PublicEstimate = () => {
     };
 
     const resetForm = () => {
+        if (quoteSaveBusy.current) return;
         setCustomerName('');
         setCustomerPhone('');
         clearVehicle();
         setSelectedParts([]);
         setSelectedServices([]);
+        managedPackages.reset();
+        setSearchParams((current) => {
+            const next = new URLSearchParams(current);
+            for (const key of ['part', 'partNumber', 'q', 'packageId', 'packageVariantId', 'quoteProductId', 'packageKey', 'serviceGroup', 'vehicleModel', 'vehicleYear', 'vehicleEngine', 'vehicleConfiguration', 'vehicleVariant', 'plateNo']) next.delete(key);
+            return next;
+        }, { replace: true });
         setPartSearch('');
         setSortBy('name-asc');
         setCurrentPage(1);
@@ -1111,12 +959,17 @@ const PublicEstimate = () => {
     };
 
     const handleModeSelect = (nextMode) => {
+        if (quoteSaveBusy.current) return;
+        if (nextMode === 'estimate') {
+            resetForm();
+        }
         setWorkflowStage('active');
         setMode(nextMode);
         setEstimatePhase('details');
     };
 
     const goToModeChoice = () => {
+        if (quoteSaveBusy.current) return;
         setWorkflowStage('choice');
         setShowSummaryDrawer(false);
     };
@@ -1256,11 +1109,11 @@ const PublicEstimate = () => {
                                             </div>
                                             <div className="mt-3 flex items-center justify-between gap-3">
                                                 <div className="flex min-h-[44px] items-center rounded-2xl border border-primary-200 bg-white p-1">
-                                                    <button type="button" onClick={() => updateQty(part.lineKey, part.quantity - 1)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Decrease ${part.name} quantity`}>
+                                                    <button type="button" disabled={isManagedBundle(part.bundleKey)} onClick={() => updateQty(part.lineKey, part.quantity - 1)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Decrease ${part.name} quantity`}>
                                                         <Minus className="h-4 w-4" />
                                                     </button>
                                                     <span className="w-9 text-center text-sm font-semibold text-primary-950">{part.quantity}</span>
-                                                    <button type="button" onClick={() => updateQty(part.lineKey, part.quantity + 1)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Increase ${part.name} quantity`}>
+                                                    <button type="button" disabled={isManagedBundle(part.bundleKey)} onClick={() => updateQty(part.lineKey, part.quantity + 1)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Increase ${part.name} quantity`}>
                                                         <Plus className="h-4 w-4" />
                                                     </button>
                                                 </div>
@@ -1289,7 +1142,7 @@ const PublicEstimate = () => {
                                                 <p className="mt-1 text-xs text-primary-500">{service.displayBundleMeta?.bundleKey || service.bundleKey ? `${service.displayBundleMeta?.bundleName || service.bundleName} / ${service.displayBundleMeta?.bundleTierLabel || service.bundleTierLabel} package labor` : 'Service / labor line'}</p>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <span className="text-sm font-bold text-accent-blue">{formatCurrency(service.price)}</span>
+                                                <span className="text-sm font-bold text-accent-blue">{formatCurrency(service.price * Number(service.quantity ?? 1))}</span>
                                                 <button
                                                     type="button"
                                                     onClick={() => removeService(service.lineKey)}
@@ -1522,36 +1375,14 @@ const PublicEstimate = () => {
                                     <p className="font-semibold text-primary-950">{service.name}</p>
                                     <p className="mt-1 text-xs text-primary-500">{service.displayBundleMeta?.bundleKey || service.bundleKey ? `${service.displayBundleMeta?.bundleName || service.bundleName} / ${service.displayBundleMeta?.bundleTierLabel || service.bundleTierLabel} package labor` : 'Service / labor line'}</p>
                                 </div>
-                                <p className="font-bold text-accent-blue">{formatCurrency(service.price)}</p>
+                                <p className="font-bold text-accent-blue">{formatCurrency(service.price * Number(service.quantity ?? 1))}</p>
                             </div>
                         ))}
                     </div>
                 )}
             </div>
 
-            {summaryFocusProduct && (
-                <ProductPackageSuggestions
-                    product={summaryFocusProduct}
-                    vehicleModelId={vehicle.model || summaryFocusProduct.model || summaryFocusProduct.vehicleModelName || ''}
-                    vehicleContext={hasVehicle ? vehicle : null}
-                    anchorQuantity={summaryFocusSelection?.quantity ?? 1}
-                    onAddProduct={addSuggestedPart}
-                    onAddService={addSuggestedService}
-                    onAddBundle={addBundleToEstimate}
-                    onRemoveProduct={removePart}
-                    onRemoveService={removeService}
-                    selectedProductIds={selectedProductIds}
-                    selectedServiceIds={selectedServiceIds}
-                    selectedBundleKeys={appliedBundleDisplays.map((bundle) => bundle.bundleKey)}
-                    title={hasVehicle ? 'Recommended bundle before finishing' : 'Part-based bundle before finishing'}
-                    subtitle={hasVehicle
-                        ? 'Add any remaining matched parts or labor before generating the quote number.'
-                        : 'Vehicle selection is optional. These bundles are based on the selected anchor part.'}
-                    highlightedPackageKey={incomingPackageKey}
-                    bundleMode="estimate"
-                    smartQuote
-                />
-            )}
+            <ManagedQuotePackages controller={managedPackages} parts={selectedParts} services={selectedServices} vehicle={vehicle} showOffers={false} busy={savingQuote} />
         </div>
     );
 
@@ -1903,7 +1734,7 @@ const PublicEstimate = () => {
                                             >
                                                 <span className="text-xs font-semibold text-primary-500">{getProductPartNumber(product)}</span>
                                                 <span className="text-base font-display font-medium text-primary-950 line-clamp-1">{product.name}</span>
-                                                <span className="line-clamp-1 text-xs text-primary-400">{product.model || 'Universal fitment'}</span>
+                                                <span className="line-clamp-1 text-xs text-primary-600">{product.model || 'Vehicle details not recorded'}</span>
                                                 <span className="text-sm font-bold text-accent-blue mt-auto">{formatCurrency(product.price)}</span>
                                                 {!canQuoteOnline && <span className="text-[0.68rem] font-semibold text-accent-danger">Not yet available for online quotes</span>}
                                             </button>
@@ -1956,7 +1787,7 @@ const PublicEstimate = () => {
                                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                                     {servicesLoading ? (
                                         <div className="rounded-xl border border-primary-200 bg-white p-5 text-sm text-primary-500 sm:col-span-2 xl:col-span-3">
-                                            Loading services from Supabase...
+                                            Loading services...
                                         </div>
                                     ) : servicesError ? (
                                         <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/5 p-5 text-sm text-accent-danger sm:col-span-2 xl:col-span-3">
@@ -1964,7 +1795,7 @@ const PublicEstimate = () => {
                                         </div>
                                     ) : availableServices.length === 0 ? (
                                         <div className="rounded-xl border border-primary-200 bg-white p-5 text-sm text-primary-500 sm:col-span-2 xl:col-span-3">
-                                            No active services are available in the database.
+                                            No services are available right now.
                                         </div>
                                     ) : availableServices.map((service) => {
                                         const isSelected = selectedServices.some((selected) => selected.id === service.id);
@@ -1985,7 +1816,7 @@ const PublicEstimate = () => {
                                                         </span>
                                                     </span>
                                                     <span className={`shrink-0 text-sm font-bold ${isSelected ? 'text-accent-primary' : 'text-primary-500'}`}>
-                                                        {formatCurrency(service.price)}
+                                                        {formatCurrency(service.price * Number(service.quantity ?? 1))}
                                                     </span>
                                                 </span>
                                             </button>
@@ -1995,83 +1826,7 @@ const PublicEstimate = () => {
                             </div>
                             )}
 
-                            {estimatePhase === 'catalog' && hasVehicle && (
-                                <div ref={packageShelfRef} className="space-y-3">
-                                    <div className="flex flex-wrap items-center justify-between gap-3">
-                                        <h3 className="text-lg font-semibold text-primary-950">Packages for your vehicle</h3>
-                                        <Button variant="secondary" onClick={() => setShowVehiclePackages((value) => !value)}>
-                                            {showVehiclePackages ? 'Hide packages' : 'Show packages'}
-                                        </Button>
-                                    </div>
-                                    {showVehiclePackages && (
-                                        <VehiclePackageShowcase
-                                            vehicle={vehicle}
-                                            packages={vehiclePackages}
-                                            loading={vehiclePackagesLoading}
-                                            error={vehiclePackagesError}
-                                            mode="estimate"
-                                            onAddBundle={addBundleToEstimate}
-                                            selectedBundleKeys={appliedBundleDisplays.map((bundle) => bundle.bundleKey)}
-                                            title="Service packages"
-                                            subtitle="Each package lists exactly what would be added to your quote. Please confirm vehicle fitment with the shop."
-                                            emptyLabel={`No verified package is available for ${vehicle.displayLabel} in the current price list. You can still choose parts and services above.`}
-                                            highlightPackageKey={highlightedVehiclePackageKey}
-                                            compactTabs
-                                        />
-                                    )}
-                                </div>
-                            )}
-
-                            {estimatePhase === 'catalog' && focusedProduct && (
-                                <div className="space-y-3">
-                                    <div className="flex flex-col gap-3 rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary-600">Packages for selected part</p>
-                                            <p className="mt-1 font-semibold text-primary-950">{focusedProduct.name}</p>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {selectedParts.length > 1 && (
-                                                <select
-                                                    value={focusedProduct.id}
-                                                    onChange={(event) => {
-                                                        const nextProduct = selectedParts.find((part) => part.id === event.target.value);
-                                                        if (nextProduct) setFocusedProduct(nextProduct);
-                                                    }}
-                                                    className="min-h-11 rounded-xl border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-900 outline-none focus:border-accent-blue"
-                                                >
-                                                    {selectedParts.map((part) => (
-                                                        <option key={`${part.lineKey}-bundle-anchor`} value={part.id}>{part.name}</option>
-                                                    ))}
-                                                </select>
-                                            )}
-                                            <Button variant="secondary" onClick={() => setShowSmartBundles((value) => !value)}>
-                                                {showSmartBundles ? 'Hide packages' : 'Show packages'}
-                                            </Button>
-                                        </div>
-                                    </div>
-                                    {showSmartBundles && (
-                                        <ProductPackageSuggestions
-                                            product={focusedProduct}
-                                            vehicleModelId={vehicle.model || focusedProduct.model || focusedProduct.vehicleModelName || ''}
-                                            vehicleContext={hasVehicle ? vehicle : null}
-                                            anchorQuantity={focusedPartSelection?.quantity ?? 1}
-                                            onAddProduct={addSuggestedPart}
-                                            onAddService={addSuggestedService}
-                                            onAddBundle={addBundleToEstimate}
-                                            onRemoveProduct={removePart}
-                                            onRemoveService={removeService}
-                                            selectedProductIds={selectedProductIds}
-                                            selectedServiceIds={selectedServiceIds}
-                                            selectedBundleKeys={appliedBundleDisplays.map((bundle) => bundle.bundleKey)}
-                                            title="More options for this part"
-                                            subtitle="Review the exact parts and labor before adding an option."
-                                            highlightedPackageKey={incomingPackageKey}
-                                            bundleMode="estimate"
-                                            smartQuote
-                                        />
-                                    )}
-                                </div>
-                            )}
+                            {estimatePhase === 'catalog' && (<div ref={packageShelfRef}><ManagedQuotePackages controller={managedPackages} parts={selectedParts} services={selectedServices} vehicle={vehicle} busy={savingQuote} preferredPackageId={incomingPackageId} preferredVariantId={incomingVariantId} contextProductIds={isUuid(incomingProductId) ? [incomingProductId] : []} /></div>)}
 
                             {estimatePhase === 'details' && (
                                 <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
@@ -2222,11 +1977,11 @@ const PublicEstimate = () => {
                                                                     </div>
                                                                     <div className="mt-3 flex items-center justify-between gap-3">
                                                                         <div className="flex items-center rounded-xl border border-primary-200 bg-white p-0.5">
-                                                                            <button type="button" onClick={() => updateQty(part.lineKey, part.quantity - 1)} className="rounded-lg p-1.5 text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Decrease ${part.name} quantity`}>
+                                                                            <button type="button" disabled={isManagedBundle(part.bundleKey)} onClick={() => updateQty(part.lineKey, part.quantity - 1)} className="rounded-lg p-1.5 text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Decrease ${part.name} quantity`}>
                                                                                 <Minus className="h-4 w-4" />
                                                                             </button>
                                                                             <span className="w-9 text-center text-sm font-semibold text-primary-950">{part.quantity}</span>
-                                                                            <button type="button" onClick={() => updateQty(part.lineKey, part.quantity + 1)} className="rounded-lg p-1.5 text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Increase ${part.name} quantity`}>
+                                                                            <button type="button" disabled={isManagedBundle(part.bundleKey)} onClick={() => updateQty(part.lineKey, part.quantity + 1)} className="rounded-lg p-1.5 text-primary-500 transition hover:bg-primary-50 hover:text-primary-950" aria-label={`Increase ${part.name} quantity`}>
                                                                                 <Plus className="h-4 w-4" />
                                                                             </button>
                                                                         </div>
@@ -2257,7 +2012,7 @@ const PublicEstimate = () => {
                                                                         <span className="mt-1 block text-xs text-primary-500">Service / labor line</span>
                                                                     </div>
                                                                     <div className="flex items-center gap-2">
-                                                                        <span className="text-sm font-bold text-accent-blue">{formatCurrency(service.price)}</span>
+                                                                        <span className="text-sm font-bold text-accent-blue">{formatCurrency(service.price * Number(service.quantity ?? 1))}</span>
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => removeService(service.lineKey)}
@@ -2275,25 +2030,6 @@ const PublicEstimate = () => {
                                             </div>
                                         )}
 
-                                        {summaryFocusProduct && (
-                                            <ProductPackageSuggestions
-                                                product={summaryFocusProduct}
-                                                vehicleModelId={vehicle.model || summaryFocusProduct.model || summaryFocusProduct.vehicleModelName || ''}
-                                                vehicleContext={hasVehicle ? vehicle : null}
-                                                anchorQuantity={summaryFocusSelection?.quantity ?? 1}
-                                                onAddProduct={addSuggestedPart}
-                                                onAddService={addSuggestedService}
-                                                onAddBundle={addBundleToEstimate}
-                                                selectedProductIds={selectedProductIds}
-                                                selectedServiceIds={selectedServiceIds}
-                                                title="Recommended Packages"
-                                                subtitle={hasVehicle
-                                                    ? 'Add remaining upsell items and labor for the selected product without going back to the long catalog view.'
-                                                    : 'Vehicle selection is optional. These bundles are based on the part you clicked and can still be added to the quote.'}
-                                                highlightedPackageKey={incomingPackageKey}
-                                                bundleMode="estimate"
-                                            />
-                                        )}
                                     </div>
 
                                     <div className={`border-t border-primary-200 bg-white/95 px-4 py-4 backdrop-blur ${isDesktopDock ? 'md:px-6 md:py-5' : 'pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:px-5 sm:py-5'}`}>

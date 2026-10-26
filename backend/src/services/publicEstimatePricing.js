@@ -176,6 +176,7 @@ export function createPublicEstimatePricingResolver({
     requestedItems = [],
     requestedEstimate = {},
     vehicle = null,
+    validateTotals = true,
   } = {}) {
     if (!Array.isArray(items) || !Array.isArray(requestedItems) || items.length !== requestedItems.length) {
       return invalid('The quotation item collection is inconsistent.');
@@ -300,6 +301,7 @@ export function createPublicEstimatePricingResolver({
       pricedSubtotal = roundMoney(pricedSubtotal + lineTotal);
       canonicalItems.push({
         ...item,
+        catalog_unit_price: catalogPrice,
         recommendation_rule_id: bundleKey ? item.recommendation_rule_id : null,
         is_upsell: bundleKey ? item.is_upsell === true : false,
         unit_price: unitPrice,
@@ -323,7 +325,7 @@ export function createPublicEstimatePricingResolver({
       grand_total: grandTotal,
     };
 
-    if (!assertRequestedEstimateMatches(requestedEstimate, totals)) {
+    if (validateTotals && !assertRequestedEstimateMatches(requestedEstimate, totals)) {
       return invalid('The quotation totals do not match the approved prices.');
     }
 

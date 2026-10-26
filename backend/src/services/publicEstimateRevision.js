@@ -2,6 +2,7 @@ import { parsePublicEstimateCreateInput } from './publicEstimateCreate.js';
 import { verifyPublicEstimateEditToken } from './publicEstimateEdit.js';
 import { buildPublicEstimateLookupResult } from './publicEstimateLookup.js';
 import { PUBLIC_ESTIMATE_PRICING_INVALID_MESSAGE } from './publicEstimatePricing.js';
+import { estimatePricingVehicle } from './estimateVehicleContext.js';
 
 export const PUBLIC_ESTIMATE_EDIT_SESSION_INVALID_MESSAGE = 'This quote-edit session has expired. Start a new quotation to make changes.';
 export const PUBLIC_ESTIMATE_NOT_EDITABLE_MESSAGE = 'This quotation can no longer be edited.';
@@ -62,15 +63,24 @@ export function createPublicEstimateRevisionHandler({
         res.status(input.statusCode).json({ error: input.error });
         return;
       }
+      if (input.expectedRevision === null || input.expectedRevision !== Number(existingEstimate.estimate.revision_number ?? 0)) {
+        res.status(409).json({ error: 'This quotation changed or needs to be refreshed. Reload it before saving.', code: 'QUOTE_CONFLICT' });
+        return;
+      }
 
+      const pricingVehicle = estimatePricingVehicle(input.payload, existingEstimate);
       const pricing = await resolvePricing({
         items: input.payload.items,
         requestedItems: requestBody.items,
         requestedEstimate: requestBody.estimate,
-        vehicle: input.payload.vehicle ?? null,
+        vehicle: pricingVehicle,
+        selections: input.selections,
+        repricePackageIds: input.repricePackageIds,
+        existingQuote: existingEstimate,
       });
       if (!pricing?.ok) {
-        res.status(400).json({ error: PUBLIC_ESTIMATE_PRICING_INVALID_MESSAGE });
+        res.status(pricing?.statusCode || 400).json({ error: pricing?.error || PUBLIC_ESTIMATE_PRICING_INVALID_MESSAGE,
+          ...(pricing?.code ? { code: pricing.code } : {}) });
         return;
       }
 
@@ -83,16 +93,21 @@ export function createPublicEstimateRevisionHandler({
         },
         items: pricing.items,
       };
-      await reviseEstimate(editSession.estimateId, payload, 'Public quote updated');
+      const saved = await reviseEstimate(editSession.estimateId, payload, 'Public quote updated', {
+        expectedRevision: input.expectedRevision, snapshots: pricing.snapshots || [], pricingVehicle,
+      });
 
-      const updatedEstimate = await loadEstimate(editSession.estimateId);
-      const publicEstimate = buildPublicEstimateLookupResult(updatedEstimate);
+      const publicEstimate = buildPublicEstimateLookupResult(saved.estimate);
       if (!publicEstimate) {
         throw new Error('Public estimate revision returned an invalid snapshot.');
       }
 
       res.json({ estimate: publicEstimate });
     } catch (error) {
+      if (error.publicMessage && error.statusCode >= 400 && error.statusCode < 500) {
+        res.status(error.statusCode).json({ error: error.publicMessage, code: error.code });
+        return;
+      }
       const safeError = new Error(PUBLIC_ESTIMATE_REVISION_UNAVAILABLE_MESSAGE);
       safeError.statusCode = 503;
       safeError.cause = error;

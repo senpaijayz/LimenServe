@@ -10,6 +10,9 @@ function normalizeVehicle(vehicle = {}) {
   const normalized = {
     model: vehicle.model ? String(vehicle.model).trim() : '',
     year: vehicle.year ? String(vehicle.year).trim() : '',
+    engine: vehicle.engine ? String(vehicle.engine).trim().slice(0, 120) : '',
+    fitmentId: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(vehicle.fitmentId || '') ? vehicle.fitmentId : '',
+    variant: vehicle.variant ? String(vehicle.variant).trim().slice(0, 120) : '',
     plateNo: vehicle.plateNo ? String(vehicle.plateNo).trim() : '',
   };
 
@@ -47,7 +50,7 @@ function writeVehicleCookie(vehicle) {
 
   // Keep this cookie limited to non-sensitive fitment preferences. Auth/session
   // tokens and plate numbers must remain outside client-readable cookies.
-  const payload = encodeURIComponent(JSON.stringify({ model: vehicle.model, year: vehicle.year }));
+  const payload = encodeURIComponent(JSON.stringify({ model: vehicle.model, year: vehicle.year, engine: vehicle.engine, fitmentId: vehicle.fitmentId, variant: vehicle.variant }));
   const secure = window.location.protocol === 'https:' ? '; Secure' : '';
   document.cookie = `${COOKIE_KEY}=${payload}; Max-Age=${COOKIE_MAX_AGE_SECONDS}; Path=/; SameSite=Lax${secure}`;
 }
@@ -63,6 +66,9 @@ function readVehicleFromSearch(searchParams) {
   return normalizeVehicle({
     model: searchParams.get('vehicleModel') || '',
     year: searchParams.get('vehicleYear') || '',
+    engine: searchParams.get('vehicleEngine') || '',
+    fitmentId: searchParams.get('vehicleConfiguration') || '',
+    variant: searchParams.get('vehicleVariant') || '',
     plateNo: searchParams.get('plateNo') || '',
   });
 }
@@ -127,6 +133,9 @@ export default function usePublicVehicleSelection({
     const pairs = [
       ['vehicleModel', vehicle.model],
       ['vehicleYear', vehicle.year],
+      ['vehicleEngine', vehicle.engine],
+      ['vehicleConfiguration', vehicle.fitmentId],
+      ['vehicleVariant', vehicle.variant],
     ];
 
     if (includePlate) {
@@ -147,10 +156,6 @@ export default function usePublicVehicleSelection({
       }
     });
 
-    if (nextParams.has('vehicleEngine')) {
-      nextParams.delete('vehicleEngine');
-      didChange = true;
-    }
 
     if (didChange) {
       setSearchParams(nextParams, { replace: true });
@@ -160,6 +165,9 @@ export default function usePublicVehicleSelection({
   const apiVehicle = useMemo(() => ({
     model: vehicle.model,
     year: vehicle.year,
+    engine: vehicle.engine,
+    fitmentId: vehicle.fitmentId,
+    variant: vehicle.variant,
     plateNo: vehicle.plateNo,
     displayLabel: vehicle.displayLabel,
   }), [vehicle]);

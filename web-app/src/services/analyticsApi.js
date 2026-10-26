@@ -1,4 +1,4 @@
-import apiClient, { cachedApiGet, extractApiError } from './apiClient';
+import apiClient, { extractApiError } from './apiClient';
 
 export async function getRecordedSalesReport(params = {}) {
   try {
@@ -9,9 +9,6 @@ export async function getRecordedSalesReport(params = {}) {
   }
 }
 
-function isNetworkFailure(error) {
-  return !error?.response;
-}
 
 export async function runFullAnalyticsRefresh(notes = null) {
   try {
@@ -22,35 +19,7 @@ export async function runFullAnalyticsRefresh(notes = null) {
   }
 }
 
-export async function getProductRecommendationPackages(productId, vehicleModelId = null, partLimit = 6, serviceLimit = 4) {
-  try {
-    const { data } = await cachedApiGet(`/catalog/products/${productId}/recommendations`, {
-      params: {
-        vehicleModelId,
-        partLimit,
-        serviceLimit,
-      },
-    });
 
-    return {
-      packages: data.packages ?? [],
-      recommendations: data.recommendations ?? [],
-    };
-  } catch (error) {
-    if (isNetworkFailure(error)) {
-      return {
-        packages: [],
-        recommendations: [],
-      };
-    }
-    extractApiError(error, 'Failed to load recommendation packages.');
-  }
-}
-
-export async function getProductUpsellRecommendations(productId, vehicleModelId = null, limitCount = 5) {
-  const data = await getProductRecommendationPackages(productId, vehicleModelId, limitCount, limitCount);
-  return data?.recommendations ?? [];
-}
 
 export async function getMonthlyProductForecasts(targetMonth = null) {
   try {

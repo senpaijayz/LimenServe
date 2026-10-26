@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
     Archive,
@@ -24,8 +24,11 @@ import { useToast } from '../../../components/ui/Toast';
 import { useCart } from '../../../context/CartContext';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
-import ProductPackageSuggestions from '../../public/components/ProductPackageSuggestions';
-import { buildBundleLineItems, calculateQuoteTotals, clearBundlePricing, createQuoteLineKey } from '../../public/utils/bundleQuotePricing';
+import useManagedQuotePackages from '../../../hooks/useManagedQuotePackages';
+import ManagedQuotePackages from '../../public/components/ManagedQuotePackages';
+import PublicVehicleSelector from '../../public/components/PublicVehicleSelector';
+import { isManagedBundle, managedSelectionsFromLines, savedManagedOffers } from '../../public/utils/managedQuotePackages';
+import { calculateQuoteTotals, clearBundlePricing, createQuoteLineKey } from "../../public/utils/bundleQuotePricing";
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 import { downloadQuotationPdf } from '../utils/downloadQuotationPdf';
 import {
@@ -108,6 +111,8 @@ function buildPrintableQuote({
     selectedParts,
     selectedServices,
     totals,
+    issuedAt,
+    validUntil,
 }) {
     const lineItems = [
         ...selectedParts.map((part) => ({
@@ -116,8 +121,9 @@ function buildPrintableQuote({
             code: getProductPartNumber(part) || 'No part number',
             quantity: Number(part.quantity ?? 1),
             unitPrice: Number(part.price ?? 0),
+            catalogUnitPrice: Number(part.catalogPrice ?? part.price ?? 0),
             lineTotal: Number(part.price ?? 0) * Number(part.quantity ?? 1),
-            bundleLabel: part.bundleKey ? `${part.bundleTierLabel || 'Smart'} bundle` : '',
+            bundleLabel: part.bundleKey ? `${part.bundleName || 'Package'} (${part.bundleTierLabel || 'Complete package'})` : '',
         })),
         ...selectedServices.map((service) => ({
             kind: 'Service',
@@ -125,8 +131,9 @@ function buildPrintableQuote({
             code: service.bundleKey ? `${service.bundleTierLabel || 'Smart'} bundle labor` : 'Service / labor',
             quantity: Number(service.quantity ?? 1),
             unitPrice: Number(service.price ?? 0),
+            catalogUnitPrice: Number(service.catalogPrice ?? service.price ?? 0),
             lineTotal: Number(service.price ?? 0) * Number(service.quantity ?? 1),
-            bundleLabel: service.bundleKey ? `${service.bundleTierLabel || 'Smart'} bundle` : '',
+            bundleLabel: service.bundleKey ? `${service.bundleName || 'Package'} (${service.bundleTierLabel || 'Complete package'})` : '',
         })),
     ];
 
@@ -139,7 +146,7 @@ function buildPrintableQuote({
                 ${item.bundleLabel ? `<em>${escapeHtml(item.bundleLabel)}</em>` : ''}
             </td>
             <td>${item.quantity}</td>
-            <td>${escapeHtml(formatCurrency(item.unitPrice))}</td>
+            <td>${escapeHtml(formatCurrency(item.unitPrice))}${item.catalogUnitPrice > item.unitPrice ? `<span>Catalog: ${escapeHtml(formatCurrency(item.catalogUnitPrice))}</span>` : ''}</td>
             <td>${escapeHtml(formatCurrency(item.lineTotal))}</td>
         </tr>
     `).join('');
@@ -194,13 +201,13 @@ function buildPrintableQuote({
                         <div class="doc-title">
                             <h2>Quotation</h2>
                             <p><strong>${escapeHtml(quoteNumber || 'Draft Quotation')}</strong></p>
-                            <p>Generated ${escapeHtml(new Date().toLocaleString())}</p>
+                            <p>Issued ${escapeHtml(issuedAt || 'Not recorded')}</p>
                         </div>
                     </section>
                     <section class="meta-grid">
                         <div class="box"><span class="label">Customer</span><div class="value">${escapeHtml(customerName || 'Walk-in Customer')}</div><div class="muted">${escapeHtml(customerPhone || 'No phone recorded')}</div></div>
                         <div class="box"><span class="label">Prepared By</span><div class="value">LimenServe</div><div class="muted">Admin quotation</div></div>
-                        <div class="box"><span class="label">Validity</span><div class="value">30 days</div><div class="muted">Subject to stock availability</div></div>
+                        <div class="box"><span class="label">Valid until</span><div class="value">${escapeHtml(validUntil || 'Not recorded')}</div><div class="muted">Subject to stock availability</div></div>
                         <div class="box"><span class="label">Total</span><div class="value">${escapeHtml(formatCurrency(totals.total))}</div><div class="muted">VAT included</div></div>
                     </section>
                     <section class="section">
@@ -300,6 +307,7 @@ function mapEstimateDetailToState(estimate) {
         customerPhone: estimate?.customer?.phone || '',
         notes: estimate?.estimate?.note || '',
         currentEstimateNumber: estimate?.estimate?.estimate_number || '',
+        currentEstimateRevision: Number(estimate?.estimate?.revision_number ?? 0),
         selectedParts: items
             .filter((item) => item.line_type === 'product')
             .map((item) => ({
@@ -341,6 +349,8 @@ const QuoteBuilder = () => {
     const { services: availableServices, loading: servicesLoading, error: servicesError } = useServiceCatalog();
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
+    const [quoteVehicle, setQuoteVehicle] = useState({});
+    const [quoteVehicleChanged, setQuoteVehicleChanged] = useState(false);
     const [selectedParts, setSelectedParts] = useState([]);
     const [selectedServices, setSelectedServices] = useState([]);
     const [notes, setNotes] = useState('');
@@ -352,12 +362,16 @@ const QuoteBuilder = () => {
     const [saving, setSaving] = useState(false);
     const [currentEstimateId, setCurrentEstimateId] = useState(null);
     const [currentEstimateNumber, setCurrentEstimateNumber] = useState('');
+    const [currentEstimateRevision, setCurrentEstimateRevision] = useState(0);
+    const [savedEstimateSnapshot, setSavedEstimateSnapshot] = useState(null);
+    const quoteMutationVersion = useRef(0);
+    const quoteSaveBusy = useRef(false);
+    const quoteLoadRequest = useRef(0);
     const [currentEstimateStatus, setCurrentEstimateStatus] = useState('draft');
     const [quoteDirty, setQuoteDirty] = useState(false);
     const [changeNote, setChangeNote] = useState('Customer requested item updates');
     const [, setRevisions] = useState([]);
     const [focusedProduct, setFocusedProduct] = useState(null);
-    const [showSmartBundles, setShowSmartBundles] = useState(true);
     const [quoteToDelete, setQuoteToDelete] = useState(null);
     const [deletingQuoteId, setDeletingQuoteId] = useState(null);
     const [quoteToArchive, setQuoteToArchive] = useState(null);
@@ -377,7 +391,19 @@ const QuoteBuilder = () => {
         includeCategories: false,
     });
     const partNumberSuggestions = useMemo(() => getPartNumberSearchSuggestions(availableProducts, searchQuery, 5), [availableProducts, searchQuery]);
-    const markQuoteDirty = () => setQuoteDirty(true);
+    const markQuoteDirty = () => {
+        quoteMutationVersion.current += 1;
+        setQuoteDirty(true);
+    };
+
+    const managedPackages = useManagedQuotePackages({
+        parts: selectedParts,
+        services: selectedServices,
+        setParts: setSelectedParts,
+        setServices: setSelectedServices,
+        onDirty: markQuoteDirty,
+        onError: showError,
+    });
 
     const totals = useMemo(() => {
         const quoteTotals = calculateQuoteTotals(selectedParts, selectedServices);
@@ -394,7 +420,6 @@ const QuoteBuilder = () => {
             total: quoteTotals.total,
         };
     }, [selectedParts, selectedServices]);
-    const focusedPartSelection = selectedParts.find((part) => part.id === focusedProduct?.id);
 
     useEffect(() => {
         let active = true;
@@ -426,6 +451,10 @@ const QuoteBuilder = () => {
 
     const breakBundle = (bundleKey) => {
         if (!bundleKey) return true;
+        if (isManagedBundle(bundleKey)) {
+            showError('Use the package controls to change this package. Its included items stay together.');
+            return false;
+        }
         if (!window.confirm('This change removes the package discount from its remaining items and returns them to their listed prices. Continue?')) return false;
         setSelectedParts((parts) => parts.map((part) => part.bundleKey === bundleKey ? clearBundlePricing(part) : part));
         setSelectedServices((services) => services.map((service) => service.bundleKey === bundleKey ? clearBundlePricing(service) : service));
@@ -463,6 +492,10 @@ const QuoteBuilder = () => {
     const removePart = (identifier) => {
         const selectedLine = selectedParts.find((part) => part.lineKey === identifier) || selectedParts.find((part) => part.id === identifier);
         if (!selectedLine) return;
+        if (isManagedBundle(selectedLine.bundleKey)) {
+            managedPackages.remove(selectedLine.bundleKey.slice(4));
+            return;
+        }
         if (selectedLine.bundleKey && !breakBundle(selectedLine.bundleKey)) return;
         markQuoteDirty();
         setSelectedParts((parts) => parts.filter((part) => part.lineKey !== selectedLine.lineKey));
@@ -498,90 +531,66 @@ const QuoteBuilder = () => {
         }
     };
 
-    const addBundleToQuote = (pkg, tier) => {
-        if (!tier?.items?.length) {
-            return;
-        }
-        markQuoteDirty();
-
-        buildBundleLineItems(pkg, tier).forEach((lineItem) => {
-            const recommendation = {
-                ...lineItem.raw,
-                resolvedPrice: lineItem.price,
-                catalogPrice: lineItem.catalogPrice,
-                bundleMeta: lineItem.bundleMeta,
-            };
-
-            if (lineItem.kind === 'service') {
-                const nextService = {
-                    lineKey: createQuoteLineKey(),
-                    id: recommendation.recommendedServiceId,
-                    name: recommendation.recommendedServiceName,
-                    price: Number(recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? 0),
-                    quantity: 1,
-                    isUpsell: true,
-                    recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
-                    catalogPrice: Number(recommendation.catalogPrice ?? recommendation.recommendedPrice ?? 0),
-                    ...(recommendation.bundleMeta ?? {}),
-                };
-
-                setSelectedServices((services) => {
-                    const bundleKey = nextService.bundleKey || '';
-                    if (bundleKey && services.some((service) => service.id === nextService.id && service.bundleKey === bundleKey)) return services;
-                    const ordinaryLine = services.find((service) => service.id === nextService.id && !service.bundleKey);
-                    if (bundleKey && ordinaryLine) {
-                        return services.map((service) => service.lineKey === ordinaryLine.lineKey
-                            ? { ...service, ...nextService, lineKey: service.lineKey, price: nextService.price, catalogPrice: nextService.catalogPrice }
-                            : service);
-                    }
-                    return [...services, nextService];
-                });
-                return;
-            }
-
-            if (recommendation.recommendedProduct) {
-                addPart(recommendation.recommendedProduct, {
-                    price: Number(recommendation.resolvedPrice ?? recommendation.recommendedProduct.price ?? recommendation.recommendedPrice ?? 0),
-                    isUpsell: true,
-                    recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
-                    catalogPrice: Number(recommendation.catalogPrice ?? recommendation.recommendedProduct.price ?? recommendation.recommendedPrice ?? 0),
-                    ...(recommendation.bundleMeta ?? {}),
-                });
-            }
-        });
-    };
 
     const loadQuote = async (estimateId) => {
+        if (quoteSaveBusy.current) return;
+        if (quoteDirty && !window.confirm('Load this quotation and discard your unsaved changes?')) return;
+        const request = ++quoteLoadRequest.current;
+        const version = quoteMutationVersion.current;
         try {
-            const estimate = await getEstimateDetail(estimateId);
+            const [detail, history] = await Promise.allSettled([
+                getEstimateDetail(estimateId), getEstimateRevisions(estimateId),
+            ]);
+            if (request !== quoteLoadRequest.current || quoteSaveBusy.current) return;
+            if (version !== quoteMutationVersion.current) {
+                info('You made changes while this quotation was loading. Your current edits were kept.');
+                return;
+            }
+            if (detail.status === 'rejected') throw detail.reason;
+            const estimate = detail.value;
+            savedManagedOffers(estimate);
             const nextState = mapEstimateDetailToState(estimate);
             setCurrentEstimateId(estimateId);
             setCurrentEstimateNumber(nextState.currentEstimateNumber);
+            setCurrentEstimateRevision(nextState.currentEstimateRevision);
             setCurrentEstimateStatus(nextState.currentEstimateStatus);
             setCustomerName(nextState.customerName);
             setCustomerPhone(nextState.customerPhone);
             setNotes(nextState.notes);
             setSelectedParts(nextState.selectedParts);
             setSelectedServices(nextState.selectedServices);
+            setSavedEstimateSnapshot(estimate);
+            setQuoteVehicle(estimate.vehicle ? { ...estimate.vehicle, model: estimate.vehicle.model_name || estimate.vehicle.model,
+                fitmentId: estimate.vehicle.fitmentId || estimate.vehicle.metadata?.fitmentId || '',
+                variant: estimate.vehicle.variant || estimate.vehicle.metadata?.variant || '',
+            } : {});
+            setQuoteVehicleChanged(false);
+            managedPackages.hydrate(estimate);
             setFocusedProduct(nextState.selectedParts[0] || null);
             setQuoteDirty(false);
-            const revisionHistory = await getEstimateRevisions(estimateId);
-            setRevisions(revisionHistory);
-            info(`Loaded quote ${nextState.currentEstimateNumber || estimateId}`);
+            setRevisions(history.status === 'fulfilled' ? history.value : []);
+            info(`Loaded quote ${nextState.currentEstimateNumber || estimateId}${history.status === 'rejected' ? '. Its history could not be loaded yet.' : ''}`);
         } catch (loadError) {
-            showError(loadError.message || 'Unable to load the selected quotation.');
+            if (request === quoteLoadRequest.current && !quoteSaveBusy.current) showError(loadError.message || 'Unable to load the selected quotation.');
         }
     };
 
     const resetQuotationEditor = () => {
+        if (quoteSaveBusy.current) return;
+        quoteLoadRequest.current += 1;
         setCurrentEstimateId(null);
         setCurrentEstimateNumber('');
+        setCurrentEstimateRevision(0);
+        setSavedEstimateSnapshot(null);
         setCurrentEstimateStatus('draft');
         setCustomerName('');
         setCustomerPhone('');
         setNotes('');
         setSelectedParts([]);
         setSelectedServices([]);
+        setQuoteVehicle({});
+        setQuoteVehicleChanged(false);
+        managedPackages.reset();
         setFocusedProduct(null);
         setRevisions([]);
         setQuoteDirty(false);
@@ -651,13 +660,18 @@ const QuoteBuilder = () => {
     };
 
     const handleSave = async () => {
+        if (quoteSaveBusy.current) return;
         if (!selectedParts.length && !selectedServices.length) {
             showError('Add at least one part or service before saving.');
             return;
         }
 
+        quoteSaveBusy.current = true;
+        quoteLoadRequest.current += 1;
         setSaving(true);
+        let confirmedId = currentEstimateId;
         try {
+            const submittedVersion = quoteMutationVersion.current;
             const payload = buildEstimatePayload({
                 customerName,
                 customerPhone,
@@ -667,13 +681,29 @@ const QuoteBuilder = () => {
                 currentEstimateNumber,
             });
             payload.estimate.status = currentEstimateId ? currentEstimateStatus : 'draft';
+            payload.managed_packages = managedSelectionsFromLines([...selectedParts, ...selectedServices]);
+            payload.reprice_package_ids = managedPackages.repriceIds;
+            if (!currentEstimateId || quoteVehicleChanged) {
+                payload.vehicle = quoteVehicle.model ? {
+                    make: quoteVehicle.make || 'Mitsubishi',
+                    model_name: quoteVehicle.model,
+                    year: quoteVehicle.year || null,
+                    engine: quoteVehicle.engine || null,
+                    fitmentId: quoteVehicle.fitmentId || null,
+                    variant: quoteVehicle.variant || null,
+                } : null;
+            }
 
             if (currentEstimateId) {
-                await updateEstimate(currentEstimateId, payload, changeNote);
-                setQuoteDirty(false);
+                payload.expected_revision = currentEstimateRevision;
+                const updated = await updateEstimate(currentEstimateId, payload, changeNote);
+                const estimate = updated.estimate;
+                setSavedEstimateSnapshot(estimate);
+                setCurrentEstimateRevision(Number(estimate.estimate.revision_number));
+                managedPackages.acknowledge(estimate);
+                if (quoteMutationVersion.current === submittedVersion) setQuoteVehicleChanged(false);
+                setQuoteDirty(quoteMutationVersion.current !== submittedVersion);
                 success('Quotation updated and revision saved.');
-                const revisionHistory = await getEstimateRevisions(currentEstimateId);
-                setRevisions(revisionHistory);
             } else {
                 // createEstimate returns the complete API result, not the UUID itself.
                 // Passing that object into the detail route stringifies it as
@@ -684,29 +714,67 @@ const QuoteBuilder = () => {
                     throw new Error('The quotation was saved, but its identifier was not returned.');
                 }
 
-                const estimate = created?.estimate ?? await getEstimateDetail(estimateId);
+                const estimate = created.estimate;
+                confirmedId = estimateId;
+                setSavedEstimateSnapshot(estimate);
                 setCurrentEstimateId(estimateId);
                 setCurrentEstimateNumber(estimate?.estimate?.estimate_number || '');
-                setCurrentEstimateStatus(String(estimate?.estimate?.status || 'draft').toLowerCase());
-                setQuoteDirty(false);
+                setCurrentEstimateRevision(Number(estimate?.estimate?.revision_number ?? 0));
+                managedPackages.acknowledge(estimate);
+                if (quoteMutationVersion.current === submittedVersion) setCurrentEstimateStatus(String(estimate?.estimate?.status || 'draft').toLowerCase());
+                if (quoteMutationVersion.current === submittedVersion) setQuoteVehicleChanged(false);
+                setQuoteDirty(quoteMutationVersion.current !== submittedVersion);
                 success('Quotation saved successfully.');
-                const revisionHistory = await getEstimateRevisions(estimateId);
-                setRevisions(revisionHistory);
             }
 
-            const refreshedQuotes = await listEstimates(quoteSearch, 8, quoteStatusFilter);
-            setSavedQuotes(refreshedQuotes);
+            // These panels are secondary reads. Their failure must not relabel
+            // a committed quotation as an unsuccessful save or trigger a retry.
+            const request = quoteLoadRequest.current;
+            void Promise.allSettled([
+                getEstimateRevisions(confirmedId), listEstimates(quoteSearch, 8, quoteStatusFilter),
+            ]).then(([history, quotes]) => {
+                if (request !== quoteLoadRequest.current) return;
+                if (history.status === 'fulfilled') setRevisions(history.value);
+                if (quotes.status === 'fulfilled') setSavedQuotes(quotes.value);
+                if (history.status === 'rejected' || quotes.status === 'rejected') info('Your quotation is saved. Refresh the list or history to load the latest records.');
+            });
         } catch (saveError) {
             showError(saveError.message || 'Unable to save the quotation.');
         } finally {
+            quoteSaveBusy.current = false;
             setSaving(false);
         }
     };
 
     const hasQuoteItems = selectedParts.length > 0 || selectedServices.length > 0;
 
+    // Issued documents use the acknowledged snapshot, never current CMS prices
+    // or a fresh validity date calculated when somebody downloads them again.
+    const getDocumentState = () => {
+        const saved = currentEstimateId ? savedEstimateSnapshot : null;
+        const state = saved ? mapEstimateDetailToState(saved) : { customerName, customerPhone, notes, selectedParts, selectedServices };
+        const calculated = saved ? calculateQuoteTotals(state.selectedParts, state.selectedServices) : null;
+        const header = saved?.estimate;
+        const documentTotals = saved ? {
+            partsCatalogTotal: calculated.partsCatalogSubtotal,
+            servicesCatalogTotal: calculated.servicesCatalogSubtotal,
+            appliedBundles: calculated.appliedBundles,
+            subtotalBeforeDiscount: Number(header.subtotal),
+            bundleDiscountTotal: Number(header.discount_total),
+            subtotal: Number(header.subtotal) - Number(header.discount_total),
+            vat: Number(header.tax_total),
+            total: Number(header.grand_total),
+        } : totals;
+        const formatDate = (value) => value ? new Date(value).toLocaleDateString('en-PH') : '';
+        return { ...state, totals: documentTotals,
+            quoteNumber: header?.estimate_number || currentEstimateNumber || 'Draft Quotation',
+            issuedAt: formatDate(header ? header.issued_at || header.created_at : new Date()),
+            validUntil: formatDate(header ? header.valid_until : Date.now() + 30 * 24 * 60 * 60 * 1000),
+        };
+    };
+
     const handlePrint = () => {
-        if (currentEstimateId && quoteDirty) {
+        if (saving || (currentEstimateId && (quoteDirty || !savedEstimateSnapshot))) {
             showError('Save this quotation revision before printing, so the document matches the saved record.');
             return;
         }
@@ -721,15 +789,7 @@ const QuoteBuilder = () => {
             return;
         }
 
-        const html = buildPrintableQuote({
-            quoteNumber: currentEstimateNumber,
-            customerName,
-            customerPhone,
-            notes,
-            selectedParts,
-            selectedServices,
-            totals,
-        });
+        const html = buildPrintableQuote(getDocumentState());
 
         printWindow.document.open();
         printWindow.document.write(html);
@@ -743,7 +803,7 @@ const QuoteBuilder = () => {
     };
 
     const handleDownloadPdf = async () => {
-        if (currentEstimateId && quoteDirty) {
+        if (saving || (currentEstimateId && (quoteDirty || !savedEstimateSnapshot))) {
             showError('Save this quotation revision before downloading, so the PDF matches the saved record.');
             return;
         }
@@ -753,12 +813,13 @@ const QuoteBuilder = () => {
         }
         const toastId = showToastLoading('Preparing your quotation PDF…');
         try {
+            const { quoteNumber, customerName, customerPhone, notes, selectedParts, selectedServices, totals, issuedAt, validUntil } = getDocumentState();
             await downloadQuotationPdf({
-                referenceValue: currentEstimateNumber || 'Draft Quotation',
+                referenceValue: quoteNumber,
                 customerName: customerName || 'Walk-in Customer',
                 customerPhone,
-                issuedAt: new Date().toLocaleDateString('en-PH'),
-                validUntil: new Date(Date.now() + (30 * 24 * 60 * 60 * 1000)).toLocaleDateString('en-PH'),
+                issuedAt,
+                validUntil,
                 note: notes,
                 subtotalBeforeDiscount: totals.subtotalBeforeDiscount,
                 subtotalAfterDiscount: totals.subtotal,
@@ -1076,105 +1137,18 @@ const QuoteBuilder = () => {
                                 >
                                     <p className="text-sm font-semibold text-primary-950 line-clamp-2">{product.name}</p>
                                     <p className="mt-1 text-xs font-mono text-primary-500">{getProductPartNumber(product) || 'No part number'}</p>
-                                    <p className="text-[11px] text-primary-400 mt-1">{product.model || 'Universal fitment'}</p>
+                                    <p className="text-[11px] text-primary-600 mt-1">{product.model || 'Vehicle details not recorded'}</p>
                                     <p className="mt-3 text-sm font-bold text-accent-blue">{formatCurrency(product.price || 0)}</p>
                                 </button>
                             ))}
                         </div>
                     </Card>
 
-                    {focusedProduct && (
-                        <div className="space-y-3">
-                            <div className="flex flex-col gap-3 rounded-xl border border-primary-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary-400">Selected bundle anchor</p>
-                                    <p className="mt-1 font-semibold text-primary-950">{focusedProduct.name}</p>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                    {selectedParts.length > 1 && (
-                                        <select
-                                            value={focusedProduct.id}
-                                            onChange={(event) => {
-                                                const nextProduct = selectedParts.find((part) => part.id === event.target.value);
-                                                if (nextProduct) setFocusedProduct(nextProduct);
-                                            }}
-                                            className="min-h-11 rounded-xl border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-900 outline-none focus:border-accent-blue"
-                                        >
-                                            {selectedParts.map((part) => (
-                                                <option key={`${part.lineKey}-quote-bundle-anchor`} value={part.id}>{part.name}</option>
-                                            ))}
-                                        </select>
-                                    )}
-                                    <Button variant="secondary" onClick={() => setShowSmartBundles((value) => !value)}>
-                                        {showSmartBundles ? 'Hide Smart Bundles' : 'Show Smart Bundles'}
-                                    </Button>
-                                </div>
-                            </div>
-                            {showSmartBundles && (
-                                <ProductPackageSuggestions
-                                    product={focusedProduct}
-                                    vehicleModelId={focusedProduct.model || null}
-                                    anchorQuantity={focusedPartSelection?.quantity ?? 1}
-                                    onAddBundle={addBundleToQuote}
-                                    onAddProduct={(recommendation) => {
-                                if (!recommendation.recommendedProduct) {
-                                    return;
-                                }
-
-                                addPart(recommendation.recommendedProduct, {
-                                    price: Number(recommendation.resolvedPrice ?? recommendation.recommendedProduct.price ?? recommendation.recommendedPrice ?? 0),
-                                    isUpsell: true,
-                                    recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
-                                    catalogPrice: Number(recommendation.catalogPrice ?? recommendation.catalog_price ?? recommendation.recommendedProduct.price ?? recommendation.recommendedPrice ?? 0),
-                                    ...(recommendation.bundleMeta ?? {}),
-                                });
-                                    }}
-                                    onAddService={(recommendation) => {
-                                if (!recommendation.recommendedServiceId) {
-                                    return;
-                                }
-
-                                markQuoteDirty();
-                                setSelectedServices((services) => {
-                                    const nextService = {
-                                        id: recommendation.recommendedServiceId,
-                                        name: recommendation.recommendedServiceName,
-                                        price: Number(recommendation.resolvedPrice ?? recommendation.recommendedPrice ?? 0),
-                                        quantity: 1,
-                                        isUpsell: true,
-                                        recommendationRuleId: recommendation.packageItemId || recommendation.ruleId || null,
-                                        catalogPrice: Number(recommendation.catalogPrice ?? recommendation.catalog_price ?? recommendation.recommendedPrice ?? 0),
-                                        ...(recommendation.bundleMeta ?? {}),
-                                    };
-                                    const existing = services.find((service) => service.id === recommendation.recommendedServiceId);
-
-                                    if (existing) {
-                                        return services.map((service) => (service.id === recommendation.recommendedServiceId ? {
-                                            ...service,
-                                            ...nextService,
-                                            price: Math.min(Number(service.price ?? 0), Number(nextService.price ?? 0)),
-                                        } : service));
-                                    }
-
-                                    return [
-                                        ...services,
-                                        nextService,
-                                    ];
-                                });
-                                    }}
-                                    selectedProductIds={selectedParts.map((part) => part.id)}
-                                    selectedServiceIds={selectedServices.map((service) => service.id)}
-                                    title="Recommended Packages"
-                                    subtitle="Review package items and savings before adding them to this quotation."
-                                />
-                            )}
-                        </div>
-                    )}
 
                     <Card title="Select Services" subtitle="Add labor or maintenance services to the quotation.">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {servicesLoading ? (
-                                <div className="col-span-full rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-500">Loading services from Supabase...</div>
+                                <div className="col-span-full rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-500">Loading services...</div>
                             ) : servicesError ? (
                                 <div className="col-span-full rounded-lg border border-accent-danger/20 bg-accent-danger/5 p-4 text-sm text-accent-danger">{servicesError}</div>
                             ) : availableServices.length === 0 ? (
@@ -1200,6 +1174,13 @@ const QuoteBuilder = () => {
                             })}
                         </div>
                     </Card>
+
+                    <PublicVehicleSelector vehicle={quoteVehicle} title="Vehicle for this quotation"
+                        subtitle={currentEstimateId ? 'Vehicle changes apply only to this quotation. Review selected packages again before saving a different vehicle.' : 'Choose a model, year, and engine to see approved packages. Vehicle-independent services do not require a vehicle.'}
+                        onChange={(patch) => { setQuoteVehicle((current) => ({ ...current, ...patch })); setQuoteVehicleChanged(true); markQuoteDirty(); }}
+                        onClear={() => { setQuoteVehicle({}); setQuoteVehicleChanged(true); markQuoteDirty(); }} />
+
+                    <ManagedQuotePackages controller={managedPackages} parts={selectedParts} services={selectedServices} vehicle={quoteVehicle} busy={saving} />
 
                     <Card title="Additional Notes">
                         <textarea
@@ -1231,6 +1212,8 @@ const QuoteBuilder = () => {
                                             <div className="flex items-center gap-2">
                                                 <input
                                                     type="number"
+                                                    disabled={isManagedBundle(part.bundleKey)}
+                                                    aria-label={`Quantity for ${part.name}`}
                                                     value={part.quantity}
                                                     onChange={(e) => updatePartQuantity(part.lineKey, parseInt(e.target.value, 10) || 0)}
                                                     className="w-14 px-2 py-1 bg-white border border-primary-200 rounded text-sm text-center font-bold text-primary-950 focus:outline-none focus:border-accent-blue shadow-sm"
