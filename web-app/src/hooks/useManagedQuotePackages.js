@@ -22,6 +22,7 @@ export default function useManagedQuotePackages({
   const [offers, setOffers] = useState([]);
   const [repriceIds, setRepriceIds] = useState([]);
   const [error, setError] = useState("");
+  const [pendingRemoval, setPendingRemoval] = useState(null);
   const offersRef = useRef([]);
   const setCurrent = (next) => {
     offersRef.current = next;
@@ -89,13 +90,16 @@ export default function useManagedQuotePackages({
     const offer = offersRef.current.find(
       (row) => row.selection.packageId === packageId,
     );
-    if (
-      !offer ||
-      !window.confirm(
-        `Remove ${offer.definition.name} and all of its included items?`,
-      )
-    )
-      return false;
+    if (!offer) return false;
+    setPendingRemoval(offer);
+    return false;
+  };
+  const confirmRemoval = () => {
+    const offer = pendingRemoval;
+    setPendingRemoval(null);
+    // Do not apply a confirmation to another quote or a changed package.
+    if (!offer || !offersRef.current.includes(offer)) return false;
+    const packageId = offer.selection.packageId;
     const key = managedBundleKey(packageId);
     setParts((current) => current.filter((line) => line.bundleKey !== key));
     setServices((current) => current.filter((line) => line.bundleKey !== key));
@@ -142,6 +146,7 @@ export default function useManagedQuotePackages({
     });
   const hydrate = (quote) =>
     change(() => {
+      setPendingRemoval(null);
       const next = savedManagedOffers(quote);
       setParts((current) => [
         ...current.filter((line) => !line.bundleKey?.startsWith("pkg:")),
@@ -161,6 +166,7 @@ export default function useManagedQuotePackages({
     });
   const acknowledge = (quote) =>
     change(() => {
+      setPendingRemoval(null);
       const saved = savedManagedOffers(quote);
       const changedIds = [];
       const next = offersRef.current.map((offer) => {
@@ -189,6 +195,7 @@ export default function useManagedQuotePackages({
       return true;
     });
   const reset = () => {
+    setPendingRemoval(null);
     setCurrent([]);
     setRepriceIds([]);
     setError("");
@@ -200,6 +207,9 @@ export default function useManagedQuotePackages({
     clearError: () => setError(""),
     add,
     remove,
+    pendingRemoval,
+    confirmRemoval,
+    cancelRemoval: () => setPendingRemoval(null),
     changeQuantity,
     reprice,
     hydrate,

@@ -9,6 +9,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Modal from "../../../components/ui/Modal";
+import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import { formatCurrency } from "../../../utils/formatters";
 import {
   getPublishedPackage,
@@ -522,6 +523,15 @@ export default function ManagedQuotePackages({
           </p>
         )}
       </Modal>
+      <ConfirmDialog
+        isOpen={Boolean(controller?.pendingRemoval)}
+        title="Remove this package?"
+        message={`Remove ${controller?.pendingRemoval?.definition.name || 'this package'} and all of its included items? Other items stay in your quote. Your saved quotation will not change until you save again.`}
+        confirmLabel="Remove package"
+        isLoading={busy}
+        onClose={() => { if (!busy) controller.cancelRemoval(); }}
+        onConfirm={() => { if (!busy) controller.confirmRemoval(); }}
+      />
     </section>
   );
 }
