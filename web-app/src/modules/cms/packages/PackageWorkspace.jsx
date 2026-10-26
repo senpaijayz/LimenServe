@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../../context/useAuth";
 import { useToast } from "../../../components/ui/Toast";
+import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import {
   duplicateManagedPackage,
   getManagedPackage,
@@ -327,7 +328,7 @@ function InitializationPanel({ onClose, onChanged }) {
           ))}
         </div>
       )}
-      {!state.result && (
+      {!state.result && state.candidates.some((candidate) => !candidate.alreadyExists) && (
         <button
           type="button"
           onClick={() => initialize()}
@@ -363,6 +364,7 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
   const [page, setPage] = useState(1);
   const [reload, setReload] = useState(0);
   const [busy, setBusy] = useState("");
+  const [transitionTarget, setTransitionTarget] = useState(null);
   const [editor, setEditor] = useState(null);
   const [editorRecovery, setEditorRecovery] = useState(null);
   const [recovery, setRecovery] = useState(() => readPackageRecovery(user?.id));
@@ -448,14 +450,10 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
       setBusy("");
     }
   };
-  const transition = async (pkg, action) => {
-    const label =
-      action === "restore"
-        ? "Restore this package as an unpublished draft?"
-        : action === "archive"
-          ? "Archive this package? It will stop appearing in new quotations. Existing quotes stay unchanged."
-          : "Unpublish this package? Existing quotes stay unchanged.";
-    if (!window.confirm(label)) return;
+  const transition = (pkg, action) => setTransitionTarget({ pkg, action });
+  const confirmTransition = async () => {
+    if (!transitionTarget || busy) return;
+    const { pkg, action } = transitionTarget;
     setBusy(pkg.id);
     try {
       await transitionManagedPackage(pkg.id, pkg.expectedRevision, action);
@@ -467,6 +465,7 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
             ? "Package archived."
             : "Package unpublished.",
       );
+      setTransitionTarget(null);
     } catch (error) {
       showError(error.message);
     } finally {
@@ -854,6 +853,18 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
           </button>
         </div>
       </footer>
+      <ConfirmDialog
+        isOpen={Boolean(transitionTarget)}
+        title={transitionTarget?.action === "restore" ? "Restore package?" : transitionTarget?.action === "archive" ? "Archive package?" : "Unpublish package?"}
+        message={transitionTarget?.action === "restore"
+          ? `Restore “${transitionTarget.pkg.name}” as an unpublished draft? Review its items and eligibility before publishing again.`
+          : `${transitionTarget?.action === "archive" ? "Archive" : "Unpublish"} “${transitionTarget?.pkg.name || "this package"}”? It will no longer appear in new quotations. Previously saved quotations and their prices stay unchanged.${transitionTarget?.action === "archive" ? " You can restore this package later." : ""}`}
+        confirmLabel={transitionTarget?.action === "restore" ? "Restore draft" : transitionTarget?.action === "archive" ? "Archive package" : "Unpublish package"}
+        confirmVariant={transitionTarget?.action === "restore" ? "primary" : "danger"}
+        isLoading={Boolean(busy)}
+        onConfirm={confirmTransition}
+        onClose={() => { if (!busy) setTransitionTarget(null); }}
+      />
     </div>
   );
 }
