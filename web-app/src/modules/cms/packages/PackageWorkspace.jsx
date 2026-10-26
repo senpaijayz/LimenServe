@@ -715,9 +715,7 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
                   <h3 className="mt-1 break-words text-lg font-semibold text-primary-950">
                     {pkg.name}
                   </h3>
-                  <p className="mt-1 break-all text-xs text-primary-600">
-                    {pkg.packageKey}
-                  </p>
+                  {pkg.description && <p className="mt-1 line-clamp-2 break-words text-sm leading-6 text-primary-700">{pkg.description}</p>}
                 </div>
                 <span
                   className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${statusStyles[pkg.status] || statusStyles.draft}`}
@@ -726,7 +724,7 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
                 </span>
               </div>
               <p className="mt-3 text-sm text-primary-700">
-                {pkg.itemCount} item definitions · {pkg.variants.length} options
+                Included items: {pkg.itemCount} · Package options: {pkg.variants.length}
               </p>
               <p className="mt-1 break-words text-xs text-primary-600">
                 {compatibility.join(" · ") || "Compatibility not reviewed"}
@@ -785,7 +783,7 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
                 ·{" "}
                 {pkg.sourceKind === "manual"
                   ? "Administrator-created"
-                  : `${pkg.sourceKind} data${pkg.seedCustomized ? " · customized" : ""}`}
+                  : `Imported package${pkg.seedCustomized ? " · edited by staff" : ""}`}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <button

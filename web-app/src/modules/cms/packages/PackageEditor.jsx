@@ -165,8 +165,12 @@ export default function PackageEditor({
     onClose();
   };
   const goNext = () => {
-    if (step === 1 && (!draft.name.trim() || !draft.packageKey.trim())) {
-      setError("Enter a package name before continuing. If its internal key is empty, add one under Optional settings.");
+    if (step === 1 && !draft.name.trim()) {
+      setError("Give your package a name before continuing. This is the name customers will see.");
+      return;
+    }
+    if (step === 1 && !draft.packageKey.trim()) {
+      setError("Add an internal key under Optional settings before continuing. Use lowercase letters, numbers and hyphens.");
       return;
     }
     if (step === 2 && !variant?.items.some((item) => item.active)) {
@@ -175,6 +179,10 @@ export default function PackageEditor({
     }
     setError("");
     setStep((value) => value + 1);
+  };
+  const goToStep = (value) => {
+    setError("");
+    setStep(value);
   };
   const adoptSaved = (saved) => {
     const labels = new Map(
@@ -314,7 +322,9 @@ export default function PackageEditor({
               {draft.name || "Create a package"}
             </h2>
             <p className="mt-1 text-sm text-primary-700">
-              {dirty
+              {draft.expectedRevision === 0
+                ? "New package · not saved yet"
+                : dirty
                 ? "Unsaved changes"
                 : lastSaved
                   ? `Saved at ${new Date(lastSaved).toLocaleTimeString()}`
@@ -332,7 +342,7 @@ export default function PackageEditor({
           Editing section
           <select
             value={step}
-            onChange={(event) => setStep(Number(event.target.value))}
+            onChange={(event) => goToStep(Number(event.target.value))}
             disabled={busy}
             className="mt-1 min-h-11 w-full rounded-xl border border-primary-300 bg-white px-3"
           >
@@ -353,7 +363,7 @@ export default function PackageEditor({
               type="button"
               disabled={busy}
               aria-current={step === index ? "step" : undefined}
-              onClick={() => setStep(index)}
+              onClick={() => goToStep(index)}
               className={`min-h-12 rounded-xl border px-2 py-2 text-xs font-semibold ${step === index ? "border-blue-600 bg-blue-50 text-blue-950" : "border-primary-200 text-primary-700 hover:bg-primary-50"}`}
             >
               <span className="block text-xs">{index + 1}</span>
@@ -620,7 +630,7 @@ export default function PackageEditor({
         )}
         {step === 3 && (
           <>
-            {draft.variants.length > 1 && <PackageField
+            {(draft.variants.length > 1 || draft.variants.some((option) => option.eligibility.length > 0) || eligibilityScope !== "package") && <PackageField
               label="Compatibility applies to"
               value={eligibilityScope}
               onChange={setEligibilityScope}
@@ -894,7 +904,7 @@ export default function PackageEditor({
             type="button"
             aria-label="Back"
             disabled={busy || step === 0}
-            onClick={() => setStep((value) => value - 1)}
+            onClick={() => goToStep(step - 1)}
             className="flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-xl border border-primary-300 px-3 text-sm font-semibold text-primary-800 disabled:opacity-40"
           >
             <ChevronLeft className="h-4 w-4" />

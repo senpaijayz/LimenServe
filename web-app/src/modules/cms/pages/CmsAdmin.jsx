@@ -1837,7 +1837,7 @@ export default function CmsAdmin() {
   return (
     <div className={handleSaveActive && activeTabHasUnsavedChanges ? 'space-y-6 pb-24 md:pb-0' : 'space-y-6'}>
       <div className="overflow-hidden rounded-3xl border border-primary-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-5 border-b border-primary-200 bg-[radial-gradient(circle_at_top_left,_rgba(30,58,138,0.08),_transparent_30%),linear-gradient(to_right,_#ffffff,_#f8fafc)] p-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className={`${activeTab === 'packages' ? 'hidden md:flex' : 'flex'} flex-col gap-5 border-b border-primary-200 bg-[radial-gradient(circle_at_top_left,_rgba(30,58,138,0.08),_transparent_30%),linear-gradient(to_right,_#ffffff,_#f8fafc)] p-6 lg:flex-row lg:items-center lg:justify-between`}>
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-accent-primary">
               <Globe2 className="h-3.5 w-3.5" />
