@@ -32,7 +32,9 @@ export default function PackageRecordSearch({
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [retry, setRetry] = useState(0);
-  const [state, setState] = useState({
+  const requestKey = JSON.stringify([kind, search, page, retry]);
+  const [savedState, setState] = useState({
+    key: "",
     rows: [],
     pagination: { totalPages: 1, totalCount: 0 },
     loading: true,
@@ -41,7 +43,7 @@ export default function PackageRecordSearch({
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(async () => {
-      setState((current) => ({ ...current, loading: true, error: "" }));
+      setState({ key: requestKey, rows: [], pagination: { totalPages: 1, totalCount: 0 }, loading: true, error: "" });
       try {
         const result = await loaders[kind](
           { search, page, pageSize: 6 },
@@ -49,6 +51,7 @@ export default function PackageRecordSearch({
         );
         if (!controller.signal.aborted)
           setState({
+            key: requestKey,
             rows: result[resultKeys[kind]] || [],
             pagination: result.pagination,
             loading: false,
@@ -56,18 +59,26 @@ export default function PackageRecordSearch({
           });
       } catch (error) {
         if (!controller.signal.aborted)
-          setState((current) => ({
-            ...current,
+          setState({
+            key: requestKey,
+            rows: [],
+            pagination: { totalPages: 1, totalCount: 0 },
             loading: false,
             error: error.message,
-          }));
+          });
       }
     }, 350);
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [kind, search, page, retry]);
+  }, [kind, search, page, retry, requestKey]);
+  // Hide and disable the old query's rows immediately, including during the
+  // debounce interval. A slow response must not let an administrator add a
+  // stale result beneath a newly entered part number or a different page.
+  const state = savedState.key === requestKey ? savedState : {
+    rows: [], pagination: { totalPages: 1, totalCount: 0 }, loading: true, error: "",
+  };
   return (
     <section
       className="min-w-0 space-y-3 rounded-2xl border border-primary-200 bg-primary-50/60 p-3 sm:p-4"
