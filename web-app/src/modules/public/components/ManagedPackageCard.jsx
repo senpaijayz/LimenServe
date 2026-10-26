@@ -79,7 +79,7 @@ export default function ManagedPackageCard({
           <Package className="h-4 w-4" />
           Package
         </p>
-        <h3 className="mt-2 break-words text-xl font-semibold">
+        <h3 className="mt-2 break-words text-xl font-semibold text-white">
           {definition.name}
         </h3>
         {definition.description && (
@@ -95,7 +95,7 @@ export default function ManagedPackageCard({
             <span className="block text-xs text-primary-200">
               Package total · before VAT
             </span>
-            <strong className="text-2xl tabular-nums">
+            <strong className="text-2xl tabular-nums text-white">
               {selected?.valid === false || !selected
                 ? "Price needs review"
                 : formatCurrency(selected.packageTotal)}

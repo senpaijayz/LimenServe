@@ -88,12 +88,12 @@ function InitializationPanel({ onClose, onChanged }) {
       controller.abort();
     };
   }, [retry]);
-  const initialize = async () => {
-    if (!selected.length) return;
+  const initialize = async (candidateKeys = selected) => {
+    if (!candidateKeys.length) return;
     setBusy(true);
     try {
       const approvedPolicies = Object.fromEntries(
-        selected
+        candidateKeys
           .filter(
             (key) =>
               promotionPolicies[key]?.pricing?.mode !== "catalog" &&
@@ -102,7 +102,7 @@ function InitializationPanel({ onClose, onChanged }) {
           .map((key) => [key, promotionPolicies[key]]),
       );
       const result = await initializeManagedPackages(
-        selected,
+        candidateKeys,
         approvedPolicies,
       );
       setState((value) => ({ ...value, result, error: "" }));
@@ -330,7 +330,7 @@ function InitializationPanel({ onClose, onChanged }) {
       {!state.result && (
         <button
           type="button"
-          onClick={initialize}
+          onClick={() => initialize()}
           disabled={busy || state.loading || !selected.length}
           className="min-h-11 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white disabled:opacity-50"
         >
@@ -339,6 +339,17 @@ function InitializationPanel({ onClose, onChanged }) {
             : `Save ${selected.length} selected candidates`}
         </button>
       )}
+      {!state.result && state.candidates.length > 0 &&
+        state.candidates.every((candidate) => candidate.alreadyExists) && (
+          <button
+            type="button"
+            disabled={busy || state.loading}
+            onClick={() => initialize(state.candidates.map((candidate) => candidate.key))}
+            className="min-h-11 rounded-xl border border-primary-300 bg-white px-4 text-sm font-semibold text-primary-900 disabled:opacity-50"
+          >
+            {busy ? "Checking saved starters…" : "Verify saved starters — no changes"}
+          </button>
+        )}
     </section>
   );
 }

@@ -17,6 +17,7 @@ export default function PackageField({
       <span>{label}</span>
       {options ? (
         <select
+          aria-label={label}
           value={value ?? ""}
           onChange={(event) => onChange(event.target.value)}
           className={fieldClass}
@@ -30,6 +31,7 @@ export default function PackageField({
         </select>
       ) : multiline ? (
         <textarea
+          aria-label={label}
           value={value ?? ""}
           onChange={(event) => onChange(event.target.value)}
           className={`${fieldClass} min-h-24 font-normal`}
@@ -37,6 +39,7 @@ export default function PackageField({
         />
       ) : (
         <input
+          aria-label={label}
           value={value ?? ""}
           onChange={(event) => onChange(event.target.value)}
           className={`${fieldClass} font-normal`}
