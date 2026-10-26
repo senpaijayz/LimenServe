@@ -441,9 +441,16 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
       const draft = await duplicateManagedPackage(id);
       discardRecovery();
       setEditorRecovery(null);
-      setEditor(await getManagedPackage(draft.id));
+      // The copy is already committed. A secondary display-details request
+      // must never turn that successful write into an apparent failed copy.
       changed();
       success("A separate draft copy was created. It is not published.");
+      try {
+        setEditor(await getManagedPackage(draft.id));
+      } catch {
+        setEditor(draft);
+        showError("The draft copy was saved, but item details could not load. Reopen the saved copy from the package list; do not duplicate it again.");
+      }
     } catch (error) {
       showError(error.message);
     } finally {

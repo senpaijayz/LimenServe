@@ -173,3 +173,26 @@ Existing Supabase advisor categories remain: RLS-enabled/no-policy informational
 5. Before a real discounted campaign, explicitly approve the offer and check percentage/fixed/override/complimentary and variant-specific amounts end to end using that approved data. Financial policies must not be tested by publishing unauthorized promotions to customers.
 
 Browser verification ended signed out as approved. Staff access requires signing in again. Temporary phone viewport overrides are reset at handoff; no domain, paid monitoring or additional service was purchased.
+
+## Follow-up: continue all phases
+
+The user requested continuing the remaining phase work after delivery. A later authenticated staff session was available; it was not signed out during this follow-up.
+
+- Verified Duplicate through the production CMS: Brake Cleaning Service produced a distinct `Brake Cleaning Service (copy)` at saved draft revision 1, with a new copy key and no automatic publication. The original published package remained separate. This is one **manual verification copy in addition to the 11 initialized starters**, not another generated starter. Until cleanup is confirmed, the system therefore has 12 packages: one published and eleven drafts.
+- Changed the duplicate's name/notes locally to a clearly labeled verification copy. The editor displayed its recovery-copy acknowledgment. These label edits were not yet saved when reload verification began; the server-side duplicate remains named `(copy)` and unpublished.
+- Reload stopped on the existing unsaved-changes navigation safeguard. Asked the user to confirm Leave/Reload in the browser. Recovery after reload, saving the recovered label, and archiving this manual copy remain pending that action. Do not report those steps as passed or delete the tab/recovery copy to bypass the warning.
+- Code review found that duplication's successful write was followed by a fallible detail read inside the same failure handler. Changed the workspace to acknowledge the committed copy, distinguish detail-load failure, and retain the committed draft as a fallback. This avoids implying duplication failed and inviting another copy. It does not automatically retry the write or change backend pricing/publication behavior. React review kept the editor unavailable until the secondary request resolves, preventing a late detail response from overwriting new user edits.
+
+### Phase closeout map
+
+| Original phase | Implementation state | Remaining qualification |
+| --- | --- | --- |
+| 1–4: audit, model, migrations, atomic persistence | Delivered and applied | Existing unrelated clean-replay history remains gated; no reset/replay requested. |
+| 5: CMS manager | Delivered; duplicate now manually verified | Recovery round trip awaits the browser's navigation confirmation; then archive the manual verification copy. |
+| 6–8: car/service/parts/combination builders | Delivered | Genuine fitment and related-item/service evidence is still needed before publishing uncertain candidates. |
+| 9: pricing engine | Delivered | Standard-price flow verified; no unauthorized promotion published. Other approved campaign combinations remain an operator checklist. |
+| 10–11: starter initialization and legacy migration | Delivered and repeated safely | 11 initialized starters remain; manual duplicate is separate. Review drafts using real business evidence. |
+| 12–15: remove hardcoded authority, public/admin integration, finance | Delivered and manually verified on the reported flows | Physical printing and all device/concurrency combinations were not claimed. |
+| 16: responsive UI | Delivered; phone-width checks recorded | Physical-device coverage remains distinct from viewport emulation. |
+| 17: final review | Follow-up in progress | Finish recovery/cleanup after the user confirms the pending navigation prompt. No automated suites. |
+| 18: main delivery | Prior release delivered; follow-up lint/build/budgets passed | Push/deployment status of the follow-up is recorded in the handoff. |
