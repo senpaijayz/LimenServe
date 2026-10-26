@@ -507,8 +507,8 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
             Packages & Bundles
           </h2>
           <p className="mt-2 max-w-xl text-sm text-primary-700">
-            Build an offer, review the exact items and total, then publish when
-            ready. Published changes appear without a website redeploy.
+            Put parts or services together, check the price, then choose when
+            customers can see the package.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -517,7 +517,7 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
             onClick={() => setShowInitialization((value) => !value)}
             className="min-h-11 rounded-xl border border-primary-300 bg-white px-4 text-sm font-semibold text-primary-800"
           >
-            Starter data
+            Import starter packages
           </button>
           <button
             type="button"
@@ -530,6 +530,15 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
           </button>
         </div>
       </header>
+      <details className="rounded-2xl border border-primary-200 bg-white p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-primary-950">New here? Start with these 3 steps</summary>
+        <ol className="mt-4 grid gap-3 text-sm leading-6 text-primary-700 sm:grid-cols-3">
+          <li className="rounded-xl bg-primary-50 p-3"><strong className="block text-primary-950">1. Build your package</strong>Choose a type, name it, and add parts or services from your catalog.</li>
+          <li className="rounded-xl bg-primary-50 p-3"><strong className="block text-primary-950">2. Check the details</strong>Confirm vehicle suitability, quantities and the customer price.</li>
+          <li className="rounded-xl bg-primary-50 p-3"><strong className="block text-primary-950">3. Save or publish</strong>A draft is for staff only. A published package can appear in matching customer quotes.</li>
+        </ol>
+        <p className="mt-3 text-xs leading-5 text-primary-700">Unpublished means hidden from new quotes. Archived means set aside, with history kept. Neither changes quotes already issued.</p>
+      </details>
       {recovery && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           <p>

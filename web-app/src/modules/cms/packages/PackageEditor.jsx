@@ -11,6 +11,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useToast } from "../../../components/ui/Toast";
+import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import { uploadCmsImage } from "../../../services/cmsApi";
 import {
   previewManagedPackage,
@@ -26,6 +27,7 @@ import {
   duplicateVariant,
   newPackageVariant,
   PACKAGE_STEPS,
+  PACKAGE_STEP_GUIDANCE,
   PACKAGE_TYPE_OPTIONS,
   packageSlug,
   PRICING_OPTIONS,
@@ -68,6 +70,8 @@ export default function PackageEditor({
   const [viewport, setViewport] = useState("desktop");
   const [lastSaved, setLastSaved] = useState("");
   const [recoveryMessage, setRecoveryMessage] = useState("");
+  const [confirmPublication, setConfirmPublication] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const snapshot = JSON.stringify(draft);
   const dirty = snapshot !== savedSnapshot;
   const variant =
@@ -146,19 +150,31 @@ export default function PackageEditor({
   }, [snapshot, step, busy, draft.name, draft.packageKey]);
 
   const close = () => {
-    if (
-      dirty &&
-      !window.confirm(
-        "Discard unsaved package changes? The last saved draft and published package will stay unchanged.",
-      )
-    )
+    if (dirty) {
+      setConfirmDiscard(true);
       return;
+    }
+    discardAndClose();
+  };
+  const discardAndClose = () => {
     try {
       sessionStorage.removeItem(`limen-package-editor:${userId}`);
     } catch {
       /* Storage may be unavailable. */
     }
     onClose();
+  };
+  const goNext = () => {
+    if (step === 1 && (!draft.name.trim() || !draft.packageKey.trim())) {
+      setError("Enter a package name before continuing. If its internal key is empty, add one under Optional settings.");
+      return;
+    }
+    if (step === 2 && !variant?.items.some((item) => item.active)) {
+      setError("Add at least one part or service to this option before continuing. You can also save a draft and finish later.");
+      return;
+    }
+    setError("");
+    setStep((value) => value + 1);
   };
   const adoptSaved = (saved) => {
     const labels = new Map(
@@ -350,6 +366,10 @@ export default function PackageEditor({
         )}
       </header>
       <fieldset disabled={busy} className="min-w-0 space-y-5 p-4 sm:p-6">
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4" aria-label="Help for this step">
+          <h3 className="font-semibold text-blue-950">{step + 1}. {PACKAGE_STEPS[step]}</h3>
+          <p className="mt-1 text-sm leading-6 text-blue-950">{PACKAGE_STEP_GUIDANCE[step]}</p>
+        </div>
         {error && (
           <div
             role="alert"
@@ -365,8 +385,8 @@ export default function PackageEditor({
                 What are you offering?
               </h3>
               <p className="mt-1 text-sm text-primary-700">
-                Choose a structure. The selected records and approved prices
-                determine the actual offer.
+                Choose the closest match. This helps you organize the package;
+                it does not add items or approve vehicle compatibility for you.
               </p>
             </div>
             <div className="space-y-3 sm:hidden">
@@ -404,6 +424,8 @@ export default function PackageEditor({
           <div className="grid gap-4 sm:grid-cols-2">
             <PackageField
               label="Package name"
+              className="sm:col-span-2"
+              placeholder="Enter the name customers will see"
               maxLength={180}
               value={draft.name}
               onChange={(name) =>
@@ -411,25 +433,30 @@ export default function PackageEditor({
                   name,
                   ...(!draft.packageKey ||
                   draft.packageKey === packageSlug(draft.name)
-                    ? { packageKey: packageSlug(name) }
+                    ? { packageKey: packageSlug(name) || `package-${draft.id.slice(0, 8)}` }
                     : {}),
                 })
               }
             />
+            <PackageField
+              className="sm:col-span-2"
+              label="Customer description"
+              placeholder="Explain what is included and anything the customer needs to know."
+              multiline
+              maxLength={2000}
+              value={draft.description}
+              onChange={(description) => patch({ description })}
+            />
+            <details className="rounded-xl border border-primary-200 p-4 sm:col-span-2">
+            <summary className="cursor-pointer text-sm font-semibold text-primary-900">Optional settings: organization, image link & internal notes</summary>
+            <p className="mt-2 text-xs leading-5 text-primary-700">You can leave these as they are. The internal key is filled in from the name; customers do not see it.</p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <PackageField
               label="Package key"
               value={draft.packageKey}
               maxLength={120}
               onChange={(packageKey) => patch({ packageKey })}
               hint="Unique internal identity. Use lowercase letters, numbers, and hyphens."
-            />
-            <PackageField
-              className="sm:col-span-2"
-              label="Customer description"
-              multiline
-              maxLength={2000}
-              value={draft.description}
-              onChange={(description) => patch({ description })}
             />
             <PackageField
               label="Category"
@@ -457,6 +484,16 @@ export default function PackageEditor({
               value={draft.imageUrl}
               onChange={(imageUrl) => patch({ imageUrl })}
             />
+            <PackageField
+              className="sm:col-span-2"
+              label="Internal notes (not shown to customers)"
+              multiline
+              maxLength={4000}
+              value={draft.internalNotes}
+              onChange={(internalNotes) => patch({ internalNotes })}
+            />
+            </div>
+            </details>
             <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-primary-300 bg-primary-50 px-4 text-sm font-semibold text-primary-800">
               <Upload className="h-4 w-4" />
               Upload package image
@@ -477,18 +514,12 @@ export default function PackageEditor({
                 className="h-28 max-w-full rounded-xl object-contain"
               />
             )}
-            <PackageField
-              className="sm:col-span-2"
-              label="Internal notes (not shown to customers)"
-              multiline
-              maxLength={4000}
-              value={draft.internalNotes}
-              onChange={(internalNotes) => patch({ internalNotes })}
-            />
           </div>
         )}
         {[2, 4].includes(step) && (
-          <div className="space-y-3 rounded-2xl border border-primary-200 bg-primary-50 p-4">
+          <details key={`options:${step}`} open={draft.variants.length > 1} className="space-y-3 rounded-2xl border border-primary-200 bg-primary-50 p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-primary-950">{draft.variants.length > 1 ? `Manage ${draft.variants.length} package options` : 'Need Good / Better / Best options? (optional)'}</summary>
+            <p className="text-sm leading-6 text-primary-700">Skip this for a single package. Open it only if customers should choose between different sets of items or prices.</p>
             <div className="flex flex-wrap items-end gap-3">
               <PackageField
                 className="min-w-48 flex-1"
@@ -577,7 +608,7 @@ export default function PackageEditor({
                 )}
               </div>
             )}
-          </div>
+          </details>
         )}
         {step === 2 && variant && (
           <PackageItemsEditor
@@ -589,7 +620,7 @@ export default function PackageEditor({
         )}
         {step === 3 && (
           <>
-            <PackageField
+            {draft.variants.length > 1 && <PackageField
               label="Compatibility applies to"
               value={eligibilityScope}
               onChange={setEligibilityScope}
@@ -600,7 +631,7 @@ export default function PackageEditor({
                   label: `${value.label} — separate rules`,
                 })),
               ]}
-            />
+            />}
             {eligibilityScope !== "package" && (
               <p className="text-sm text-primary-700">
                 An option with no separate rules uses the package defaults.
@@ -677,6 +708,7 @@ export default function PackageEditor({
               )}
               <PackageField
                 label="When source prices change"
+                hint="Current prices update future offers when the catalog changes. Keeping approved prices means you must review them yourself. Saved quotes never change."
                 value={variant.pricing.strategy}
                 options={[
                   { value: "live", label: "Use current catalog prices" },
@@ -699,9 +731,10 @@ export default function PackageEditor({
               affects future offers only. Item-specific prices and complimentary
               labor are configured in Items.
             </p>
-            <section className="space-y-3 rounded-2xl border border-primary-200 p-4">
+            <details className="space-y-3 rounded-2xl border border-primary-200 p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-primary-950">When to recommend this package {draft.anchorProductId || draft.anchorCategory || draft.triggerServiceId ? '(rules already set)' : '(optional)'}</summary>
               <h4 className="font-semibold text-primary-950">
-                When should customers discover this offer?
+                Show it after a customer chooses a matching part or service
               </h4>
               <PackageField
                 label="When this part is selected (optional)"
@@ -764,7 +797,7 @@ export default function PackageEditor({
                   })
                 }
               />
-            </section>
+            </details>
           </>
         )}
         {step >= 4 && (
@@ -829,7 +862,7 @@ export default function PackageEditor({
             )}
             {!draft.name && (
               <p className="text-sm text-primary-700">
-                Enter a package name and key in Details to load the preview.
+                Add a package name in Name & details to load the preview. Its internal key is filled in for you.
               </p>
             )}
           </section>
@@ -841,10 +874,10 @@ export default function PackageEditor({
               Choose what happens next
             </h3>
             <p className="mt-2">
-              Save Draft stores your work without changing the customer-facing
-              offer. Save & Publish creates an approved revision for future
-              quotations. Unpublishing or archiving later does not change
-              previously issued quotes.
+              Not ready for customers? Choose Save Draft. It keeps your work
+              for staff without changing the current published offer. Ready to
+              show it? Check the preview, then choose Save & Publish. Quotes
+              already issued keep their saved prices.
             </p>
             {draft.publication_status === "published" && (
               <p className="mt-2 font-semibold">
@@ -885,10 +918,11 @@ export default function PackageEditor({
           <button
             type="button"
             disabled={busy}
-            onClick={() => setStep((value) => value + 1)}
+            onClick={goNext}
             className="flex min-h-11 items-center gap-2 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white disabled:opacity-50"
           >
-            Next
+            <span className="sm:hidden">Next</span>
+            <span className="hidden sm:inline">Next: {PACKAGE_STEPS[step + 1]}</span>
             <ChevronRight className="h-4 w-4" />
           </button>
         ) : (
@@ -900,13 +934,41 @@ export default function PackageEditor({
               !previewCurrent ||
               !preview?.data.publishable
             }
-            onClick={() => save(true)}
+            onClick={() => setConfirmPublication(true)}
             className="min-h-11 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? "Saving…" : "Save & Publish"}
           </button>
         )}
       </footer>
+      <ConfirmDialog
+        isOpen={confirmDiscard}
+        title="Leave without saving your changes?"
+        message="Your latest changes have not been saved to the system. Choose Keep editing, then Save Draft if you want to keep them. Discard changes leaves your last saved draft and published package unchanged."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard changes"
+        isLoading={busy}
+        onClose={() => { if (!busy) setConfirmDiscard(false); }}
+        onConfirm={() => { if (!busy) discardAndClose(); }}
+      />
+      <ConfirmDialog
+        isOpen={confirmPublication}
+        title={draft.publication_status === "published" ? "Update this published package?" : "Show this package to customers?"}
+        message={`Publish ${draft.name || 'this package'} with the items and prices in your preview? Customers who match its vehicle and recommendation rules can then add it to a quote. Existing quotes will not change. Choose Cancel if you want to keep working on the draft.`}
+        confirmLabel={draft.publication_status === "published" ? "Publish updated package" : "Publish package"}
+        confirmVariant="primary"
+        isLoading={busy}
+        onClose={() => { if (!busy) setConfirmPublication(false); }}
+        onConfirm={() => {
+          if (busy) return;
+          setConfirmPublication(false);
+          if (previewBusy || !previewCurrent || !preview?.data.publishable) {
+            setError("The preview changed. Check the items and price again before publishing.");
+            return;
+          }
+          void save(true);
+        }}
+      />
     </section>
   );
 }

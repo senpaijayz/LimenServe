@@ -196,3 +196,13 @@ The user requested continuing the remaining phase work after delivery. A later a
 | 16: responsive UI | Delivered; phone-width checks recorded | Physical-device coverage remains distinct from viewport emulation. |
 | 17: final review | Follow-up in progress | Finish recovery/cleanup after the user confirms the pending navigation prompt. No automated suites. |
 | 18: main delivery | Prior release delivered; follow-up lint/build/budgets passed | Push/deployment status of the follow-up is recorded in the handoff. |
+
+## First-time administrator flow refinement
+
+User requested a simpler Packages & Bundles experience rather than continuing the previous recovery-check prompt. The workspace now includes a compact three-part getting-started guide, plain-language package-type descriptions and status explanations. The seven editing sections have clearer names and a short task-specific explanation at each step. Desktop Next buttons name the next section; phone buttons remain compact. Next gives an actionable message for a missing name or empty item selection, without preventing Save Draft or relaxing publication validation.
+
+Name and customer description come first. Internal keys, organization settings, image links and internal notes are inside an optional disclosure. Keys remain generated automatically (with a stable internal fallback for names that do not produce an ASCII slug). Variant controls are collapsed for a single complete package and available for explicitly configured multiple options. Recommendation triggers remain preserved in a labeled optional section, which indicates when rules are already configured. Vehicle-rule language explains what the user must check rather than assuming that a catalog vehicle proves fitment.
+
+Publishing now asks for explicit in-page confirmation describing customer visibility and historical quote preservation. Leaving dirty edits uses a clear Keep editing / Discard changes dialog rather than an opaque native confirmation. Both retain busy guards; publication rechecks that its reviewed preview is current and publishable before the existing save/publish operations. No automatic approval, price policy, catalog data, inventory, package content, publication status or database schema was changed by this UX refinement. Existing live CMS entries changed since the earlier verification snapshot; earlier counts and states in this chronological report must not be treated as current counts.
+
+React review covered accessible labels, native disclosure controls, desktop/mobile progression, preservation of IDs/drafts, busy states and stale-preview rejection. Frontend lint/build/budgets passed; automated suites remain unrun by request. Release and rendered walkthrough evidence are reported in the handoff.

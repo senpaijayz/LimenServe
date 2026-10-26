@@ -4,11 +4,11 @@ import PackageRecordSearch from "./PackageRecordSearch";
 import { newEligibilityRule } from "./packageEditorModel";
 
 const modes = [
-  { value: "unverified", label: "Unverified — keep as draft" },
-  { value: "exact", label: "Exact recorded configuration" },
-  { value: "model_year", label: "Approved model / year range" },
-  { value: "family", label: "Verified vehicle family" },
-  { value: "universal", label: "Explicitly approved universal use" },
+  { value: "unverified", label: "Not checked yet — save as draft" },
+  { value: "exact", label: "One specific vehicle and engine" },
+  { value: "model_year", label: "A model and range of years" },
+  { value: "family", label: "A vehicle family I have checked" },
+  { value: "universal", label: "Vehicle-independent parts or services I have checked" },
 ];
 
 export default function PackageEligibilityEditor({
@@ -25,16 +25,16 @@ export default function PackageEligibilityEditor({
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm leading-relaxed text-blue-950">
-        Vehicle choices identify saved configurations. They do not prove that a
-        part fits.
+        Choose who this package is suitable for. A vehicle appearing in the list
+        does not mean the selected parts fit it.
         {productEvidenceRequired &&
           " Confirm the selected parts against a reliable fitment source before approving this package."}{" "}
-        Make and trim are not recorded in the current vehicle source.
+        Only the vehicle details saved in your catalog are available here.
       </div>
       {!rules.length && (
         <p className="rounded-xl border border-dashed border-primary-300 p-4 text-sm text-primary-700">
-          No compatibility approval yet. This package can be saved as a draft,
-          but cannot be published.
+          Start by adding a vehicle rule below. If you have not checked suitability
+          yet, save a draft and finish this step later. Customers will not see the draft.
         </p>
       )}
       {rules.map((rule, index) => (
@@ -44,7 +44,7 @@ export default function PackageEligibilityEditor({
         >
           <div className="flex items-center justify-between gap-3">
             <h4 className="font-semibold text-primary-950">
-              Compatibility rule {index + 1}
+              Vehicle rule {index + 1}
             </h4>
             <button
               type="button"
@@ -137,13 +137,12 @@ export default function PackageEligibilityEditor({
           )}
           {rule.mode === "universal" && (
             <p className="text-sm text-amber-900">
-              Use universal eligibility only when these services or parts are
-              genuinely vehicle-independent. It is not a substitute for missing
-              fitment information.
+              Use this only when the work or parts genuinely do not depend on
+              a particular vehicle. If fitment is unknown, choose Not checked yet instead.
             </p>
           )}
           <PackageField
-            label="Approval evidence / source"
+            label="How did you check this?"
             value={rule.evidence}
             multiline
             maxLength={1000}
@@ -162,8 +161,8 @@ export default function PackageEligibilityEditor({
             />
             <span>
               <span className="flex items-center gap-1 font-semibold">
-                <ShieldCheck className="h-4 w-4" />I reviewed and approve this
-                eligibility
+                <ShieldCheck className="h-4 w-4" />I checked that this package is suitable
+                for the vehicles described above
               </span>
               <span className="mt-1 block text-xs text-primary-600">
                 Changing this rule requires reviewing it again. Approval is
@@ -180,7 +179,7 @@ export default function PackageEligibilityEditor({
         className="flex min-h-11 items-center gap-2 rounded-xl border border-blue-300 bg-blue-50 px-4 text-sm font-semibold text-blue-900 disabled:opacity-50"
       >
         <Plus className="h-4 w-4" />
-        Add compatibility rule
+        Add a vehicle rule
       </button>
     </div>
   );

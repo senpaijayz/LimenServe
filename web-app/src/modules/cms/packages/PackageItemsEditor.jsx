@@ -204,8 +204,8 @@ export default function PackageItemsEditor({ variant, packageType, onChange, ite
         ))}
       {!variant.items.length && (
         <p className="rounded-xl border border-dashed border-primary-300 p-4 text-sm text-primary-700">
-          Choose saved parts or services above. New packages do not contain
-          example products.
+          Search above and select a part or service to add it here. Then check
+          how many of each item the customer will receive.
         </p>
       )}
       <div className="space-y-3">

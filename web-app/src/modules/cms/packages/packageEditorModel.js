@@ -2,37 +2,37 @@ export const PACKAGE_TYPE_OPTIONS = [
   {
     value: "vehicle",
     label: "Car package",
-    description: "An offer for reviewed vehicle configurations.",
+    description: "Offer parts or services for specific vehicles you have checked.",
   },
   {
     value: "service",
     label: "Service package",
-    description: "One or more saved labor or service entries.",
+    description: "Group workshop services or labor. No parts are required.",
   },
   {
     value: "parts",
     label: "Parts bundle",
-    description: "Two or more related, compatible parts.",
+    description: "Sell two or more parts together after checking they work together.",
   },
   {
     value: "combination",
     label: "Combination package",
-    description: "Parts and the labor that goes with them.",
+    description: "Include both the parts and the work needed to install or service them.",
   },
   {
     value: "promotion",
     label: "Promotion",
-    description: "An offer with administrator-approved pricing.",
+    description: "Create an offer with a discount or a special price you have approved.",
   },
   {
     value: "maintenance",
     label: "Maintenance package",
-    description: "Reviewed maintenance parts or services.",
+    description: "Group the parts or services needed for a maintenance visit.",
   },
   {
     value: "custom",
     label: "Custom package",
-    description: "Build your own complete package.",
+    description: "Build a different combination of parts or services.",
   },
 ];
 export const PACKAGE_STATUS_OPTIONS = [
@@ -48,13 +48,22 @@ export const PRICING_OPTIONS = [
   { value: "fixed_price", label: "Fixed package price" },
 ];
 export const PACKAGE_STEPS = [
-  "Type",
-  "Details",
-  "Items",
-  "Vehicles",
-  "Pricing",
-  "Preview",
-  "Save & publish",
+  "Choose type",
+  "Name & details",
+  "Add items",
+  "Check vehicles",
+  "Set price",
+  "Review",
+  "Finish",
+];
+export const PACKAGE_STEP_GUIDANCE = [
+  "Choose what you want to offer. You will add the actual parts and services in step 3.",
+  "Give the package a name customers will recognize and explain what is included. Other settings are optional.",
+  "Search for real parts or services, add them, then check the quantity of each item. Start with one complete package.",
+  "Choose which vehicles this package is suitable for and explain how you checked. Not sure yet? You can still save a draft.",
+  "Keep the listed prices or choose a discount you have approved. The preview shows the total before and after VAT.",
+  "Check the name, included items, vehicle details and total exactly as customers will see them. Go back to change anything.",
+  "Save a draft to finish later, or publish the reviewed package so eligible customers can add it to a quote.",
 ];
 export const newIdentity = () => crypto.randomUUID();
 export function newPackageVariant(index = 0) {
