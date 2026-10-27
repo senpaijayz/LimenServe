@@ -154,7 +154,13 @@ async function discoverCandidates() {
     catch (error) { if (!error.statusCode) throw error; priceError = error.publicMessage; }
     const existingPackageId = owned.get(candidate.key) || candidate.sourceRecords
       .map((source) => ownedSources.get(`${source.table}:${source.key}`)).find(Boolean) || null;
-    return { ...candidate, pricing, priceError, alreadyExists: Boolean(existingPackageId), existingPackageId };
+    // Retained provenance with a null live FK is a permanently deleted starter,
+    // not an available source to import again.
+    const alreadyExists = owned.has(candidate.key) || candidate.sourceRecords
+      .some((source) => ownedSources.has(`${source.table}:${source.key}`));
+    return { ...candidate, pricing, priceError, alreadyExists, existingPackageId,
+      reviewNotes: [candidate.reviewNotes, alreadyExists && !existingPackageId
+        ? 'This starter was permanently deleted and will not be imported again.' : ''].filter(Boolean).join(' ') };
   });
 }
 

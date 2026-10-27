@@ -175,6 +175,23 @@ export async function transitionManagedPackage(packageId, expectedRevision, acto
   });
 }
 
+export async function deleteArchivedManagedPackage(packageId, expectedRevision, actorId, confirmation) {
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1 || confirmation !== 'DELETE') {
+    throw packageError('Type DELETE and reload the archived package before deleting it.');
+  }
+  try {
+    return await cmsRpc('delete_archived_managed_package', {
+      p_package_id: requireId(packageId), p_expected_revision: expectedRevision,
+      p_actor_id: actorId, p_confirmation: confirmation,
+    });
+  } catch (error) {
+    if (error.code === 'PACKAGE_REFERENCE') {
+      throw packageError('This package is used by a saved quotation. Keep it archived to preserve its history.', 409, 'PACKAGE_IN_USE');
+    }
+    throw error;
+  }
+}
+
 export async function duplicateManagedPackage(packageId, actorId) {
   const source = await getManagedPackage(packageId);
   const copy = structuredClone(source);

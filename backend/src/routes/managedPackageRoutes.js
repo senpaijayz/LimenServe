@@ -4,6 +4,7 @@ import { clearPublicResponseCache } from '../middleware/cache.js';
 import {
   createManagedPackageService,
   duplicateManagedPackage,
+  deleteArchivedManagedPackage,
   getManagedPackage,
   getManagedPackageHistory,
   listManagedPackages,
@@ -65,6 +66,11 @@ router.post('/:id/publish', handle(async (req, res) => {
 router.post('/:id/duplicate', handle(async (req, res) => {
   const saved = await duplicateManagedPackage(req.params.id, req.user.id);
   res.status(201).json({ package: saved });
+}));
+router.delete('/:id', handle(async (req, res) => {
+  const result = await deleteArchivedManagedPackage(req.params.id, expectedRevision(req), req.user.id, objectBody(req).confirmation);
+  invalidatePackages();
+  res.json(result);
 }));
 for (const action of ['unpublish', 'archive', 'restore']) {
   router.post(`/:id/${action}`, handle(async (req, res) => {

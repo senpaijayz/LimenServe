@@ -8,12 +8,16 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Trash2,
 } from "lucide-react";
 import { useAuth } from "../../../context/useAuth";
 import { useToast } from "../../../components/ui/Toast";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
+import Modal from "../../../components/ui/Modal";
+import Button from "../../../components/ui/Button";
 import {
   duplicateManagedPackage,
+  deleteArchivedManagedPackage,
   getManagedPackage,
   initializeManagedPackages,
   listManagedPackages,
@@ -365,6 +369,9 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
   const [reload, setReload] = useState(0);
   const [busy, setBusy] = useState("");
   const [transitionTarget, setTransitionTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const [editor, setEditor] = useState(null);
   const [editorRecovery, setEditorRecovery] = useState(null);
   const [recovery, setRecovery] = useState(() => readPackageRecovery(user?.id));
@@ -458,6 +465,32 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
     }
   };
   const transition = (pkg, action) => setTransitionTarget({ pkg, action });
+  const closeDelete = () => {
+    if (busy) return;
+    setDeleteTarget(null);
+    setDeleteConfirmation("");
+    setDeleteError("");
+  };
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleteConfirmation !== "DELETE" || busy) return;
+    const pkg = deleteTarget;
+    setBusy(pkg.id);
+    setDeleteError("");
+    try {
+      await deleteArchivedManagedPackage(pkg.id, pkg.expectedRevision, deleteConfirmation);
+      setList((current) => ({ ...current, packages: current.packages.filter((row) => row.id !== pkg.id) }));
+      if (recovery?.draft.id === pkg.id) discardRecovery();
+      if (page > 1 && list.packages.length === 1) setPage(page - 1);
+      changed();
+      setDeleteTarget(null);
+      setDeleteConfirmation("");
+      success("Package permanently deleted. It cannot be restored. Its audit history is retained.");
+    } catch (error) {
+      setDeleteError(error.message);
+    } finally {
+      setBusy("");
+    }
+  };
   const confirmTransition = async () => {
     if (!transitionTarget || busy) return;
     const { pkg, action } = transitionTarget;
@@ -831,6 +864,13 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
                   <Archive className="h-4 w-4" />
                   {pkg.status === "archived" ? "Restore" : "Archive"}
                 </button>
+                {pkg.status === "archived" && (
+                  <button type="button" disabled={Boolean(busy) || list.loading}
+                    onClick={() => { setDeleteTarget(pkg); setDeleteConfirmation(""); setDeleteError(""); }}
+                    className="flex min-h-10 items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-3 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-40">
+                    <Trash2 className="h-4 w-4" />Delete permanently
+                  </button>
+                )}
               </div>
             </article>
           );
@@ -872,6 +912,23 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
         onConfirm={confirmTransition}
         onClose={() => { if (!busy) setTransitionTarget(null); }}
       />
+      <Modal isOpen={Boolean(deleteTarget)} onClose={closeDelete} title="Permanently delete this package?" size="sm"
+        showCloseButton={!busy} closeOnBackdrop={!busy} closeOnEscape={!busy}
+        footer={<>
+          <Button variant="cancel" onClick={closeDelete} isDisabled={Boolean(busy)}>Cancel</Button>
+          <Button variant="danger" onClick={confirmDelete} isDisabled={Boolean(busy) || deleteConfirmation !== "DELETE"}
+            isLoading={Boolean(busy)} loadingLabel="Deleting…">Delete permanently</Button>
+        </>}>
+        <div className="space-y-4 text-sm leading-6 text-primary-800">
+          <p><strong className="break-words text-primary-950">{deleteTarget?.name}</strong> will be removed from Packages & Bundles. You cannot restore it.</p>
+          <p>Catalog parts, services, stock and sales will not be deleted. Packages used in saved quotations cannot be deleted. A record of this deletion and the package’s audit history are kept.</p>
+          <label className="block font-semibold text-primary-950" htmlFor="package-delete-confirmation">Type DELETE to confirm</label>
+          <input id="package-delete-confirmation" value={deleteConfirmation} disabled={Boolean(busy)} autoComplete="off" spellCheck={false}
+            onChange={(event) => setDeleteConfirmation(event.target.value)}
+            className="min-h-12 w-full rounded-xl border border-primary-300 bg-white px-3 text-primary-950 outline-none focus:border-red-600 focus:ring-2 focus:ring-red-100" />
+          {deleteError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-800">{deleteError}</p>}
+        </div>
+      </Modal>
     </div>
   );
 }

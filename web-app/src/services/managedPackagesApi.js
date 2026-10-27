@@ -46,6 +46,11 @@ export const createPackageService = async (service) => {
 };
 export const duplicateManagedPackage = async (id) =>
   (await request("post", `/${encodeURIComponent(id)}/duplicate`, {})).package;
+export async function deleteArchivedManagedPackage(id, expectedRevision, confirmation) {
+  const result = await request("delete", `/${encodeURIComponent(id)}`, { expectedRevision, confirmation });
+  invalidate();
+  return result;
+}
 export const getManagedPackageHistory = (id, params, signal) =>
   request("get", `/${encodeURIComponent(id)}/history`, params, { signal });
 export async function publishManagedPackage(id, expectedRevision) {
