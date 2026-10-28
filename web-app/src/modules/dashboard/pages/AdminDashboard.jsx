@@ -18,6 +18,7 @@ import { formatCurrency, formatNumber } from '../../../utils/formatters';
 import { getAnalyticsDashboardSnapshot } from '../../../services/analyticsApi';
 import { getDashboardOperationsSnapshot, summarizeDashboardOperations } from '../../../services/dashboardApi';
 import ServiceAttentionList from '../components/ServiceAttentionList';
+import InventoryFollowupSummary from '../components/InventoryFollowupSummary';
 
 const SalesChart = lazy(() => import('../components/SalesChart'));
 const InventoryMovementLedger = lazy(() => import('../components/InventoryMovementLedger'));
@@ -203,6 +204,7 @@ const AdminDashboard = () => {
             </div>
 
             {operations?.serviceOrders && <ServiceAttentionList orders={operations.serviceOrders} />}
+            <InventoryFollowupSummary />
             {profileWarning && (
                 <Card className="border border-amber-200 bg-amber-50" padding="sm">
                     <div className="flex items-start gap-3 text-sm text-amber-700">

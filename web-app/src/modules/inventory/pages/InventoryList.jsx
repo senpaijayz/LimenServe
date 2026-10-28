@@ -775,6 +775,7 @@ const InventoryList = () => {
                     View Logs
                 </Link>
                 <Link to="/inventory/replenishment" className="inline-flex min-h-11 items-center rounded-xl border border-blue-300 bg-white px-4 text-sm font-semibold text-blue-800">Replenishment</Link>
+                <Link to="/inventory/follow-ups" className="inline-flex min-h-11 items-center rounded-xl border border-blue-300 bg-white px-4 text-sm font-semibold text-blue-800">Stock follow-ups</Link>
                 </div>
             </div>
 

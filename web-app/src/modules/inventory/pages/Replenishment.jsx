@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { useAuth } from "../../../context/useAuth";
 import { useToast } from "../../../components/ui/Toast";
 import {
@@ -42,10 +42,17 @@ export default function Replenishment() {
   const { user } = useAuth();
   const toast = useToast();
   const admin = user?.role === "admin";
-  const [filter, setFilter] = useState("low");
+  const [params] = useSearchParams();
+  const [filter, setFilter] = useState(() =>
+    views.some(([key]) => key === params.get("filter"))
+      ? params.get("filter")
+      : "low",
+  );
   const [sort, setSort] = useState("part");
   const [bulkPriority, setBulkPriority] = useState("keep");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() =>
+    (params.get("q") || "").slice(0, 120),
+  );
   const [page, setPage] = useState(1);
   const [reload, setReload] = useState(0);
   const [state, setState] = useState({
@@ -301,6 +308,12 @@ export default function Replenishment() {
       </Link>
       <header className="rounded-xl border border-primary-200 bg-white p-5">
         <h1 className="text-2xl font-bold text-primary-950">Replenishment</h1>
+        <Link
+          to="/inventory/follow-ups"
+          className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-800 underline"
+        >
+          Stock follow-ups →
+        </Link>
         <p className="mt-2 text-sm text-primary-700">
           Review available stock and configure when to reorder. Suggestions are
           not purchase orders.

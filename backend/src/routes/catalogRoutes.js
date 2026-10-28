@@ -15,10 +15,12 @@ import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 import publishedPackageRoutes from './publishedPackageRoutes.js';
 import createReplenishmentRouter from './replenishmentRoutes.js';
 import createSupplierOrderRouter from './supplierOrderRoutes.js';
+import createInventoryFollowupRouter from './inventoryFollowupRoutes.js';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
 const router = Router();
+router.use(createInventoryFollowupRouter());
 router.use(createReplenishmentRouter({ onSettingsSaved: invalidateProductCatalogCache }));
 router.use(createSupplierOrderRouter({ onInventoryChanged: invalidateProductCatalogCache }));
 router.use(publishedPackageRoutes);
