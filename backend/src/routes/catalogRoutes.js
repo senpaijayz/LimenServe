@@ -14,11 +14,13 @@ import { applyEstimatePricelistScope, getActiveEstimatePricelist } from '../serv
 import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 import publishedPackageRoutes from './publishedPackageRoutes.js';
 import createReplenishmentRouter from './replenishmentRoutes.js';
+import createSupplierOrderRouter from './supplierOrderRoutes.js';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
 const router = Router();
 router.use(createReplenishmentRouter({ onSettingsSaved: invalidateProductCatalogCache }));
+router.use(createSupplierOrderRouter({ onInventoryChanged: invalidateProductCatalogCache }));
 router.use(publishedPackageRoutes);
 router.use(createPriceHistoryRouter(supabaseAdmin));
 const invoiceUpload = multer({
@@ -2175,6 +2177,10 @@ router.delete('/suppliers/:supplierId', requireRole('admin'), async (req, res, n
       res.status(409).json({ error: 'This supplier is linked to products. Update those product suppliers before deleting it.' });
       return;
     }
+
+    const { data: supplierOrders, error: supplierOrderError } = await supabaseAdmin.schema('catalog').from('supplier_orders').select('id').eq('supplier_id',supplierId).limit(1);
+    if (supplierOrderError) throw supplierOrderError;
+    if (supplierOrders?.length) return res.status(409).json({error:'This supplier has order history. Keep the supplier record to preserve those orders.'});
 
     const { error } = await supabaseAdmin.schema('catalog').from('suppliers').delete().eq('id', supplierId);
     if (error) {

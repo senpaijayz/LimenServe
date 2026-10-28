@@ -53,6 +53,24 @@ export default function Replenishment() {
   });
   const [supplierReload, setSupplierReload] = useState(0);
   const dirty = Object.keys(drafts).length > 0;
+  const selectedParts = state.items.filter((item) =>
+    selected.includes(item.id),
+  );
+  const orderSeed = {
+    supplierId:
+      selectedParts.length &&
+      selectedParts.every(
+        (item) => item.supplier_id === selectedParts[0].supplier_id,
+      )
+        ? selectedParts[0].supplier_id || ""
+        : "",
+    items: selectedParts.map((item) => ({
+      productId: item.id,
+      sku: item.sku,
+      name: item.name,
+      quantity: item.reorder_quantity > 0 ? String(item.reorder_quantity) : "",
+    })),
+  };
   useEffect(() => {
     if (!admin) return;
     let active = true;
@@ -268,6 +286,12 @@ export default function Replenishment() {
         >
           Receive stock
         </Link>
+        <Link
+          to="/inventory/orders"
+          className="btn ml-2 border border-primary-300"
+        >
+          Supplier orders
+        </Link>
       </header>
       <fieldset
         disabled={busy}
@@ -349,6 +373,15 @@ export default function Replenishment() {
           <summary className="cursor-pointer font-bold text-primary-950">
             Bulk edit · {selected.length} selected
           </summary>
+          <Link
+            to="/inventory/orders/new"
+            state={{ supplierOrderSeed: orderSeed }}
+            className={`btn mt-3 border border-blue-300 text-blue-800 ${!selected.length || busy || state.loading ? "pointer-events-none opacity-50" : ""}`}
+            aria-disabled={!selected.length || busy || state.loading}
+            tabIndex={!selected.length || busy || state.loading ? -1 : 0}
+          >
+            Prepare order draft from selected parts
+          </Link>
           <fieldset
             disabled={busy || state.loading || Boolean(state.error)}
             className="space-y-3 rounded-xl border border-primary-200 bg-white p-4"
