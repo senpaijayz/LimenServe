@@ -18,7 +18,7 @@ const ResetPasswordCodePage = lazy(() => import('./modules/auth/pages/ResetPassw
 const ResetPasswordPage = lazy(() => import('./modules/auth/pages/ResetPasswordPage'));
 const RecoveryEmailVerificationPage = lazy(() => import('./modules/auth/pages/RecoveryEmailVerificationPage'));
 const AccountSecurityPage = lazy(() => import('./modules/auth/pages/AccountSecurityPage'));
-const AdminDashboard = lazy(() => import('./modules/dashboard/pages/AdminDashboard'));
+const AdminDashboard = lazy(() => import('./modules/dashboard/pages/TaskDashboard'));
 const InventoryList = lazy(() => import('./modules/inventory/pages/InventoryList'));
 const ReceiveStock = lazy(() => import('./modules/inventory/pages/ReceiveStock'));
 const InventoryLogs = lazy(() => import('./modules/inventory/pages/InventoryLogs'));

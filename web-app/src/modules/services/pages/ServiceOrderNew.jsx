@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { assignMechanicToServiceOrder, createServiceOrder, getServiceScheduleSlots } from '../../../services/serviceOrdersApi';
+import { createServiceOrder, getServiceScheduleSlots } from '../../../services/serviceOrdersApi';
 import { listMechanics } from '../../../services/mechanicsApi';
 import { useToast } from '../../../components/ui/Toast';
 import { useAuth } from '../../../context/useAuth';
@@ -9,7 +9,7 @@ import { ROLES } from '../../../utils/constants';
 import { formatCurrency } from '../../../utils/formatters';
 import { PartSearch } from '../components/ServiceOrderModals';
 
-const DRAFT_KEY = 'limen-service-intake-draft-v1';
+const DRAFT_KEY_PREFIX = 'limen-service-intake-draft-v2';
 const initial = { customerName: '', customerPhone: '', vehicleMake: 'Mitsubishi', vehicleModel: '', vehicleYear: '', vehiclePlate: '', description: '', laborEstimate: '', priority: 'normal', mechanicId: '', date: '', duration: 60, slotStart: '', slotEnd: '', parts: [] };
 const steps = ['Customer & vehicle', 'Requested work', 'Schedule', 'Review'];
 const manilaToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -20,10 +20,11 @@ export default function ServiceOrderNew() {
   const navigate = useNavigate();
   const toast = useToast();
   const { user } = useAuth();
+  const draftKey = `${DRAFT_KEY_PREFIX}:${user?.id || 'unavailable'}`;
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(() => {
-    try { return { ...initial, ...JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}') }; }
-    catch { return initial; }
+    try { return { ...initial, intakeRequestId: crypto.randomUUID(), ...JSON.parse(localStorage.getItem(draftKey) || '{}') }; }
+    catch { return { ...initial, intakeRequestId: crypto.randomUUID() }; }
   });
   const [mechanics, setMechanics] = useState([]);
   const [slots, setSlots] = useState([]);
@@ -31,15 +32,16 @@ export default function ServiceOrderNew() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const creating = useRef(false);
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const partsTotal = useMemo(() => form.parts.reduce((sum, part) => sum + Number(part.lineTotal || 0), 0), [form.parts]);
   const labor = Math.max(Number(form.laborEstimate) || 0, 0);
   const total = Math.round((labor + partsTotal) * 100) / 100;
 
   useEffect(() => {
-    const timer = window.setTimeout(() => localStorage.setItem(DRAFT_KEY, JSON.stringify(form)), 250);
+    const timer = window.setTimeout(() => { try { localStorage.setItem(draftKey, JSON.stringify(form)); } catch { /* Saving is checked again before any creation request. */ } }, 250);
     return () => window.clearTimeout(timer);
-  }, [form]);
+  }, [form, draftKey]);
 
   useEffect(() => {
     if (user?.role !== ROLES.ADMIN) return;
@@ -72,9 +74,13 @@ export default function ServiceOrderNew() {
   };
 
   const create = async () => {
+    if (creating.current) return;
+    creating.current = true;
     setSaving(true); setError('');
     try {
       const payload = {
+        intakeRequestId: form.intakeRequestId,
+        ...(user?.role === ROLES.ADMIN && form.mechanicId ? { mechanicId: form.mechanicId, scheduledStart: form.slotStart, scheduledEnd: form.slotEnd } : {}),
         customerName: form.customerName.trim(), customerPhone: form.customerPhone.trim(),
         vehicleMake: form.vehicleMake.trim(), vehicleModel: form.vehicleModel.trim(),
         vehicleYear: Number(form.vehicleYear) || null, vehiclePlate: form.vehiclePlate.trim(),
@@ -84,20 +90,14 @@ export default function ServiceOrderNew() {
           ...(labor > 0 ? [{ lineType: 'service', displayName: form.description.trim().slice(0, 120), itemName: form.description.trim().slice(0, 120), itemSku: 'LABOR', quantity: 1, unitPrice: labor, lineTotal: labor }] : []),
         ],
       };
+      localStorage.setItem(draftKey, JSON.stringify(form));
       const order = await createServiceOrder(payload);
-      localStorage.removeItem(DRAFT_KEY);
-      if (form.mechanicId && form.slotStart) {
-        try {
-          await assignMechanicToServiceOrder(order.id, { mechanicId: form.mechanicId, scheduledStart: form.slotStart, scheduledEnd: form.slotEnd });
-        } catch (assignmentError) {
-          toast.error(`Order created, but scheduling did not finish: ${assignmentError.message}`);
-          navigate(`/services/${order.id}`); return;
-        }
-      }
+      localStorage.removeItem(draftKey);
+      setForm({ ...initial, intakeRequestId: crypto.randomUUID() });
       toast.success('Service order created.');
       navigate(`/services/${order.id}`);
     } catch (err) { setError(err.message || 'Unable to create this service order.'); }
-    finally { setSaving(false); }
+    finally { creating.current = false; setSaving(false); }
   };
 
   return <div className="mx-auto max-w-5xl space-y-5 pb-24">

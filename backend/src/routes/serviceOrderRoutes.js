@@ -254,6 +254,8 @@ function normalizeServiceOrderError(error) {
   if (error?.code === 'P0002') error.statusCode = 404;
   if (error?.code === '22023') error.statusCode = 400;
   if (error?.code === 'PT409') error.statusCode = 409;
+  if (error?.code === '23P01') error.statusCode = 409;
+  if (error?.code === 'PT400') error.statusCode = 400;
 
   if (
     message.includes('Service order not found') ||
@@ -710,6 +712,23 @@ router.post('/', async (req, res, next) => {
   try {
     if (req.body?.priority && !ALLOWED_PRIORITIES.has(String(req.body.priority).toLowerCase())) {
       res.status(400).json({ error: 'Choose a valid service priority.' });
+      return;
+    }
+    if (req.body?.intakeRequestId) {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.body.intakeRequestId)) {
+        res.status(400).json({ error: 'Reload the intake form to obtain a valid request reference.' }); return;
+      }
+      const timestampWithZone = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/i;
+      if (req.body.mechanicId && (!timestampWithZone.test(String(req.body.scheduledStart || '')) || !timestampWithZone.test(String(req.body.scheduledEnd || '')))) {
+        res.status(400).json({ error: 'Choose an appointment with a start and end time, including its time zone.' }); return;
+      }
+      const order = await callRpc('limen_create_service_intake', {
+        p_payload: req.body, p_actor: req.user.id, p_request_id: req.body.intakeRequestId,
+      });
+      // Creation has committed. An optional enrichment read must not turn that
+      // success into a misleading creation failure and invite a duplicate.
+      try { res.status(201).json({ order: await loadOrder(order.id) }); }
+      catch { res.status(201).json({ order, refreshRequired: true }); }
       return;
     }
     const order = await callRpc('limen_create_service_order', {

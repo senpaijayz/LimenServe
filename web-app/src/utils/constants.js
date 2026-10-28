@@ -33,11 +33,11 @@ export function getDefaultAuthenticatedPath(role) {
     }
 
     if (role === ROLES.CASHIER) {
-        return '/pos';
+        return '/dashboard';
     }
 
     if (role === ROLES.STOCK_CLERK) {
-        return '/inventory';
+        return '/dashboard';
     }
 
     return '/dashboard';
@@ -108,7 +108,7 @@ export const PAGINATION = {
 // Navigation Items
 export const NAV_ITEMS = {
     main: [
-        { path: '/dashboard', label: 'Dashboard', icon: 'LayoutDashboard', roles: [ROLES.ADMIN] },
+        { path: '/dashboard', label: 'Dashboard', icon: 'LayoutDashboard', roles: [ROLES.ADMIN, ROLES.CASHIER, ROLES.STOCK_CLERK] },
         { path: '/pos', label: 'Point of Sale', icon: 'ShoppingCart', roles: [ROLES.ADMIN, ROLES.CASHIER] },
         { path: '/inventory', label: 'Inventory', icon: 'Package', roles: [ROLES.ADMIN, ROLES.STOCK_CLERK] },
         { path: '/services', label: 'Service Orders', icon: 'Wrench', roles: [ROLES.ADMIN, ROLES.CASHIER] },
