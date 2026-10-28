@@ -222,61 +222,73 @@ export default function Replenishment() {
         disables reorder alerts; it does not mean stock is sufficient.
       </p>
       {admin && (
+        <details className="rounded-xl border border-primary-200 bg-white p-4">
+          <summary className="cursor-pointer font-bold text-primary-950">
+            Bulk edit · {selected.length} selected
+          </summary>
+          <fieldset
+            disabled={busy || state.loading || Boolean(state.error)}
+            className="space-y-3 rounded-xl border border-primary-200 bg-white p-4"
+          >
+            <h2 className="font-bold text-primary-950">
+              Set selected parts together
+            </h2>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="text-sm text-primary-800">
+                Reorder point
+                <input
+                  className={field}
+                  type="number"
+                  min="0"
+                  max="1000000"
+                  step="1"
+                  value={point}
+                  onChange={(event) => setPoint(event.target.value)}
+                />
+              </label>
+              <label className="text-sm text-primary-800">
+                Preferred reorder quantity
+                <input
+                  className={field}
+                  type="number"
+                  min="0"
+                  max="1000000"
+                  step="1"
+                  value={quantity}
+                  onChange={(event) => setQuantity(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className="btn self-end border border-primary-300"
+                disabled={!selected.length || !valid(point) || !valid(quantity)}
+                onClick={() =>
+                  setDrafts((current) => ({
+                    ...current,
+                    ...Object.fromEntries(
+                      selected.map((id) => [
+                        id,
+                        { reorderPoint: point, reorderQuantity: quantity },
+                      ]),
+                    ),
+                  }))
+                }
+              >
+                Apply to {selected.length} selected
+              </button>
+            </div>
+            <p className="text-xs text-primary-700">
+              Applies to selected rows on this page only. Review, then Save
+              settings.
+            </p>
+          </fieldset>
+        </details>
+      )}
+      {admin && dirty && (
         <fieldset
           disabled={busy || state.loading || Boolean(state.error)}
-          className="space-y-3 rounded-xl border border-primary-200 bg-white p-4"
+          className="sticky top-16 z-10 flex flex-wrap gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 shadow-sm"
         >
-          <h2 className="font-bold text-primary-950">
-            Set selected parts together
-          </h2>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="text-sm text-primary-800">
-              Reorder point
-              <input
-                className={field}
-                type="number"
-                min="0"
-                max="1000000"
-                step="1"
-                value={point}
-                onChange={(event) => setPoint(event.target.value)}
-              />
-            </label>
-            <label className="text-sm text-primary-800">
-              Preferred reorder quantity
-              <input
-                className={field}
-                type="number"
-                min="0"
-                max="1000000"
-                step="1"
-                value={quantity}
-                onChange={(event) => setQuantity(event.target.value)}
-              />
-            </label>
-            <button
-              type="button"
-              className="btn self-end border border-primary-300"
-              disabled={!selected.length || !valid(point) || !valid(quantity)}
-              onClick={() =>
-                setDrafts((current) => ({
-                  ...current,
-                  ...Object.fromEntries(
-                    selected.map((id) => [
-                      id,
-                      { reorderPoint: point, reorderQuantity: quantity },
-                    ]),
-                  ),
-                }))
-              }
-            >
-              Apply to {selected.length} selected
-            </button>
-          </div>
-          <p className="text-xs text-primary-700">
-            Applies to selected rows on this page only. Review, then Save
-            settings.
-          </p>
           <button
             type="button"
             className="btn bg-blue-800 text-white"
@@ -288,7 +300,7 @@ export default function Replenishment() {
           {dirty && (
             <button
               type="button"
-              className="btn ml-2 border border-primary-300"
+              className="btn border border-primary-300 bg-white"
               onClick={() => setDrafts({})}
             >
               Discard edits
