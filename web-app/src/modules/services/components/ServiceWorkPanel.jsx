@@ -23,7 +23,14 @@ function printReceipt(order, work) {
   window.setTimeout(() => { if (!printWindow.closed) printWindow.print(); }, 300);
 }
 
-export default function ServiceWorkPanel({ order, onOrderUpdated }) {
+const visibleSection = {
+  work: '[&>section:not(:nth-of-type(1))]:hidden',
+  charges: '[&>section:not(:nth-of-type(2))]:hidden',
+  billing: '[&>section:not(:nth-of-type(3))]:hidden',
+  history: '[&>section:not(:nth-of-type(4)):not(:nth-of-type(5))]:hidden',
+};
+
+export default function ServiceWorkPanel({ order, onOrderUpdated, onWorkChanged, activeSection = 'all' }) {
   const toast = useToast();
   const [work, setWork] = useState(null);
   const [lines, setLines] = useState([]);
@@ -42,6 +49,21 @@ export default function ServiceWorkPanel({ order, onOrderUpdated }) {
   const [error, setError] = useState('');
   const paymentInFlight = useRef(false);
   const [paymentUncertain, setPaymentUncertain] = useState(false);
+  useEffect(() => { onWorkChanged?.(work); },[work,onWorkChanged]);
+  useEffect(() => {
+    if(!dirty && !note.trim() && !laborDescription.trim()) return;
+    const unload = (event) => { event.preventDefault(); event.returnValue=''; };
+    const navigate = (event) => {
+      const link = event.target.closest?.('a[href]');
+      if(!link || link.getAttribute('href')?.startsWith('#')) return;
+      if(!window.confirm('Leave this job and discard unsaved work? Switching job sections keeps your edits.')) {
+        event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
+      }
+    };
+    window.addEventListener('beforeunload',unload);
+    document.addEventListener('click',navigate,true);
+    return ()=>{window.removeEventListener('beforeunload',unload);document.removeEventListener('click',navigate,true);};
+  },[dirty,note,laborDescription]);
   const reload = useCallback(async () => {
     const data = await getServiceWork(order.id);
     setWork(data); setLines((data.lines || []).map(lineFromRow)); setDirty(false);
@@ -54,7 +76,9 @@ export default function ServiceWorkPanel({ order, onOrderUpdated }) {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [order.id]);
-  const stage = work?.state?.stage || 'intake';
+  const stage = order.status==='cancelled' ? 'cancelled'
+    : order.status==='completed' || order.paymentStatus==='paid' || order.payment_status==='paid' ? 'released'
+    : work?.state?.stage || 'intake';
   const operationalStage = getServiceOperationalStage(order, work);
   const editable = Boolean(work) && !['released','cancelled'].includes(stage) && order.status !== 'completed' && order.status !== 'cancelled';
   const actualTotal = useMemo(() => money(lines.reduce((sum, line) => sum + money(line.quantity) * money(line.unitPrice), 0)), [lines]);
@@ -136,8 +160,11 @@ export default function ServiceWorkPanel({ order, onOrderUpdated }) {
 
   if (loading) return <section className="rounded-xl border border-primary-200 bg-white p-5 text-sm text-primary-600">Loading workshop progress…</section>;
   if (!work) return <section role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">{error || 'Workshop progress could not be loaded.'} <button type="button" className="ml-2 underline" onClick={() => { setLoading(true); reload().then(() => setError('')).catch((err) => setError(err.message || 'Unable to reload workshop progress.')).finally(() => setLoading(false)); }}>Try again</button></section>;
-  return <div className="space-y-5" id="workshop-progress">
+  return <div hidden={activeSection!=='all' && !visibleSection[activeSection]} className={`space-y-5 ${visibleSection[activeSection] || ''} ${stage==='released' && !work.sale ? '[&>section:nth-of-type(3)>p]:hidden' : ''}`} id="workshop-progress">
     {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+    {dirty && activeSection!=='charges' && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">You have unsaved actual charges. Return to Parts & labor to save them before completing work or posting payment.</p>}
+    {activeSection==='charges' && approvalNeeded && editable && <label className="block rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950">Customer approval note<textarea className="input mt-2 w-full" value={note} disabled={saving} onChange={(event)=>setNote(event.target.value)} placeholder="Record what the customer approved before saving the approval below." /></label>}
+    {activeSection==='billing' && stage==='released' && !work.sale && <p className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">{order.paymentStatus==='paid' || order.payment_status==='paid' ? 'Payment is recorded, but the linked receipt is not available here. Check Sales before collecting or posting another payment.' : 'This historical job is marked completed, but its payment is not recorded as paid. Check original receipts and Sales before making any correction. No payment has been posted by opening this page.'}</p>}
     <section className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-primary-500">Current job stage</p><h2 className="mt-1 text-xl font-bold text-primary-950">{operationalStage.label}</h2><p className="mt-1 text-sm text-primary-700">{operationalStage.nextAction}</p></div><span className="rounded-full bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">{order.assignedMechanic?.name || 'Mechanic not assigned'}</span></div>
       {editable && <div className="mt-5 flex flex-wrap gap-2">{stage==='intake' || stage==='scheduled' ? <button type="button" className="btn bg-blue-700 text-white" disabled={saving} onClick={() => event('start','Work started.')}><Play className="h-4 w-4" /> Start work</button> : null}{stage==='in_progress' && <button type="button" className="btn" disabled={saving} onClick={() => event('pause',note)}><Pause className="h-4 w-4" /> Pause with reason</button>}{stage==='paused' && <button type="button" className="btn bg-blue-700 text-white" disabled={saving} onClick={() => event('resume','Work resumed.')}><Play className="h-4 w-4" /> Resume</button>}{stage==='in_progress' && <button type="button" className="btn bg-emerald-700 text-white" disabled={saving || dirty} onClick={() => event('work_completed','Repair work finished; billing review pending.')}><CheckCircle2 className="h-4 w-4" /> Mark repair finished</button>}</div>}
       {editable && <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]"><textarea className="input min-h-16" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Record diagnosis, repair notes, or a delay reason…" /><div className="flex gap-2"><button type="button" className="btn" disabled={saving || !note.trim()} onClick={() => event('note')}><Plus className="h-4 w-4" /> Note</button><button type="button" className="btn" disabled={saving || !note.trim()} onClick={() => event('diagnosis')}><FileText className="h-4 w-4" /> Diagnosis</button></div></div>}
@@ -194,5 +221,6 @@ export default function ServiceWorkPanel({ order, onOrderUpdated }) {
     </>}</section>
 
     <section className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:p-6"><div className="flex items-center gap-2"><Clock className="h-5 w-5 text-blue-700" /><h2 className="text-lg font-bold text-primary-950">Activity history</h2></div><div className="mt-4 space-y-2">{(work?.events || []).length===0 && <p className="text-sm text-primary-500">No workshop updates have been recorded yet.</p>}{(work?.events || []).map((item) => <div key={item.id} className="border-l-2 border-blue-200 py-2 pl-4 text-sm"><div className="flex flex-wrap justify-between gap-2"><strong className="capitalize text-primary-950">{item.event_type.replaceAll('_',' ')}</strong><time className="text-primary-500">{new Date(item.occurred_at).toLocaleString('en-PH',{timeZone:'Asia/Manila'})}</time></div>{item.note && <p className="mt-1 text-primary-700">{item.note}</p>}</div>)}</div></section>
+    <section className="rounded-2xl border border-primary-200 bg-white p-4 sm:p-6"><h2 className="text-lg font-bold text-primary-950">Assignment history</h2><p className="mt-1 text-sm text-primary-700">Recorded appointments, including previous assignments. Times are Philippine time.</p>{!(work.assignments || []).length && <p className="mt-3 text-sm text-primary-700">No saved assignment history.</p>}<ul className="mt-3 divide-y divide-primary-100">{(work.assignments || []).map((assignment)=><li key={assignment.id} className="space-y-1 py-3 text-sm text-primary-800"><strong className="capitalize">{assignment.status}</strong><p>{new Date(assignment.scheduled_start).toLocaleString('en-PH',{timeZone:'Asia/Manila'})} – {new Date(assignment.scheduled_end).toLocaleString('en-PH',{timeZone:'Asia/Manila'})}</p>{assignment.note && <p>{assignment.note}</p>}<details><summary className="min-h-9 cursor-pointer py-2 font-semibold">Assignment reference</summary><p className="break-all">{assignment.id}</p><p className="break-all">Mechanic: {assignment.mechanic_id}</p></details></li>)}</ul></section>
   </div>;
 }

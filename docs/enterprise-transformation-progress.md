@@ -1,5 +1,15 @@
 # Enterprise transformation — delivery ledger
 
+## Next phase: unified job workspace
+
+Replaced the routed service detail page's page-mode modal with a dedicated job workspace. The header identifies the customer, vehicle, operational stage and priority, with a state-derived next-section action. Six compact sections cover overview/requested work/intake lines, mechanic scheduling, work progress, actual charges, billing/receipt and history. Mobile uses one labeled section dropdown instead of a long row of tabs. Existing modal-based flows elsewhere are retained; shared part search and priority formatting remain reused.
+
+The existing workshop component stays mounted across section changes, preserving actual-charge edits, notes and payment fields. It reports loaded work state to the parent so the header and workshop agree without adding a duplicate work fetch. Unsaved charges are disclosed outside their section; document unload and anchor navigation warn before discarding charge/note edits. SPA browser-back interruption is not claimed blocked. Route-ID changes remount the workspace to prevent one job's edits appearing on another job.
+
+The focused assignment panel reuses existing authenticated APIs, server-side schedule rules and removal confirmation. It displays recorded historical appointments independently of today's selectable slots; only future available slots can be submitted. Admin-only controls and finalized-order restrictions remain. No assignment was changed during UI verification. The charges section exposes approval notes without requiring a trip back to a hidden work section. History includes the existing workshop events and assignment records. Paid/finalized jobs cannot reopen the collection form; missing historical payment/receipt evidence is explicitly flagged rather than inferred.
+
+No backend/RPC/database/billing calculation was changed in this UI phase. No production payment, stock, work event or assignment was created as a demonstration. Lint and production build/bundle checks are required before release; deployment/browser outcomes are recorded in the chat handoff. Full payment, print-device and scheduling mutation walkthroughs remain authorized manual checks.
+
 ## Executive summary and scope
 
 This is the first P0 reliability increment against the October 28, 2026 request, not completion of the entire transformation. The existing application, authorization, financial RPCs and production facts are preserved. No automated test suites, fake sales, payment mutations or inventory adjustments were performed.
