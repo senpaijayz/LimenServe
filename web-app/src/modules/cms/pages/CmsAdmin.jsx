@@ -1210,7 +1210,6 @@ function CmsOverview({ onEditPage, onOpenTab, onRefresh, refreshing }) {
 const tabs = [
   { id: 'overview', label: 'Overview', icon: Globe2 },
   { id: 'pages', label: 'Pages', icon: FileText },
-  { id: 'catalog', label: 'Catalog Content', icon: PackageSearch },
   { id: 'packages', label: 'Packages & Bundles', icon: PackageSearch },
   { id: 'settings', label: 'Site Settings', icon: Settings },
   { id: 'navigation', label: 'Navigation', icon: Navigation },
@@ -1223,6 +1222,7 @@ export default function CmsAdmin() {
   const cmsRequestIdRef = useRef(0);
   const cmsLoadPromiseRef = useRef(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [packageArea, setPackageArea] = useState('packages');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1267,7 +1267,7 @@ export default function CmsAdmin() {
       ? settingsIsDirty
       : activeTab === 'navigation'
         ? navigationIsDirty
-        : activeTab === 'packages' ? packagesHaveUnsavedChanges : activeTab === 'catalog' && catalogHasUnsavedChanges;
+        : activeTab === 'packages' && (packageArea === 'featured' ? catalogHasUnsavedChanges : packagesHaveUnsavedChanges);
   const hasUnsavedChanges = pageIsDirty || settingsIsDirty || navigationIsDirty || catalogHasUnsavedChanges || packagesHaveUnsavedChanges;
 
   const selectedPage = useMemo(
@@ -1492,13 +1492,16 @@ export default function CmsAdmin() {
   );
 
   const handleTabChange = (nextTab) => {
-    if (nextTab === activeTab || !confirmDiscardChanges()) {
+    const nextArea = nextTab === 'catalog' ? 'featured' : 'packages';
+    const destination = nextTab === 'catalog' ? 'packages' : nextTab;
+    if ((destination === activeTab && (destination !== 'packages' || nextArea === packageArea)) || !confirmDiscardChanges()) {
       return;
     }
 
     if (nextTab === 'catalog') setHasVisitedCatalog(true);
     if (nextTab === 'packages') setHasVisitedPackages(true);
-    setActiveTab(nextTab);
+    if (destination === 'packages') setPackageArea(nextArea);
+    setActiveTab(destination);
   };
 
   const handleSelectPage = (nextSlug) => {
@@ -1864,7 +1867,7 @@ export default function CmsAdmin() {
             </div>
           ) : (
             <div className="rounded-2xl border border-primary-200 bg-white px-4 py-3 text-sm font-semibold text-primary-600">
-              {activeTab === 'overview' ? 'Website content and settings.' : activeTab === 'packages' ? 'Save drafts and publish offers inside the package editor.' : 'Save each catalog item after editing.'}
+              {activeTab === 'overview' ? 'Website content and settings.' : activeTab === 'packages' ? 'Manage packages and featured products in one place.' : 'Save each item after editing.'}
             </div>
           )}
         </div>
@@ -2095,7 +2098,7 @@ export default function CmsAdmin() {
               </div>
             </main>
           </div>
-        ) : activeTab === 'catalog' || activeTab === 'packages' ? null : activeTab === 'settings' ? (
+        ) : activeTab === 'packages' ? null : activeTab === 'settings' ? (
           <div className="space-y-6 p-5 lg:p-6">
             {siteLoadError && <div role="alert" className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between"><span>{siteLoadError}</span><button type="button" onClick={() => { if (confirmDiscardChanges()) void loadCms(); }} className="min-h-10 shrink-0 rounded-lg border border-amber-300 bg-white px-3 font-semibold hover:bg-amber-100">Try again</button></div>}
             <section className="rounded-3xl border border-primary-200 bg-white p-5 shadow-sm">
@@ -2217,12 +2220,25 @@ export default function CmsAdmin() {
             </section>
           </div>
         )}
+        {activeTab === 'packages' && (
+          <div className="border-b border-primary-200 px-4 py-3 sm:px-6">
+            <div role="group" aria-label="Packages and website highlights" className="grid grid-cols-2 gap-1 rounded-xl border border-primary-200 bg-primary-50 p-1 sm:inline-grid">
+              {[{ id: 'packages', label: 'Packages', destination: 'packages' }, { id: 'featured', label: 'Featured products', destination: 'catalog' }].map((area) => (
+                <button key={area.id} type="button" aria-pressed={packageArea === area.id} onClick={() => handleTabChange(area.destination)}
+                  className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${packageArea === area.id ? 'bg-white text-primary-950 shadow-sm ring-1 ring-primary-200' : 'text-primary-700 hover:bg-white/70'}`}>
+                  {area.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-sm text-primary-700">{packageArea === 'packages' ? 'Combine parts or services into one customer offer.' : 'Choose individual parts to highlight on the website.'}</p>
+          </div>
+        )}
         {hasVisitedCatalog && (
-          <div hidden={activeTab !== 'catalog'}>
+          <div hidden={activeTab !== 'packages' || packageArea !== 'featured'}>
             <CatalogContentCmsPanel onUnsavedChange={setCatalogHasUnsavedChanges} />
           </div>
         )}
-        {hasVisitedPackages && <div hidden={activeTab !== 'packages'}><PageLoadBoundary><Suspense fallback={<p className="p-6 text-sm text-primary-700">Loading package workspace…</p>}><PackageWorkspace onUnsavedChange={setPackagesHaveUnsavedChanges} /></Suspense></PageLoadBoundary></div>}
+        {hasVisitedPackages && <div hidden={activeTab !== 'packages' || packageArea !== 'packages'}><PageLoadBoundary><Suspense fallback={<p className="p-6 text-sm text-primary-700">Loading package workspace…</p>}><PackageWorkspace onUnsavedChange={setPackagesHaveUnsavedChanges} /></Suspense></PageLoadBoundary></div>}
       </div>
       {handleSaveActive && activeTabHasUnsavedChanges && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-primary-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:hidden">

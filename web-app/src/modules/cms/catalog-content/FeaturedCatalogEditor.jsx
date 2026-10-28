@@ -133,8 +133,8 @@ export default function FeaturedCatalogEditor({ onUnsavedChange = noop }) {
             Featured products
           </h2>
           <p className="mt-1 text-sm text-primary-700">
-            Choose parts to highlight on the customer website. Offers are
-            managed separately in Packages & Bundles.
+            Highlight individual parts on the customer website. To combine parts
+            or services into an offer, switch to Packages above.
           </p>
         </div>
         {!draft && (
