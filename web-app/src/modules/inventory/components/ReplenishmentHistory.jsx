@@ -3,7 +3,7 @@ import { getReplenishmentHistory } from "../../../services/replenishmentApi";
 
 function describe(plan) {
   if (Object.hasOwn(plan, "reorderPoint"))
-    return `Point: ${plan.reorderPoint} · Quantity: ${plan.reorderQuantity}`;
+    return `Point: ${plan.reorderPoint} · Quantity: ${plan.reorderQuantity} · Priority: ${plan.priority || "not set / not recorded"}`;
   return `${plan.supplierName || (plan.supplierId ? "Former supplier" : "No supplier")} · Delivery: ${plan.leadTimeDays === null ? "unknown" : `${plan.leadTimeDays} calendar days`}`;
 }
 

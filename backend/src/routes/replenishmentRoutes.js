@@ -13,9 +13,19 @@ export default function createReplenishmentRouter({ onSettingsSaved }) {
     async (req, res, next) => {
       try {
         const filter = String(req.query.filter || "low");
+        const sort = String(req.query.sort || "part");
         const page = Number(req.query.page || 1);
         if (
-          !["low", "out", "missing", "nosupplier", "all"].includes(filter) ||
+          ![
+            "low",
+            "out",
+            "missing",
+            "nosupplier",
+            "priority",
+            "nopriority",
+            "all",
+          ].includes(filter) ||
+          !["part", "priority", "available"].includes(sort) ||
           !Number.isSafeInteger(page) ||
           page < 1 ||
           page > 100000
@@ -25,15 +35,20 @@ export default function createReplenishmentRouter({ onSettingsSaved }) {
             .json({ error: "Choose valid replenishment filters." });
           return;
         }
-        const data = await callRpc("limen_replenishment_page", {
+        const data = await callRpc("limen_replenishment_review", {
           p_filter: filter,
           p_search: String(req.query.q || "")
             .trim()
             .slice(0, 120),
           p_page: page,
-          p_size: 24,
+          p_sort: sort,
         });
-        res.json({ ...data, planningSupported: true });
+        res.json({
+          ...data,
+          planningSupported: true,
+          prioritySupported: true,
+          insightsSupported: true,
+        });
       } catch (error) {
         next(error);
       }
@@ -59,6 +74,15 @@ export default function createReplenishmentRouter({ onSettingsSaved }) {
           (item) =>
             item && planningKeys.some((key) => Object.hasOwn(item, key)),
         );
+      const priorityKeys = ["reorderPriority", "expectedPriority"];
+      const withPriority =
+        Array.isArray(items) &&
+        items.some(
+          (item) =>
+            item && priorityKeys.some((key) => Object.hasOwn(item, key)),
+        );
+      const priority = (value) =>
+        value === null || ["low", "normal", "high", "urgent"].includes(value);
       const nullableUuid = (value) => value === null || uuid(value);
       const days = (value) =>
         value === null || (integer(value) && value <= 3650);
@@ -74,6 +98,10 @@ export default function createReplenishmentRouter({ onSettingsSaved }) {
             !integer(item.reorderQuantity) ||
             !Number.isFinite(item.expectedPoint) ||
             !Number.isFinite(item.expectedQuantity) ||
+            (withPriority &&
+              (!priorityKeys.every((key) => Object.hasOwn(item, key)) ||
+                !priority(item.reorderPriority) ||
+                !priority(item.expectedPriority))) ||
             (withPlanning &&
               (!planningKeys.every((key) => Object.hasOwn(item, key)) ||
                 !nullableUuid(item.supplierId) ||

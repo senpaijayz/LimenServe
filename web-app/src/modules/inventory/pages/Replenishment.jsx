@@ -12,6 +12,7 @@ import ReplenishmentSupplyPlan, {
   BulkSupplyPlan,
 } from "../components/ReplenishmentSupplyPlan";
 import ReplenishmentHistory from "../components/ReplenishmentHistory";
+import ReplenishmentSuggestion from "../components/ReplenishmentSuggestion";
 
 const field = "input min-h-11 w-full min-w-0";
 const views = [
@@ -19,19 +20,31 @@ const views = [
   ["out", "Out of stock"],
   ["missing", "No threshold"],
   ["nosupplier", "No supplier"],
+  ["priority", "High / urgent priority"],
+  ["nopriority", "No priority set"],
   ["all", "All active parts"],
+];
+const priorities = [
+  ["", "Not set"],
+  ["low", "Low"],
+  ["normal", "Normal"],
+  ["high", "High"],
+  ["urgent", "Urgent"],
 ];
 const toDraft = (item) => ({
   reorderPoint: String(item.reorder_point ?? 0),
   reorderQuantity: String(item.reorder_quantity ?? 0),
   supplierId: item.supplier_id || "",
   leadTimeDays: item.lead_time_days == null ? "" : String(item.lead_time_days),
+  reorderPriority: item.reorder_priority || "",
 });
 export default function Replenishment() {
   const { user } = useAuth();
   const toast = useToast();
   const admin = user?.role === "admin";
   const [filter, setFilter] = useState("low");
+  const [sort, setSort] = useState("part");
+  const [bulkPriority, setBulkPriority] = useState("keep");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [reload, setReload] = useState(0);
@@ -68,7 +81,13 @@ export default function Replenishment() {
       productId: item.id,
       sku: item.sku,
       name: item.name,
-      quantity: item.reorder_quantity > 0 ? String(item.reorder_quantity) : "",
+      quantity: state.insightsSupported
+        ? item.review_quantity > 0 && item.review_quantity <= 1000000
+          ? String(item.review_quantity)
+          : ""
+        : item.reorder_quantity > 0
+          ? String(item.reorder_quantity)
+          : "",
     })),
   };
   useEffect(() => {
@@ -117,7 +136,7 @@ export default function Replenishment() {
     let active = true;
     const timer = setTimeout(
       () =>
-        getReplenishment({ filter, q: query, page }, controller.signal)
+        getReplenishment({ filter, q: query, page, sort }, controller.signal)
           .then((data) => {
             if (active) setState({ ...data, loading: false, error: "" });
           })
@@ -137,7 +156,7 @@ export default function Replenishment() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [filter, query, page, reload]);
+  }, [filter, query, page, sort, reload]);
   const navigate = (change) => {
     if (
       dirty &&
@@ -215,6 +234,12 @@ export default function Replenishment() {
         expectedQuantity: Number(item.reorder_quantity),
         reorderPoint: Number(drafts[item.id].reorderPoint),
         reorderQuantity: Number(drafts[item.id].reorderQuantity),
+        ...(state.prioritySupported
+          ? {
+              reorderPriority: drafts[item.id].reorderPriority || null,
+              expectedPriority: item.reorder_priority || null,
+            }
+          : {}),
         ...(state.planningSupported
           ? {
               supplierId: drafts[item.id].supplierId || null,
@@ -295,7 +320,7 @@ export default function Replenishment() {
       </header>
       <fieldset
         disabled={busy}
-        className="grid gap-3 rounded-xl border border-primary-200 bg-white p-4 sm:grid-cols-2"
+        className="grid grid-cols-2 gap-3 rounded-xl border border-primary-200 bg-white p-4 lg:grid-cols-3"
       >
         <label className="text-sm font-semibold text-primary-800">
           View
@@ -317,6 +342,23 @@ export default function Replenishment() {
           </select>
         </label>
         <label className="text-sm font-semibold text-primary-800">
+          Sort by
+          <select
+            className={`${field} mt-1`}
+            value={sort}
+            onChange={(event) =>
+              navigate(() => {
+                setSort(event.target.value);
+                setPage(1);
+              })
+            }
+          >
+            <option value="part">Part number</option>
+            <option value="priority">Priority first</option>
+            <option value="available">Lowest available</option>
+          </select>
+        </label>
+        <label className="col-span-2 text-sm font-semibold text-primary-800 lg:col-span-1">
           Search part number or name
           <input
             className={`${field} mt-1`}
@@ -451,6 +493,47 @@ export default function Replenishment() {
               ready={suppliers.ready && Boolean(state.planningSupported)}
               onApply={applySupply}
             />
+            {state.prioritySupported && (
+              <div className="flex flex-wrap items-end gap-3 border-t border-primary-200 pt-3">
+                <label className="min-w-0 flex-1 text-sm font-semibold text-primary-800">
+                  Priority
+                  <select
+                    className={field}
+                    value={bulkPriority}
+                    onChange={(event) => setBulkPriority(event.target.value)}
+                  >
+                    <option value="keep">Keep current priorities</option>
+                    {priorities.map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="btn border border-primary-300"
+                  disabled={!selected.length || bulkPriority === "keep"}
+                  onClick={() =>
+                    setDrafts((current) => ({
+                      ...current,
+                      ...Object.fromEntries(
+                        selectedParts.map((item) => [
+                          item.id,
+                          {
+                            ...toDraft(item),
+                            ...current[item.id],
+                            reorderPriority: bulkPriority,
+                          },
+                        ]),
+                      ),
+                    }))
+                  }
+                >
+                  Apply priority
+                </button>
+              </div>
+            )}
           </fieldset>
         </details>
       )}
@@ -544,6 +627,14 @@ export default function Replenishment() {
                   On hand: {item.on_hand} · Available:{" "}
                   <strong>{item.available}</strong>
                 </p>
+                <span
+                  className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${["urgent", "high"].includes(item.reorder_priority) ? "border-amber-300 bg-amber-50 text-amber-950" : "border-primary-200 bg-primary-50 text-primary-800"}`}
+                >
+                  Priority:{" "}
+                  {priorities.find(
+                    ([value]) => value === (item.reorder_priority || ""),
+                  )?.[1] || "Not set"}
+                </span>
                 {admin ? (
                   <fieldset disabled={busy} className="grid grid-cols-2 gap-3">
                     <label className="text-xs font-semibold text-primary-800">
@@ -579,6 +670,28 @@ export default function Replenishment() {
                         }
                       />
                     </label>
+                    {state.prioritySupported && (
+                      <label className="col-span-2 text-xs font-semibold text-primary-800">
+                        Reorder priority
+                        <select
+                          className={`${field} mt-1`}
+                          value={
+                            drafts[item.id]?.reorderPriority ??
+                            item.reorder_priority ??
+                            ""
+                          }
+                          onChange={(event) =>
+                            patch(item, "reorderPriority", event.target.value)
+                          }
+                        >
+                          {priorities.map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
                   </fieldset>
                 ) : (
                   <p className="text-sm text-primary-800">
@@ -595,13 +708,12 @@ export default function Replenishment() {
                   admin={admin}
                   disabled={busy}
                 />
-                <p className="text-sm text-primary-700">
-                  Suggested quantity:{" "}
-                  {item.suggested_quantity > 0
-                    ? item.suggested_quantity
-                    : "Not configured / not due"}{" "}
-                  — based on saved settings, not a demand forecast.
-                </p>
+                <ReplenishmentSuggestion
+                  item={item}
+                  window={state.window}
+                  supported={state.insightsSupported}
+                  dirty={Boolean(drafts[item.id])}
+                />
                 <Link
                   to={buildLocator3DUrl({
                     id: item.id,
