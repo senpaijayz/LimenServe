@@ -761,11 +761,12 @@ const InventoryList = () => {
     return (
         <div className="space-y-6">
             {/* Page Header */}
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold font-display text-primary-950 tracking-tight">Inventory</h1>
                     <p className="text-sm text-primary-500 mt-0.5">Manage stock levels and product inventory</p>
                 </div>
+                <div className="flex flex-wrap gap-2">
                 <Link
                     to="/inventory/logs"
                     className="flex-shrink-0 inline-flex items-center gap-2 rounded-xl border border-primary-200 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 shadow-sm hover:border-accent-blue hover:text-accent-blue transition-colors"
@@ -773,6 +774,8 @@ const InventoryList = () => {
                     <ClipboardList className="w-4 h-4" />
                     View Logs
                 </Link>
+                <Link to="/inventory/replenishment" className="inline-flex min-h-11 items-center rounded-xl border border-blue-300 bg-white px-4 text-sm font-semibold text-blue-800">Replenishment</Link>
+                </div>
             </div>
 
             {/* KPI Stats Row */}

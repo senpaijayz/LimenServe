@@ -1,5 +1,19 @@
 # Enterprise transformation — delivery ledger
 
+## Current increment: replenishment controls and receiving handoff
+
+Added `/inventory/replenishment`, linked from Inventory without removing View Logs. Administrators and stock clerks can review paginated active parts at a configured reorder point, out of stock, without a threshold, or across the full active catalog. Part numbers lead each row. Available stock is on-hand minus reserved units; a zero threshold explicitly disables alerts. Suggested quantity is the saved preferred quantity, not a demand forecast or an automatically created purchase order.
+
+Only administrators may save reorder settings. Single-row editing and page-local bulk editing use whole-number validation, review confirmation, an authenticated backend endpoint, stable row-lock ordering, optimistic stale-setting checks, atomic batch rollback and a server-only change ledger. Identical current settings are safe to retry. Clerks have read-only controls. Loading errors hide stale rows; unsaved settings warn on unload and anchor navigation, but SPA browser-back interception is not claimed. No default business thresholds or supplier orders were invented.
+
+Confirmed receiving results now provide per-part warehouse locator links plus movement-history and replenishment shortcuts. These reuse the existing locator and receipt identity; they do not claim physical put-away completion or create additional stock movements. Optional device-storage failures after server acknowledgement can no longer reclassify a confirmed receipt as a failed receipt. A positive receiving walkthrough was not performed with fabricated stock.
+
+Applied additive migration `20261028115755_inventory_replenishment_controls`. Read-only checks confirmed all 30,086 balances retained the same on-hand/reserved digest before and after migration, zero reorder change rows, no direct anon/authenticated RPC execution, invoker functions, and RLS on the change ledger. The backend can insert/read but cannot update/delete ledger entries. A null-actor save was rejected before any write. No stock, threshold, location, supplier, sale or payment values were changed. The active catalog currently has 30,071 parts without thresholds, so an empty reorder-due view is not evidence of sufficient stock. New index notices are informational unused-index findings before traffic; existing security/performance notices remain.
+
+Frontend lint and production build/bundle-budget checks passed; backend route syntax and migration consistency passed (123 files). Existing large-chunk warnings and the legacy clean-replay gate remain. No automated suites were run. Actual release/browser outcomes are reported in the chat handoff, not presumed here. Positive admin saves, stale-edit rollback and clerks' signed-in read-only acceptance remain manual checks requiring legitimate settings/accounts.
+
+This is a replenishment foundation, not completion of the entire enterprise request. Preferred-supplier/lead-time planning, pending purchase-order reconciliation, physical put-away acknowledgements, full exception inbox, customer/vehicle workspace, package/quote conversion refinements and wider financial/security/mobile acceptance remain separate work.
+
 ## Next phase: unified job workspace
 
 Replaced the routed service detail page's page-mode modal with a dedicated job workspace. The header identifies the customer, vehicle, operational stage and priority, with a state-derived next-section action. Six compact sections cover overview/requested work/intake lines, mechanic scheduling, work progress, actual charges, billing/receipt and history. Mobile uses one labeled section dropdown instead of a long row of tabs. Existing modal-based flows elsewhere are retained; shared part search and priority formatting remain reused.

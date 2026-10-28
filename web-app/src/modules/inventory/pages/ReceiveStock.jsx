@@ -9,6 +9,7 @@ import { createIdempotencyKey } from '../../../utils/idempotency';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import AddStockModal from '../components/AddStockModal';
 import { useLocator3DStore } from '../../locator3d/store/useLocator3DStore';
+import ReceivedStockHandoff from '../components/ReceivedStockHandoff';
 
 const field = 'w-full min-h-11 rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-950 focus:outline-none focus:ring-2 focus:ring-accent-blue';
 const today = () => { const now = new Date(); return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-'); };
@@ -95,8 +96,10 @@ export default function ReceiveStock() {
             localStorage.setItem(storageKey, JSON.stringify(submitted));
             setDraft(submitted); setUncertain(true);
             const saved = await receiveInventoryBatch({ items: draft.items.map(({ productId, quantity: q }) => ({ productId, quantity: Number(q) })), supplierId: draft.supplierId || null, referenceNumber: draft.referenceNumber, receivedDate: draft.receivedDate, reason: draft.notes }, { idempotencyKey: draft.requestKey });
-            setReceipt(saved); localStorage.removeItem(storageKey); setDraftStatus('Receipt confirmed');
-            useLocator3DStore.getState().setRecentlyReceivedStock({ receiptId: saved.receiptId, items: saved.items, returnTo: '/inventory/receive' });
+            setReceipt(saved); setDraftStatus('Receipt confirmed');
+            // Device storage is optional after the server confirms the receipt.
+            try { localStorage.removeItem(storageKey); } catch { /* Same-key retries remain safe. */ }
+            try { useLocator3DStore.getState().setRecentlyReceivedStock({ receiptId: saved.receiptId, items: saved.items, returnTo: '/inventory/receive' }); } catch { /* Per-part locator links remain available. */ }
             try { sessionStorage.setItem(`limen:received:${user.id}`, JSON.stringify({ ...saved, savedAt: Date.now() })); } catch { /* The confirmed receipt is also held in memory. */ }
         } catch (e) {
             if (e.receiptRejected) {
@@ -113,7 +116,7 @@ export default function ReceiveStock() {
     };
     const units = draft.items.reduce((n, x) => n + (Number(x.quantity) || 0), 0);
     if (!['admin', 'stock_clerk'].includes(user?.role)) return <p>You do not have permission to receive stock.</p>;
-    if (receipt) return <div className="mx-auto max-w-3xl space-y-5 rounded-2xl border bg-white p-5"><h1 className="text-2xl font-bold">Stock received</h1><p>{receipt.totalLines} products · {receipt.totalQuantity} units · {receipt.referenceNumber}</p><p>Stock is confirmed. You can now assign physical locations, or do that later.</p><div className="flex flex-wrap gap-3"><button className="btn btn-primary" onClick={() => navigate('/locator-3d?received=1')}>Assign Locations in 3D</button><Link className="btn btn-secondary" to="/inventory">Back to Inventory</Link><button className="btn btn-secondary" onClick={() => { setReceipt(null); setUncertain(false); setDraft(empty()); }}>Receive more stock</button></div></div>;
+    if (receipt) return <div className="mx-auto max-w-3xl space-y-5 rounded-2xl border bg-white p-5"><h1 className="text-2xl font-bold">Stock received</h1><p>{receipt.totalLines} products · {receipt.totalQuantity} units · {receipt.referenceNumber}</p><p>Stock is confirmed. You can now assign physical locations, or do that later.</p><ReceivedStockHandoff receipt={receipt} /><div className="flex flex-wrap gap-3"><button className="btn btn-primary" onClick={() => navigate('/locator-3d?received=1')}>Assign Locations in 3D</button><Link className="btn btn-secondary" to="/inventory">Back to Inventory</Link><button className="btn btn-secondary" onClick={() => { setReceipt(null); setUncertain(false); setDraft(empty()); }}>Receive more stock</button></div></div>;
     return <div className="mx-auto max-w-5xl space-y-5 pb-40">
         <header className="flex flex-wrap items-start justify-between gap-3"><div><Link className="inline-flex min-h-11 items-center gap-2 text-sm text-primary-600" to="/inventory"><ArrowLeft size={16} /> Back to Inventory</Link><h1 className="text-2xl font-bold">Receive Stock</h1><p role="status" className="mt-1 text-sm text-primary-500">{draftStatus}</p></div><button className="btn btn-secondary" disabled={busy || uncertain} onClick={() => setInvoice(true)}>Scan / enter invoice</button></header>
         {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>}

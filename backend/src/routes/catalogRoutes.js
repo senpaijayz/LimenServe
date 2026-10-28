@@ -13,10 +13,12 @@ import { createPriceHistoryRouter } from './priceHistoryRoutes.js';
 import { applyEstimatePricelistScope, getActiveEstimatePricelist } from '../services/estimatePricelistScope.js';
 import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 import publishedPackageRoutes from './publishedPackageRoutes.js';
+import replenishmentRoutes from './replenishmentRoutes.js';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
 const router = Router();
+router.use(replenishmentRoutes);
 router.use(publishedPackageRoutes);
 router.use(createPriceHistoryRouter(supabaseAdmin));
 const invoiceUpload = multer({
