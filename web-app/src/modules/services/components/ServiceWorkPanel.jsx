@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Clock, CreditCard, Download, FileText, Package, Pause, Play, Plus, Printer, Save, Trash2 } from 'lucide-react';
-import { completeServiceOrder, getServiceWork, recordServiceWorkEvent, saveServiceWorkLines } from '../../../services/serviceOrdersApi';
+import { completeServiceOrder, getServiceOrder, getServiceWork, recordServiceWorkEvent, saveServiceWorkLines } from '../../../services/serviceOrdersApi';
+import { getServiceOperationalStage } from '../utils/serviceOrderDisplay';
 import { formatCurrency } from '../../../utils/formatters';
 import { useToast } from '../../../components/ui/Toast';
 import { PartSearch } from './ServiceOrderModals';
 
 const money = (value) => Math.round((Number(value) || 0) * 100) / 100;
 const escapeHtml = (value) => String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-const stageLabels = { intake: 'Intake', scheduled: 'Scheduled', in_progress: 'In progress', paused: 'Paused', work_completed: 'Repair finished · awaiting payment', released: 'Completed / released', cancelled: 'Cancelled' };
 const lineFromRow = (line) => ({ id: line.id || crypto.randomUUID(), kind: line.kind, productId: line.product_id || null, description: line.description, quantity: String(line.quantity), unitPrice: String(line.unit_price) });
 
 function printReceipt(order, work) {
@@ -40,6 +40,8 @@ export default function ServiceWorkPanel({ order, onOrderUpdated }) {
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentVerified, setPaymentVerified] = useState(false);
   const [error, setError] = useState('');
+  const paymentInFlight = useRef(false);
+  const [paymentUncertain, setPaymentUncertain] = useState(false);
   const reload = useCallback(async () => {
     const data = await getServiceWork(order.id);
     setWork(data); setLines((data.lines || []).map(lineFromRow)); setDirty(false);
@@ -53,6 +55,7 @@ export default function ServiceWorkPanel({ order, onOrderUpdated }) {
     return () => { active = false; };
   }, [order.id]);
   const stage = work?.state?.stage || 'intake';
+  const operationalStage = getServiceOperationalStage(order, work);
   const editable = Boolean(work) && !['released','cancelled'].includes(stage) && order.status !== 'completed' && order.status !== 'cancelled';
   const actualTotal = useMemo(() => money(lines.reduce((sum, line) => sum + money(line.quantity) * money(line.unitPrice), 0)), [lines]);
   const estimate = money(work?.state?.estimate_total ?? order.estimatedCost ?? order.totalAmount ?? order.total_amount);
@@ -84,12 +87,38 @@ export default function ServiceWorkPanel({ order, onOrderUpdated }) {
     finally { setSaving(false); }
   };
   const pay = async () => {
+    if (paymentInFlight.current) return;
+    if (paymentUncertain) {
+      toast.error('Posting is paused until you reopen this order and check its payment status in Sales. Do not collect another payment.');
+      return;
+    }
+    paymentInFlight.current = true;
     setSaving(true); setError('');
     try {
       const result = await completeServiceOrder(order.id, { paymentMethod, cashReceived: paymentMethod === 'cash' ? Number(cashReceived) : 0, paymentReference: paymentMethod === 'cash' ? '' : paymentReference.trim(), paymentReceivedConfirmed: paymentVerified });
-      onOrderUpdated(result.order); await reload(); toast.success('Payment posted once; service order completed.');
-    } catch (err) { setError(err.message || 'Unable to post the payment. No duplicate sale was created.'); }
-    finally { setSaving(false); }
+      onOrderUpdated(result.order);
+      setPaymentVerified(false);
+      toast.success('Payment posted; service order completed.');
+      try { await reload(); }
+      catch { setError('Payment was posted successfully, but the receipt could not load. Reopen this order to retrieve it. Do not collect payment again.'); }
+    } catch (err) {
+      // A failed HTTP response is not proof that the database write failed.
+      setPaymentVerified(false);
+      try {
+        const [savedOrder, savedWork] = await Promise.all([getServiceOrder(order.id), getServiceWork(order.id)]);
+        if (savedOrder?.paymentStatus === 'paid' && savedWork?.sale?.id) {
+          onOrderUpdated(savedOrder); setWork(savedWork);
+          setLines((savedWork.lines || []).map(lineFromRow)); setDirty(false);
+          toast.success('The payment was already posted. The saved receipt has been recovered.');
+        } else {
+          setPaymentUncertain(true);
+          setError(`${err.message || 'Payment could not be confirmed.'} Check this order’s payment status before trying again. Do not collect a second payment.`);
+        }
+      } catch {
+        setPaymentUncertain(true);
+        setError('The payment result could not be checked. Reopen this order and verify Sales before retrying. Do not collect a second payment.');
+      }
+    } finally { paymentInFlight.current = false; setSaving(false); }
   };
   const changeLine = (id, key, value) => { setLines((current) => current.map((line) => line.id === id ? { ...line, [key]: value } : line)); setDirty(true); };
   const saveReceiptPdf = async () => {
@@ -109,7 +138,7 @@ export default function ServiceWorkPanel({ order, onOrderUpdated }) {
   if (!work) return <section role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">{error || 'Workshop progress could not be loaded.'} <button type="button" className="ml-2 underline" onClick={() => { setLoading(true); reload().then(() => setError('')).catch((err) => setError(err.message || 'Unable to reload workshop progress.')).finally(() => setLoading(false)); }}>Try again</button></section>;
   return <div className="space-y-5" id="workshop-progress">
     {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-    <section className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-primary-500">Workshop progress</p><h2 className="mt-1 text-xl font-bold text-primary-950">{stageLabels[stage] || stage}</h2><p className="mt-1 text-sm text-primary-600">Finishing the repair does not mark it paid.</p></div><span className="rounded-full bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">{order.assignedMechanic?.name || 'Mechanic not assigned'}</span></div>
+    <section className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-primary-500">Current job stage</p><h2 className="mt-1 text-xl font-bold text-primary-950">{operationalStage.label}</h2><p className="mt-1 text-sm text-primary-700">{operationalStage.nextAction}</p></div><span className="rounded-full bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">{order.assignedMechanic?.name || 'Mechanic not assigned'}</span></div>
       {editable && <div className="mt-5 flex flex-wrap gap-2">{stage==='intake' || stage==='scheduled' ? <button type="button" className="btn bg-blue-700 text-white" disabled={saving} onClick={() => event('start','Work started.')}><Play className="h-4 w-4" /> Start work</button> : null}{stage==='in_progress' && <button type="button" className="btn" disabled={saving} onClick={() => event('pause',note)}><Pause className="h-4 w-4" /> Pause with reason</button>}{stage==='paused' && <button type="button" className="btn bg-blue-700 text-white" disabled={saving} onClick={() => event('resume','Work resumed.')}><Play className="h-4 w-4" /> Resume</button>}{stage==='in_progress' && <button type="button" className="btn bg-emerald-700 text-white" disabled={saving || dirty} onClick={() => event('work_completed','Repair work finished; billing review pending.')}><CheckCircle2 className="h-4 w-4" /> Mark repair finished</button>}</div>}
       {editable && <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]"><textarea className="input min-h-16" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Record diagnosis, repair notes, or a delay reason…" /><div className="flex gap-2"><button type="button" className="btn" disabled={saving || !note.trim()} onClick={() => event('note')}><Plus className="h-4 w-4" /> Note</button><button type="button" className="btn" disabled={saving || !note.trim()} onClick={() => event('diagnosis')}><FileText className="h-4 w-4" /> Diagnosis</button></div></div>}
       {dirty && <p className="mt-2 text-xs text-amber-800">Save actual parts and labor before marking the repair finished.</p>}

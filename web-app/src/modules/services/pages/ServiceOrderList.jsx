@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Clock, AlertCircle, RefreshCw, Wrench, Archive, ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
-import { StatusBadge } from '../../../components/ui/Badge';
+import ServiceStageBadge from '../components/ServiceStageBadge';
 import Tabs from '../../../components/ui/Tabs';
 import { formatCurrency, formatRelativeTime } from '../../../utils/formatters';
 import { PriorityBadge } from '../components/ServiceOrderModals';
@@ -107,7 +107,7 @@ const ServiceOrderList = () => {
                         <p className="font-mono text-xs tracking-widest text-primary-500 mb-1">{order.orderNumber || order.id}</p>
                         <h3 className="font-display font-semibold text-lg text-primary-950 group-hover:text-red-600 transition-colors">{order.customerName}</h3>
                     </div>
-                    <div className="flex flex-col items-end gap-2"><StatusBadge status={order.status} /><PriorityBadge priority={order.priority} />{overdue && <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-800">Overdue</span>}</div>
+                    <div className="flex flex-col items-end gap-2"><ServiceStageBadge order={order} /><PriorityBadge priority={order.priority} />{overdue && <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-800">Overdue</span>}</div>
                 </div>
 
                 <div className="space-y-3 p-4 bg-primary-50 rounded-lg border border-primary-100">

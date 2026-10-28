@@ -5,7 +5,7 @@ import Button from '../../../components/ui/Button';
 import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import Input from '../../../components/ui/Input';
 import { formatCurrency, formatDateTime, formatRelativeTime } from '../../../utils/formatters';
-import { StatusBadge } from '../../../components/ui/Badge';
+import ServiceStageBadge from './ServiceStageBadge';
 import useDataStore from '../../../store/useDataStore';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 import { listMechanics } from '../../../services/mechanicsApi';
@@ -883,7 +883,7 @@ export const ServiceOrderDetailModal = ({
                         <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                                 <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-primary-500">{order.orderNumber || order.id}</p>
-                                <StatusBadge status={order.status} />
+                                <ServiceStageBadge order={order} />
                                 <PriorityBadge priority={order.priority} />
                                 {isOverdue && <span className="inline-flex min-h-7 items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-800"><Clock className="h-3.5 w-3.5" /> Overdue</span>}
                             </div>

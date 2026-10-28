@@ -129,11 +129,19 @@ async function enrichOrdersWithAssignments(orders = []) {
 
 async function enrichOrdersWithAssignmentsUsingMetadata(orders, metadataById) {
   const assignments = await loadLatestAssignments(orders.map((order) => order?.id));
+  const ids = orders.map((order) => order?.id).filter(Boolean);
+  const { data: workStates, error: workError } = ids.length
+    ? await supabaseAdmin.schema('operations').from('service_work_state')
+      .select('service_order_id,stage').in('service_order_id', ids)
+    : { data: [], error: null };
+  if (workError) throw workError;
+  const workById = new Map((workStates || []).map((row) => [row.service_order_id, row.stage]));
   return orders.map((order) => {
     const assignment = assignments.get(order?.id) ?? null;
     const orderMetadata = metadataById.get(order?.id) ?? {};
     return {
       ...order,
+      workStage: workById.get(order.id) || null,
       priority: orderMetadata.priority ?? order.priority ?? 'normal',
       paymentStatus: orderMetadata.payment_status ?? order.paymentStatus ?? order.payment_status ?? 'unpaid',
       paymentMethod: orderMetadata.payment_method ?? order.paymentMethod ?? order.payment_method ?? null,
