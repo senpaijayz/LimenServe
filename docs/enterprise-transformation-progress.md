@@ -1,5 +1,19 @@
 # Enterprise transformation — delivery ledger
 
+## Current increment: supplier planning and settings history
+
+Extended the existing one-supplier-per-product link with nullable expected delivery days. Replenishment now includes a No supplier filter, per-part supplier controls, page-local bulk supplier/delivery actions and on-demand paginated settings history. Unknown delivery time remains unknown; zero explicitly means same-day, measured in calendar days. These are planning settings, not orders, promised arrival dates or received quantities. Bulk controls remain collapsed by default on phones.
+
+The combined admin-only save commits reorder values and supplier plans in one transaction with stable product/balance/link locking and comparison against loaded values. A conflict rolls back the whole batch; unchanged values do not create duplicate audit entries. Existing older threshold-only clients remain supported. A backend capability flag prevents newer supplier controls from silently submitting to an older backend during the staggered frontend/backend rollout. Supplier edits invalidate the existing catalog caches.
+
+The product editor now reuses the same supplier-link writer. Saving an unchanged supplier preserves its delivery estimate; changing or clearing the supplier clears the old estimate. The old link helper used separate delete/insert calls and did not inspect returned Supabase errors. The replacement makes that individual link change atomic and reports errors. This does not make the entire existing product create/edit workflow atomic; its other writes are outside this function.
+
+Applied additive migration `20261028151013_replenishment_supplier_planning`. All new functions are invoker functions, with direct anon/authenticated execution revoked. The new history ledger has RLS and backend SELECT/INSERT but no UPDATE/DELETE grants. Product/actor deletion nulls references while retaining the original product identity and supplier-name snapshots. No production supplier assignments, delivery values, thresholds, stock quantities, orders, sales or payments were changed. All 30,086 on-hand/reserved balances retained their baseline digest; the pre-existing supplier link is unchanged with unknown delivery time. A same-current-values save returned changed=0 and supplyChanged=0. New audit rows remained zero. No invented settings were submitted to create demonstration history.
+
+Read-only queries confirmed 30,070 active parts without a supplier, supplier-aware result fields and an honest empty history. Lint, frontend build/bundle budgets, backend syntax and migration consistency passed (124 migration files). No automated suites were run. Existing security/performance notices and the legacy clean-replay gate remain; the new scoped advisor notice is informational unused-index. Browser/release outcomes are reported separately after verification. Positive changed-value saves, concurrent stale-edit rollback and signed-in clerk acceptance remain manual checks with legitimate business settings.
+
+This increment does not add pending purchase-order tracking, stock-receipt reconciliation, reorder priority or demand forecasting. Those remain distinct work; no forecast or planning setting is represented as an actual supplier order.
+
 ## Current increment: replenishment controls and receiving handoff
 
 Added `/inventory/replenishment`, linked from Inventory without removing View Logs. Administrators and stock clerks can review paginated active parts at a configured reorder point, out of stock, without a threshold, or across the full active catalog. Part numbers lead each row. Available stock is on-hand minus reserved units; a zero threshold explicitly disables alerts. Suggested quantity is the saved preferred quantity, not a demand forecast or an automatically created purchase order.

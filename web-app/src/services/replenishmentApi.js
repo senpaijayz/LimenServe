@@ -20,3 +20,15 @@ export async function saveReorderSettings(items) {
     );
   }
 }
+export async function getReplenishmentHistory(productId, page, signal) {
+  try {
+    return (
+      await apiClient.get(
+        `/catalog/replenishment/${encodeURIComponent(productId)}/history`,
+        { params: { page }, signal },
+      )
+    ).data;
+  } catch (error) {
+    extractApiError(error, "Settings history could not load. Try again.");
+  }
+}

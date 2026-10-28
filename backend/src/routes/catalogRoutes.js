@@ -13,12 +13,12 @@ import { createPriceHistoryRouter } from './priceHistoryRoutes.js';
 import { applyEstimatePricelistScope, getActiveEstimatePricelist } from '../services/estimatePricelistScope.js';
 import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 import publishedPackageRoutes from './publishedPackageRoutes.js';
-import replenishmentRoutes from './replenishmentRoutes.js';
+import createReplenishmentRouter from './replenishmentRoutes.js';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
 const router = Router();
-router.use(replenishmentRoutes);
+router.use(createReplenishmentRouter({ onSettingsSaved: invalidateProductCatalogCache }));
 router.use(publishedPackageRoutes);
 router.use(createPriceHistoryRouter(supabaseAdmin));
 const invoiceUpload = multer({
@@ -887,24 +887,15 @@ async function upsertProductImage(productId, imageUrl) {
   }
 }
 
-async function linkProductSupplier(productId, supplierId) {
+async function linkProductSupplier(productId, supplierId, actorId) {
   if (supplierId === undefined) {
     return;
   }
 
-  try {
-    await supabaseAdmin.schema('catalog').from('product_supplier_links').delete().eq('product_id', productId);
-    if (supplierId) {
-      await supabaseAdmin.schema('catalog').from('product_supplier_links').insert({
-        product_id: productId,
-        supplier_id: supplierId,
-      });
-    }
-  } catch (error) {
-    if (!isPrivateSchemaAccessError(error) && !String(error.message || '').includes('product_supplier_links')) {
-      throw error;
-    }
-  }
+  const { error } = await supabaseAdmin.rpc('limen_link_product_supplier', {
+    p_product: productId, p_supplier: supplierId || null, p_actor: actorId,
+  });
+  if (error) throw error;
 }
 
 async function saveCurrentRetailPrice(productId, amount, businessDate) {
@@ -2769,7 +2760,7 @@ router.post('/products', requireRole('admin'), async (req, res, next) => {
       throw balanceError;
     }
 
-    await linkProductSupplier(product.id, supplierId);
+    await linkProductSupplier(product.id, supplierId, req.user.id);
     await upsertProductImage(product.id, imageUrl);
 
     invalidateProductCatalogCache();
@@ -2932,7 +2923,7 @@ router.patch('/products/:productId', requireRole('admin'), async (req, res, next
 
     await saveCurrentRetailPrice(productId, price, businessDate, nowIso);
 
-    await linkProductSupplier(productId, supplierId);
+    await linkProductSupplier(productId, supplierId, req.user.id);
     await upsertProductImage(productId, imageUrl);
 
     invalidateProductCatalogCache();

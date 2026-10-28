@@ -7,14 +7,26 @@ import {
   saveReorderSettings,
 } from "../../../services/replenishmentApi";
 import { buildLocator3DUrl } from "../../locator3d/utils/locatorNavigation";
+import { getSuppliers } from "../../../services/catalogApi";
+import ReplenishmentSupplyPlan, {
+  BulkSupplyPlan,
+} from "../components/ReplenishmentSupplyPlan";
+import ReplenishmentHistory from "../components/ReplenishmentHistory";
 
 const field = "input min-h-11 w-full min-w-0";
 const views = [
   ["low", "At reorder point"],
   ["out", "Out of stock"],
   ["missing", "No threshold"],
+  ["nosupplier", "No supplier"],
   ["all", "All active parts"],
 ];
+const toDraft = (item) => ({
+  reorderPoint: String(item.reorder_point ?? 0),
+  reorderQuantity: String(item.reorder_quantity ?? 0),
+  supplierId: item.supplier_id || "",
+  leadTimeDays: item.lead_time_days == null ? "" : String(item.lead_time_days),
+});
 export default function Replenishment() {
   const { user } = useAuth();
   const toast = useToast();
@@ -34,7 +46,28 @@ export default function Replenishment() {
   const [point, setPoint] = useState("");
   const [quantity, setQuantity] = useState("");
   const [busy, setBusy] = useState(false);
+  const [suppliers, setSuppliers] = useState({
+    items: [],
+    ready: false,
+    error: "",
+  });
+  const [supplierReload, setSupplierReload] = useState(0);
   const dirty = Object.keys(drafts).length > 0;
+  useEffect(() => {
+    if (!admin) return;
+    let active = true;
+    getSuppliers()
+      .then((items) => {
+        if (active) setSuppliers({ items, ready: true, error: "" });
+      })
+      .catch((error) => {
+        if (active)
+          setSuppliers({ items: [], ready: false, error: error.message });
+      });
+    return () => {
+      active = false;
+    };
+  }, [admin, supplierReload]);
   useEffect(() => {
     if (!dirty) return;
     const beforeUnload = (event) => {
@@ -104,9 +137,12 @@ export default function Replenishment() {
     setDrafts((current) => ({
       ...current,
       [item.id]: {
-        reorderPoint: String(item.reorder_point ?? 0),
-        reorderQuantity: String(item.reorder_quantity ?? 0),
+        ...toDraft(item),
         ...current[item.id],
+        ...(key === "supplierId" &&
+        value !== (current[item.id]?.supplierId ?? item.supplier_id ?? "")
+          ? { leadTimeDays: "" }
+          : {}),
         [key]: value,
       },
     }));
@@ -115,6 +151,42 @@ export default function Replenishment() {
     Number.isSafeInteger(Number(value)) &&
     Number(value) >= 0 &&
     Number(value) <= 1000000;
+  const applySupply = ({ mode, supplierId, daysMode, days }) => {
+    const next = { ...drafts };
+    for (const item of state.items.filter((item) =>
+      selected.includes(item.id),
+    )) {
+      const previous = { ...toDraft(item), ...drafts[item.id] };
+      const nextSupplier =
+        mode === "keep"
+          ? previous.supplierId
+          : mode === "clear"
+            ? ""
+            : supplierId;
+      const nextDays =
+        mode === "clear"
+          ? ""
+          : daysMode === "unknown"
+            ? ""
+            : daysMode === "days"
+              ? days
+              : nextSupplier === previous.supplierId
+                ? previous.leadTimeDays
+                : "";
+      if (!nextSupplier && nextDays !== "") {
+        toast.error(
+          "Choose a supplier for each selected part before setting delivery days.",
+        );
+        return;
+      }
+      next[item.id] = {
+        ...previous,
+        supplierId: nextSupplier,
+        leadTimeDays: nextDays,
+      };
+    }
+    setDrafts(next);
+  };
   const save = async () => {
     if (busy || state.loading || state.error) return;
     const items = state.items
@@ -123,24 +195,39 @@ export default function Replenishment() {
         productId: item.id,
         expectedPoint: Number(item.reorder_point),
         expectedQuantity: Number(item.reorder_quantity),
-        ...Object.fromEntries(
-          Object.entries(drafts[item.id]).map(([key, value]) => [
-            key,
-            Number(value),
-          ]),
-        ),
+        reorderPoint: Number(drafts[item.id].reorderPoint),
+        reorderQuantity: Number(drafts[item.id].reorderQuantity),
+        ...(state.planningSupported
+          ? {
+              supplierId: drafts[item.id].supplierId || null,
+              leadTimeDays:
+                drafts[item.id].leadTimeDays === ""
+                  ? null
+                  : Number(drafts[item.id].leadTimeDays),
+              expectedSupplierId: item.supplier_id || null,
+              expectedLeadTimeDays: item.lead_time_days ?? null,
+            }
+          : {}),
       }));
     if (
       Object.values(drafts).some(
-        (item) => !valid(item.reorderPoint) || !valid(item.reorderQuantity),
+        (item) =>
+          !valid(item.reorderPoint) ||
+          !valid(item.reorderQuantity) ||
+          (item.leadTimeDays !== "" &&
+            (!valid(item.leadTimeDays) ||
+              Number(item.leadTimeDays) > 3650 ||
+              !item.supplierId)),
       )
     ) {
-      toast.error("Use whole numbers from 0 to 1,000,000.");
+      toast.error(
+        "Use whole reorder numbers from 0 to 1,000,000. Delivery days must be 0–3,650 with a supplier selected, or left blank.",
+      );
       return;
     }
     if (
       !window.confirm(
-        `Save reorder settings for ${items.length} parts? Stock quantities and supplier orders will not change.`,
+        `Save replenishment settings for ${items.length} parts? Stock quantities and supplier orders will not change.`,
       )
     )
       return;
@@ -152,7 +239,9 @@ export default function Replenishment() {
       setPage(1);
       setState((current) => ({ ...current, loading: true }));
       setReload((value) => value + 1);
-      toast.success("Reorder settings saved. Stock quantities are unchanged.");
+      toast.success(
+        "Replenishment settings saved. Stock quantities are unchanged.",
+      );
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -221,6 +310,40 @@ export default function Replenishment() {
         Available = recorded on-hand minus reserved units. A threshold of 0
         disables reorder alerts; it does not mean stock is sufficient.
       </p>
+      {admin && suppliers.error && (
+        <p
+          role="alert"
+          className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
+        >
+          Supplier choices could not load. Existing settings are kept.{" "}
+          <button
+            type="button"
+            className="min-h-11 font-semibold underline"
+            onClick={() => {
+              setSuppliers((current) => ({ ...current, error: "" }));
+              setSupplierReload((value) => value + 1);
+            }}
+          >
+            Retry suppliers
+          </button>
+        </p>
+      )}
+      {admin && !state.loading && !state.error && !state.planningSupported && (
+        <p
+          role="status"
+          className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
+        >
+          Supplier planning is being updated. Reload the list when ready;
+          reorder settings still work.{" "}
+          <button
+            type="button"
+            className="min-h-11 font-semibold underline"
+            onClick={() => navigate(() => setReload((value) => value + 1))}
+          >
+            Reload list
+          </button>
+        </p>
+      )}
       {admin && (
         <details className="rounded-xl border border-primary-200 bg-white p-4">
           <summary className="cursor-pointer font-bold text-primary-950">
@@ -266,10 +389,17 @@ export default function Replenishment() {
                   setDrafts((current) => ({
                     ...current,
                     ...Object.fromEntries(
-                      selected.map((id) => [
-                        id,
-                        { reorderPoint: point, reorderQuantity: quantity },
-                      ]),
+                      state.items
+                        .filter((item) => selected.includes(item.id))
+                        .map((item) => [
+                          item.id,
+                          {
+                            ...toDraft(item),
+                            ...current[item.id],
+                            reorderPoint: point,
+                            reorderQuantity: quantity,
+                          },
+                        ]),
                     ),
                   }))
                 }
@@ -281,6 +411,13 @@ export default function Replenishment() {
               Applies to selected rows on this page only. Review, then Save
               settings.
             </p>
+            <BulkSupplyPlan
+              selected={selected.length}
+              disabled={busy || state.loading || Boolean(state.error)}
+              suppliers={suppliers.items}
+              ready={suppliers.ready && Boolean(state.planningSupported)}
+              onApply={applySupply}
+            />
           </fieldset>
         </details>
       )}
@@ -416,6 +553,15 @@ export default function Replenishment() {
                     {item.reorder_quantity}
                   </p>
                 )}
+                <ReplenishmentSupplyPlan
+                  item={item}
+                  value={{ ...toDraft(item), ...drafts[item.id] }}
+                  onChange={(key, value) => patch(item, key, value)}
+                  suppliers={suppliers.items}
+                  ready={suppliers.ready && Boolean(state.planningSupported)}
+                  admin={admin}
+                  disabled={busy}
+                />
                 <p className="text-sm text-primary-700">
                   Suggested quantity:{" "}
                   {item.suggested_quantity > 0
@@ -433,6 +579,10 @@ export default function Replenishment() {
                 >
                   Find in warehouse
                 </Link>
+                <ReplenishmentHistory
+                  key={`${item.id}:${reload}`}
+                  productId={item.id}
+                />
               </article>
             ))}
           </div>
