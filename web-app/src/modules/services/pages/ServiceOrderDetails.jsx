@@ -24,7 +24,9 @@ function JobWorkspace({ orderId }) {
   const [error,setError] = useState('');
   const [retry,setRetry] = useState(0);
   const [section,setSection] = useState('overview');
+  const [assignmentVersion,setAssignmentVersion] = useState(0);
   const workChanged = useCallback((value) => setWork(value),[]);
+  const assignmentChanged = useCallback((value) => {setOrder(value);setAssignmentVersion((version)=>version+1);},[]);
   useEffect(() => {
     let active = true;
     getServiceOrder(orderId).then((value) => { if(active) {setOrder(value); if(!value) setError('This service order was not found. Return to the service queue.');} })
@@ -55,8 +57,8 @@ function JobWorkspace({ orderId }) {
         <div className={panel}><h2 className="font-bold text-primary-950">Requested work</h2><p className="mt-2 whitespace-pre-wrap break-words text-sm text-primary-800">{order.description || order.note || 'No requested work recorded.'}</p></div>
         <div className={panel}><h2 className="font-bold text-primary-950">Estimated parts & labor at intake</h2><p className="mt-1 text-sm text-primary-700">Estimates do not deduct stock. Record what was actually used under Parts & labor.</p>{!(order.items || []).length && <p className="mt-3 text-sm text-primary-700">No itemized intake estimate was recorded.</p>}<ul className="mt-3 divide-y divide-primary-100">{(order.items || []).map((item,index)=><li key={item.id || index} className="flex flex-wrap justify-between gap-2 py-3 text-sm"><div className="min-w-0"><strong className="break-words text-primary-950">{item.itemSku || item.sku || (item.lineType==='service'?'Labor':'Part')}</strong><p className="break-words text-primary-800">{item.displayName || item.itemName}</p></div><span className="text-primary-800">{item.quantity} × {formatCurrency(item.unitPrice)} · {formatCurrency(item.lineTotal)}</span></li>)}</ul></div>
       </section>
-      <div hidden={section!=='schedule'}><ServiceAssignmentPanel key={order.id} order={order} onOrderUpdated={setOrder} /></div>
-      <ServiceWorkPanel key={order.id} order={order} onOrderUpdated={setOrder} onWorkChanged={workChanged} activeSection={section} />
+      <div hidden={section!=='schedule'}><ServiceAssignmentPanel key={order.id} order={order} onOrderUpdated={assignmentChanged} /></div>
+      <ServiceWorkPanel key={order.id} order={order} onOrderUpdated={setOrder} onWorkChanged={workChanged} activeSection={section} assignmentVersion={assignmentVersion} />
     </>}
   </div>;
 }

@@ -30,7 +30,7 @@ const visibleSection = {
   history: '[&>section:not(:nth-of-type(4)):not(:nth-of-type(5))]:hidden',
 };
 
-export default function ServiceWorkPanel({ order, onOrderUpdated, onWorkChanged, activeSection = 'all' }) {
+export default function ServiceWorkPanel({ order, onOrderUpdated, onWorkChanged, activeSection = 'all', assignmentVersion = 0 }) {
   const toast = useToast();
   const [work, setWork] = useState(null);
   const [lines, setLines] = useState([]);
@@ -50,6 +50,14 @@ export default function ServiceWorkPanel({ order, onOrderUpdated, onWorkChanged,
   const paymentInFlight = useRef(false);
   const [paymentUncertain, setPaymentUncertain] = useState(false);
   useEffect(() => { onWorkChanged?.(work); },[work,onWorkChanged]);
+  useEffect(() => {
+    if(!assignmentVersion) return;
+    let active=true;
+    // Refresh history without replacing unsaved actual-charge inputs.
+    getServiceWork(order.id).then((data)=>{if(active)setWork(data);})
+      .catch(()=>{if(active)setError('The appointment was saved, but history could not refresh. Reopen this job to see its saved assignment history.');});
+    return ()=>{active=false;};
+  },[order.id,assignmentVersion]);
   useEffect(() => {
     if(!dirty && !note.trim() && !laborDescription.trim()) return;
     const unload = (event) => { event.preventDefault(); event.returnValue=''; };
