@@ -64,7 +64,18 @@ function SupplierOrderEditorWorkspace({ id, user }) {
         } catch {
           /* Offer a fresh form without destroying unreadable storage. */
         }
-        if (recovered?.requestId && Array.isArray(recovered.items)) {
+        const recoveredWork =
+          recovered?.submitted ||
+          recovered?.supplierId ||
+          recovered?.externalReference ||
+          recovered?.expectedDate ||
+          recovered?.notes ||
+          recovered?.items?.length;
+        if (
+          recovered?.requestId &&
+          Array.isArray(recovered.items) &&
+          recoveredWork
+        ) {
           setDraft(recovered);
           setStorageNote(
             "Recovered draft on this device. Any newly selected parts were not added over it.",
