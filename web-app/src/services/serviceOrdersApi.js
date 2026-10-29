@@ -81,6 +81,14 @@ export async function createServiceOrder(payload) {
   }
 }
 
+export async function getServiceIntakeResult(requestId) {
+  try {
+    return (await apiClient.get(`/service-orders/intake-requests/${encodeURIComponent(requestId)}`)).data;
+  } catch (error) {
+    extractApiError(error, 'The previous submission could not be checked. Keep this draft and retry the check.');
+  }
+}
+
 export async function updateServiceOrder(orderId, payload) {
   try {
     const { data } = await apiClient.patch(`/service-orders/${orderId}`, payload);

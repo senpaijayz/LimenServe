@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router';
-import { createServiceOrder, getServiceScheduleSlots } from '../../../services/serviceOrdersApi';
+import { useNavigate, useSearchParams } from 'react-router';
+import { createServiceOrder, getServiceScheduleSlots, getServiceIntakeResult } from '../../../services/serviceOrdersApi';
+import { getServiceIntakeContext } from '../../../services/customerHistoryApi';
+import SavedCustomerIntake from '../components/SavedCustomerIntake';
+import { savedIntakeFields } from '../utils/savedIntakeFields';
 import { listMechanics } from '../../../services/mechanicsApi';
 import { useToast } from '../../../components/ui/Toast';
 import { useAuth } from '../../../context/useAuth';
@@ -10,20 +13,31 @@ import { formatCurrency } from '../../../utils/formatters';
 import { PartSearch } from '../components/ServiceOrderModals';
 
 const DRAFT_KEY_PREFIX = 'limen-service-intake-draft-v2';
-const initial = { customerName: '', customerPhone: '', vehicleMake: 'Mitsubishi', vehicleModel: '', vehicleYear: '', vehiclePlate: '', description: '', laborEstimate: '', priority: 'normal', mechanicId: '', date: '', duration: 60, slotStart: '', slotEnd: '', parts: [] };
+const initial = { customerId: '', vehicleId: '', identityVersion: '', customerName: '', customerPhone: '', vehicleMake: 'Mitsubishi', vehicleModel: '', vehicleYear: '', vehiclePlate: '', description: '', laborEstimate: '', priority: 'normal', mechanicId: '', date: '', duration: 60, slotStart: '', slotEnd: '', parts: [] };
 const steps = ['Customer & vehicle', 'Requested work', 'Schedule', 'Review'];
 const manilaToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const timeLabel = (value) => new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
 const fieldClass = 'input mt-1 w-full min-w-0';
 
 export default function ServiceOrderNew() {
+  const { user } = useAuth();
+  return <ServiceIntake key={user?.id || 'unavailable'} user={user} />;
+}
+
+function ServiceIntake({ user }) {
   const navigate = useNavigate();
   const toast = useToast();
-  const { user } = useAuth();
+  const [params] = useSearchParams();
   const draftKey = `${DRAFT_KEY_PREFIX}:${user?.id || 'unavailable'}`;
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(() => {
-    try { return { ...initial, intakeRequestId: crypto.randomUUID(), ...JSON.parse(localStorage.getItem(draftKey) || '{}') }; }
+    try {
+      const loaded = { ...initial, ...JSON.parse(localStorage.getItem(draftKey) || '{}') };
+      for (const [key, value] of Object.entries(initial)) if (typeof value === 'string') loaded[key] = String(loaded[key] ?? value);
+      if (!Array.isArray(loaded.parts)) loaded.parts = [];
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(loaded.intakeRequestId || '')) loaded.intakeRequestId = crypto.randomUUID();
+      return loaded;
+    }
     catch { return { ...initial, intakeRequestId: crypto.randomUUID() }; }
   });
   const [mechanics, setMechanics] = useState([]);
@@ -32,16 +46,47 @@ export default function ServiceOrderNew() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(!!params.get('customer'));
+  const [checkingIdentity, setCheckingIdentity] = useState(false);
+  const [checkingRecovery, setCheckingRecovery] = useState(true);
+  const [recoveryError, setRecoveryError] = useState('');
+  const [recoveredOrder, setRecoveredOrder] = useState(null);
+  const [recoveryReload, setRecoveryReload] = useState(0);
+  const committed = useRef(false);
+  const mounted = useRef(true);
   const creating = useRef(false);
+  const canProceed = !saving && !checkingIdentity && !checkingRecovery && !recoveryError && !recoveredOrder;
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const partsTotal = useMemo(() => form.parts.reduce((sum, part) => sum + Number(part.lineTotal || 0), 0), [form.parts]);
   const labor = Math.max(Number(form.laborEstimate) || 0, 0);
   const total = Math.round((labor + partsTotal) * 100) / 100;
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { try { localStorage.setItem(draftKey, JSON.stringify(form)); } catch { /* Saving is checked again before any creation request. */ } }, 250);
+    const timer = window.setTimeout(() => { if (committed.current) return; try { localStorage.setItem(draftKey, JSON.stringify(form)); } catch { /* Saving is checked again before any creation request. */ } }, 250);
     return () => window.clearTimeout(timer);
   }, [form, draftKey]);
+
+  useEffect(() => {
+    let active = true;
+    setCheckingRecovery(true);
+    getServiceIntakeResult(form.intakeRequestId)
+      .then((result) => { if (active) { setRecoveredOrder(result.orderId); setRecoveryError(''); } })
+      .catch((err) => { if (active) setRecoveryError(err.message); })
+      .finally(() => { if (active) setCheckingRecovery(false); });
+    return () => { active = false; };
+  }, [form.intakeRequestId, recoveryReload]);
+
+  const applySavedIdentity = (selection) => {
+    setForm((current) => ({ ...current, ...selection, ...(current.customerId !== selection.customerId || current.vehicleId !== selection.vehicleId ? { mechanicId: '', date: '', slotStart: '', slotEnd: '' } : {}) }));
+    setPickerOpen(false); setError('');
+  };
+  const openCreatedJob = (orderId) => {
+    if (!mounted.current) return;
+    committed.current = true;
+    try { localStorage.removeItem(draftKey); } catch { /* A retained reference recovers the same job next time. */ }
+    navigate(`/services/${orderId}`);
+  };
 
   useEffect(() => {
     if (user?.role !== ROLES.ADMIN) return;
@@ -59,10 +104,21 @@ export default function ServiceOrderNew() {
     return () => { active = false; };
   }, [form.date, form.duration, form.mechanicId]);
 
-  const next = () => {
+  const next = async () => {
+    if (!canProceed) return;
     setError('');
     if (step === 0 && (!form.customerName.trim() || !form.vehicleModel.trim() || !form.vehiclePlate.trim())) {
       setError('Add the customer name, vehicle model, and plate number to continue.'); return;
+    }
+    if (step === 0 && form.customerId) {
+      setCheckingIdentity(true);
+      try {
+        const context = await getServiceIntakeContext(form.customerId);
+        const vehicle = context.vehicles.find((item) => item.id === form.vehicleId);
+        if (!vehicle || !form.identityVersion || vehicle.identityVersion !== form.identityVersion) throw new Error('Saved customer or vehicle details changed. Choose the saved records again before continuing.');
+        setForm((current) => ({ ...current, ...savedIntakeFields(context.customer, vehicle) }));
+      } catch (err) { setError(err.message); return; }
+      finally { setCheckingIdentity(false); }
     }
     if (step === 1 && (!form.description.trim() || !Number.isFinite(Number(form.laborEstimate || 0)) || Number(form.laborEstimate || 0) < 0)) {
       setError('Describe the requested work and enter a valid labor estimate.'); return;
@@ -74,16 +130,18 @@ export default function ServiceOrderNew() {
   };
 
   const create = async () => {
-    if (creating.current) return;
+    if (creating.current || !canProceed) return;
     creating.current = true;
     setSaving(true); setError('');
     try {
       const payload = {
         intakeRequestId: form.intakeRequestId,
         ...(user?.role === ROLES.ADMIN && form.mechanicId ? { mechanicId: form.mechanicId, scheduledStart: form.slotStart, scheduledEnd: form.slotEnd } : {}),
-        customerName: form.customerName.trim(), customerPhone: form.customerPhone.trim(),
-        vehicleMake: form.vehicleMake.trim(), vehicleModel: form.vehicleModel.trim(),
-        vehicleYear: Number(form.vehicleYear) || null, vehiclePlate: form.vehiclePlate.trim(),
+        ...(form.customerId ? { customerId: form.customerId, vehicleId: form.vehicleId, identityVersion: form.identityVersion } : {
+          customerName: form.customerName.trim(), customerPhone: form.customerPhone.trim(),
+          vehicleMake: form.vehicleMake.trim(), vehicleModel: form.vehicleModel.trim(),
+          vehicleYear: Number(form.vehicleYear) || null, vehiclePlate: form.vehiclePlate.trim(),
+        }),
         description: form.description.trim(), estimatedCost: total, priority: form.priority, status: 'pending',
         items: [
           ...form.parts,
@@ -92,27 +150,46 @@ export default function ServiceOrderNew() {
       };
       localStorage.setItem(draftKey, JSON.stringify(form));
       const order = await createServiceOrder(payload);
-      localStorage.removeItem(draftKey);
-      setForm({ ...initial, intakeRequestId: crypto.randomUUID() });
+      if (!mounted.current) return;
+      if (!order?.id) throw new Error('The creation response was incomplete. Check the saved submission before retrying.');
       toast.success('Service order created.');
-      navigate(`/services/${order.id}`);
-    } catch (err) { setError(err.message || 'Unable to create this service order.'); }
+      openCreatedJob(order.id);
+    } catch (err) {
+      if (!mounted.current) return;
+      try {
+        const result = await getServiceIntakeResult(form.intakeRequestId);
+        if (!mounted.current) return;
+        if (result.orderId) { toast.success('Saved service order found.'); openCreatedJob(result.orderId); return; }
+      } catch (recoveryFailure) { setRecoveryError(recoveryFailure.message); }
+      setError(err.message || 'Unable to create this service order.');
+    }
     finally { creating.current = false; setSaving(false); }
   };
 
   return <div className="mx-auto max-w-5xl space-y-5 pb-24">
     <button type="button" onClick={() => navigate('/services')} className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-primary-600 hover:text-primary-950"><ArrowLeft className="h-4 w-4" /> Service Orders</button>
     <header className="rounded-2xl border border-primary-200 bg-white p-5 shadow-sm sm:p-7"><p className="text-xs font-bold uppercase tracking-widest text-primary-500">Workshop intake</p><h1 className="mt-1 text-2xl font-bold text-primary-950 sm:text-3xl">New Service Order</h1><p className="mt-2 text-sm text-primary-600">Record the customer's concern first. A mechanic and appointment can be added now or later.</p></header>
-    <nav aria-label="Intake steps" className="grid grid-cols-2 gap-2 sm:grid-cols-4">{steps.map((label, index) => <button key={label} type="button" onClick={() => { if (index < step) setStep(index); }} className={`rounded-xl border px-3 py-3 text-left text-xs font-semibold sm:text-sm ${index === step ? 'border-blue-700 bg-blue-50 text-blue-900' : 'border-primary-200 bg-white text-primary-600'}`}><span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary-100 text-xs">{index < step ? <Check className="h-3 w-3" /> : index + 1}</span>{label}</button>)}</nav>
+    <nav aria-label="Intake steps" className="grid grid-cols-2 gap-2 sm:grid-cols-4">{steps.map((label, index) => <button key={label} type="button" disabled={!canProceed} onClick={() => { if (index < step) setStep(index); }} className={`rounded-xl border px-3 py-3 text-left text-xs font-semibold sm:text-sm ${index === step ? 'border-blue-700 bg-blue-50 text-blue-900' : 'border-primary-200 bg-white text-primary-600'}`}><span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary-100 text-xs">{index < step ? <Check className="h-3 w-3" /> : index + 1}</span>{label}</button>)}</nav>
     <main className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:p-7">
+      {checkingRecovery && <p role="status" className="mb-4 text-sm text-primary-700">Checking this draft for an already-created job…</p>}
+      {recoveryError && <div role="alert" className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">{recoveryError}<button type="button" className="btn mt-2 border border-amber-500" disabled={checkingRecovery} onClick={() => setRecoveryReload((value) => value + 1)}>Check submission again</button></div>}
+      {recoveredOrder && <div role="status" className="mb-4 rounded-xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-950">This draft already created a service order. Open the saved job instead of creating another.<button type="button" className="btn mt-2 border border-blue-800 bg-blue-800 text-white" onClick={() => openCreatedJob(recoveredOrder)}>Open created job</button></div>}
       {error && <p role="alert" className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+      <fieldset disabled={!canProceed} className="min-w-0">
+      {step === 0 && <div className="mb-5 space-y-3">
+        <details open={pickerOpen} onToggle={(event) => setPickerOpen(event.currentTarget.open)} className="rounded-xl border border-primary-200 p-3">
+          <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-blue-900">Find a saved customer & vehicle</summary>
+          <SavedCustomerIntake suggestedCustomer={params.get('customer') || form.customerId} suggestedVehicle={params.get('vehicle') || form.vehicleId} onSelect={applySavedIdentity} disabled={!canProceed} />
+        </details>
+        {form.customerId && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">Using saved customer and vehicle records. The fields below are read-only; details are checked again before this job is created.<button type="button" className="btn mt-2 border border-blue-300" onClick={() => setForm((current) => ({ ...current, customerId: '', vehicleId: '', identityVersion: '' }))}>Enter details instead</button></div>}
+      </div>}
       {step === 0 && <div className="grid gap-4 sm:grid-cols-2">
-        <label className="text-sm font-semibold text-primary-700">Customer name *<input className={fieldClass} value={form.customerName} onChange={(e) => set('customerName', e.target.value)} /></label>
-        <label className="text-sm font-semibold text-primary-700">Phone<input className={fieldClass} inputMode="tel" value={form.customerPhone} onChange={(e) => set('customerPhone', e.target.value)} /></label>
-        <label className="text-sm font-semibold text-primary-700">Vehicle make<input className={fieldClass} value={form.vehicleMake} onChange={(e) => set('vehicleMake', e.target.value)} /></label>
-        <label className="text-sm font-semibold text-primary-700">Vehicle model *<input className={fieldClass} value={form.vehicleModel} onChange={(e) => set('vehicleModel', e.target.value)} /></label>
-        <label className="text-sm font-semibold text-primary-700">Year<input className={fieldClass} type="number" min="1900" max="2100" value={form.vehicleYear} onChange={(e) => set('vehicleYear', e.target.value)} /></label>
-        <label className="text-sm font-semibold text-primary-700">Plate number *<input className={fieldClass} value={form.vehiclePlate} onChange={(e) => set('vehiclePlate', e.target.value)} /></label>
+        <label className="text-sm font-semibold text-primary-700">Customer name *<input className={fieldClass} value={form.customerName} readOnly={!!form.customerId} onChange={(e) => set('customerName', e.target.value)} /></label>
+        <label className="text-sm font-semibold text-primary-700">Phone<input className={fieldClass} inputMode="tel" value={form.customerPhone} readOnly={!!form.customerId} onChange={(e) => set('customerPhone', e.target.value)} /></label>
+        <label className="text-sm font-semibold text-primary-700">Vehicle make<input className={fieldClass} value={form.vehicleMake} readOnly={!!form.customerId} onChange={(e) => set('vehicleMake', e.target.value)} /></label>
+        <label className="text-sm font-semibold text-primary-700">Vehicle model *<input className={fieldClass} value={form.vehicleModel} readOnly={!!form.customerId} onChange={(e) => set('vehicleModel', e.target.value)} /></label>
+        <label className="text-sm font-semibold text-primary-700">Year<input className={fieldClass} type="number" min="1900" max="2100" value={form.vehicleYear} readOnly={!!form.customerId} onChange={(e) => set('vehicleYear', e.target.value)} /></label>
+        <label className="text-sm font-semibold text-primary-700">Plate number *<input className={fieldClass} value={form.vehiclePlate} readOnly={!!form.customerId} onChange={(e) => set('vehiclePlate', e.target.value)} /></label>
       </div>}
       {step === 1 && <div className="space-y-5">
         <label className="block text-sm font-semibold text-primary-700">Reported concern and requested work *<textarea className={`${fieldClass} min-h-28`} value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="What did the customer report?" /></label>
@@ -128,7 +205,8 @@ export default function ServiceOrderNew() {
         {form.mechanicId && form.date && !loadingSlots && !slots.some((slot) => slot.available) && <p className="text-sm text-primary-700">No available schedule remains for this day. Choose another date.</p>}
       </> : <p className="rounded-lg bg-primary-50 p-3 text-sm text-primary-700">An administrator can assign the mechanic after this order is created.</p>}</div>}
       {step === 3 && <div className="space-y-4 text-sm"><h2 className="text-lg font-semibold text-primary-950">Review before creating</h2><div className="grid gap-3 sm:grid-cols-2"><p><span className="text-primary-500">Customer</span><br /><strong>{form.customerName}</strong> · {form.customerPhone || 'No phone'}</p><p><span className="text-primary-500">Vehicle</span><br /><strong>{[form.vehicleYear,form.vehicleMake,form.vehicleModel,form.vehiclePlate].filter(Boolean).join(' ')}</strong></p><p className="sm:col-span-2"><span className="text-primary-500">Requested work</span><br />{form.description}</p><p><span className="text-primary-500">Priority</span><br /><strong className="capitalize">{form.priority}</strong></p><p><span className="text-primary-500">Appointment</span><br /><strong>{form.slotStart ? `${form.date}, ${timeLabel(form.slotStart)}–${timeLabel(form.slotEnd)}` : 'Assign later'}</strong></p></div>{form.parts.length > 0 && <div className="rounded-xl border border-primary-200 p-4"><h3 className="font-semibold text-primary-950">Estimated parts</h3>{form.parts.map((part) => <p key={part.draftId} className="mt-2 text-primary-700"><strong>{part.itemSku}</strong> ({part.itemName}) · {part.quantity} × {formatCurrency(part.unitPrice)}</p>)}</div>}{labor > 0 && <p className="text-primary-700">Estimated labor: <strong>{formatCurrency(labor)}</strong></p>}<div className="rounded-xl bg-primary-950 p-4 text-white"><span>Estimated only — no stock is deducted</span><strong className="float-right">{formatCurrency(total)}</strong></div></div>}
+      </fieldset>
     </main>
-    <div className="sticky bottom-2 flex justify-between gap-3 rounded-xl border border-primary-200 bg-white/95 p-3 shadow-lg backdrop-blur"><button type="button" className="btn" onClick={() => step ? setStep(step - 1) : navigate('/services')}><ArrowLeft className="h-4 w-4" /> Back</button>{step < 3 ? <button type="button" className="btn bg-blue-700 text-white" onClick={next}>Continue <ArrowRight className="h-4 w-4" /></button> : <button type="button" className="btn bg-blue-700 text-white" disabled={saving} onClick={create}><Plus className="h-4 w-4" /> {saving ? 'Creating…' : 'Create service order'}</button>}</div>
+    <div className="sticky bottom-2 flex justify-between gap-3 rounded-xl border border-primary-200 bg-white/95 p-3 shadow-lg backdrop-blur"><button type="button" className="btn" disabled={saving || checkingIdentity} onClick={() => step ? setStep(step - 1) : navigate('/services')}><ArrowLeft className="h-4 w-4" /> Back</button>{step < 3 ? <button type="button" className="btn bg-blue-700 text-white" disabled={!canProceed} onClick={next}>Continue <ArrowRight className="h-4 w-4" /></button> : <button type="button" className="btn bg-blue-700 text-white" disabled={!canProceed} onClick={create}><Plus className="h-4 w-4" /> {saving ? 'Creating…' : 'Create service order'}</button>}</div>
   </div>;
 }

@@ -183,6 +183,7 @@ function Workspace({ customerId, admin }) {
           <p className="mt-2 text-xs text-primary-700">
             Current contact details · Saved customer record
           </p>
+          <Link className="btn mt-3 border border-blue-800 bg-blue-800 text-white" to={`/services/new?customer=${encodeURIComponent(state.customer.id)}`}>New visit</Link>
           <details className="mt-2 text-xs text-primary-700">
             <summary className="min-h-11 cursor-pointer py-3">
               Record information
