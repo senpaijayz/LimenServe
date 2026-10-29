@@ -28,7 +28,7 @@ export default function ServiceOrderNew() {
 function ServiceIntake({ user }) {
   const navigate = useNavigate();
   const toast = useToast();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const draftKey = `${DRAFT_KEY_PREFIX}:${user?.id || 'unavailable'}`;
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(() => {
@@ -82,6 +82,9 @@ function ServiceIntake({ user }) {
   const applySavedIdentity = (selection) => {
     setForm((current) => ({ ...current, ...selection, ...(current.customerId !== selection.customerId || current.vehicleId !== selection.vehicleId ? { mechanicId: '', date: '', slotStart: '', slotEnd: '' } : {}) }));
     setPickerOpen(false); setError('');
+    // A handoff is only a suggestion. Once accepted, the saved draft is the
+    // source for reopening; an old link must not re-suggest a different pair.
+    setParams((current) => { const next = new URLSearchParams(current); next.delete('customer'); next.delete('vehicle'); return next; }, { replace: true });
   };
   const openCreatedJob = (orderId, clearMatchingDraft = true) => {
     if (!mounted.current) return;
@@ -189,6 +192,7 @@ function ServiceIntake({ user }) {
       {error && <p role="alert" className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
       <fieldset disabled={!canProceed} className="min-w-0">
       {step === 0 && <div className="mb-5 space-y-3">
+        {params.get('customer') && form.customerName && <p className="text-sm text-primary-700">Your existing intake draft is unchanged. Use selection below only if you want to replace its customer and vehicle details.</p>}
         <details open={pickerOpen} onToggle={(event) => setPickerOpen(event.currentTarget.open)} className="rounded-xl border border-primary-200 p-3">
           <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-blue-900">Find a saved customer & vehicle</summary>
           <SavedCustomerIntake suggestedCustomer={params.get('customer') || form.customerId} suggestedVehicle={params.get('vehicle') || form.vehicleId} onSelect={applySavedIdentity} disabled={!canProceed} />
