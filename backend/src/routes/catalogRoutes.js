@@ -13,15 +13,16 @@ import { createPriceHistoryRouter } from './priceHistoryRoutes.js';
 import { applyEstimatePricelistScope, getActiveEstimatePricelist } from '../services/estimatePricelistScope.js';
 import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 import publishedPackageRoutes from './publishedPackageRoutes.js';
-import createReplenishmentRouter from './replenishmentRoutes.js';
+import inventoryMovementExportRoutes from './inventoryMovementExportRoutes.js';
 import createSupplierOrderRouter from './supplierOrderRoutes.js';
-import createInventoryFollowupRouter from './inventoryFollowupRoutes.js';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
 const router = Router();
-router.use(createInventoryFollowupRouter());
-router.use(createReplenishmentRouter({ onSettingsSaved: invalidateProductCatalogCache }));
+router.use(inventoryMovementExportRoutes);
+router.use(['/replenishment', '/inventory-followups'], requireRole('admin', 'stock_clerk'), (_req, res) => {
+  res.set('Cache-Control', 'private, no-store').status(410).json({ error: 'This feature has been removed. Use Inventory for stock receiving and movement history.' });
+});
 router.use(createSupplierOrderRouter({ onInventoryChanged: invalidateProductCatalogCache }));
 router.use(publishedPackageRoutes);
 router.use(createPriceHistoryRouter(supabaseAdmin));
