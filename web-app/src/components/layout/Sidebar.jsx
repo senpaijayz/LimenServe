@@ -11,13 +11,14 @@ const icons = { LayoutDashboard, ShoppingCart, Package, FileText, Wrench, Box, B
 
 function NavigationEntry({ item, active, collapsed, mobile, onNavigate }) {
     const Icon = icons[item.icon] || Box;
+    const visibleLabel = mobile && item.path === '/users' ? 'Users' : item.label;
     const mobileClass = 'grid min-h-12 grid-cols-[1.125rem_minmax(0,1fr)] items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold ' + (active ? 'border-blue-500 bg-blue-50 text-blue-950' : 'border-primary-200 bg-white text-primary-800 hover:border-blue-400 hover:bg-blue-50');
     const desktopClass = 'sidebar-nav-item ' + (active ? 'sidebar-nav-item-active' : '');
     return <Link to={item.path} onClick={onNavigate} aria-current={active ? 'page' : undefined}
-        aria-label={item.label} title={collapsed && !mobile ? item.label : undefined}
+        aria-label={visibleLabel === item.label ? item.label : visibleLabel + ' — ' + item.label} title={collapsed && !mobile ? item.label : undefined}
         className={(mobile ? mobileClass : desktopClass) + ' focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'}>
         <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-        <span className={collapsed && !mobile ? 'sr-only' : 'min-w-0 break-words'}>{mobile && item.path === '/users' ? 'Users' : item.label}</span>
+        <span className={collapsed && !mobile ? 'sr-only' : 'min-w-0 break-words'}>{visibleLabel}</span>
     </Link>;
 }
 
