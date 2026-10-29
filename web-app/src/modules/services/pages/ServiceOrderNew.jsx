@@ -11,6 +11,7 @@ import { useAuth } from '../../../context/useAuth';
 import { ROLES } from '../../../utils/constants';
 import { formatCurrency } from '../../../utils/formatters';
 import { PartSearch } from '../components/ServiceOrderModals';
+import Modal from '../../../components/ui/Modal';
 
 const DRAFT_KEY_PREFIX = 'limen-service-intake-draft-v2';
 const initial = { customerId: '', vehicleId: '', identityVersion: '', customerName: '', customerPhone: '', vehicleMake: 'Mitsubishi', vehicleModel: '', vehicleYear: '', vehiclePlate: '', description: '', laborEstimate: '', priority: 'normal', mechanicId: '', date: '', duration: 60, slotStart: '', slotEnd: '', parts: [] };
@@ -52,6 +53,7 @@ function ServiceIntake({ user }) {
   const [recoveryError, setRecoveryError] = useState('');
   const [recoveredOrder, setRecoveredOrder] = useState(null);
   const [recoveryReload, setRecoveryReload] = useState(0);
+  const [discardPrompt, setDiscardPrompt] = useState(false);
   const committed = useRef(false);
   const mounted = useRef(true);
   const creating = useRef(false);
@@ -81,11 +83,21 @@ function ServiceIntake({ user }) {
     setForm((current) => ({ ...current, ...selection, ...(current.customerId !== selection.customerId || current.vehicleId !== selection.vehicleId ? { mechanicId: '', date: '', slotStart: '', slotEnd: '' } : {}) }));
     setPickerOpen(false); setError('');
   };
-  const openCreatedJob = (orderId) => {
+  const openCreatedJob = (orderId, clearMatchingDraft = true) => {
     if (!mounted.current) return;
     committed.current = true;
-    try { localStorage.removeItem(draftKey); } catch { /* A retained reference recovers the same job next time. */ }
+    try {
+      if (clearMatchingDraft && localStorage.getItem(draftKey) === JSON.stringify(form)) localStorage.removeItem(draftKey);
+    } catch { /* Preserve an unverified/newer draft; its reference recovers the same job. */ }
     navigate(`/services/${orderId}`);
+  };
+  const startFreshIntake = () => {
+    const fresh = { ...initial, intakeRequestId: crypto.randomUUID() };
+    try { localStorage.setItem(draftKey, JSON.stringify(fresh)); }
+    catch { setError('This browser could not replace the draft. The saved job and current draft are unchanged.'); setDiscardPrompt(false); return; }
+    committed.current = false;
+    setForm(fresh); setStep(0); setPickerOpen(false); setRecoveredOrder(null);
+    setCheckingRecovery(true); setRecoveryError(''); setError(''); setDiscardPrompt(false);
   };
 
   useEffect(() => {
@@ -173,7 +185,7 @@ function ServiceIntake({ user }) {
     <main className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm sm:p-7">
       {checkingRecovery && <p role="status" className="mb-4 text-sm text-primary-700">Checking this draft for an already-created job…</p>}
       {recoveryError && <div role="alert" className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">{recoveryError}<button type="button" className="btn mt-2 border border-amber-500" disabled={checkingRecovery} onClick={() => setRecoveryReload((value) => value + 1)}>Check submission again</button></div>}
-      {recoveredOrder && <div role="status" className="mb-4 rounded-xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-950">This draft already created a service order. Open the saved job instead of creating another.<button type="button" className="btn mt-2 border border-blue-800 bg-blue-800 text-white" onClick={() => openCreatedJob(recoveredOrder)}>Open created job</button></div>}
+      {recoveredOrder && <div role="status" className="mb-4 rounded-xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-950">This draft reference already has a saved job. Opening it keeps this browser draft, including any later changes.<div className="mt-2 flex flex-wrap gap-2"><button type="button" className="btn border border-blue-800 bg-blue-800 text-white" onClick={() => openCreatedJob(recoveredOrder, false)}>Open created job</button><button type="button" className="btn border border-blue-300" onClick={() => setDiscardPrompt(true)}>Start a fresh intake</button></div></div>}
       {error && <p role="alert" className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
       <fieldset disabled={!canProceed} className="min-w-0">
       {step === 0 && <div className="mb-5 space-y-3">
@@ -208,5 +220,6 @@ function ServiceIntake({ user }) {
       </fieldset>
     </main>
     <div className="sticky bottom-2 flex justify-between gap-3 rounded-xl border border-primary-200 bg-white/95 p-3 shadow-lg backdrop-blur"><button type="button" className="btn" disabled={saving || checkingIdentity} onClick={() => step ? setStep(step - 1) : navigate('/services')}><ArrowLeft className="h-4 w-4" /> Back</button>{step < 3 ? <button type="button" className="btn bg-blue-700 text-white" disabled={!canProceed} onClick={next}>Continue <ArrowRight className="h-4 w-4" /></button> : <button type="button" className="btn bg-blue-700 text-white" disabled={!canProceed} onClick={create}><Plus className="h-4 w-4" /> {saving ? 'Creating…' : 'Create service order'}</button>}</div>
+    <Modal isOpen={discardPrompt} onClose={() => setDiscardPrompt(false)} title="Start a fresh intake?" size="sm"><p className="text-sm text-primary-800">The saved service order stays in the system. This clears the browser draft, including any later changes that are not in that job. Copy any unsaved work before continuing.</p><div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" className="btn border border-primary-300" onClick={() => setDiscardPrompt(false)}>Keep draft</button><button type="button" className="btn border border-red-700 bg-red-700 text-white" onClick={startFreshIntake}>Discard draft and start fresh</button></div></Modal>
   </div>;
 }

@@ -221,9 +221,16 @@ export default function SavedCustomerIntake({
                       </select>
                     </label>
                     {vehicle && (
-                      <p className="break-all text-xs text-primary-700">
-                        Vehicle record {vehicle.id}
-                      </p>
+                      <div className="text-primary-800">
+                        <p className="break-words text-sm font-semibold">
+                          {[vehicle.year, vehicle.make, vehicle.model]
+                            .filter(Boolean)
+                            .join(" ")}
+                        </p>
+                        <p className="mt-1 break-all text-xs text-primary-700">
+                          Vehicle record {vehicle.id}
+                        </p>
+                      </div>
                     )}
                     {suggestedVehicle &&
                       !current.data.vehicles.some(
@@ -235,10 +242,8 @@ export default function SavedCustomerIntake({
                         </p>
                       )}
                     <p className="text-xs text-primary-700">
-                      Use selection replaces customer and vehicle details in
-                      this draft. Requested work and estimates are kept. A
-                      different vehicle clears the draft appointment. No
-                      customer or ownership record is edited.
+                      Use selection keeps work and estimates. A different
+                      vehicle clears the draft appointment.
                     </p>
                     <button
                       type="button"
@@ -272,8 +277,7 @@ export default function SavedCustomerIntake({
         )
       )}
       <p className="text-xs text-primary-700">
-        Opening or searching this picker does not replace your draft. Details
-        change only when you choose Use selection.
+        Choose Use selection to fill this draft. Saved records stay unchanged.
       </p>
     </fieldset>
   );
