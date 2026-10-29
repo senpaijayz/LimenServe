@@ -4,10 +4,12 @@ import { getEstimateDetail } from "../../../services/estimatesApi";
 import { getPosSaleDetail } from "../../../services/posApi";
 import { formatCurrency } from "../../../utils/formatters";
 
+const recordedNumber = (value) =>
+  value == null || value === "" || !Number.isFinite(Number(value))
+    ? null
+    : Number(value);
 const money = (value) =>
-  value == null || !Number.isFinite(Number(value))
-    ? "Not recorded"
-    : formatCurrency(value);
+  recordedNumber(value) == null ? "Not recorded" : formatCurrency(value);
 export default function CustomerRecordPreview({ record, kind, onClose }) {
   const [reload, setReload] = useState(0),
     [state, setState] = useState({
@@ -44,6 +46,19 @@ export default function CustomerRecordPreview({ record, kind, onClose }) {
       active = false;
     };
   }, [record.id, kind, reload]);
+  const subtotal = recordedNumber(state.header.subtotal);
+  const lineTotals = state.items.map((item) =>
+    recordedNumber(item.lineTotal ?? item.line_total),
+  );
+  const incompleteLines =
+    !state.loading &&
+    !state.error &&
+    subtotal !== null &&
+    (lineTotals.some((value) => value === null) ||
+      lineTotals.reduce(
+        (sum, value) => sum + Math.round((value ?? 0) * 100),
+        0,
+      ) !== Math.round(subtotal * 100));
   return (
     <Modal
       isOpen
@@ -73,6 +88,16 @@ export default function CustomerRecordPreview({ record, kind, onClose }) {
           </p>
         ) : (
           <>
+            {incompleteLines && (
+              <p
+                role="status"
+                className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-950"
+              >
+                The saved item lines do not match the recorded subtotal. Review
+                the original record before using it for billing. This view keeps
+                the original amounts unchanged.
+              </p>
+            )}
             <p>
               Recorded total:{" "}
               <strong>
