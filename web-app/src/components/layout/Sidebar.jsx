@@ -1,235 +1,90 @@
-import { NavLink, useLocation } from 'react-router';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-    LayoutDashboard,
-    ShoppingCart,
-    Package,
-    FileText,
-    Wrench,
-    Box,
-    Boxes,
-    BarChart3,
-    Users,
-    Truck,
-    ClipboardList,
-    ChevronLeft,
-    LogOut,
-    ShieldCheck,
-    X,
-} from 'lucide-react';
+import { Link, useLocation } from 'react-router';
+import { LayoutDashboard, ShoppingCart, Package, FileText, Wrench, Box, Boxes, BarChart3, Users, Truck, ClipboardList, ChevronLeft, LogOut, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/useAuth';
 import { useTheme } from '../../context/ThemeContext';
 import usePublicCmsSite from '../../hooks/usePublicCmsSite';
-import { NAV_ITEMS } from '../../utils/constants';
+import { ROLE_LABELS } from '../../utils/constants';
+import { getActiveNavigationPath, getNavigationGroups } from '../../utils/workspaceNavigation';
+import Modal from '../ui/Modal';
 
-// Icon mapping
-const iconMap = {
-    LayoutDashboard,
-    ShoppingCart,
-    Package,
-    FileText,
-    Wrench,
-    Box,
-    Boxes,
-    BarChart3,
-    Users,
-    Truck,
-    ClipboardList,
-};
+const icons = { LayoutDashboard, ShoppingCart, Package, FileText, Wrench, Box, Boxes, BarChart3, Users, Truck, ClipboardList };
 
-/**
- * Sidebar Component
- * Main navigation sidebar with collapsible state
- */
-const Sidebar = () => {
-    const MotionDiv = motion.div;
-    const MotionSpan = motion.span;
+function NavigationEntry({ item, active, collapsed, mobile, onNavigate }) {
+    const Icon = icons[item.icon] || Box;
+    const mobileClass = 'grid min-h-12 grid-cols-[1.125rem_minmax(0,1fr)] items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold ' + (active ? 'border-blue-500 bg-blue-50 text-blue-950' : 'border-primary-200 bg-white text-primary-800 hover:border-blue-400 hover:bg-blue-50');
+    const desktopClass = 'sidebar-nav-item ' + (active ? 'sidebar-nav-item-active' : '');
+    return <Link to={item.path} onClick={onNavigate} aria-current={active ? 'page' : undefined}
+        aria-label={item.label} title={collapsed && !mobile ? item.label : undefined}
+        className={(mobile ? mobileClass : desktopClass) + ' focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'}>
+        <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+        <span className={collapsed && !mobile ? 'sr-only' : 'min-w-0 break-words'}>{item.label}</span>
+    </Link>;
+}
+
+function NavigationGroups({ groups, activePath, collapsed = false, mobile = false, onNavigate }) {
+    return groups.map((section) => <section key={section.label} aria-label={section.label} className="mb-5 last:mb-0">
+        <h2 className={collapsed && !mobile ? 'sr-only' : 'mb-2 px-1 text-xs font-bold uppercase tracking-wider text-primary-600'}>{section.label}</h2>
+        <div className={mobile ? 'grid grid-cols-2 gap-2 [&>a:last-child:nth-child(odd)]:col-span-2' : 'space-y-1'}>
+            {section.items.map((item) => <NavigationEntry key={item.path} item={item} active={activePath === item.path} collapsed={collapsed} mobile={mobile} onNavigate={onNavigate} />)}
+        </div>
+    </section>);
+}
+
+export default function Sidebar() {
     const { user, logout } = useAuth();
     const { sidebarCollapsed, sidebarOpen, toggleSidebar, closeMobileSidebar } = useTheme();
     const { settings } = usePublicCmsSite();
-    const location = useLocation();
-    const logoUrl = settings?.logo_url || '/LogoLimen.jpg';
+    const { pathname } = useLocation();
+    const groups = getNavigationGroups(user?.role);
+    const activePath = getActiveNavigationPath(pathname, groups.flatMap((group) => group.items));
+    const name = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.fullName || 'Staff account';
+    const role = ROLE_LABELS[user?.role] || user?.role || '';
+    const canViewSecurity = ['admin', 'cashier', 'stock_clerk'].includes(user?.role);
+    const securityActive = pathname.startsWith('/settings/security');
+    const handleLogout = () => { closeMobileSidebar(); void logout(); };
 
-    // Filter nav items based on user role
-    const filterByRole = (items) => {
-        return items.filter(item => item.roles.includes(user?.role));
-    };
-
-    const mainNavItems = filterByRole(NAV_ITEMS.main);
-    const adminNavItems = filterByRole(NAV_ITEMS.admin);
-
-    // Render navigation item
-    const NavItem = ({ item }) => {
-        const Icon = iconMap[item.icon];
-        const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
-
-        return (
-            <NavLink
-                to={item.path}
-                onClick={closeMobileSidebar}
-                className={`
-          sidebar-nav-item
-          ${isActive ? 'sidebar-nav-item-active' : ''}
-        `}
-            >
-                {Icon && <Icon className="w-5 h-5 flex-shrink-0" />}
-                <AnimatePresence>
-                    {!sidebarCollapsed && (
-                        <MotionSpan
-                            initial={{ opacity: 0, width: 0 }}
-                            animate={{ opacity: 1, width: 'auto' }}
-                            exit={{ opacity: 0, width: 0 }}
-                            className="whitespace-nowrap overflow-hidden"
-                        >
-                            {item.label}
-                        </MotionSpan>
-                    )}
-                </AnimatePresence>
-            </NavLink>
-        );
-    };
-
-    return (
-        <>
-            {/* Mobile Overlay */}
-            <AnimatePresence>
-                {sidebarOpen && (
-                    <MotionDiv
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={closeMobileSidebar}
-                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden"
-                    />
-                )}
-            </AnimatePresence>
-
-            {/* Sidebar */}
-            <aside
-                className={`
-          sidebar
-          ${sidebarCollapsed ? 'sidebar-collapsed' : ''}
-          ${sidebarOpen ? 'sidebar-open translate-x-0' : ''}
-        `}
-            >
-                {/* Logo */}
-                <div className="sidebar-logo pb-6 border-b border-primary-200">
-                    <img src={logoUrl} alt="Limen Logo" onError={(event) => { event.currentTarget.src = '/LogoLimen.jpg'; }} className="w-10 h-10 object-contain rounded-lg bg-white p-1 flex-shrink-0 border border-primary-200" />
-                    <AnimatePresence>
-                        {!sidebarCollapsed && (
-                            <MotionDiv
-                                initial={{ opacity: 0, width: 0 }}
-                                animate={{ opacity: 1, width: 'auto' }}
-                                exit={{ opacity: 0, width: 0 }}
-                                className="overflow-hidden"
-                            >
-                                <h1 className="font-display font-bold text-lg text-primary-950 whitespace-nowrap">
-                                    LimenServe
-                                </h1>
-                                <p className="text-xs text-primary-500 whitespace-nowrap">Auto Parts MIS</p>
-                            </MotionDiv>
-                        )}
-                    </AnimatePresence>
-
-                    {/* Mobile close button */}
-                    <button
-                        onClick={closeMobileSidebar}
-                        className="lg:hidden ml-auto p-1 rounded hover:bg-primary-100"
-                        aria-label="Close navigation menu"
-                        type="button"
-                    >
-                        <X className="w-5 h-5 text-primary-500" />
-                    </button>
+    return <>
+        <aside className={'sidebar hidden lg:flex ' + (sidebarCollapsed ? 'sidebar-collapsed' : '')} aria-label="Desktop workspace">
+            <div className="sidebar-logo">
+                <img src={settings?.logo_url || '/LogoLimen.jpg'} alt="Limen Logo" onError={(event) => { event.currentTarget.src = '/LogoLimen.jpg'; }} className="h-10 w-10 shrink-0 rounded-lg border border-primary-200 bg-white p-1 object-contain" />
+                {!sidebarCollapsed && <div className="min-w-0"><p className="font-display text-lg font-bold text-primary-950">LimenServe</p><p className="text-xs text-primary-600">Auto Parts MIS</p></div>}
+            </div>
+            <nav className="sidebar-nav" aria-label="Workspace navigation">
+                <NavigationGroups groups={groups} activePath={activePath} collapsed={sidebarCollapsed} onNavigate={closeMobileSidebar} />
+            </nav>
+            <div className="mt-auto border-t border-primary-200 p-3">
+                <div className="mb-3 flex min-w-0 items-center gap-3 px-1" title={name + ' · ' + role}>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary-200 bg-primary-100 text-sm font-bold text-primary-900">{user?.firstName?.[0]}{user?.lastName?.[0]}</span>
+                    {!sidebarCollapsed && <div className="min-w-0"><p className="truncate text-sm font-semibold text-primary-950">{name}</p><p className="text-xs text-primary-600">{role}</p></div>}
                 </div>
+                {canViewSecurity && <Link to="/settings/security" onClick={closeMobileSidebar} aria-label="Account Security" title={sidebarCollapsed ? 'Account Security' : undefined} aria-current={securityActive ? 'page' : undefined}
+                    className={'sidebar-nav-item ' + (securityActive ? 'sidebar-nav-item-active' : '')}>
+                    <ShieldCheck className="h-5 w-5 shrink-0" aria-hidden="true" /><span className={sidebarCollapsed ? 'sr-only' : 'text-sm'}>Account Security</span>
+                </Link>}
+                <button type="button" onClick={toggleSidebar} aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!sidebarCollapsed} title={sidebarCollapsed ? 'Expand sidebar' : undefined}
+                    className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-primary-700 hover:bg-primary-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
+                    <ChevronLeft className={'h-5 w-5 shrink-0 ' + (sidebarCollapsed ? 'rotate-180' : '')} aria-hidden="true" />
+                    <span className={sidebarCollapsed ? 'sr-only' : 'text-sm'}>Collapse</span>
+                </button>
+                <button type="button" onClick={handleLogout} aria-label="Logout" title={sidebarCollapsed ? 'Logout' : undefined}
+                    className="mt-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-red-700 hover:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-600">
+                    <LogOut className="h-5 w-5 shrink-0" aria-hidden="true" /><span className={sidebarCollapsed ? 'sr-only' : 'text-sm'}>Logout</span>
+                </button>
+            </div>
+        </aside>
 
-                {/* Navigation */}
-                <nav className="sidebar-nav">
-                    {/* Main Navigation */}
-                    <div className="mb-6">
-                        {!sidebarCollapsed && (
-                            <p className="sidebar-section-title">Main Menu</p>
-                        )}
-                        {mainNavItems.map((item) => (
-                            <NavItem key={item.path} item={item} />
-                        ))}
-                    </div>
-
-                    {/* Admin Navigation */}
-                    {adminNavItems.length > 0 && (
-                        <div className="mb-6">
-                            {!sidebarCollapsed && (
-                                <p className="sidebar-section-title">Administration</p>
-                            )}
-                            {adminNavItems.map((item) => (
-                                <NavItem key={item.path} item={item} />
-                            ))}
-                        </div>
-                    )}
-                </nav>
-
-                {/* Bottom Section */}
-                <div className="mt-auto border-t border-primary-200 p-4">
-                    {/* User Info */}
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 rounded-full bg-accent-danger/10 flex items-center justify-center flex-shrink-0 border border-accent-danger/20">
-                            <span className="text-accent-danger font-bold text-sm">
-                                {user?.firstName?.[0]}{user?.lastName?.[0]}
-                            </span>
-                        </div>
-                        <AnimatePresence>
-                            {!sidebarCollapsed && (
-                                <MotionDiv
-                                    initial={{ opacity: 0, width: 0 }}
-                                    animate={{ opacity: 1, width: 'auto' }}
-                                    exit={{ opacity: 0, width: 0 }}
-                                    className="overflow-hidden"
-                                >
-                                    <p className="text-sm font-semibold text-primary-950 whitespace-nowrap">
-                                        {user?.firstName} {user?.lastName}
-                                    </p>
-                                    <p className="text-xs text-primary-500 capitalize whitespace-nowrap">
-                                        {user?.role?.replace('_', ' ')}
-                                    </p>
-                                </MotionDiv>
-                            )}
-                        </AnimatePresence>
-                    </div>
-
-                    {/* Account security lives with the signed-in user's profile controls. */}
-                    {['admin', 'cashier', 'stock_clerk'].includes(user?.role) && (
-                        <NavLink
-                            to="/settings/security"
-                            onClick={closeMobileSidebar}
-                            title={sidebarCollapsed ? 'Account Security' : undefined}
-                            aria-label="Account Security"
-                            className={`flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-primary-600 transition-colors hover:bg-primary-100 hover:text-primary-950 ${location.pathname.startsWith('/settings/security') ? 'bg-primary-100 font-semibold text-primary-950' : ''}`}
-                        >
-                            <ShieldCheck className="h-5 w-5 shrink-0" aria-hidden="true" />
-                            {!sidebarCollapsed && <span className="text-sm">Account Security</span>}
-                        </NavLink>
-                    )}
-
-                    {/* Collapse Toggle (Desktop) */}
-                    <button
-                        onClick={toggleSidebar}
-                        className="hidden lg:flex items-center gap-3 w-full px-3 py-2 rounded-lg text-primary-500 hover:bg-primary-100 hover:text-primary-900 transition-colors"
-                    >
-                        <ChevronLeft className={`w-5 h-5 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} />
-                        {!sidebarCollapsed && <span className="text-sm font-medium">Collapse</span>}
-                    </button>
-
-                    {/* Logout Button */}
-                    <button
-                        onClick={logout}
-                        className="flex items-center gap-3 w-full px-3 py-2 mt-2 rounded-lg text-accent-danger hover:bg-accent-danger/10 transition-colors"
-                    >
-                        <LogOut className="w-5 h-5" />
-                        {!sidebarCollapsed && <span className="text-sm">Logout</span>}
-                    </button>
+        <Modal id="mobile-workspace-navigation" isOpen={sidebarOpen} onClose={closeMobileSidebar} title="Menu" size="lg" footer={
+            <div className="w-full">
+                <p className="mb-3 break-words text-xs text-primary-600">{name} · {role}</p>
+                <div className="flex flex-wrap gap-2">
+                    {canViewSecurity && <Link to="/settings/security" onClick={closeMobileSidebar} aria-current={securityActive ? 'page' : undefined} className="btn btn-secondary min-h-11 flex-1"><ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />Account Security</Link>}
+                    <button type="button" onClick={handleLogout} className="btn btn-secondary min-h-11 text-red-700"><LogOut className="h-4 w-4" aria-hidden="true" />Logout</button>
                 </div>
-            </aside>
-        </>
-    );
-};
-
-export default Sidebar;
+            </div>
+        }>
+            <nav aria-label="Workspace navigation">
+                <NavigationGroups groups={groups} activePath={activePath} mobile onNavigate={closeMobileSidebar} />
+            </nav>
+        </Modal>
+    </>;
+}

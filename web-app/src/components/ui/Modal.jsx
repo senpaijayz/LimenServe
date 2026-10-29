@@ -18,6 +18,7 @@ let previousBodyOverflow = '';
  * </Modal>
  */
 const Modal = ({
+    id,
     isOpen,
     onClose,
     title,
@@ -101,6 +102,7 @@ const Modal = ({
                 >
                     <Motion.div
                         ref={modalRef}
+                        id={id}
                         role="dialog"
                         aria-modal="true"
                         aria-label={typeof title === 'string' ? title : 'Dialog'}

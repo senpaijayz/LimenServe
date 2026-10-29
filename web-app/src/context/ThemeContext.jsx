@@ -26,13 +26,11 @@ export function ThemeProvider({ children }) {
     const closeNotifications = useCallback(() => setNotificationsOpen(false), []);
 
     // Toggle sidebar collapsed state
-    const toggleSidebar = useCallback(() => {
-        setSidebarCollapsed(prev => {
-            const newValue = !prev;
-            localStorage.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, String(newValue));
-            return newValue;
-        });
-    }, []);
+    const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
+    useEffect(() => {
+        try { localStorage.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, String(sidebarCollapsed)); }
+        catch { /* Optional display preference must not break navigation. */ }
+    }, [sidebarCollapsed]);
 
     // Toggle mobile sidebar
     const toggleMobileSidebar = useCallback(() => {
@@ -54,8 +52,9 @@ export function ThemeProvider({ children }) {
         };
 
         window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
+        window.addEventListener('popstate', closeMobileSidebar);
+        return () => { window.removeEventListener('resize', handleResize); window.removeEventListener('popstate', closeMobileSidebar); };
+    }, [closeMobileSidebar]);
 
     const value = {
         sidebarCollapsed,

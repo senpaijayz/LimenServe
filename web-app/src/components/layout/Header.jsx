@@ -3,34 +3,18 @@ import { Menu } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/useAuth';
 import NotificationsDropdown from '../ui/NotificationsDropdown';
+import { getWorkspaceTitle } from '../../utils/workspaceNavigation';
 
 /**
  * Header Component
  * Top navigation bar with page context and staff status messaging
  */
 const Header = () => {
-    const { sidebarCollapsed, toggleMobileSidebar } = useTheme();
+    const { sidebarCollapsed, sidebarOpen, toggleMobileSidebar } = useTheme();
     const { user, isProfileReady, profileWarning } = useAuth();
     const location = useLocation();
     const canViewQuotationNotifications = user?.role === 'admin';
 
-    // Get page title from path
-    const getPageTitle = () => {
-        const pathMap = {
-            '/dashboard': 'Dashboard',
-            '/pos': 'Point of Sale',
-            '/inventory': 'Inventory Management',
-            '/quotation': 'Cost Estimation & Quotation',
-            '/services': 'Service Orders',
-            '/customers': 'Customers',
-            '/reports': 'Reports & Analytics',
-            '/users': 'User Management',
-            '/locator-3d': '3D Locator',
-        };
-
-        const basePath = '/' + location.pathname.split('/')[1];
-        return pathMap[basePath] || 'LimenServe';
-    };
 
     return (
         <header className={`header ${sidebarCollapsed ? 'header-collapsed' : ''}`}>
@@ -40,7 +24,10 @@ const Header = () => {
                 <button
                     onClick={toggleMobileSidebar}
                     className="min-h-11 min-w-11 rounded-lg border border-primary-200 p-2 transition-colors hover:bg-primary-50 lg:hidden"
-                    aria-label="Open navigation menu"
+                    aria-label={sidebarOpen ? 'Close navigation menu' : 'Open navigation menu'}
+                    aria-expanded={sidebarOpen}
+                    aria-haspopup="dialog"
+                    aria-controls="mobile-workspace-navigation"
                 >
                     <Menu className="w-5 h-5 text-primary-700" />
                 </button>
@@ -48,11 +35,11 @@ const Header = () => {
                 {/* Page Title & Date */}
                 <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                     <h1 className="max-w-[48vw] truncate text-base font-display font-bold text-primary-950 sm:max-w-none sm:text-xl">
-                        {getPageTitle()}
+                        {getWorkspaceTitle(location.pathname)}
                     </h1>
                     <span className="hidden h-5 w-px bg-primary-200 sm:block" />
                     <span className="hidden text-sm font-medium text-primary-500 sm:block">
-                        {new Date().toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        {new Date().toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', weekday: 'short', month: 'short', day: 'numeric' })}
                     </span>
                 </div>
             </div>
