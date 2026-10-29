@@ -112,6 +112,7 @@ export const NAV_ITEMS = {
         { path: '/pos', label: 'Point of Sale', icon: 'ShoppingCart', roles: [ROLES.ADMIN, ROLES.CASHIER] },
         { path: '/inventory', label: 'Inventory', icon: 'Package', roles: [ROLES.ADMIN, ROLES.STOCK_CLERK] },
         { path: '/services', label: 'Service Orders', icon: 'Wrench', roles: [ROLES.ADMIN, ROLES.CASHIER] },
+        { path: '/customers', label: 'Customers', icon: 'Users', roles: [ROLES.ADMIN, ROLES.CASHIER] },
     ],
     admin: [
         { path: '/products', label: 'Products', icon: 'Boxes', roles: [ROLES.ADMIN] },

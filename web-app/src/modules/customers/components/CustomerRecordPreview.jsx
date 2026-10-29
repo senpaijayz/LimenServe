@@ -1,0 +1,142 @@
+import { useEffect, useState } from "react";
+import Modal from "../../../components/ui/Modal";
+import { getEstimateDetail } from "../../../services/estimatesApi";
+import { getPosSaleDetail } from "../../../services/posApi";
+import { formatCurrency } from "../../../utils/formatters";
+
+const money = (value) =>
+  value == null || !Number.isFinite(Number(value))
+    ? "Not recorded"
+    : formatCurrency(value);
+export default function CustomerRecordPreview({ record, kind, onClose }) {
+  const [reload, setReload] = useState(0),
+    [state, setState] = useState({
+      loading: true,
+      error: "",
+      items: [],
+      header: {},
+    });
+  useEffect(() => {
+    let active = true;
+    const read = kind === "quotes" ? getEstimateDetail : getPosSaleDetail;
+    read(record.id)
+      .then((data) => {
+        if (!data || (kind === "sales" && !data.sale))
+          throw new Error("This record is no longer available.");
+        if (active)
+          setState({
+            loading: false,
+            error: "",
+            items: data.items || [],
+            header: kind === "quotes" ? data.estimate || {} : data.sale || {},
+          });
+      })
+      .catch((error) => {
+        if (active)
+          setState({
+            loading: false,
+            error: error.message,
+            items: [],
+            header: {},
+          });
+      });
+    return () => {
+      active = false;
+    };
+  }, [record.id, kind, reload]);
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={kind === "quotes" ? "Saved quotation" : "Sale record"}
+      size="lg"
+    >
+      <div className="space-y-3 text-sm text-primary-800">
+        <p className="break-all font-mono font-bold text-primary-950">
+          {record.reference}
+        </p>
+        {state.loading ? (
+          <p role="status">Loading saved items…</p>
+        ) : state.error ? (
+          <p role="alert">
+            {state.error}
+            <button
+              type="button"
+              className="ml-2 min-h-11 font-semibold underline"
+              onClick={() => {
+                setState({ loading: true, error: "", items: [], header: {} });
+                setReload((value) => value + 1);
+              }}
+            >
+              Retry
+            </button>
+          </p>
+        ) : (
+          <>
+            <p>
+              Recorded total:{" "}
+              <strong>
+                {money(
+                  state.header.grand_total ??
+                    state.header.totalAmount ??
+                    state.header.total_amount,
+                )}
+              </strong>
+            </p>
+            <p>
+              Recorded status:{" "}
+              {String(state.header.status || "Not recorded").replaceAll(
+                "_",
+                " ",
+              )}
+            </p>
+            {kind === "sales" && (
+              <p>
+                Payment method:{" "}
+                {state.header.paymentMethod ||
+                  state.header.payment_method ||
+                  "Not recorded"}
+              </p>
+            )}
+            {!state.items.length && (
+              <p>No itemized lines were saved for this record.</p>
+            )}
+            <ul className="divide-y divide-primary-200">
+              {state.items.map((item, index) => (
+                <li key={item.id || index} className="py-3">
+                  <strong className="break-all text-primary-950">
+                    {item.itemSku ||
+                      item.product_sku ||
+                      item.service_code ||
+                      "Item"}
+                  </strong>
+                  <p className="break-words">
+                    {item.itemName ||
+                      item.product_name ||
+                      item.service_name ||
+                      "Description not recorded"}
+                  </p>
+                  <p className="mt-1">
+                    {item.quantity} × {money(item.unitPrice ?? item.unit_price)}{" "}
+                    · Line total {money(item.lineTotal ?? item.line_total)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        <p className="border-t border-primary-200 pt-3 text-xs text-primary-700">
+          View only. Amounts use saved line prices; nothing is charged or
+          changed here.
+        </p>
+        <button
+          type="button"
+          className="btn border border-primary-300"
+          onClick={onClose}
+        >
+          Close
+        </button>
+      </div>
+    </Modal>
+  );
+}

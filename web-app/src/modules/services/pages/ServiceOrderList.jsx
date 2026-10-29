@@ -278,6 +278,7 @@ const ServiceOrderList = () => {
                     <p className="text-primary-500 mt-2 text-sm max-w-2xl leading-relaxed">Manage repair jobs, workshop scheduling, mechanic assignments, and customer billing.</p>
                 </div>
                 <div className="relative z-10 flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                    <button className="btn w-full border border-primary-200 bg-white text-primary-900 sm:w-auto" onClick={() => navigate('/customers')}>Customer history</button>
                     <button className="btn w-full border border-primary-200 bg-white text-primary-900 sm:w-auto" onClick={() => navigate('/services/schedule')}><CalendarDays className="h-4 w-4" /> View Schedule</button>
                     <button className="btn w-full border-none bg-gradient-to-r from-red-600 to-red-800 text-white shadow-lg shadow-red-600/40 sm:w-auto" onClick={() => navigate('/services/new')}>
                         <Plus className="w-4 h-4" /> NEW SERVICE ORDER

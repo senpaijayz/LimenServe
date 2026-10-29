@@ -31,6 +31,7 @@ import serviceOrderRoutes from './routes/serviceOrderRoutes.js';
 import stockroomRoutes from './routes/stockroomRoutes.js';
 import locatorRoutes from './routes/locatorRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import customerHistoryRoutes from './routes/customerHistoryRoutes.js';
 
 const defaultReadinessCheck = createSupabaseReadinessCheck({
   supabaseUrl: env.supabaseUrl,
@@ -148,6 +149,7 @@ export function createApp({
   });
   app.use('/api/service-orders', serviceOrderRoutes);
   app.use('/api/users', userRoutes);
+  app.use('/api/customers', customerHistoryRoutes);
   app.use('/api/inventory/stockroom', inventoryStockroomRoutes);
   app.use('/api/parts-mapping', partsMappingRoutes);
   app.use('/api/stockroom', stockroomRoutes);

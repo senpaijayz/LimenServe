@@ -23,6 +23,8 @@ const InventoryList = lazy(() => import('./modules/inventory/pages/InventoryList
 const ReceiveStock = lazy(() => import('./modules/inventory/pages/ReceiveStock'));
 const Replenishment = lazy(() => import('./modules/inventory/pages/Replenishment'));
 const InventoryFollowups = lazy(() => import('./modules/inventory/pages/InventoryFollowups'));
+const CustomerSearch = lazy(() => import('./modules/customers/pages/CustomerSearch'));
+const CustomerWorkspace = lazy(() => import('./modules/customers/pages/CustomerWorkspace'));
 const SupplierOrders = lazy(() => import('./modules/inventory/pages/SupplierOrders'));
 const SupplierOrderEditor = lazy(() => import('./modules/inventory/pages/SupplierOrderEditor'));
 const SupplierOrderDetail = lazy(() => import('./modules/inventory/pages/SupplierOrderDetail'));
@@ -121,6 +123,8 @@ function App() {
                 <Route element={<MainLayout />}>
                   <Route path="/settings/security" element={renderRoute(AccountSecurityPage, <WorkspaceRouteFallback title="Loading account security" />)} />
                   <Route path="/dashboard" element={renderRoute(AdminDashboard, <WorkspaceRouteFallback title="Loading dashboard" />)} />
+                  <Route path="/customers" element={renderRoute(CustomerSearch, <WorkspaceRouteFallback title="Loading customer search" />)} />
+                  <Route path="/customers/:customerId" element={renderRoute(CustomerWorkspace, <WorkspaceRouteFallback title="Loading customer history" />)} />
                   <Route path="/inventory" element={renderRoute(InventoryList, <WorkspaceRouteFallback title="Loading inventory" />)} />
                   <Route path="/inventory/receive" element={renderRoute(ReceiveStock, <WorkspaceRouteFallback title="Loading stock receiving" />)} />
                   <Route path="/inventory/replenishment" element={renderRoute(Replenishment, <WorkspaceRouteFallback title="Loading replenishment" />)} />
