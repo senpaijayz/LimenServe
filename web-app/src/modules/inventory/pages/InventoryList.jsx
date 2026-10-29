@@ -742,6 +742,7 @@ const InventoryList = () => {
                     <ClipboardList className="w-4 h-4" />
                     View Logs
                 </Link>
+                <Button variant="secondary" isLoading={summaryLoading} onClick={() => { void refreshInventoryMeta().catch(() => {}); }}>Refresh totals</Button>
                 </div>
             </div>
 
@@ -782,10 +783,9 @@ const InventoryList = () => {
                 <div className="min-w-0 flex-1">
                     <p className="text-xs text-primary-700">Totals cover all active products, not just your search. Stock value uses current retail prices, not purchase cost.</p>
                     <p role={summaryError && !summaryLoading ? 'alert' : 'status'} className={`mt-1 text-xs ${summaryError && !summaryLoading ? 'text-red-700' : 'text-primary-600'}`}>
-                        {summaryLoading ? 'Loading inventory totals…' : summaryError || `Calculated ${summaryTime} (Philippine time). Totals may be cached for ${catalogSummary.cacheMaxAgeSeconds} seconds.`}
+                        {summaryLoading ? 'Loading inventory totals…' : summaryError || `Checked ${summaryTime} (Philippine time). For recent changes, wait ${catalogSummary.cacheMaxAgeSeconds} seconds and refresh.`}
                     </p>
                 </div>
-                <Button variant="secondary" size="sm" isLoading={summaryLoading} onClick={() => { void refreshInventoryMeta().catch(() => {}); }}>Refresh totals</Button>
             </div>
             {isAdmin && priceListError && <div role="alert" className="flex flex-wrap items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800"><span>{priceListError}</span><Button variant="secondary" size="sm" onClick={() => setRefreshKey((value) => value + 1)}>Retry price lists</Button></div>}
 
