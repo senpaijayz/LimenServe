@@ -439,6 +439,17 @@ router.get('/customer/mine', requireRole('customer'), async (req, res, next) => 
 
 router.use(requireRole('admin', 'cashier'));
 
+router.get('/intake-requests/:requestId', async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'private, no-store');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.requestId)) {
+      return res.status(400).json({ error: 'Choose a valid intake request reference.' });
+    }
+    const result = await callRpc('limen_service_intake_result', { p_actor: req.user.id, p_request: req.params.requestId });
+    res.json({ orderId: result?.orderId || null });
+  } catch (error) { next(normalizeServiceOrderError(error)); }
+});
+
 router.get('/queue', async (req, res, next) => {
   try {
     const stage = String(req.query.stage || 'active');
@@ -710,6 +721,14 @@ router.delete('/:orderId/assignment', requireRole('admin'), async (req, res, nex
 
 router.post('/', async (req, res, next) => {
   try {
+    if (req.body?.customerId || req.body?.vehicleId) {
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const validId = (value) => typeof value === 'string' && uuid.test(value);
+      if (!validId(req.body.customerId) || !validId(req.body.vehicleId)
+        || !validId(req.body.intakeRequestId) || typeof req.body.identityVersion !== 'string' || !/^[a-f0-9]{32}$/.test(req.body.identityVersion)) {
+        return res.status(400).json({ error: 'Choose a saved customer and vehicle with a valid intake reference.' });
+      }
+    }
     if (req.body?.priority && !ALLOWED_PRIORITIES.has(String(req.body.priority).toLowerCase())) {
       res.status(400).json({ error: 'Choose a valid service priority.' });
       return;

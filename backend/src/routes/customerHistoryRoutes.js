@@ -37,6 +37,14 @@ router.get("/", async (req, res, next) => {
     next(error);
   }
 });
+router.get("/:customerId/intake-context", async (req, res, next) => {
+  try {
+    if (!uuid(req.params.customerId)) return res.status(400).json({ error: "Choose a valid saved customer." });
+    const data = await callRpc("limen_service_intake_context", { p_customer: req.params.customerId });
+    if (!data) return res.status(404).json({ error: "This saved customer is no longer available." });
+    res.json(data);
+  } catch (error) { next(error); }
+});
 router.get("/:customerId", async (req, res, next) => {
   try {
     const kind = String(req.query.view || "orders"),
