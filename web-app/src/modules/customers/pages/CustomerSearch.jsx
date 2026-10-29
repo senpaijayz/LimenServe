@@ -89,8 +89,8 @@ export default function CustomerSearch() {
       ) : (
         <>
           <p className="text-sm text-primary-700">
-            {state.total} matching records · Page {page} of{" "}
-            {Math.max(1, Math.ceil(state.total / 24))}
+            {state.total} matching {state.total === 1 ? "record" : "records"} ·
+            Page {page} of {Math.max(1, Math.ceil(state.total / 24))}
           </p>
           {!state.items.length && (
             <p className="rounded-xl border border-primary-200 bg-white p-6 text-sm text-primary-700">
@@ -111,9 +111,8 @@ export default function CustomerSearch() {
                   {customer.phone || "No phone recorded"}
                 </p>
                 <p className="mt-3 text-sm text-primary-700">
-                  {customer.service_count} service orders ·{" "}
-                  {customer.vehicle_count} linked vehicles ·{" "}
-                  {customer.sale_count} linked sales
+                  Service orders: {customer.service_count} · Linked vehicles:{" "}
+                  {customer.vehicle_count} · Linked sales: {customer.sale_count}
                 </p>
                 <p className="mt-1 break-all font-mono text-xs text-primary-600">
                   Record {customer.id}

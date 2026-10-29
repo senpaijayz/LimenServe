@@ -22,6 +22,7 @@ const Header = () => {
             '/inventory': 'Inventory Management',
             '/quotation': 'Cost Estimation & Quotation',
             '/services': 'Service Orders',
+            '/customers': 'Customers',
             '/reports': 'Reports & Analytics',
             '/users': 'User Management',
             '/locator-3d': '3D Locator',

@@ -290,8 +290,8 @@ function Workspace({ customerId, admin }) {
             </p>
           </details>
           <p className="text-xs text-primary-700">
-            {state.total} records · Page {page} of{" "}
-            {Math.max(1, Math.ceil(state.total / 20))} · Checked{" "}
+            {state.total} {state.total === 1 ? "record" : "records"} · Page{" "}
+            {page} of {Math.max(1, Math.ceil(state.total / 20))} · Checked{" "}
             {date(state.checkedAt)} · Philippine time
           </p>
           {!state.items.length && (

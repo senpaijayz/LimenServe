@@ -126,8 +126,8 @@ export default function CustomerRecordPreview({ record, kind, onClose }) {
           </>
         )}
         <p className="border-t border-primary-200 pt-3 text-xs text-primary-700">
-          View only. Amounts use saved line prices; nothing is charged or
-          changed here.
+          View only. Saved totals may include tax or discounts. Nothing is
+          charged or changed here.
         </p>
         <button
           type="button"
