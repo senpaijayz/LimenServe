@@ -406,8 +406,7 @@ function SupplierOrderEditorWorkspace({ id, user }) {
             <h2 className="font-bold">Order lines · {draft.items.length}</h2>
             {!draft.items.length && (
               <p className="text-sm text-primary-700">
-                Search for a part, or select parts in Replenishment to prepare
-                this draft.
+                Search for a part to add it to this order draft.
               </p>
             )}
             <div className="divide-y">

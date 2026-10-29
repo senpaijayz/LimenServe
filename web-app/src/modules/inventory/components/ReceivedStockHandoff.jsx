@@ -47,9 +47,9 @@ export default function ReceivedStockHandoff({ receipt }) {
         </Link>
         <Link
           className="btn border border-primary-300"
-          to="/inventory/replenishment"
+          to="/inventory"
         >
-          Review replenishment
+          Back to inventory
         </Link>
       </div>
     </section>

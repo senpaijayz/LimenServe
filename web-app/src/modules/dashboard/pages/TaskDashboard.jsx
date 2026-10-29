@@ -3,7 +3,6 @@ import { Link } from 'react-router';
 import { useAuth } from '../../../context/useAuth';
 import { listServiceOrders } from '../../../services/serviceOrdersApi';
 import ServiceAttentionList from '../components/ServiceAttentionList';
-import InventoryFollowupSummary from '../components/InventoryFollowupSummary';
 
 const AdminDashboard = lazy(() => import('./AdminDashboard'));
 const tasks = {
@@ -38,7 +37,6 @@ export default function TaskDashboard() {
   const links = tasks[user?.role] || [];
   return <div className="space-y-5">
     <header><h1 className="text-2xl font-bold text-primary-950">{user?.role === 'cashier' ? 'Sales & service desk' : 'Inventory & warehouse'}</h1><p className="mt-2 text-sm text-primary-700">Choose the task you need to work on.</p></header>
-    {user?.role === 'stock_clerk' && <InventoryFollowupSummary />}
     <div className="grid gap-3 sm:grid-cols-2">{links.map(([href,title,description]) => <Link key={href} to={href} className="min-h-24 rounded-xl border border-primary-200 bg-white p-4 transition hover:border-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"><strong className="text-primary-950">{title}</strong><span className="mt-2 block text-sm text-primary-700">{description}</span></Link>)}</div>
     {user?.role === 'cashier' && <>
       {state.loading ? <p role="status">Loading recent service jobs…</p> : state.error ? <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">{state.error}<button type="button" onClick={() => {setState((current) => ({...current,loading:true}));setRetry((value)=>value+1);}} className="ml-3 min-h-11 font-bold underline">Retry</button></div> : <ServiceAttentionList orders={state.orders} />}

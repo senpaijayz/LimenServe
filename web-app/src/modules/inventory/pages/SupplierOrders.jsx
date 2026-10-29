@@ -48,10 +48,10 @@ export default function SupplierOrders() {
   return (
     <div className="space-y-4 pb-10">
       <Link
-        to="/inventory/replenishment"
+        to="/inventory"
         className="inline-flex min-h-11 items-center font-semibold text-blue-800"
       >
-        ← Replenishment
+        ← Inventory
       </Link>
       <header className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-primary-200 bg-white p-5">
         <div>

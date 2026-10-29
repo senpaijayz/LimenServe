@@ -3,7 +3,8 @@ import { ClipboardList, Download, Printer, RefreshCw, Search, X } from 'lucide-r
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Dropdown from '../../../components/ui/Dropdown';
-import { getInventoryMovementPage } from '../../../services/catalogApi';
+import { getInventoryMovementPage, getInventoryMovementExport } from '../../../services/catalogApi';
+import { downloadMovementCsv, movementDateBounds } from '../utils/movementExportCsv';
 import { formatDateTime, formatNumber } from '../../../utils/formatters';
 
 const MOVEMENT_LABELS = {
@@ -34,7 +35,7 @@ const TYPE_OPTIONS = [
 ];
 
 const DATE_RANGE_OPTIONS = [
-    { value: '24h', label: 'Last 24 Hours' },
+    { value: '24h', label: 'Today (Philippine time)' },
     { value: '7d', label: 'Last 7 Days' },
     { value: '30d', label: 'Last 30 Days' },
     { value: '90d', label: 'Last 90 Days' },
@@ -43,35 +44,6 @@ const DATE_RANGE_OPTIONS = [
 
 function escapeHtml(v) {
     return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function exportToExcel(movements) {
-    const headers = ['#', 'Product', 'Part Number', 'Action', 'Prev Stock', 'Change', 'New Stock', 'Supplier', 'Reference', 'Staff', 'Date/Time', 'Notes'];
-    const rows = movements.map((m, i) => [
-        i + 1,
-        m.productName || 'Unknown',
-        m.sku || '',
-        MOVEMENT_LABELS[m.movementType] || m.movementType || '',
-        m.previousStock ?? '',
-        m.quantity ?? '',
-        m.newStock ?? '',
-        m.supplierName || m.supplier || '',
-        m.referenceNumber || m.referenceType || '',
-        m.performedBy || '',
-        formatDateTime(m.createdAt),
-        m.notes || '',
-    ]);
-
-    const csvLines = [headers, ...rows].map((row) =>
-        row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')
-    );
-    const blob = new Blob(['\uFEFF' + csvLines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `inventory-logs-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
 }
 
 function printLogs(movements) {
@@ -137,25 +109,51 @@ export default function InventoryLogs() {
     const [page, setPage] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const requestSequence = useRef(0);
+    const exportController = useRef(null);
+    const [loadedKey, setLoadedKey] = useState('');
+    const [exporting, setExporting] = useState(false);
+    const [exportMessage, setExportMessage] = useState('');
+    const [exportError, setExportError] = useState('');
+    const { startDate, endDate } = movementDateBounds(dateRange);
+    const requestKey = JSON.stringify([page, deferredSearch.trim(), typeFilter, startDate, endDate]);
+    const pageReady = !loading && !error && loadedKey === requestKey && search.trim() === deferredSearch.trim();
+    useEffect(() => () => { requestSequence.current += 1; exportController.current?.abort(); }, []);
+    useEffect(() => () => exportController.current?.abort(), [deferredSearch, typeFilter, startDate, endDate]);
 
     const loadData = useCallback(async () => {
         const sequence = ++requestSequence.current;
         setLoading(true); setError('');
         try {
-            const days = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 }[dateRange];
-            const startDate = days ? new Date(Date.now() - days * 86400000).toISOString().slice(0, 10) : undefined;
-            const data = await getInventoryMovementPage(50, { page, search: deferredSearch.trim(), type: typeFilter, startDate });
+            const data = await getInventoryMovementPage(50, { page, search: deferredSearch.trim(), type: typeFilter, startDate, endDate });
             if (sequence !== requestSequence.current) return;
             setAllMovements(data.movements ?? []);
             setTotalCount(Number(data.totalCount || 0));
+            setLoadedKey(requestKey);
         } catch (e) {
             if (sequence === requestSequence.current) setError(e.message || 'Failed to load inventory logs.');
         } finally {
             if (sequence === requestSequence.current) setLoading(false);
         }
-    }, [dateRange, deferredSearch, page, typeFilter]);
+    }, [startDate, endDate, deferredSearch, page, typeFilter, requestKey]);
 
     useEffect(() => { void loadData(); }, [loadData]);
+
+    const exportMatching = async () => {
+        if (!pageReady || exporting) return;
+        const controller = new AbortController();
+        exportController.current = controller;
+        setExporting(true); setExportError(''); setExportMessage('');
+        try {
+            const snapshot = await getInventoryMovementExport({ search: deferredSearch.trim(), type: typeFilter, startDate, endDate }, controller.signal);
+            if (controller.signal.aborted) return;
+            downloadMovementCsv(snapshot);
+            setExportMessage(`Last CSV download: ${snapshot.totalCount.toLocaleString('en-PH')} matching records.`);
+        } catch (err) {
+            if (!controller.signal.aborted) setExportError(err.message || 'The export could not finish. Try again.');
+        } finally {
+            if (exportController.current === controller) setExporting(false);
+        }
+    };
 
     const movementModel = useMemo(() => {
         const filtered = [];
@@ -164,7 +162,7 @@ export default function InventoryLogs() {
         let totalQtyIn = 0;
         let totalQtySold = 0;
 
-        for (const m of allMovements) {
+        for (const m of (pageReady ? allMovements : [])) {
             filtered.push(m);
 
             if (m.movementType === 'stock_in') {
@@ -183,7 +181,7 @@ export default function InventoryLogs() {
             totalQtyIn,
             totalQtySold,
         };
-    }, [allMovements]);
+    }, [allMovements, pageReady]);
 
     const {
         filteredMovements,
@@ -203,22 +201,25 @@ export default function InventoryLogs() {
                         Inventory Logs
                     </h1>
                     <p className="text-sm text-primary-500 mt-0.5">
-                        Search all recorded stock movements. Totals and exports below cover the displayed page.
+                        Search recorded stock movements. CSV includes every matching record (up to 10,000); totals and printing cover this page.
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <Button variant="secondary" leftIcon={<RefreshCw className="w-4 h-4" />} isLoading={loading} onClick={loadData}>
+                    <Button variant="secondary" leftIcon={<RefreshCw className="w-4 h-4" />} isLoading={loading} disabled={exporting} onClick={loadData}>
                         Refresh
                     </Button>
-                    <Button variant="secondary" leftIcon={<Download className="w-4 h-4" />} onClick={() => exportToExcel(filteredMovements)} disabled={filteredMovements.length === 0}>
-                        Export page CSV
+                    <Button variant="secondary" leftIcon={<Download className="w-4 h-4" />} onClick={exportMatching} isLoading={exporting} disabled={!pageReady || totalCount === 0 || exporting}>
+                        Export matching CSV
                     </Button>
-                    <Button variant="primary" leftIcon={<Printer className="w-4 h-4" />} onClick={() => printLogs(filteredMovements)} disabled={filteredMovements.length === 0}>
+                    <Button variant="primary" leftIcon={<Printer className="w-4 h-4" />} onClick={() => printLogs(filteredMovements)} disabled={!pageReady || filteredMovements.length === 0 || exporting}>
                         Print page PDF
                     </Button>
                 </div>
             </div>
 
+            {exporting && <p role="status" className="text-sm text-blue-800">Preparing all matching records…</p>}
+            {exportMessage && <p role="status" className="text-sm text-emerald-800">{exportMessage}</p>}
+            {exportError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{exportError}</p>}
             {/* KPI cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[
@@ -229,7 +230,7 @@ export default function InventoryLogs() {
                 ].map(({ label, value, color }) => (
                     <div key={label} className="bg-white border border-primary-200 rounded-2xl p-4 shadow-sm">
                         <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary-400 mb-1">{label}</p>
-                        <p className={`text-sm font-bold ${color}`}>{value}</p>
+                        <p className={`text-sm font-bold ${color}`}>{pageReady ? value : '—'}</p>
                     </div>
                 ))}
             </div>
@@ -242,21 +243,21 @@ export default function InventoryLogs() {
                         <input
                             type="text"
                             placeholder="Search product, part number, staff, reference..."
-                            value={search}
+                            value={search} disabled={exporting}
                             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                             className="w-full pl-10 pr-4 py-2.5 bg-white border border-primary-200 rounded-xl text-sm text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/10 shadow-sm"
                         />
                         {search && (
-                            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-400 hover:text-primary-600">
+                            <button aria-label="Clear search" disabled={exporting} onClick={() => { setSearch(''); setPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-400 hover:text-primary-600">
                                 <X className="w-4 h-4" />
                             </button>
                         )}
                     </div>
                     <div className="flex-shrink-0 w-44">
-                        <Dropdown options={TYPE_OPTIONS} value={typeFilter} onChange={(v) => { setTypeFilter(v); setPage(1); }} />
+                        <Dropdown disabled={exporting} options={TYPE_OPTIONS} value={typeFilter} onChange={(v) => { setTypeFilter(v); setPage(1); }} />
                     </div>
                     <div className="flex-shrink-0 w-44">
-                        <Dropdown options={DATE_RANGE_OPTIONS} value={dateRange} onChange={(v) => { setDateRange(v); setPage(1); }} />
+                        <Dropdown disabled={exporting} options={DATE_RANGE_OPTIONS} value={dateRange} onChange={(v) => { setDateRange(v); setPage(1); }} />
                     </div>
                     <p className="text-sm text-primary-400 flex-shrink-0">
                         {formatNumber(filteredMovements.length)} records
@@ -266,7 +267,7 @@ export default function InventoryLogs() {
                 {/* Table */}
                 {error ? (
                     <div className="px-4 py-8 text-center text-sm text-red-600">{error}</div>
-                ) : loading ? (
+                ) : !pageReady ? (
                     <div className="px-4 py-12 text-center text-sm text-primary-400">Loading inventory logs...</div>
                 ) : filteredMovements.length === 0 ? (
                     <div className="px-4 py-12 text-center">
@@ -342,7 +343,7 @@ export default function InventoryLogs() {
                     </div>
                 )}
             </Card>
-            <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-primary-600">{formatNumber(totalCount)} matching records · Page {page} of {Math.max(1, Math.ceil(totalCount / 50))}</p><div className="flex gap-2"><Button variant="secondary" disabled={loading || page === 1} onClick={() => setPage((p) => p - 1)}>Previous</Button><Button variant="secondary" disabled={loading || page * 50 >= totalCount} onClick={() => setPage((p) => p + 1)}>Next</Button></div></div>
+            <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-primary-600">{pageReady ? `${formatNumber(totalCount)} matching records · Page ${page} of ${Math.max(1, Math.ceil(totalCount / 50))}` : 'Loading matching records…'}</p><div className="flex gap-2"><Button variant="secondary" disabled={!pageReady || exporting || page === 1} onClick={() => setPage((p) => p - 1)}>Previous</Button><Button variant="secondary" disabled={!pageReady || exporting || page * 50 >= totalCount} onClick={() => setPage((p) => p + 1)}>Next</Button></div></div>
         </div>
     );
 }

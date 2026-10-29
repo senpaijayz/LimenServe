@@ -646,6 +646,14 @@ export async function getInventoryMovementPage(limit = 50, params = {}) {
   }
 }
 
+export async function getInventoryMovementExport(params, signal) {
+  try {
+    return (await apiClient.get('/catalog/stock/movements/export', { params, signal, timeout: 60000 })).data;
+  } catch (error) {
+    extractApiError(error, 'The movement export could not finish. Try again; no stock was changed.');
+  }
+}
+
 export async function getInventoryMovements(limit = 12, params = {}) {
   return (await getInventoryMovementPage(limit, params)).movements || [];
 }
