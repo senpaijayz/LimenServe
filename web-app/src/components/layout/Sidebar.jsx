@@ -17,7 +17,7 @@ function NavigationEntry({ item, active, collapsed, mobile, onNavigate }) {
         aria-label={item.label} title={collapsed && !mobile ? item.label : undefined}
         className={(mobile ? mobileClass : desktopClass) + ' focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'}>
         <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-        <span className={collapsed && !mobile ? 'sr-only' : 'min-w-0 break-words'}>{item.label}</span>
+        <span className={collapsed && !mobile ? 'sr-only' : 'min-w-0 break-words'}>{mobile && item.path === '/users' ? 'Users' : item.label}</span>
     </Link>;
 }
 
