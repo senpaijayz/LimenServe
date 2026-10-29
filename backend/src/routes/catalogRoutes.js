@@ -15,6 +15,7 @@ import inventoryClassifier from '../../../scripts/lib/inventory-classifier.cjs';
 import publishedPackageRoutes from './publishedPackageRoutes.js';
 import inventoryMovementExportRoutes from './inventoryMovementExportRoutes.js';
 import createSupplierOrderRouter from './supplierOrderRoutes.js';
+import { createCatalogSummaryReader } from '../services/catalogSummary.js';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
@@ -110,10 +111,7 @@ let vehicleFitmentCache = {
   data: null,
   fetchedAt: 0,
 };
-let catalogSummaryCache = {
-  data: null,
-  fetchedAt: 0,
-};
+const catalogSummaryReader = createCatalogSummaryReader(() => callRpc('get_catalog_summary'), { ttlMs: CATALOG_SUMMARY_CACHE_TTL_MS });
 let archivedProductIdsCache = {
   data: null,
   fetchedAt: 0,
@@ -122,7 +120,6 @@ let archivedProductIdsCache = {
 let productCatalogCachePromise = null;
 let serviceCatalogCachePromise = null;
 let vehicleFitmentCachePromise = null;
-let catalogSummaryCachePromise = null;
 let archivedProductIdsPromise = null;
 
 function parsePrice(value) {
@@ -547,11 +544,7 @@ export function invalidateProductCatalogCache() {
     fetchedAt: 0,
   };
   productCatalogCachePromise = null;
-  catalogSummaryCache = {
-    data: null,
-    fetchedAt: 0,
-  };
-  catalogSummaryCachePromise = null;
+  catalogSummaryReader.invalidate();
   archivedProductIdsCache = {
     data: null,
     fetchedAt: 0,
@@ -1927,99 +1920,6 @@ async function getCachedProductCatalog() {
   return productCatalogCachePromise;
 }
 
-function calculateInventoryValue(products = []) {
-  return products.reduce((sum, product) => {
-    const unitPrice = Number(product.price ?? 0);
-    const stockOnHand = Number(product.stock ?? product.quantity ?? 0);
-
-    if (!Number.isFinite(unitPrice) || !Number.isFinite(stockOnHand)) {
-      return sum;
-    }
-
-    return sum + (unitPrice * stockOnHand);
-  }, 0);
-}
-
-async function getCatalogStockSummarySafely() {
-  try {
-    const summaryRows = await callRpc('get_catalog_summary');
-    const summary = Array.isArray(summaryRows) ? (summaryRows[0] ?? null) : summaryRows;
-
-    return {
-      inStockProducts: Number(summary?.in_stock_products ?? 0),
-      inventoryValue: Number(summary?.inventory_value ?? 0),
-    };
-  } catch (error) {
-    if (!isPrivateSchemaAccessError(error)) {
-      console.warn('Unable to calculate stock summary for catalog:', error?.message || error);
-    }
-    return {
-      inStockProducts: 0,
-      inventoryValue: 0,
-    };
-  }
-}
-
-async function getCatalogSummaryData() {
-  const now = Date.now();
-  if (catalogSummaryCache.data && (now - catalogSummaryCache.fetchedAt) < CATALOG_SUMMARY_CACHE_TTL_MS) {
-    return catalogSummaryCache.data;
-  }
-
-  if (catalogSummaryCachePromise) {
-    return catalogSummaryCachePromise;
-  }
-
-  catalogSummaryCachePromise = (async () => {
-    try {
-      try {
-        const summaryRows = await callRpc('get_catalog_summary');
-        const summary = Array.isArray(summaryRows) ? (summaryRows[0] ?? null) : summaryRows;
-        const stockSummary = summary?.in_stock_products !== undefined && summary?.inventory_value !== undefined
-          ? {
-            inStockProducts: Number(summary.in_stock_products ?? 0),
-            inventoryValue: Number(summary.inventory_value ?? 0),
-          }
-          : await getCatalogStockSummarySafely();
-
-        return {
-          totalProducts: Math.max(Number(summary?.total_products ?? 0), Number(summary?.pricelist_rows ?? 0)),
-          pricelistRows: Number(summary?.pricelist_rows ?? 0),
-          uniqueProducts: Number(summary?.unique_products ?? 0),
-          currentPrices: Number(summary?.current_prices ?? 0),
-          inStockProducts: stockSummary.inStockProducts,
-          inventoryValue: stockSummary.inventoryValue,
-        };
-      } catch (error) {
-        const message = String(error?.message || error || '');
-        if (!message.includes('get_catalog_summary') && !isPrivateSchemaAccessError(error)) {
-          throw error;
-        }
-      }
-
-      const products = await getCachedProductCatalog();
-      const totalProducts = Number(products?.length ?? 0);
-
-      return {
-        totalProducts,
-        pricelistRows: totalProducts,
-        uniqueProducts: totalProducts,
-        currentPrices: totalProducts,
-        inStockProducts: products.filter((product) => Number(product.stock ?? product.quantity ?? 0) > 0).length,
-        inventoryValue: calculateInventoryValue(products),
-      };
-    } finally {
-      catalogSummaryCachePromise = null;
-    }
-  })();
-
-  const summary = await catalogSummaryCachePromise;
-  catalogSummaryCache = {
-    data: summary,
-    fetchedAt: Date.now(),
-  };
-  return summary;
-}
 
 async function getCachedServiceCatalog() {
   const now = Date.now();
@@ -2536,11 +2436,14 @@ router.get('/products/:productId/stock-history', requireRole('admin', 'stock_cle
 });
 
 router.get('/summary', requireRole('admin', 'stock_clerk'), async (_req, res, next) => {
+  res.set('Cache-Control', 'private, no-store');
   try {
     res.json({
-      summary: await getCatalogSummaryData(),
+      summary: await catalogSummaryReader.read(),
     });
   } catch (error) {
+    error.statusCode = 503;
+    error.publicMessage ||= 'Inventory totals could not load. Refresh totals to try again.';
     next(error);
   }
 });
