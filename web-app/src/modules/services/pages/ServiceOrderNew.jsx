@@ -174,7 +174,7 @@ function ServiceIntake({ user }) {
       try {
         const result = await getServiceIntakeResult(form.intakeRequestId);
         if (!mounted.current) return;
-        if (result.orderId) { toast.success('Saved service order found.'); openCreatedJob(result.orderId); return; }
+        if (result.orderId) { toast.success('Saved service order found.'); openCreatedJob(result.orderId, false); return; }
       } catch (recoveryFailure) { setRecoveryError(recoveryFailure.message); }
       setError(err.message || 'Unable to create this service order.');
     }
