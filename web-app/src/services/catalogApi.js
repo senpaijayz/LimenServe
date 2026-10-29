@@ -3,6 +3,7 @@ import { ALL_VEHICLE_MODELS, products as fallbackProducts } from '../data/produc
 import inventoryClassifier from '../lib/inventoryClassifier';
 import { queryClient } from '../lib/queryClient';
 import { createIdempotencyKey } from '../utils/idempotency';
+import { parseCatalogSummary } from '../modules/inventory/utils/catalogSummary';
 
 const { OPERATIONAL_CATEGORIES, classifyInventoryItem } = inventoryClassifier;
 
@@ -467,18 +468,13 @@ export async function getFullProductCatalog() {
   }
 }
 
-export async function getCatalogSummary() {
+export async function getCatalogSummary(signal) {
   try {
     const { data } = await apiClient.get('/catalog/summary', {
       timeout: INVENTORY_API_TIMEOUT_MS,
+      signal,
     });
-    return data.summary ?? {
-      totalProducts: 0,
-      pricelistRows: 0,
-      uniqueProducts: 0,
-      currentPrices: 0,
-      inventoryValue: 0,
-    };
+    return parseCatalogSummary(data.summary);
   } catch (error) {
     extractApiError(error, 'Failed to load catalog summary.');
   }

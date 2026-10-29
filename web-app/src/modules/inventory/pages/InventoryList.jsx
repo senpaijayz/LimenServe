@@ -15,7 +15,6 @@ import { useAuth } from '../../../context/useAuth';
 import PriceListManager from '../components/PriceListManager';
 import ProductLabelPreviewModal from '../components/ProductLabelPreviewModal';
 import {
-    getCatalogSummary,
     getProductStockHistory,
     getRetailPriceListVersionItems,
     getRetailPriceListVersions,
@@ -27,6 +26,7 @@ import { getPartNumberSearchSuggestions, getProductPartNumber, findProductByIden
 import { isShelfObject, normalizeAisle } from '../../locator3d/data/locatorScene';
 import { assignProductLocation, removeProductLocation, loadStoreLayout } from '../../locator3d/services/locator3DApi';
 import { buildLocator3DUrl } from '../../locator3d/utils/locatorNavigation';
+import useInventorySummary from '../hooks/useInventorySummary';
 
 const PAGE_SIZE = 12;
 const INVENTORY_CATEGORY_OPTIONS = [
@@ -361,9 +361,10 @@ function EditProductModalContent({ isOpen, product, isSaving, onClose, onSave, s
 const InventoryList = () => {
     const navigate = useNavigate();
     const { success, error: showError } = useToast();
-    const { isAdmin } = useAuth();    const findProduct = useDataStore((state) => state.findProduct);
-    const [catalogSummary, setCatalogSummary] = useState(null);
-    const [summaryError, setSummaryError] = useState('');
+    const { isAdmin, user } = useAuth();
+    const findProduct = useDataStore((state) => state.findProduct);
+    const { summary: catalogSummary, loading: summaryLoading, error: summaryError, refresh: refreshInventoryMeta } = useInventorySummary(user?.id ? `${user.id}:${user.role || ''}` : null);
+    const [priceListError, setPriceListError] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [selectedStockFilter, setSelectedStockFilter] = useState('all');
@@ -403,30 +404,6 @@ const InventoryList = () => {
     });
 
     useEffect(() => {
-        let active = true;
-
-        void (async () => {
-            try {
-                const [summary] = await Promise.all([
-                    getCatalogSummary(),
-                ]);
-                if (active) {
-                    setCatalogSummary(summary);
-                    setSummaryError('');
-                }
-            } catch (loadError) {
-                if (active) {
-                    setSummaryError(loadError.message || 'Unable to load catalog summary.');
-                }
-            }
-        })();
-
-        return () => {
-            active = false;
-        };
-    }, []);
-
-    useEffect(() => {
         if (!isAdmin) {
             return undefined;
         }
@@ -436,12 +413,13 @@ const InventoryList = () => {
             .then((versions) => {
                 if (!active) return;
                 setPriceListVersions(versions ?? []);
+                setPriceListError('');
                 const activeVersion = (versions ?? []).find((version) => version.isActive);
                 setSelectedPriceListVersionId((current) => current || activeVersion?.id || versions?.[0]?.id || '');
             })
             .catch((loadError) => {
                 if (active) {
-                    setSummaryError(loadError.message || 'Unable to load price list versions.');
+                    setPriceListError(loadError.message || 'Unable to load price list versions.');
                 }
             });
 
@@ -449,14 +427,6 @@ const InventoryList = () => {
             active = false;
         };
     }, [isAdmin, refreshKey]);
-
-    const refreshInventoryMeta = async () => {
-        const [summary] = await Promise.all([
-            getCatalogSummary(),
-        ]);
-        setCatalogSummary(summary);
-        setSummaryError('');
-    };
 
     useEffect(() => {
         let active = true;
@@ -566,13 +536,10 @@ const InventoryList = () => {
         });
     }, []);
 
-    const totalProducts = catalogSummary?.totalProducts ?? pagination.totalCount ?? visibleProducts.length;
-    const inStockProducts = catalogSummary?.inStockProducts ?? visibleProducts.filter((product) => product.quantity > 0).length;
-    const pageInventoryValue = useMemo(() => (
-        filteredProducts.reduce((sum, product) => sum + (product.price * product.quantity), 0)
-    ), [filteredProducts]);
-    const summaryInventoryValue = Number(catalogSummary?.inventoryValue);
-    const totalValue = Number.isFinite(summaryInventoryValue) ? summaryInventoryValue : pageInventoryValue;
+    const totalProducts = catalogSummary ? formatNumber(catalogSummary.totalProducts) : '—';
+    const inStockProducts = catalogSummary ? formatNumber(catalogSummary.inStockProducts) : '—';
+    const totalValue = catalogSummary ? formatCurrency(catalogSummary.inventoryValue) : '—';
+    const summaryTime = catalogSummary ? new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(catalogSummary.fetchedAt)) : '';
     const canGoPrev = (pagination.page ?? currentPage) > 1;
     const canGoNext = (pagination.page ?? currentPage) < (pagination.totalPages ?? 1);
     const rangeStart = pagination.totalCount === 0 ? 0 : (((pagination.page ?? currentPage) - 1) * (pagination.pageSize ?? PAGE_SIZE)) + 1;
@@ -728,6 +695,7 @@ const InventoryList = () => {
             setSelectedPreviewProduct((current) => (current?.id === editingProduct.id ? normalizedProduct : current));
             setEditingProduct(null);
             setRefreshKey((value) => value + 1);
+            void refreshInventoryMeta().catch(() => {});
             success('Inventory details updated successfully.');
         } catch (saveError) {
             showError(detailsSaved ? `Product details were saved, but the location was not confirmed. ${saveError.message || 'Reload the stockroom and try assigning the location again.'}` : (saveError.message || 'Unable to update inventory details.'));
@@ -778,14 +746,14 @@ const InventoryList = () => {
             </div>
 
             {/* KPI Stats Row */}
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4 [&>div]:p-3 [&>div]:gap-2 [&>div:last-child]:col-span-2 sm:[&>div:last-child]:col-span-1 [&>div>div:first-child]:hidden sm:[&>div>div:first-child]:flex">
+            <div aria-busy={summaryLoading} className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4 [&>div]:p-3 [&>div]:gap-2 [&>div:last-child]:col-span-2 sm:[&>div:last-child]:col-span-1 [&>div>div:first-child]:hidden sm:[&>div>div:first-child]:flex">
                 <div className="bg-white border border-primary-200 border-l-4 border-l-accent-info rounded-2xl p-5 shadow-sm flex items-center gap-4">
                     <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-accent-info/10 flex items-center justify-center">
                         <Package className="w-6 h-6 text-accent-info" />
                     </div>
                     <div className="min-w-0">
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500 mb-0.5">Total Products</p>
-                        <p className="break-words text-lg font-bold font-display text-primary-950 leading-tight sm:text-2xl">{formatNumber(totalProducts)}</p>
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500 mb-0.5">Active Products</p>
+                        <p className="break-words text-lg font-bold font-display text-primary-950 leading-tight sm:text-2xl">{totalProducts}</p>
                     </div>
                 </div>
 
@@ -795,7 +763,7 @@ const InventoryList = () => {
                     </div>
                     <div className="min-w-0">
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500 mb-0.5">In Stock</p>
-                        <p className="text-2xl font-bold font-display text-primary-950 leading-none">{formatNumber(inStockProducts)}</p>
+                        <p className="text-2xl font-bold font-display text-primary-950 leading-none">{inStockProducts}</p>
                     </div>
                 </div>
 
@@ -804,15 +772,22 @@ const InventoryList = () => {
                         <Package className="w-6 h-6 text-accent-success" />
                     </div>
                     <div className="min-w-0">
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500 mb-0.5">Inventory Value</p>
-                        <p className="text-2xl font-bold font-display text-primary-950 leading-none">{formatCurrency(totalValue)}</p>
-                        {summaryError
-                            ? <p className="text-xs text-accent-danger mt-1">{summaryError}</p>
-                            : <p className="text-xs text-primary-400 mt-1">Total stock value</p>
-                        }
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-500 mb-0.5">Stock Retail Value</p>
+                        <p className="break-words text-lg font-bold font-display text-primary-950 leading-tight sm:text-2xl">{totalValue}</p>
                     </div>
                 </div>
             </div>
+
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                    <p className="text-xs text-primary-700">Totals cover all active products, not just your search. Stock value uses current retail prices, not purchase cost.</p>
+                    <p role={summaryError && !summaryLoading ? 'alert' : 'status'} className={`mt-1 text-xs ${summaryError && !summaryLoading ? 'text-red-700' : 'text-primary-600'}`}>
+                        {summaryLoading ? 'Loading inventory totals…' : summaryError || `Calculated ${summaryTime} (Philippine time). Totals may be cached for ${catalogSummary.cacheMaxAgeSeconds} seconds.`}
+                    </p>
+                </div>
+                <Button variant="secondary" size="sm" isLoading={summaryLoading} onClick={() => { void refreshInventoryMeta().catch(() => {}); }}>Refresh totals</Button>
+            </div>
+            {isAdmin && priceListError && <div role="alert" className="flex flex-wrap items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800"><span>{priceListError}</span><Button variant="secondary" size="sm" onClick={() => setRefreshKey((value) => value + 1)}>Retry price lists</Button></div>}
 
             {/* Toolbar */}
 
@@ -913,11 +888,7 @@ const InventoryList = () => {
                     {isAdmin && (
                         <PriceListManager onUpdated={async () => {
                             setRefreshKey((value) => value + 1);
-                            try {
-                                await refreshInventoryMeta();
-                            } catch (loadError) {
-                                setSummaryError(loadError.message || 'Unable to refresh catalog summary.');
-                            }
+                            await refreshInventoryMeta().catch(() => {});
                         }} />
                     )}
 

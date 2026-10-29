@@ -349,8 +349,8 @@ function buildPrintableInventoryReport({
         </header>
 
         <div class="kpi-grid">
-            <div class="kpi-card"><div class="label">Products Listed</div><div class="value">${escapeHtml(formatNumber(summary?.totalProducts ?? 0))}</div></div>
-            <div class="kpi-card"><div class="label">Unique Part Numbers</div><div class="value">${escapeHtml(formatNumber(summary?.uniqueProducts ?? 0))}</div></div>
+            <div class="kpi-card"><div class="label">Active Products</div><div class="value">${escapeHtml(formatNumber(summary?.totalProducts ?? 0))}</div></div>
+            <div class="kpi-card"><div class="label">Parts with Stock</div><div class="value">${escapeHtml(formatNumber(summary?.inStockProducts ?? 0))}</div></div>
             <div class="kpi-card"><div class="label">Active Prices</div><div class="value">${escapeHtml(formatNumber(summary?.currentPrices ?? 0))}</div></div>
             <div class="kpi-card"><div class="label">Stock Changes</div><div class="value">${escapeHtml(formatNumber(movements.length))}</div></div>
             <div class="kpi-card"><div class="label">Total Stock In</div><div class="value green">+${escapeHtml(formatNumber(stockInQty))}</div></div>
@@ -543,12 +543,12 @@ export default function InventoryReport() {
 
             {/* KPI Cards */}
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <KPICard title="Products Listed" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(summary?.totalProducts ?? 0)} icon={<Boxes className="h-6 w-6" />} />
-                <KPICard title="Unique Part Numbers" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(summary?.uniqueProducts ?? 0)} icon={<PackageCheck className="h-6 w-6" />} />
+                <KPICard title="Active Products" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(summary?.totalProducts ?? 0)} icon={<Boxes className="h-6 w-6" />} />
+                <KPICard title="Parts with Stock" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(summary?.inStockProducts ?? 0)} icon={<PackageCheck className="h-6 w-6" />} />
                 <KPICard title="Stock Changes Shown" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(filteredMovements.length)} icon={<ClipboardList className="h-6 w-6" />} />
                 <KPICard title="Archived Products Shown" value={loading ? 'Loading...' : error ? 'Unavailable' : formatNumber(archivedProducts.length)} icon={<Archive className="h-6 w-6" />} />
             </div>
-            <p className="text-sm text-primary-500">The product counts show what is in your catalog now. Changing the dates does not change these counts. The dates and category filter the stock changes below. You can see up to 500 changes and 20 archived products. The printout includes these records; the CSV contains the stock changes.</p>
+            <p className="text-sm text-primary-500">Product totals cover all active products; archived products are listed separately. Changing the dates does not change these counts. The dates and category filter the stock changes below. You can see up to 500 changes and 20 archived products. The printout includes these records; the CSV contains the stock changes.</p>
 
             <Card title="Parts Added from Invoices" subtitle="See parts added using a supplier invoice. Other stock additions appear in the stock changes below.">
                 {loading ? (
