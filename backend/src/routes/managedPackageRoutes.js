@@ -18,6 +18,7 @@ import {
 } from '../services/managedPackageService.js';
 import { packageError } from '../services/managedPackageDomain.js';
 import { initializeManagedPackageCandidates, previewManagedPackageInitialization } from '../services/managedPackageInitialization.js';
+import { readSavedPackagePreview } from '../services/managedPackagePreviewService.js';
 
 const router = Router();
 router.use(requireRole('admin'));
@@ -55,6 +56,10 @@ router.post('/', handle(async (req, res) => {
   // Saving a working draft intentionally does not invalidate the published
   // package, which remains unchanged until an explicit successful publication.
   res.status(201).json({ package: saved });
+}));
+router.get('/:id/saved-preview', handle(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json(await readSavedPackagePreview(req.params.id, req.query));
 }));
 router.get('/:id', handle(async (req, res) => res.json({ package: await getManagedPackage(req.params.id) })));
 router.get('/:id/history', handle(async (req, res) => res.json(await getManagedPackageHistory(req.params.id, req.query))));
