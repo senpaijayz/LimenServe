@@ -35,6 +35,23 @@ export async function getEstimateDetail(estimateId) {
   }
 }
 
+export async function searchSavedEstimates({ search = '', status = '', validity = 'current', page = 1, pageSize = 8, signal } = {}) {
+  try {
+    const { data } = await apiClient.get('/estimates/saved', { params: { search, status, validity, page, pageSize }, signal });
+    if (!Array.isArray(data?.quotes) || !Number.isSafeInteger(data.total) || data.total < 0
+        || !Number.isSafeInteger(data.page) || data.page < 1 || data.pageSize !== pageSize
+        || data.page > Math.max(1, Math.ceil(data.total / pageSize))
+        || data.quotes.length !== Math.min(pageSize, Math.max(0, data.total - (data.page - 1) * pageSize))
+        || !/^\d{4}-\d{2}-\d{2}$/.test(data.businessDate || '')
+        || !data.quotes.every((quote) => ORDER_ID_PATTERN.test(quote?.id) && typeof quote.past_validity === 'boolean')) {
+      throw new Error('The saved quotation list could not be confirmed.');
+    }
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to load saved quotations.');
+  }
+}
+
 export async function deleteEstimate(estimateId) {
   try {
     const { data } = await apiClient.delete(`/estimates/${encodeURIComponent(estimateId)}`);

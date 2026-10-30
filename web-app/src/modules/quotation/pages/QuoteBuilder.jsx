@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
     Archive,
@@ -32,55 +32,19 @@ import { calculateQuoteTotals, clearBundlePricing, createQuoteLineKey } from "..
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 import { downloadQuotationPdf } from '../utils/downloadQuotationPdf';
 import QuoteServiceOrderHandoff from '../components/QuoteServiceOrderHandoff';
+import SavedQuotationBrowser from '../components/SavedQuotationBrowser';
 import {
     createEstimate,
     archiveEstimate,
     deleteEstimate,
     getEstimateDetail,
     getEstimateRevisions,
-    listEstimates,
     updateEstimate,
 } from '../../../services/estimatesApi';
 
 const defaultMeta = {
     status: 'draft',
     source: 'internal',
-};
-
-const estimateStatusFilters = [
-    { value: '', label: 'All statuses' },
-    { value: 'draft', label: 'Draft' },
-    { value: 'sent', label: 'Sent' },
-    { value: 'approved', label: 'Approved' },
-    { value: 'converted_sale', label: 'Converted to sale' },
-    { value: 'converted_service', label: 'Converted to service' },
-    { value: 'expired', label: 'Expired' },
-    { value: 'rejected', label: 'Rejected' },
-];
-
-const estimateStatusLabels = Object.fromEntries(estimateStatusFilters.filter((option) => option.value).map((option) => [option.value, option.label]));
-
-function getEstimateStatusLabel(status) {
-    const normalizedStatus = String(status || '').toLowerCase();
-    return estimateStatusLabels[normalizedStatus] || (normalizedStatus ? normalizedStatus.replace(/_/g, ' ') : 'Unknown');
-}
-
-function getEstimateStatusClass(status) {
-    const normalizedStatus = String(status || '').toLowerCase();
-    if (normalizedStatus === 'approved') return 'bg-accent-success/10 text-accent-success';
-    if (normalizedStatus === 'rejected' || normalizedStatus === 'expired') return 'bg-accent-danger/10 text-accent-danger';
-    if (normalizedStatus === 'draft') return 'bg-primary-100 text-primary-600';
-    return 'bg-accent-blue/10 text-accent-blue';
-}
-
-const formatCreatedDate = (value) => {
-    if (!value) return 'Date unavailable';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return 'Date unavailable';
-    return new Intl.DateTimeFormat('en-PH', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-    }).format(date);
 };
 
 const escapeHtml = (value) => String(value ?? '')
@@ -355,10 +319,7 @@ const QuoteBuilder = () => {
     const [selectedServices, setSelectedServices] = useState([]);
     const [notes, setNotes] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
-    const [quoteSearch, setQuoteSearch] = useState('');
-    const [quoteStatusFilter, setQuoteStatusFilter] = useState('');
-    const [savedQuotes, setSavedQuotes] = useState([]);
-    const [quotesLoading, setQuotesLoading] = useState(false);
+    const [quotesRefresh, setQuotesRefresh] = useState(0);
     const [saving, setSaving] = useState(false);
     const [currentEstimateId, setCurrentEstimateId] = useState(null);
     const [currentEstimateNumber, setCurrentEstimateNumber] = useState('');
@@ -427,34 +388,6 @@ const QuoteBuilder = () => {
             total: quoteTotals.total,
         };
     }, [selectedParts, selectedServices]);
-
-    useEffect(() => {
-        let active = true;
-
-        const loadQuotes = async () => {
-            setQuotesLoading(true);
-            try {
-                const records = await listEstimates(quoteSearch, 8, quoteStatusFilter);
-                if (active) {
-                    setSavedQuotes(records);
-                }
-            } catch {
-                if (active) {
-                    setSavedQuotes([]);
-                }
-            } finally {
-                if (active) {
-                    setQuotesLoading(false);
-                }
-            }
-        };
-
-        void loadQuotes();
-
-        return () => {
-            active = false;
-        };
-    }, [quoteSearch, quoteStatusFilter]);
 
     const breakBundle = (bundleKey) => {
         if (!bundleKey) return true;
@@ -613,7 +546,7 @@ const QuoteBuilder = () => {
         setDeletingQuoteId(quote.id);
         try {
             await deleteEstimate(quote.id);
-            setSavedQuotes((quotes) => quotes.filter((savedQuote) => savedQuote.id !== quote.id));
+            setQuotesRefresh((value) => value + 1);
             if (currentEstimateId === quote.id) {
                 resetQuotationEditor();
             }
@@ -638,7 +571,7 @@ const QuoteBuilder = () => {
         setArchivingQuoteId(quote.id);
         try {
             await archiveEstimate(quote.id);
-            setSavedQuotes((quotes) => quotes.filter((savedQuote) => savedQuote.id !== quote.id));
+            setQuotesRefresh((value) => value + 1);
             if (currentEstimateId === quote.id) {
                 resetQuotationEditor();
             }
@@ -724,13 +657,11 @@ const QuoteBuilder = () => {
             // These panels are secondary reads. Their failure must not relabel
             // a committed quotation as an unsuccessful save or trigger a retry.
             const request = quoteLoadRequest.current;
-            void Promise.allSettled([
-                getEstimateRevisions(confirmedId), listEstimates(quoteSearch, 8, quoteStatusFilter),
-            ]).then(([history, quotes]) => {
-                if (request !== quoteLoadRequest.current) return;
-                if (history.status === 'fulfilled') setRevisions(history.value);
-                if (quotes.status === 'fulfilled') setSavedQuotes(quotes.value);
-                if (history.status === 'rejected' || quotes.status === 'rejected') info('Your quotation is saved. Refresh the list or history to load the latest records.');
+            setQuotesRefresh((value) => value + 1);
+            void getEstimateRevisions(confirmedId).then((history) => {
+                if (request === quoteLoadRequest.current) setRevisions(history);
+            }).catch(() => {
+                if (request === quoteLoadRequest.current) info('Your quotation is saved. Its history could not be refreshed yet.');
             });
         } catch (saveError) {
             showError(saveError.message || 'Unable to save the quotation.');
@@ -901,88 +832,11 @@ const QuoteBuilder = () => {
         <div className="space-y-6">
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
                 <div className="xl:col-span-3 space-y-6">
-                    <Card title="Saved Quotations" subtitle="Retrieve, revise, and keep quotations active for 30 days.">
+                    <Card title="Saved Quotations" subtitle="Find a saved quotation, review its items, or continue working on a current quote.">
                         <div className="grid gap-4 lg:grid-cols-[minmax(0,280px)_1fr]">
-                            <div>
-                                <div className="relative mb-4">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search quote no., customer, or phone..."
-                                        value={quoteSearch}
-                                        onChange={(e) => setQuoteSearch(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-primary-200 rounded-lg text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue shadow-sm"
-                                    />
-                                </div>
-                                <label className="mb-4 block text-xs font-semibold uppercase tracking-[0.16em] text-primary-500">
-                                    Status filter
-                                    <select
-                                        value={quoteStatusFilter}
-                                        onChange={(event) => setQuoteStatusFilter(event.target.value)}
-                                        className="mt-2 w-full rounded-lg border border-primary-200 bg-white px-3 py-2.5 text-sm font-normal normal-case tracking-normal text-primary-950 shadow-sm focus:border-accent-blue focus:outline-none focus:ring-1 focus:ring-accent-blue"
-                                    >
-                                        {estimateStatusFilters.map((option) => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}
-                                    </select>
-                                </label>
-                                <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
-                                    {quotesLoading ? (
-                                        <div className="rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-500">Loading saved quotations...</div>
-                                    ) : savedQuotes.length === 0 ? (
-                                        <div className="rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-500">No saved quotations matched your search.</div>
-                                    ) : savedQuotes.map((quote) => (
-                                        <div
-                                            key={quote.id}
-                                            className="relative"
-                                        >
-                                            <button
-                                                type="button"
-                                                onClick={() => loadQuote(quote.id)}
-                                                className={`w-full rounded-xl border p-4 pr-14 text-left transition-all ${currentEstimateId === quote.id ? 'border-accent-blue bg-accent-blue/5 shadow-sm' : 'border-primary-200 bg-white hover:border-primary-300 hover:shadow-sm'}`}
-                                            >
-                                                <div className="flex items-start justify-between gap-2 pr-9">
-                                                    <div className="min-w-0">
-                                                        <span className="inline-flex items-center gap-1.5 rounded-md bg-primary-950 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white">
-                                                            <FileClock className="h-3 w-3" aria-hidden="true" />
-                                                            EST
-                                                        </span>
-                                                        <p className="mt-2 truncate text-lg font-display font-bold tracking-tight text-primary-950">{quote.estimate_number}</p>
-                                                    </div>
-                                                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${getEstimateStatusClass(quote.status)}`}>{getEstimateStatusLabel(quote.status)}</span>
-                                                </div>
-                                                <p className="mt-2 text-sm text-primary-700">{quote.customer_name || 'Walk-in Customer'}</p>
-                                                <p className="text-xs text-primary-500">{quote.customer_phone || 'No phone'}</p>
-                                                <p className="mt-2 text-sm font-semibold text-accent-blue">{formatCurrency(quote.grand_total || 0)}</p>
-                                                <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-primary-100 pt-3 text-xs text-primary-500">
-                                                    <span>Created {formatCreatedDate(quote.created_at)}</span>
-                                                    <span>Valid until {quote.valid_until || 'N/A'}</span>
-                                                </div>
-                                            </button>
-                                            {String(quote.status || '').toLowerCase() === 'draft' && (
-                                                <button
-                                                    type="button"
-                                                    aria-label={`Delete draft quotation ${quote.estimate_number || ''}`.trim()}
-                                                    title="Delete draft quotation"
-                                                    onClick={() => setQuoteToDelete(quote)}
-                                                    className="absolute right-3 top-3 rounded-lg border border-primary-200 bg-transparent p-2.5 text-accent-danger shadow-none transition-all duration-150 hover:scale-110 hover:border-accent-danger hover:bg-accent-danger hover:text-white hover:shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-danger/40"
-                                                >
-                                                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                                                </button>
-                                            )}
-                                            {String(quote.status || '').toLowerCase() !== 'draft' && (
-                                                <button
-                                                    type="button"
-                                                    aria-label={`Archive quotation ${quote.estimate_number || ''}`.trim()}
-                                                    title="Archive quotation"
-                                                    onClick={() => setQuoteToArchive(quote)}
-                                                    className="absolute right-3 top-3 rounded-lg border border-primary-200 bg-transparent p-2.5 text-primary-500 shadow-none transition-all duration-150 hover:scale-110 hover:border-accent-blue hover:bg-accent-blue hover:text-white hover:shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/40"
-                                                >
-                                                    <Archive className="h-4 w-4" aria-hidden="true" />
-                                                </button>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                            <SavedQuotationBrowser selectedId={currentEstimateId} onSelect={loadQuote}
+                                onDelete={setQuoteToDelete} onArchive={setQuoteToArchive}
+                                refreshKey={quotesRefresh} disabled={saving || handoffBusy} />
 
                             <div className="rounded-2xl border border-primary-200 bg-primary-50/70 p-5">
                                 <div className="flex flex-wrap items-start justify-between gap-4">
