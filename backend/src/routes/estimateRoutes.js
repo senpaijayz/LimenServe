@@ -26,6 +26,7 @@ import { createPublicEstimateRevisionHandler } from '../services/publicEstimateR
 import { callRpc } from '../services/supabaseRpc.js';
 import { filterActiveEstimates } from '../services/estimateValidity.js';
 import { parseUpsellAction } from '../services/upsellAction.js';
+import { parseSavedEstimateSearch } from '../services/savedEstimateSearch.js';
 
 const router = Router();
 const ESTIMATE_STATUS_FILTERS = new Set(['draft', 'sent', 'approved', 'converted_sale', 'converted_service', 'expired', 'rejected']);
@@ -390,6 +391,16 @@ router.post(
   publicEstimateRevisionRateLimiter,
   publicEstimateRevisionHandler,
 );
+
+router.get('/saved', requireRole('admin'), async (req, res, next) => {
+  res.set('Cache-Control', 'private, no-store');
+  try {
+    const result = await callRpc('search_saved_estimates', parseSavedEstimateSearch(req.query));
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
 
 // Read-only recovery: a lost conversion response must not require another write.
 router.get('/:estimateId/service-order', requireRole('admin'), async (req, res, next) => {
