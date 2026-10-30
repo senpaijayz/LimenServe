@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { STORAGE_KEYS } from '../utils/constants';
+import { useAuth } from './useAuth';
 
 // Create Cart Context
 const CartContext = createContext(null);
@@ -10,14 +11,29 @@ const CartContext = createContext(null);
  * Manages shopping cart state for POS module
  */
 export function CartProvider({ children }) {
+    const { user } = useAuth();
+    const owner = user?.id || null;
+    return <StaffCartProvider key={owner || 'signed-out'} owner={owner} canRecoverLegacy={user?.role === 'admin'}>{children}</StaffCartProvider>;
+}
+
+function StaffCartProvider({ children, owner, canRecoverLegacy }) {
+    const cartKey = owner ? `${STORAGE_KEYS.CART}:staff:${owner}` : null;
     const [items, setItems] = useState(() => {
         try {
-            const saved = localStorage.getItem(STORAGE_KEYS.CART);
-            return saved ? JSON.parse(saved) : [];
+            const saved = cartKey ? JSON.parse(localStorage.getItem(cartKey) || '[]') : [];
+            return Array.isArray(saved) ? saved : [];
         } catch {
             return [];
         }
     });
+
+    const legacyItems = useMemo(() => {
+        try {
+            if (!canRecoverLegacy || !cartKey || items.length || localStorage.getItem(cartKey) !== null) return [];
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.CART) || '[]');
+            return Array.isArray(saved) && saved.every(item => item && typeof item.id === 'string' && Number.isFinite(item.price) && item.price >= 0 && Number.isFinite(item.quantity) && item.quantity > 0) ? saved : [];
+        } catch { return []; }
+    }, [canRecoverLegacy, cartKey, items.length]);
 
     const [discountPercent, setDiscountPercent] = useState(0);
     const [customerName, setCustomerName] = useState('');
@@ -58,10 +74,10 @@ export function CartProvider({ children }) {
                 newItems = [...currentItems, normalizedItem];
             }
 
-            localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(newItems));
+            if (cartKey) localStorage.setItem(cartKey, JSON.stringify(newItems));
             return newItems;
         });
-    }, []);
+    }, [cartKey]);
 
     /**
      * Remove item from cart
@@ -69,10 +85,10 @@ export function CartProvider({ children }) {
     const removeItem = useCallback((productId) => {
         setItems(currentItems => {
             const newItems = currentItems.filter(item => item.id !== productId);
-            localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(newItems));
+            if (cartKey) localStorage.setItem(cartKey, JSON.stringify(newItems));
             return newItems;
         });
-    }, []);
+    }, [cartKey]);
 
     // Refresh retail prices without removing quantities, services or discounts.
     const refreshProductPrices = useCallback((prices) => {
@@ -80,10 +96,10 @@ export function CartProvider({ children }) {
         setItems((current) => {
             const updated = current.map((item) => item.lineType !== 'service' && byId.has(item.productId || item.id)
                 ? { ...item, price: byId.get(item.productId || item.id) } : item);
-            localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(updated));
+            if (cartKey) localStorage.setItem(cartKey, JSON.stringify(updated));
             return updated;
         });
-    }, []);
+    }, [cartKey]);
 
     /**
      * Update item quantity
@@ -100,20 +116,29 @@ export function CartProvider({ children }) {
                     ? { ...item, quantity: Math.min(quantity, item.maxQuantity) }
                     : item
             );
-            localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(newItems));
+            if (cartKey) localStorage.setItem(cartKey, JSON.stringify(newItems));
             return newItems;
         });
-    }, [removeItem]);
+    }, [removeItem, cartKey]);
 
     /**
      * Clear entire cart
      */
     const clearCart = useCallback(() => {
+        // Clear durable items before acknowledging checkout cleanup. Keep an empty
+        // owned record so an old, unowned basket is never restored automatically.
+        if (cartKey) localStorage.setItem(cartKey, '[]');
         setItems([]);
         setDiscountPercent(0);
         setCustomerName('');
-        localStorage.removeItem(STORAGE_KEYS.CART);
-    }, []);
+    }, [cartKey]);
+
+    const recoverLegacyCart = useCallback(() => {
+        if (!cartKey || !canRecoverLegacy || items.length || !legacyItems.length) return false;
+        localStorage.setItem(cartKey, JSON.stringify(legacyItems));
+        setItems(legacyItems);
+        return true;
+    }, [cartKey, canRecoverLegacy, items.length, legacyItems]);
 
     /**
      * Calculate cart totals
@@ -159,6 +184,8 @@ export function CartProvider({ children }) {
         updateQuantity,
         refreshProductPrices,
         clearCart,
+        legacyItems,
+        recoverLegacyCart,
         isInCart,
         getItemQuantity,
         isEmpty: items.length === 0,

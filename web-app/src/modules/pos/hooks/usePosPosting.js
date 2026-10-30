@@ -16,10 +16,11 @@ export default function usePosPosting(owner,onSaved,onRejected){
   const finish=(result,op)=>{
     if(!result?.saleId || !['pending','completed'].includes(result.status))throw new Error('The saved POS result could not be confirmed. Check it before trying another transaction.');
     if(!active.current)return;
+    try{if(onSaved(result,op)===false){setPending(op);setError(`Order ${result.transactionNumber || result.saleId} is saved, but its cart could not be cleared. Keep this reference and check the saved result before another checkout.`);return;}}
+    catch{setPending(op);setError(`Order ${result.transactionNumber || result.saleId} was saved. Check its result before another checkout.`);return;}
     try{if(read(owner)?.id===op.id)sessionStorage.removeItem(storageKey(owner));if(sessionStorage.getItem(ownerKey)===owner)sessionStorage.removeItem(ownerKey);}
     catch{setPending(op);setError(`Order ${result.transactionNumber || result.saleId} was saved, but this tab could not clear its recovery reference. Do not start another checkout; check the saved result.`);return;}
     setPending(null);setError('');
-    try{onSaved(result,op);}catch{setError(`Order ${result.transactionNumber || result.saleId} was saved. Reopen its details; do not submit it again.`);}
   };
   const send=async op=>{
     if(lock.current || !op || op.blocked)return;

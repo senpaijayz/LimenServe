@@ -1,5 +1,13 @@
 # Enterprise transformation — delivery ledger
 
+## Continuous completion run: account-specific POS carts and cleanup recovery
+
+Confirmed that the old CartProvider stayed mounted across sign-out and read one shared browser key. Different staff could see the previous staff member's unfinished items and in-memory customer name. Cart state now remounts by authenticated user ID and reads/writes an account-specific key. Sign-out does not delete another user's draft or a checkout recovery reference; returning staff recover only their own ordinary saved items. Customer names and discounts remain memory-only as before and are reset on account change. This is UI/account isolation on a shared device, not a claim that browser storage is encrypted or inaccessible to same-origin scripts.
+
+An old basket with no owner is not silently assigned. An administrator with no existing owned basket can expand a compact review, see its actual items and explicitly copy them into an empty personal cart. The warning distinguishes this from a saved quotation and asks staff not to recover already-sold items. The original unowned key remains untouched, and a deliberately emptied owned key remains present so it never auto-falls back to that basket. New/recovered baskets still pass the existing current-price/stock checks. No sale, quotation or stock record is created by recovery.
+
+POS item additions, removals, quantity changes and clear actions are ignored while posting/recovery is unresolved. Successful checkout first clears durable cart items, then retires the frozen request. If cart cleanup fails, the known saved result and recovery reference remain blocking instead of silently allowing another checkout. Optional receipt reads still cannot turn a committed financial operation into a retry invitation. Build/static verification is followed by deployment read-back; staff switching, explicit old-cart recovery and browser-storage failures remain signed-in manual acceptance, with no fabricated financial records.
+
 ## Continuous completion run: saved quotation → verified POS checkout
 
 Replaced the quote editor's local cart-copy action with a saved-ID POS link. Unsaved/unapproved edits cannot enter this flow, and the regular cart is not cleared or replaced. The dedicated POS workspace reads a server preflight, shows saved lines/totals and requires explicit receipt-of-cash or unpaid-release confirmation. It supports the existing Payment to follow behavior without losing the source quotation or applying stock twice during later collection. The printed sales document includes the original quotation number.

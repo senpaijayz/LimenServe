@@ -77,8 +77,8 @@ const POSTerminalWorkspace = ({owner}) => {
     const [searchParams,setSearchParams]=useSearchParams();
     const sourceEstimate=searchParams.get('estimateId');
     const {
-        items, totals, addItem, removeItem, updateQuantity, clearCart, refreshProductPrices,
-        customerName, setCustomerName, discountPercent, setDiscountPercent
+        items, totals, addItem: addCartItem, removeItem: removeCartItem, updateQuantity: updateCartQuantity, clearCart: clearSavedCart, refreshProductPrices,
+        customerName, setCustomerName, discountPercent, setDiscountPercent, legacyItems, recoverLegacyCart
     } = useCart();
 
     const { success, error: showScanError } = useToast();
@@ -109,7 +109,7 @@ const POSTerminalWorkspace = ({owner}) => {
         setUnpaidRefresh(v=>v+1);
         if(op.kind==='checkout'){
             setPaymentAmount('');setPaymentNote('');setReleaseConfirmed(false);setPaymentMethod('cash');
-            try{clearCart();}catch{showScanError('The order was saved, but this device could not clear its cart. Do not submit the same items again.');}
+            try{clearSavedCart();}catch{showScanError('The order was saved, but this device could not clear its cart. Do not submit the same items again.');return false;}
         }
         success(transaction.status==='pending'?`Order ${transaction.transactionNumber} saved unpaid. Stock has been released.`:`Payment saved for ${transaction.transactionNumber}.`);
     },(op,error)=>{
@@ -118,6 +118,11 @@ const POSTerminalWorkspace = ({owner}) => {
             setCustomerName(op.payload.customerName || '');setReleaseConfirmed(false);setPaymentError(error.message);setShowPaymentModal(true);
         }
     });
+    const cartLocked=posting.busy || Boolean(posting.pending);
+    const addItem=(...args)=>!cartLocked && addCartItem(...args);
+    const removeItem=(...args)=>!cartLocked && removeCartItem(...args);
+    const updateQuantity=(...args)=>!cartLocked && updateCartQuantity(...args);
+    const clearCart=()=>!cartLocked && clearSavedCart();
     const {
         products,
         pagination,
@@ -145,6 +150,7 @@ const POSTerminalWorkspace = ({owner}) => {
 
     // Handle product click
     const handleProductClick = (product) => {
+        if (cartLocked) return;
         const quantityInCart = items.find((item) => item.id === product.id)?.quantity ?? 0;
         if (!Number.isFinite(product.maxQuantity) || quantityInCart + 1 > product.maxQuantity) {
             showScanError(`${product.name}: ${product.maxQuantity > 0 ? 'available quantity is already in the cart' : 'out of stock'}. Receive stock before selling this part.`);
@@ -183,6 +189,7 @@ const POSTerminalWorkspace = ({owner}) => {
     };
 
     const handleAddService = (serviceItem) => {
+        if (cartLocked) return;
         addItem(serviceItem, 1);
         success(`Added service: ${serviceItem.name}`);
     };
@@ -311,6 +318,14 @@ const POSTerminalWorkspace = ({owner}) => {
             {sourceEstimate ? <div className="min-w-0 flex-1 space-y-4 overflow-y-auto"><QuotePosCheckout key={`${owner}:${sourceEstimate}`} estimateId={sourceEstimate} posting={posting} refreshKey={unpaidRefresh} onLeave={()=>setSearchParams(current=>{const next=new URLSearchParams(current);next.delete('estimateId');return next;},{replace:true})} /><UnpaidPosOrders refreshKey={unpaidRefresh} onPay={payload=>posting.submit('settlement',payload)} /></div> : <>
             {/* Products Section */}
             <div className="flex-1 flex flex-col min-w-0">
+                {legacyItems.length>0 && <details className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                    <summary className="min-h-11 cursor-pointer py-2 font-semibold">Review older saved cart · {legacyItems.length} items</summary>
+                    <p className="mt-2">These items were saved before carts were linked to staff accounts. Recover them only if they belong to your unfinished order and have not already been sold. The original copy stays on this device.</p>
+                    <p className="mt-2">This cart has no saved quotation link. For approved quotation prices, open the quotation and choose Open saved quote in POS.</p>
+                    <ul className="my-3 max-h-48 space-y-2 overflow-y-auto">{legacyItems.map((item,index)=><li key={`${item.id}:${index}`} className="break-words"><strong>{item.sku}</strong> ({item.name}) · Qty {item.quantity}</li>)}</ul>
+                    <Button variant="secondary" isDisabled={cartLocked || items.length>0} onClick={()=>{try{if(recoverLegacyCart())success('Older items recovered to your cart. Prices and stock will be checked before checkout.');}catch{showScanError('This device could not save the recovered cart. The original copy is unchanged.');}}}>Recover to my empty cart</Button>
+                    {items.length>0&&<p className="mt-2">Your current cart must be empty before recovery.</p>}
+                </details>}
                 <div className="mb-3 shrink-0"><UnpaidPosOrders refreshKey={unpaidRefresh} onPay={payload=>posting.submit('settlement',payload)} /></div>
                 {posting.error && !posting.pending && <p role="alert" className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{posting.error}</p>}
                 {/* Search Bar */}
