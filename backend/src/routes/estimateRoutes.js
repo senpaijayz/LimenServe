@@ -256,6 +256,11 @@ async function createQuotationNotification(estimate = {}) {
   }
 }
 
+router.get('/active-count',requireRole('admin'),async(_req,res,next)=>{
+  try {res.set('Cache-Control','private, no-store');res.json(await callRpc('dashboard_active_quote_count'));}
+  catch(error){next(error);}
+});
+
 router.get('/', requireRole('admin'), async (req, res, next) => {
   try {
     const status = String(req.query.status || '').trim().toLowerCase();

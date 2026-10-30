@@ -439,6 +439,18 @@ router.get('/customer/mine', requireRole('customer'), async (req, res, next) => 
 
 router.use(requireRole('admin', 'cashier'));
 
+router.get('/attention', async (req,res,next) => {
+  try {
+    const page=req.query.page===undefined?1:Number(req.query.page),kind=req.query.kind===undefined?'all':req.query.kind;
+    if ((req.query.page!==undefined && typeof req.query.page!=='string') || !Number.isSafeInteger(page) || page<1 || page>100000
+      || !['all','awaiting_payment','overdue','awaiting_assignment','release_review','payment_review'].includes(kind)) {
+      return res.status(400).json({error:'Choose a valid job category and page.'});
+    }
+    res.set('Cache-Control','private, no-store');
+    res.json(await callRpc('service_attention_page',{p_page:page,p_kind:kind}));
+  } catch(error) {next(normalizeServiceOrderError(error));}
+});
+
 router.get('/intake-requests/:requestId', async (req, res, next) => {
   try {
     res.set('Cache-Control', 'private, no-store');
