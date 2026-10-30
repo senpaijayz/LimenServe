@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from 'react-router';
 import {
   Archive,
   Copy,
@@ -27,6 +28,7 @@ import {
 import { formatCurrency } from "../../../utils/formatters";
 import PackageEditor from "./PackageEditor";
 import SavedPackagePreview from "./SavedPackagePreview";
+import LinkedDraftPreview from './LinkedDraftPreview';
 import PackageField from "./PackageField";
 import {
   newPackageDraft,
@@ -360,12 +362,13 @@ function InitializationPanel({ onClose, onChanged }) {
   );
 }
 
-export default function PackageWorkspace({ onUnsavedChange = noop }) {
+export default function PackageWorkspace({ onUnsavedChange = noop, active = true }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { success, error: showError } = useToast();
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(() => searchParams.get('packageStatus') === 'draft' ? 'draft' : '');
   const [page, setPage] = useState(1);
   const [reload, setReload] = useState(0);
   const [busy, setBusy] = useState("");
@@ -915,6 +918,9 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
         </div>
       </footer>
       {previewTarget && previewTarget.owner === user?.id && <SavedPackagePreview key={`${previewTarget.owner}:${previewTarget.id}:${previewTarget.source}`} target={previewTarget} onClose={() => setPreviewTarget(null)} />}
+      {active && !previewTarget && searchParams.has('reviewPackage') && <LinkedDraftPreview key={`${user?.id}:${searchParams.get('reviewPackage')}`} packageId={searchParams.get('reviewPackage')} owner={user?.id} onClose={() => setSearchParams(current => {
+        const next = new URLSearchParams(current); next.delete('reviewPackage'); return next;
+      }, {replace:true})} />}
       <ConfirmDialog
         isOpen={Boolean(transitionTarget)}
         title={transitionTarget?.action === "restore" ? "Restore package?" : transitionTarget?.action === "archive" ? "Archive package?" : "Unpublish package?"}

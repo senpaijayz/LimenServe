@@ -18,6 +18,7 @@ import { formatCurrency, formatNumber } from '../../../utils/formatters';
 import { getAnalyticsDashboardSnapshot } from '../../../services/analyticsApi';
 import { getDashboardOperationsSnapshot, summarizeDashboardOperations } from '../../../services/dashboardApi';
 import ServiceAttentionList from '../components/ServiceAttentionList';
+import PackageDraftAttention from '../components/PackageDraftAttention';
 
 const SalesChart = lazy(() => import('../components/SalesChart'));
 const InventoryMovementLedger = lazy(() => import('../components/InventoryMovementLedger'));
@@ -53,6 +54,7 @@ const AdminDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
+    const [draftReviewRefresh, setDraftReviewRefresh] = useState(0);
 
     const loadSnapshot = async ({ preserveCurrent = false } = {}) => {
         if (!preserveCurrent) {
@@ -115,6 +117,7 @@ const AdminDashboard = () => {
     const handleDashboardRefresh = async () => {
         if (loading || refreshing) return;
         setRefreshing(true);
+        setDraftReviewRefresh(value => value + 1);
         setError('');
 
         try {
@@ -203,6 +206,7 @@ const AdminDashboard = () => {
             </div>
 
             {operations?.serviceOrders && <ServiceAttentionList orders={operations.serviceOrders} />}
+            <PackageDraftAttention refreshKey={draftReviewRefresh} />
             {profileWarning && (
                 <Card className="border border-amber-200 bg-amber-50" padding="sm">
                     <div className="flex items-start gap-3 text-sm text-amber-700">

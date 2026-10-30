@@ -17,7 +17,8 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
+import { isPackageReviewEntry } from '../packages/packageReviewLinks';
 import Modal from '../../../components/ui/Modal';
 import PageLoadBoundary from '../../../components/ui/PageLoadBoundary';
 import CatalogContentCmsPanel from '../catalog-content/CatalogContentCmsPanel';
@@ -1216,12 +1217,13 @@ const tabs = [
 ];
 
 export default function CmsAdmin() {
+  const [searchParams] = useSearchParams();
   const { success, error: showError } = useToast();
   const skipNextPageLoadSlugRef = useRef('');
   const mountedRef = useRef(false);
   const cmsRequestIdRef = useRef(0);
   const cmsLoadPromiseRef = useRef(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() => isPackageReviewEntry(searchParams) ? 'packages' : 'overview');
   const [packageArea, setPackageArea] = useState('packages');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1235,7 +1237,7 @@ export default function CmsAdmin() {
   const [previewViewport, setPreviewViewport] = useState('mobile');
   const [hasVisitedCatalog, setHasVisitedCatalog] = useState(false);
   const [catalogHasUnsavedChanges, setCatalogHasUnsavedChanges] = useState(false);
-  const [hasVisitedPackages, setHasVisitedPackages] = useState(false);
+  const [hasVisitedPackages, setHasVisitedPackages] = useState(() => isPackageReviewEntry(searchParams));
   const [packagesHaveUnsavedChanges, setPackagesHaveUnsavedChanges] = useState(false);
   const [deletingSlug, setDeletingSlug] = useState('');
   const [uploadingKey, setUploadingKey] = useState('');
@@ -2220,6 +2222,7 @@ export default function CmsAdmin() {
             </section>
           </div>
         )}
+        {searchParams.has('reviewPackage') && (activeTab !== 'packages' || packageArea !== 'packages') && <div className="border-b border-primary-200 p-4 text-sm text-primary-800">A saved draft was linked to this page.<button type="button" onClick={() => handleTabChange('packages')} className="ml-2 min-h-11 font-semibold text-blue-800 underline">Open linked draft</button></div>}
         {activeTab === 'packages' && (
           <div className="border-b border-primary-200 px-4 py-3 sm:px-6">
             <div role="group" aria-label="Packages and website highlights" className="grid grid-cols-2 gap-1 rounded-xl border border-primary-200 bg-primary-50 p-1 sm:inline-grid">
@@ -2238,7 +2241,7 @@ export default function CmsAdmin() {
             <CatalogContentCmsPanel onUnsavedChange={setCatalogHasUnsavedChanges} />
           </div>
         )}
-        {hasVisitedPackages && <div hidden={activeTab !== 'packages' || packageArea !== 'packages'}><PageLoadBoundary><Suspense fallback={<p className="p-6 text-sm text-primary-700">Loading package workspace…</p>}><PackageWorkspace onUnsavedChange={setPackagesHaveUnsavedChanges} /></Suspense></PageLoadBoundary></div>}
+        {hasVisitedPackages && <div hidden={activeTab !== 'packages' || packageArea !== 'packages'}><PageLoadBoundary><Suspense fallback={<p className="p-6 text-sm text-primary-700">Loading package workspace…</p>}><PackageWorkspace active={activeTab === 'packages' && packageArea === 'packages'} onUnsavedChange={setPackagesHaveUnsavedChanges} /></Suspense></PageLoadBoundary></div>}
       </div>
       {handleSaveActive && activeTabHasUnsavedChanges && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-primary-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:hidden">
