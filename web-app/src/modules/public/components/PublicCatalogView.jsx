@@ -22,6 +22,7 @@ import { cleanVehicleModelLabel } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import usePublicVehicleSelection from '../../../hooks/usePublicVehicleSelection';
 import ManagedQuotePackages from './ManagedQuotePackages';
+import PublicPackageDirectory from './PublicPackageDirectory';
 import PublicVehicleSelector from './PublicVehicleSelector';
 import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import { getPublicFeaturedCatalogItems } from '../../cms/api/cmsCatalogApi';
@@ -326,8 +327,8 @@ const PublicCatalogView = () => {
               </Motion.h1>
               <p className="mt-3 max-w-2xl text-sm leading-relaxed text-primary-600 sm:text-base">
                 {hasVehicle
-                  ? 'Compatible parts, service packages, and bundle suggestions are now tuned to your selected vehicle.'
-                  : 'Search by part name, part number, or vehicle details to browse a cleaner, customer-ready parts catalog.'}
+                  ? 'Check the part number and listed vehicle rules before requesting a quote.'
+                  : 'Search by part number or name. Choose your vehicle to narrow the parts list.'}
               </p>
               <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-primary-500">
                 <span className="rounded-full bg-primary-50 px-3 py-1.5">1. Search a part</span>
@@ -343,7 +344,7 @@ const PublicCatalogView = () => {
             onChange={handleVehicleChange}
             onClear={handleVehicleClear}
             title="Choose your vehicle before you browse"
-            subtitle="Filter catalog results by model first, then unlock matched service packages and more useful bundle suggestions."
+            subtitle="Choose a model to narrow the parts list. Package eligibility is checked separately."
           />
 
           {hasVehicle && (
@@ -355,8 +356,8 @@ const PublicCatalogView = () => {
                   </div>
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.26em] text-accent-blue/70">Vehicle context active</p>
-                    <h2 className="mt-1 text-xl font-display font-semibold text-primary-950 sm:text-2xl">Compatible packages for {vehicle.displayLabel}</h2>
-                    <p className="mt-1 text-sm text-primary-500">Recommended service cards and clicked-product bundles now align with the vehicle you selected.</p>
+                    <h2 className="mt-1 text-xl font-display font-semibold text-primary-950 sm:text-2xl">Browsing for {vehicle.displayLabel}</h2>
+                    <p className="mt-1 text-sm text-primary-700">Check part numbers and the listed vehicle rules before requesting a quotation.</p>
                   </div>
                 </div>
                 <div className="rounded-2xl border border-primary-200 bg-white/90 px-4 py-3 text-sm text-primary-500">
@@ -456,9 +457,13 @@ const PublicCatalogView = () => {
 
       <section className="relative z-10 px-4 pb-20 md:px-8 xl:px-12">
         <div className="mx-auto max-w-[1600px] space-y-5">
-          {hasVehicle && !selectedProduct && (
-            <ManagedQuotePackages vehicle={vehicle} onChoose={(publication, price) => navigate(buildEstimateHref(publication.definition.id, price.variantId))} />
-          )}
+          <PublicPackageDirectory buildQuoteHref={(packageId, variantId) => {
+            const href = buildEstimateHref();
+            const params = new URLSearchParams(href.search);
+            params.set('packageIntent', packageId);
+            if (variantId) params.set('packageIntentVariant', variantId);
+            return { ...href, search: `?${params.toString()}` };
+          }} />
 
           <div className="mb-4 flex flex-col gap-4 rounded-2xl border border-primary-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center">
             <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">

@@ -32,6 +32,7 @@ export default function ManagedQuotePackages({
   preferredPackageId = "",
   preferredVariantId = "",
   contextProductIds = [],
+  interestedPackageId = "",
 }) {
   const [browseAll, setBrowseAll] = useState(false);
   const queryKey = JSON.stringify({
@@ -106,6 +107,7 @@ export default function ManagedQuotePackages({
   const fresh = state.key === queryKey && state.page === page;
   const chosen =
     state.packages.find((row) => row.definition.id === chosenId) ||
+    state.packages.find((row) => row.definition.id === interestedPackageId) ||
     state.packages[0];
   const openReview = async (offer) => {
     reviewRequest.current?.abort();

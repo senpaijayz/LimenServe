@@ -8,6 +8,7 @@ import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
 import useManagedQuotePackages from '../../../hooks/useManagedQuotePackages';
 import ManagedQuotePackages from '../components/ManagedQuotePackages';
+import { PackageInterestNotice } from '../components/PublicPackageDirectory';
 import { isManagedBundle, managedSelectionsFromLines } from '../utils/managedQuotePackages';
 import usePublicVehicleSelection from '../../../hooks/usePublicVehicleSelection';
 import Button from '../../../components/ui/Button';
@@ -365,11 +366,13 @@ const PublicEstimate = () => {
     const incomingPackageId = searchParams.get('packageId') || '';
     const incomingVariantId = searchParams.get('packageVariantId') || '';
     const incomingProductId = searchParams.get('quoteProductId') || '';
+    const incomingPackageIntent = searchParams.get('packageIntent') || '';
+    const incomingIntentVariant = searchParams.get('packageIntentVariant') || '';
     const packageShelfRef = useRef(null);
     const addedBundleKeysRef = useRef(new Set());
     const quoteMutationVersion = useRef(0);
     const quoteSaveBusy = useRef(false);
-    const [workflowStage, setWorkflowStage] = useState(() => (incomingPartSearch || incomingPackageId ? 'active' : 'choice'));
+    const [workflowStage, setWorkflowStage] = useState(() => (incomingPartSearch || incomingPackageId || isUuid(incomingPackageIntent) ? 'active' : 'choice'));
     const [mode, setMode] = useState('estimate');
     const [estimatePhase, setEstimatePhase] = useState('details');
     const [customerName, setCustomerName] = useState('');
@@ -921,7 +924,7 @@ const PublicEstimate = () => {
         managedPackages.reset();
         setSearchParams((current) => {
             const next = new URLSearchParams(current);
-            for (const key of ['part', 'partNumber', 'q', 'packageId', 'packageVariantId', 'quoteProductId', 'packageKey', 'serviceGroup', 'vehicleModel', 'vehicleYear', 'vehicleEngine', 'vehicleConfiguration', 'vehicleVariant', 'plateNo']) next.delete(key);
+            for (const key of ['part', 'partNumber', 'q', 'packageId', 'packageVariantId', 'packageIntent', 'packageIntentVariant', 'quoteProductId', 'packageKey', 'serviceGroup', 'vehicleModel', 'vehicleYear', 'vehicleEngine', 'vehicleConfiguration', 'vehicleVariant', 'plateNo']) next.delete(key);
             return next;
         }, { replace: true });
         setPartSearch('');
@@ -1424,6 +1427,11 @@ const PublicEstimate = () => {
             </section>
 
             <section className={`relative z-10 max-w-[1600px] mx-auto px-4 md:px-8 xl:px-12 py-2 transition-[padding] duration-300 print:hidden ${contentShiftClass}`}>
+                {workflowStage === 'active' && mode === 'estimate' && isUuid(incomingPackageIntent) && <div className="mb-4">
+                    <PackageInterestNotice packageId={incomingPackageIntent} variantId={incomingIntentVariant} phase={estimatePhase} onClear={() => setSearchParams(current => {
+                        const next = new URLSearchParams(current); next.delete('packageIntent'); next.delete('packageIntentVariant'); return next;
+                    }, { replace: true })} />
+                </div>}
                 <div className={`mb-8 ${workflowStage === 'choice' ? '' : 'surface p-4 md:p-5'}`}>
                     {workflowStage === 'choice' ? (
                         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -1826,7 +1834,7 @@ const PublicEstimate = () => {
                             </div>
                             )}
 
-                            {estimatePhase === 'catalog' && (<div ref={packageShelfRef}><ManagedQuotePackages controller={managedPackages} parts={selectedParts} services={selectedServices} vehicle={vehicle} busy={savingQuote} preferredPackageId={incomingPackageId} preferredVariantId={incomingVariantId} contextProductIds={isUuid(incomingProductId) ? [incomingProductId] : []} /></div>)}
+                            {estimatePhase === 'catalog' && (<div ref={packageShelfRef}><ManagedQuotePackages controller={managedPackages} parts={selectedParts} services={selectedServices} vehicle={vehicle} busy={savingQuote} preferredPackageId={incomingPackageId} preferredVariantId={incomingVariantId || (isUuid(incomingIntentVariant) ? incomingIntentVariant : '')} interestedPackageId={isUuid(incomingPackageIntent) ? incomingPackageIntent : ''} contextProductIds={isUuid(incomingProductId) ? [incomingProductId] : []} /></div>)}
 
                             {estimatePhase === 'details' && (
                                 <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
