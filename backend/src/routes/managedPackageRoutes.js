@@ -19,6 +19,7 @@ import {
 import { packageError } from '../services/managedPackageDomain.js';
 import { initializeManagedPackageCandidates, previewManagedPackageInitialization } from '../services/managedPackageInitialization.js';
 import { readSavedPackagePreview } from '../services/managedPackagePreviewService.js';
+import { packageDraftReviews } from '../services/packageDraftReviewService.js';
 
 const router = Router();
 router.use(requireRole('admin'));
@@ -38,6 +39,14 @@ const handle = (action) => async (req, res, next) => {
 const invalidatePackages = () => clearPublicResponseCache(['managed-packages', 'recommendations']);
 
 router.get('/', handle(async (req, res) => res.json(await listManagedPackages(req.query))));
+router.get('/review-drafts', handle(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json(await packageDraftReviews.list(req.query));
+}));
+router.get('/review-drafts/:id', handle(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json({package:await packageDraftReviews.detail(req.params.id)});
+}));
 router.get('/products', handle(async (req, res) => res.json(await searchManagedPackageProducts(req.query))));
 router.get('/services', handle(async (req, res) => res.json(await searchManagedPackageServices(req.query))));
 router.post('/services', handle(async (req, res) => {
