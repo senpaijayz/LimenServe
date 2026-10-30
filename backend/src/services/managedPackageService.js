@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { selectByInChunks } from '../utils/supabaseBatchSelect.js';
+import { linkedPackagePublication, packageSummaryDefinition, summarizeManagedPackage } from './managedPackageListSummary.js';
 import {
   assertManagedPackagePublishable,
   PACKAGE_STATUSES,
@@ -219,25 +220,12 @@ export async function listManagedPackages(query = {}) {
   });
   const definitions = result?.packages || [];
   const publicationIds = definitions.map((definition) => definition.published_revision_id).filter(Boolean);
-  const revisions = await selectReferences('cms', 'package_revisions', 'id,revision_number,definition,pricing_snapshot', 'id', publicationIds);
+  const revisions = await selectReferences('cms', 'package_revisions', 'id,package_id,revision_number,definition,pricing_snapshot', 'id', publicationIds);
   const revisionMap = new Map(revisions.map((revision) => [revision.id, revision]));
-  const visibleDefinition = (definition) => definition.publication_status === 'published' ? revisionMap.get(definition.published_revision_id)?.definition || definition : definition;
-  const references = definitions.length ? await loadManagedPackageReferences(definitions.map(visibleDefinition)) : { products: new Map(), services: new Map() };
+  const summaryDefinitions = definitions.map((definition) => packageSummaryDefinition(definition, revisionMap.get(definition.published_revision_id))).filter(Boolean);
+  const references = summaryDefinitions.length ? await loadManagedPackageReferences(summaryDefinitions) : { products: new Map(), services: new Map() };
   const packages = definitions.map((definition) => {
-    const revision = revisionMap.get(definition.published_revision_id);
-    const displayDefinition = visibleDefinition(definition);
-    const variants = displayDefinition.variants.filter((variant) => variant.active);
-    const summaries = variants.map((variant) => {
-      try {
-        const approved = revision?.pricing_snapshot?.find((value) => value.variantId === variant.id);
-        const publishedBasePrices = approved ? Object.fromEntries(approved.lines.map((line) => [line.itemId, line.catalogUnitPrice])) : null;
-        const preview = priceManagedPackageVariant(variant, references, { publishedBasePrices });
-        return { variantId: variant.id, label: variant.label, catalogTotal: preview.catalogTotal, packageTotal: preview.packageTotal, savings: preview.savings, availability: preview.availability };
-      } catch (error) {
-        if (!error.statusCode) throw error;
-        return { variantId: variant.id, label: variant.label, error: error.publicMessage };
-      }
-    });
+    const revision = linkedPackagePublication(definition, revisionMap.get(definition.published_revision_id));
     return {
       id: definition.id, packageKey: definition.packageKey, name: definition.name, type: definition.type,
       description: definition.description, imageUrl: definition.imageUrl,
@@ -246,9 +234,7 @@ export async function listManagedPackages(query = {}) {
       publishedName: revision?.definition.name || null, publishedRevisionNumber: revision?.revision_number || null,
       hasUnpublishedChanges: Boolean(revision && revision.revision_number !== definition.expectedRevision),
       sourceKind: definition.source_kind, seedCustomized: definition.seed_customized,
-      itemCount: variants.reduce((count, variant) => count + variant.items.filter((item) => item.active).length, 0),
-      eligibility: [...displayDefinition.eligibility, ...variants.flatMap((variant) => variant.eligibility)],
-      variants: summaries,
+      ...summarizeManagedPackage(definition, revision, references),
     };
   });
   return { packages, pagination: completePagination(result?.pagination) };

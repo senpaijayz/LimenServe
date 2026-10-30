@@ -1,6 +1,8 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { loadManagedPackageReferences } from './managedPackageService.js';
-import { managedPackageMatchesVehicle, PACKAGE_TYPES, packageError, priceManagedPackageVariant } from './managedPackageDomain.js';
+import { managedPackageMatchesVehicle, PACKAGE_TYPES, packageError } from './managedPackageDomain.js';
+import { pricePublishedManagedVariant } from './publishedManagedPackagePricing.js';
+export { pricePublishedManagedVariant };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const comparable = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -95,25 +97,6 @@ export function publicManagedPackageDefinition(definition) {
       label: variant.label, description: variant.description, active: variant.active,
       eligibility: (variant.eligibility.length ? variant.eligibility : definition.eligibility).map(publicRule) })),
   };
-}
-
-export function pricePublishedManagedVariant(publication, variant, references) {
-  const approved = Array.isArray(publication.pricingSnapshot)
-    ? publication.pricingSnapshot.find((value) => value.variantId === variant.id) : null;
-  if (!approved || !Array.isArray(approved.lines)) throw packageError('This package needs a pricing review before it can be added.', 409);
-  const basePrices = Object.fromEntries(approved.lines.map((line) => [line.itemId, line.catalogUnitPrice]));
-  if (variant.pricing.strategy !== 'live' && variant.items.filter((item) => item.active).some((item) => basePrices[item.id] == null)) {
-    throw packageError('This package is missing its approved price snapshot.', 409);
-  }
-  const price = priceManagedPackageVariant(variant, references, { publishedBasePrices: basePrices });
-  // Internal integer weights/stock counts do not need to be sent to a customer.
-  return { ...price, valid: true, lines: price.lines.map((line) => ({
-    itemId: line.itemId, kind: line.kind, productId: line.productId, serviceId: line.serviceId,
-    sku: line.sku, name: line.name, quantity: line.quantity, required: line.required,
-    priceMode: line.priceMode, catalogUnitPrice: line.catalogUnitPrice,
-    catalogTotal: line.catalogTotal, effectiveTotal: line.effectiveTotal, savings: line.savings,
-    allocations: line.allocations,
-  })) };
 }
 
 function presentPublication(publication, references, context) {
