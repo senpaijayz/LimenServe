@@ -2,10 +2,12 @@ import { Router } from 'express';
 import { requireRole } from '../middleware/auth.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import { normalizeHistoricalAggregatePayload } from '../services/historicalSalesModel.js';
+import { posRequestId, validatePosCheckout } from '../services/posCheckoutValidation.js';
 
 const router = Router();
 
 function normalizePosError(error) {
+  if (['22023','22003','22P02'].includes(error.code)) error.statusCode = 400;
   if (error.code === 'PT409') error.statusCode = 409;
   const message = String(error?.message || '');
 
@@ -69,6 +71,8 @@ function buildSalePayload(body) {
 
   return {
     customerName: typeof body?.customerName === 'string' ? body.customerName.trim() : '',
+    note: typeof body?.note === 'string' ? body.note.trim() : '',
+    releaseConfirmed: body?.releaseConfirmed === true,
     paymentMethod: body?.paymentMethod || 'cash',
     cashReceived: toNumeric(body?.cashReceived),
     changeDue: toNumeric(body?.changeDue),
@@ -156,6 +160,7 @@ function validateSalePayload(payload) {
 }
 
 function validateHistoricalSalePayload(payload) {
+  if (!['cash','gcash','bank_transfer'].includes(payload.paymentMethod)) throw Object.assign(new Error('Choose a supported payment method for historical sales.'),{statusCode:400});
   validateSalePayload(payload);
 
   if (!payload.saleAt || Number.isNaN(Date.parse(payload.saleAt))) {
@@ -255,10 +260,50 @@ function normalizeSaleDetail(detail) {
   };
 }
 
+async function withPosDetail(result) {
+  let detail=null;
+  try {detail=normalizeSaleDetail(await callRpc('get_sale_detail',{p_sale_id:result.saleId}));} catch { /* The write is committed; do not invite a duplicate payment or stock issue. */ }
+  return {...result,...(detail?.sale?{status:detail.sale.status,paymentMethod:detail.sale.paymentMethod,paidAt:detail.sale.paidAt}:{}),sale:detail?.sale || {id:result.saleId,transactionNumber:result.transactionNumber,status:result.status,paymentMethod:result.paymentMethod,totalAmount:result.totalAmount},items:detail?.items || [],receipt:detail?.receipt || null,detailUnavailable:!detail?.sale};
+}
+router.get('/paid-day-totals',requireRole('admin'),async(req,res,next)=>{
+  try{
+    if(typeof req.query.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(req.query.date))throw Object.assign(new Error('Choose a valid sales date.'),{statusCode:400});
+    res.set('Cache-Control','private, no-store');res.json(await callRpc('paid_sales_day_totals',{p_date:req.query.date}));
+  }catch(error){next(normalizePosError(error));}
+});
+router.get('/unpaid',requireRole('admin','cashier'),async(req,res,next)=>{
+  try{
+    const page=req.query.page===undefined?1:Number(req.query.page);
+    if(typeof req.query.page==='object'||!Number.isSafeInteger(page)||page<1||page>10000)throw Object.assign(new Error('Choose a valid unpaid-order page.'),{statusCode:400});
+    res.set('Cache-Control','private, no-store');
+    res.json(await callRpc('list_unpaid_pos_orders',{p_page:page}));
+  }catch(error){next(normalizePosError(error));}
+});
+router.get('/requests/:requestId',requireRole('admin','cashier'),async(req,res,next)=>{
+  try{
+    res.set('Cache-Control','private, no-store');
+    const result=await callRpc('recover_pos_order',{p_actor:req.user.id,p_request:posRequestId(req.params.requestId)});
+    res.json({result:result?await withPosDetail(result):null});
+  }catch(error){next(normalizePosError(error));}
+});
+router.post('/sales/:saleId/settle',requireRole('admin','cashier'),async(req,res,next)=>{
+  try{
+    const result=await callRpc('settle_pos_order',{p_sale_id:posRequestId(req.params.saleId),p_actor:req.user.id,p_request:posRequestId(req.body?.requestId),
+      payload:{cashReceived:req.body?.cashReceived,paymentVerified:req.body?.paymentVerified===true}});
+    res.json(await withPosDetail(result));
+  }catch(error){next(normalizePosError(error));}
+});
 router.post('/sales', requireRole('admin', 'cashier'), async (req, res, next) => {
   try {
     const payload = buildSalePayload(req.body);
     validateSalePayload(payload);
+    if(req.body?.requestId!==undefined){
+      validatePosCheckout(payload,req.body.requestId);
+      const result=await callRpc('checkout_pos_order',{payload,p_actor:req.user.id,p_request:posRequestId(req.body.requestId)});
+      res.status(201).json(await withPosDetail(result));
+      return;
+    }
+    if(payload.paymentMethod==='to_follow')throw Object.assign(new Error('Refresh POS before using Payment to follow.'),{statusCode:400});
 
     const saleId = await callRpc('create_pos_sale', {
       payload,

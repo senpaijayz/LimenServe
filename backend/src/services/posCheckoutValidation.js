@@ -1,0 +1,15 @@
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const invalid=message=>Object.assign(new Error(message),{statusCode:400});
+export function posRequestId(value){if(typeof value!=='string'||!UUID.test(value))throw invalid('A valid saved checkout reference is required.');return value;}
+export function validatePosCheckout(payload,requestId){
+  posRequestId(requestId);
+  if(!['cash','to_follow'].includes(payload.paymentMethod))throw invalid('Choose Cash or Payment to follow.');
+  if(payload.note.length>1000 || payload.customerName.length>200)throw invalid('Keep the note within 1000 characters and customer name within 200.');
+  if(!Object.values(payload.totals).every(value=>Number.isFinite(value)&&value>=0&&value<=1000000000)
+      || payload.discountPercent<0 || payload.discountPercent>100)throw invalid('Review the sale amounts and discount.');
+  if(payload.paymentMethod==='cash' && (!Number.isFinite(payload.cashReceived)||payload.cashReceived<0||payload.cashReceived>1000000000
+      ||Math.abs(payload.changeDue-Math.max(0,payload.cashReceived-payload.totals.total))>0.01))throw invalid('Review the cash received and change due.');
+  if(payload.paymentMethod==='to_follow' && (!payload.customerName || !payload.note || !payload.releaseConfirmed || payload.totals.total<=0)){
+    throw invalid('Enter the customer and a note, then confirm the parts are being released now.');
+  }
+}
