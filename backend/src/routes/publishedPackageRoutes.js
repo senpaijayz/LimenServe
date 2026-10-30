@@ -1,7 +1,14 @@
 import { Router } from 'express';
 import { getPublishedManagedPackage, listPublishedManagedPackages, listPackageVehicleConfigurations } from '../services/publishedManagedPackages.js';
+import { browsePublicPackageDirectory } from '../services/publicPackageDirectory.js';
 
 const router = Router();
+router.get('/package-directory', async (req,res,next) => {
+  try {res.set('Cache-Control','no-store');res.json(await browsePublicPackageDirectory(req.query));} catch(error){next(error);}
+});
+router.get('/package-directory/:packageId', async (req,res,next) => {
+  try {res.set('Cache-Control','no-store');res.json(await browsePublicPackageDirectory({page:'1',pageSize:'1'},req.params.packageId));} catch(error){next(error);}
+});
 router.get('/package-vehicle-configurations', async (req, res, next) => {
   try {
     res.set('Cache-Control', 'no-store');
