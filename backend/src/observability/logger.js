@@ -1,6 +1,7 @@
 const REDACTED = '[REDACTED]';
-const SENSITIVE_FIELD_PATTERN = /(?:authorization|cookie|password|passwd|secret|service.?role|api.?key|access.?token|refresh.?token)/i;
-const PRIVATE_FIELD_PATTERN = /^(?:body|payload|headers|query|params|req|res|request|response|customer|user|customer_?name|phone|email|address|plate(?:_?no|number)?|notes?|payment_?reference|otp|(?:recovery|verification|reset)_?code|details|hint)$/i;
+const SENSITIVE_FIELD_PATTERN = /(?:authorization|cookie|password|passwd|secret|service.?role|api.?key|token)/i;
+const CONTACT_FIELD_PATTERN = /(?:email|phone|mobile|address|customer_?name|plate_?(?:no|number))/i;
+const PRIVATE_FIELD_PATTERN = /^(?:body|payload|headers|query|params|req|res|request|response|customer|user|plate|notes?|payment_?reference|bank_?account|account_?number|card_?number|cvv|cvc|pin|otp|(?:recovery|verification|reset)_?code|details|hint)$/i;
 const MAX_SERIALIZATION_DEPTH = 8;
 
 function serializeError(error, seen, depth) {
@@ -73,7 +74,7 @@ export function sanitizeLogValue(value, seen = new WeakSet(), depth = 0) {
 
   const output = {};
   for (const [key, entry] of Object.entries(value).slice(0, 100)) {
-    output[key] = SENSITIVE_FIELD_PATTERN.test(key) || PRIVATE_FIELD_PATTERN.test(key)
+    output[key] = SENSITIVE_FIELD_PATTERN.test(key) || CONTACT_FIELD_PATTERN.test(key) || PRIVATE_FIELD_PATTERN.test(key)
       ? REDACTED
       : /^(?:error|cause)$/i.test(key)
         ? sanitizeError(entry, seen, depth + 1)

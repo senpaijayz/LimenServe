@@ -14,6 +14,8 @@ test('emits structured records while redacting credential-shaped fields', () => 
   testLogger.info('request.complete', {
     requestId: 'request-1',
     authorization: 'Bearer private-token',
+    resetToken: 'private-reset-token',
+    customer_phone: 'private-phone',
     nested: { serviceRoleKey: 'private-service-key', allowed: 'value' },
   });
 
@@ -22,6 +24,8 @@ test('emits structured records while redacting credential-shaped fields', () => 
   assert.equal(records[0].record.event, 'request.complete');
   assert.equal(records[0].record.requestId, 'request-1');
   assert.equal(records[0].record.authorization, '[REDACTED]');
+  assert.equal(records[0].record.resetToken, '[REDACTED]');
+  assert.equal(records[0].record.customer_phone, '[REDACTED]');
   assert.equal(records[0].record.nested.serviceRoleKey, '[REDACTED]');
   assert.equal(records[0].record.nested.allowed, 'value');
 });
