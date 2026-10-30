@@ -15,6 +15,7 @@ import { useAuth } from '../../../context/useAuth';
 import { useSearchParams } from 'react-router';
 import QuotePosCheckout from '../components/QuotePosCheckout';
 import ManualNonCashFields from '../components/ManualNonCashFields';
+import SavedPosCustomer from '../components/SavedPosCustomer';
 import {isNonCash,matchesFullPayment} from '../utils/paymentMethods';
 import usePosPosting from '../hooks/usePosPosting';
 import PosRequestRecovery from '../components/PosRequestRecovery';
@@ -79,7 +80,7 @@ const POSTerminalWorkspace = ({owner}) => {
     const sourceEstimate=searchParams.get('estimateId');
     const {
         items, totals, addItem: addCartItem, removeItem: removeCartItem, updateQuantity: updateCartQuantity, clearCart: clearSavedCart, refreshProductPrices,
-        customerName, setCustomerName, discountPercent, setDiscountPercent, legacyItems, recoverLegacyCart
+        customerName, setCustomerName, selectedCustomer, setSelectedCustomer, discountPercent, setDiscountPercent, legacyItems, recoverLegacyCart
     } = useCart();
 
     const { success, error: showScanError } = useToast();
@@ -120,13 +121,15 @@ const POSTerminalWorkspace = ({owner}) => {
             setPaymentMethod(op.payload.paymentMethod);setPaymentNote(op.payload.note || '');setPaymentAmount(String(op.payload.cashReceived || ''));
             setCustomerName(op.payload.customerName || '');setReleaseConfirmed(false);setPaymentError(error.message);setShowPaymentModal(true);
             setPaymentVerified(false);setPaidAmount(String(op.payload.paidAmount ?? ''));setPaymentReference(op.payload.paymentReference || '');
+            setSelectedCustomer(current=>op.payload.customerId?(current?.id===op.payload.customerId?current:{id:op.payload.customerId,name:op.payload.customerName}):null);
         }
     });
     const cartLocked=posting.busy || Boolean(posting.pending);
     const addItem=(...args)=>!cartLocked && addCartItem(...args);
     const removeItem=(...args)=>!cartLocked && removeCartItem(...args);
     const updateQuantity=(...args)=>!cartLocked && updateCartQuantity(...args);
-    const clearCart=()=>!cartLocked && clearSavedCart();
+    const clearCart=()=>{if(cartLocked)return;clearSavedCart();};
+    const changeCustomerName=value=>{if(cartLocked)return;setSelectedCustomer(null);setCustomerName(value);setPaymentVerified(false);setReleaseConfirmed(false);};
     const {
         products,
         pagination,
@@ -284,6 +287,7 @@ const POSTerminalWorkspace = ({owner}) => {
             }
             const payload = {
                 customerName,
+                ...(selectedCustomer?{customerId:selectedCustomer.id}:{}),
                 paymentMethod,
                 paymentVerified:paymentMethod!=='to_follow'&&paymentVerified,
                 paidAmount:isNonCash(paymentMethod)?Number(paidAmount):0,
@@ -514,15 +518,21 @@ const POSTerminalWorkspace = ({owner}) => {
 
                 {/* Customer Details */}
                 <div className="pt-3 pb-2 border-b border-primary-100">
+                    <label htmlFor="pos-customer-name" className="mb-1 block text-sm font-semibold text-primary-900">Customer name</label>
                     <input
+                        id="pos-customer-name"
                         type="text"
                         placeholder="Customer Name (Optional)"
                         value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
+                        maxLength={200}
+                        disabled={cartLocked}
+                        readOnly={Boolean(selectedCustomer)}
+                        onChange={(e) => changeCustomerName(e.target.value)}
                         className="w-full px-3 py-2 bg-primary-50 border border-primary-200 rounded-lg text-sm text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue shadow-sm"
                     />
                 </div>
 
+                <SavedPosCustomer owner={owner} selected={selectedCustomer} disabled={cartLocked} onSelect={customer=>{if(cartLocked)return;setSelectedCustomer(customer);setCustomerName(customer.name);setPaymentVerified(false);setReleaseConfirmed(false);}} onClear={()=>changeCustomerName('')} />
                 {/* Cart Items */}
                 <div className="flex-1 overflow-y-auto py-4 space-y-3">
                     {items.length === 0 ? (
@@ -535,6 +545,7 @@ const POSTerminalWorkspace = ({owner}) => {
                         items.map((item) => (
                             <div key={item.id} className="cart-item bg-primary-50 border border-primary-100 p-3 rounded-xl flex items-center justify-between">
                                 <div className="flex-1 min-w-0 pr-3">
+                                    {item.sku && <p className="break-words font-mono text-sm font-bold text-primary-950">{item.sku}</p>}
                                     <p className="text-sm font-semibold text-primary-950 truncate">
                                         {item.name}
                                     </p>
@@ -633,7 +644,7 @@ const POSTerminalWorkspace = ({owner}) => {
             </>}
             {/* Payment Modal */}
             <Modal
-                isOpen={showPaymentModal}
+                isOpen={showPaymentModal && !sourceEstimate}
                 onClose={closePaymentModal}
                 title="POS checkout"
                 size="lg"
@@ -675,15 +686,16 @@ const POSTerminalWorkspace = ({owner}) => {
                     </div>
 
                     <label className="block text-sm font-semibold text-primary-900">Payment<select value={paymentMethod} disabled={processingPayment} onChange={e=>{setPaymentMethod(e.target.value);setReleaseConfirmed(false);setPaymentVerified(false);setPaymentReference('');setPaidAmount('');setPaymentError('');}} className="mt-1 min-h-11 w-full rounded-xl border border-primary-300 bg-white p-3"><option value="cash">Cash — pay now</option><option value="gcash">GCash</option><option value="bank_transfer">Bank transfer</option><option value="to_follow">Payment to follow — release parts now</option></select></label>
-                    {paymentMethod==='to_follow' && <label className="block text-sm font-semibold text-primary-900">Customer name (required)<input value={customerName} maxLength={200} disabled={processingPayment} onChange={e=>setCustomerName(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-primary-300 p-3" /></label>}
+                    {paymentMethod==='to_follow' && <label className="block text-sm font-semibold text-primary-900">Customer name (required)<input value={customerName} maxLength={200} disabled={processingPayment} readOnly={Boolean(selectedCustomer)} onChange={e=>changeCustomerName(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-primary-300 p-3" /></label>}
                     <label className="block text-sm font-semibold text-primary-900">Order note {paymentMethod==='to_follow'?'(required)':'(optional)'}<textarea value={paymentNote} maxLength={1000} disabled={processingPayment} onChange={e=>setPaymentNote(e.target.value)} rows={3} placeholder="Payment arrangement or instructions for this order" className="mt-1 w-full rounded-xl border border-primary-300 p-3 font-normal" /><span className="mt-1 block text-xs font-normal text-primary-700">Saved with this order and shown on its printed document.</span></label>
                     <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
                         {paymentMethod==='cash' ? <div className="space-y-4">
                             <div>
-                                <label className="mb-2 block text-sm font-semibold text-primary-700">Cash Received</label>
+                                <label htmlFor="pos-cash-received" className="mb-2 block text-sm font-semibold text-primary-700">Cash Received</label>
                                 <div className="relative">
                                     <Banknote className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-primary-400" />
                                     <input
+                                        id="pos-cash-received"
                                         type="number"
                                         min="0"
                                         step="0.01"
@@ -747,6 +759,7 @@ const POSTerminalWorkspace = ({owner}) => {
                                 {items.map((item) => (
                                     <div key={item.id} className="flex items-start justify-between gap-3 border-b border-primary-100 py-3 last:border-b-0">
                                         <div className="min-w-0">
+                                            {item.sku && <p className="break-words font-mono text-sm font-bold text-primary-950">{item.sku}</p>}
                                             <p className="truncate text-sm font-semibold text-primary-950">{item.name}</p>
                                             <p className="mt-0.5 text-xs text-primary-500">
                                                 {item.quantity} x {formatCurrency(item.price)}

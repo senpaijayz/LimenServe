@@ -37,6 +37,7 @@ function StaffCartProvider({ children, owner, canRecoverLegacy }) {
 
     const [discountPercent, setDiscountPercent] = useState(0);
     const [customerName, setCustomerName] = useState('');
+    const [selectedCustomer, setSelectedCustomer] = useState(null);
 
     // Persist cart to localStorage
     /**
@@ -131,6 +132,7 @@ function StaffCartProvider({ children, owner, canRecoverLegacy }) {
         setItems([]);
         setDiscountPercent(0);
         setCustomerName('');
+        setSelectedCustomer(null);
     }, [cartKey]);
 
     const recoverLegacyCart = useCallback(() => {
@@ -179,6 +181,8 @@ function StaffCartProvider({ children, owner, canRecoverLegacy }) {
         setDiscountPercent,
         customerName,
         setCustomerName,
+        selectedCustomer,
+        setSelectedCustomer,
         addItem,
         removeItem,
         updateQuantity,
