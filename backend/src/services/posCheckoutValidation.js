@@ -1,9 +1,19 @@
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const invalid=message=>Object.assign(new Error(message),{statusCode:400});
 export function posRequestId(value){if(typeof value!=='string'||!UUID.test(value))throw invalid('A valid saved checkout reference is required.');return value;}
+export function posPaymentEvidence(body={}){
+  body=body&&typeof body==='object'?body:{};
+  const fields={};
+  if(Object.hasOwn(body,'paymentVerified'))fields.paymentVerified=body.paymentVerified===true;
+  if(Object.hasOwn(body,'paymentReference'))fields.paymentReference=typeof body.paymentReference==='string'?body.paymentReference.trim():'';
+  if(Object.hasOwn(body,'paidAmount'))fields.paidAmount=Number(body.paidAmount);
+  return fields;
+}
 export function validatePosCheckout(payload,requestId){
   posRequestId(requestId);
-  if(!['cash','to_follow'].includes(payload.paymentMethod))throw invalid('Choose Cash or Payment to follow.');
+  if(!['cash','gcash','bank_transfer','to_follow'].includes(payload.paymentMethod))throw invalid('Choose a supported payment method.');
+  if(payload.paymentReference!==undefined && payload.paymentReference.length>120)throw invalid('Keep the transaction reference within 120 characters.');
+  if(payload.paidAmount!==undefined && (!Number.isFinite(payload.paidAmount)||payload.paidAmount<0||payload.paidAmount>1000000000))throw invalid('Enter a valid received amount.');
   if(payload.note.length>1000 || payload.customerName.length>200)throw invalid('Keep the note within 1000 characters and customer name within 200.');
   if(!Object.values(payload.totals).every(value=>Number.isFinite(value)&&value>=0&&value<=1000000000)
       || payload.discountPercent<0 || payload.discountPercent>100)throw invalid('Review the sale amounts and discount.');

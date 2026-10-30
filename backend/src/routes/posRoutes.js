@@ -2,13 +2,15 @@ import { Router } from 'express';
 import { requireRole } from '../middleware/auth.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import { normalizeHistoricalAggregatePayload } from '../services/historicalSalesModel.js';
-import { posRequestId, validatePosCheckout } from '../services/posCheckoutValidation.js';
+import { posRequestId, validatePosCheckout, posPaymentEvidence } from '../services/posCheckoutValidation.js';
 
 const router = Router();
+router.use((_req,res,next)=>{res.set('Cache-Control','private, no-store');next();});
 
 function normalizePosError(error) {
   if (['22023','22003','22P02'].includes(error.code)) error.statusCode = 400;
   if (error.code === 'PT409') error.statusCode = 409;
+  if (error.code === '42501') error.statusCode = 403;
   const message = String(error?.message || '');
 
   if (
@@ -74,6 +76,7 @@ function buildSalePayload(body) {
     note: typeof body?.note === 'string' ? body.note.trim() : '',
     releaseConfirmed: body?.releaseConfirmed === true,
     paymentMethod: body?.paymentMethod || 'cash',
+    ...posPaymentEvidence(body),
     cashReceived: toNumeric(body?.cashReceived),
     changeDue: toNumeric(body?.changeDue),
     discountPercent: toNumeric(body?.discountPercent),
@@ -152,7 +155,7 @@ function validateSalePayload(payload) {
     }
   }
 
-  if (payload.paymentMethod === 'cash' && payload.cashReceived < payload.totals.total) {
+  if (payload.paymentMethod === 'cash' && Math.round((payload.cashReceived+Number.EPSILON)*100) < Math.round((payload.totals.total+Number.EPSILON)*100)) {
     const error = new Error('Cash received must be greater than or equal to the sale total.');
     error.statusCode = 400;
     throw error;
@@ -288,7 +291,7 @@ router.post('/quotation/:estimateId/checkout',requireRole('admin'),async(req,res
   try{
     if(typeof req.body?.version!=='string'||!/^[a-f0-9]{32}$/.test(req.body.version))throw Object.assign(new Error('Reload this saved quotation before checkout.'),{statusCode:400});
     const result=await callRpc('checkout_quote_pos_order',{p_estimate:posRequestId(req.params.estimateId),p_version:req.body.version,p_actor:req.user.id,p_request:posRequestId(req.body.requestId),
-      payment:{paymentMethod:req.body.paymentMethod,cashReceived:req.body.cashReceived,note:typeof req.body.note==='string'?req.body.note.trim():'',paymentVerified:req.body.paymentVerified===true,releaseConfirmed:req.body.releaseConfirmed===true}});
+      payment:{paymentMethod:req.body.paymentMethod,cashReceived:req.body.cashReceived,note:typeof req.body.note==='string'?req.body.note.trim():'',paymentVerified:req.body.paymentVerified===true,releaseConfirmed:req.body.releaseConfirmed===true,...posPaymentEvidence(req.body)}});
     res.status(201).json(await withPosDetail(result));
   }catch(error){next(normalizePosError(error));}
 });
@@ -302,48 +305,19 @@ router.get('/requests/:requestId',requireRole('admin','cashier'),async(req,res,n
 router.post('/sales/:saleId/settle',requireRole('admin','cashier'),async(req,res,next)=>{
   try{
     const result=await callRpc('settle_pos_order',{p_sale_id:posRequestId(req.params.saleId),p_actor:req.user.id,p_request:posRequestId(req.body?.requestId),
-      payload:{cashReceived:req.body?.cashReceived,paymentVerified:req.body?.paymentVerified===true}});
+      payload:{cashReceived:req.body?.cashReceived,paymentVerified:req.body?.paymentVerified===true,...posPaymentEvidence(req.body),...(Object.hasOwn(req.body||{},'paymentMethod')?{paymentMethod:req.body.paymentMethod}:{})}});
     res.json(await withPosDetail(result));
   }catch(error){next(normalizePosError(error));}
 });
-router.post('/sales', requireRole('admin', 'cashier'), async (req, res, next) => {
-  try {
-    const payload = buildSalePayload(req.body);
+router.post('/sales',requireRole('admin','cashier'),async(req,res,next)=>{
+  try{
+    if(req.body?.requestId===undefined)throw Object.assign(new Error('Refresh POS before checkout. A saved retry reference is required.'),{statusCode:400});
+    const payload=buildSalePayload(req.body);
     validateSalePayload(payload);
-    if(req.body?.requestId!==undefined){
-      validatePosCheckout(payload,req.body.requestId);
-      const result=await callRpc('checkout_pos_order',{payload,p_actor:req.user.id,p_request:posRequestId(req.body.requestId)});
-      res.status(201).json(await withPosDetail(result));
-      return;
-    }
-    if(payload.paymentMethod==='to_follow')throw Object.assign(new Error('Refresh POS before using Payment to follow.'),{statusCode:400});
-
-    const saleId = await callRpc('create_pos_sale', {
-      payload,
-      p_operator_id: req.user?.id ?? null,
-    });
-
-    const detail = normalizeSaleDetail(await callRpc('get_sale_detail', {
-      p_sale_id: saleId,
-    }));
-
-    if (!detail?.sale) {
-      const error = new Error('Sale was created but the receipt could not be loaded.');
-      error.statusCode = 500;
-      throw error;
-    }
-
-    res.status(201).json({
-      saleId,
-      transactionNumber: detail.sale.transactionNumber,
-      createdAt: detail.sale.createdAt,
-      sale: detail.sale,
-      items: detail.items ?? [],
-      receipt: detail.receipt ?? null,
-    });
-  } catch (error) {
-    next(normalizePosError(error));
-  }
+    validatePosCheckout(payload,req.body.requestId);
+    const result=await callRpc('checkout_pos_order',{payload,p_actor:req.user.id,p_request:posRequestId(req.body.requestId)});
+    res.status(201).json(await withPosDetail(result));
+  }catch(error){next(normalizePosError(error));}
 });
 
 router.post('/sales/historical', requireRole('admin'), async (req, res, next) => {
