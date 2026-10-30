@@ -26,6 +26,7 @@ import {
 } from "../../../services/managedPackagesApi";
 import { formatCurrency } from "../../../utils/formatters";
 import PackageEditor from "./PackageEditor";
+import SavedPackagePreview from "./SavedPackagePreview";
 import PackageField from "./PackageField";
 import {
   newPackageDraft,
@@ -373,40 +374,46 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [editor, setEditor] = useState(null);
+  const [previewTarget, setPreviewTarget] = useState(null);
   const [editorRecovery, setEditorRecovery] = useState(null);
   const [recovery, setRecovery] = useState(() => readPackageRecovery(user?.id));
   const [showInitialization, setShowInitialization] = useState(false);
-  const [list, setList] = useState({
+  const [listResult, setList] = useState({
     packages: [],
     pagination: { totalCount: 0, totalPages: 1 },
     loading: true,
     error: "",
   });
+  const listKey = JSON.stringify([user?.id, search, type, status, page, reload]);
+  const list = listResult.key === listKey ? listResult : {
+    packages: [], pagination: { totalCount: 0, totalPages: 1 }, loading: true, error: "",
+  };
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(async () => {
-      setList((value) => ({ ...value, loading: true, error: "" }));
       try {
         const result = await listManagedPackages(
           { search, type, status, page, pageSize: 12 },
           controller.signal,
         );
-        if (!controller.signal.aborted)
-          setList({ ...result, loading: false, error: "" });
+        if (!controller.signal.aborted) {
+          if (page > result.pagination.totalPages) { setPage(Math.max(1, result.pagination.totalPages)); return; }
+          setList({ ...result, key: listKey, loading: false, error: "" });
+        }
       } catch (error) {
         if (!controller.signal.aborted)
-          setList((value) => ({
-            ...value,
+          setList({
+            key: listKey, packages: [], pagination: { totalCount: 0, totalPages: 1 },
             loading: false,
-            error: error.message,
-          }));
+            error: error.message || "Packages could not load. Try refreshing the list.",
+          });
       }
     }, 300);
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [search, type, status, page, reload]);
+  }, [search, type, status, page, reload, listKey]);
   const changed = () => setReload((value) => value + 1);
   const discardRecovery = () => {
     try {
@@ -427,13 +434,13 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
     setEditorRecovery(null);
     setEditor(newPackageDraft());
   };
-  const open = async (id, preview = false) => {
+  const open = async (id) => {
     if (!canStartEditor()) return;
     setBusy(id);
     try {
       const draft = await getManagedPackage(id);
       discardRecovery();
-      setEditorRecovery(preview ? { step: 5 } : null);
+      setEditorRecovery(null);
       setEditor(draft);
     } catch (error) {
       showError(error.message);
@@ -822,14 +829,21 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
                 </button>
                 <button
                   type="button"
-                  aria-label={`Preview ${pkg.name}`}
-                  disabled={Boolean(busy) || pkg.status === "archived"}
-                  onClick={() => open(pkg.id, true)}
+                  aria-label={`Preview saved draft ${pkg.name}`}
+                  disabled={Boolean(busy) || list.loading}
+                  onClick={() => setPreviewTarget({ id: pkg.id, source: "draft", expectedRevision: pkg.expectedRevision, owner: user?.id })}
                   className="flex min-h-10 items-center gap-1 rounded-xl border border-primary-300 px-3 text-sm font-semibold text-primary-800"
                 >
                   <Eye className="h-4 w-4" />
-                  Preview
+                  Preview draft
                 </button>
+                {pkg.status === "published" && pkg.publishedRevisionId && (
+                  <button type="button" disabled={Boolean(busy) || list.loading}
+                    onClick={() => setPreviewTarget({ id: pkg.id, source: "published", revisionId: pkg.publishedRevisionId, owner: user?.id })}
+                    className="flex min-h-10 items-center gap-1 rounded-xl border border-emerald-300 bg-emerald-50 px-3 text-sm font-semibold text-emerald-900">
+                    <Eye className="h-4 w-4" aria-hidden="true" />Preview published
+                  </button>
+                )}
                 <button
                   type="button"
                   aria-label={`Duplicate ${pkg.name}`}
@@ -878,13 +892,12 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
       </div>
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-primary-200 pt-4 text-sm text-primary-700">
         <span>
-          {list.pagination.totalCount} packages · Page {page} of{" "}
-          {list.pagination.totalPages || 1}
+          {list.loading ? "Loading package count…" : list.error ? "Package count unavailable" : `${list.pagination.totalCount} matching packages · Page ${page} of ${list.pagination.totalPages || 1}`}
         </span>
         <div className="flex gap-2">
           <button
             type="button"
-            disabled={list.loading || page <= 1}
+            disabled={list.loading || Boolean(list.error) || page <= 1}
             onClick={() => setPage((value) => value - 1)}
             className="min-h-11 rounded-xl border border-primary-300 px-4 font-semibold disabled:opacity-40"
           >
@@ -892,7 +905,7 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
           </button>
           <button
             type="button"
-            disabled={list.loading || page >= (list.pagination.totalPages || 1)}
+            disabled={list.loading || Boolean(list.error) || page >= (list.pagination.totalPages || 1)}
             onClick={() => setPage((value) => value + 1)}
             className="min-h-11 rounded-xl border border-primary-300 px-4 font-semibold disabled:opacity-40"
           >
@@ -900,6 +913,7 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
           </button>
         </div>
       </footer>
+      {previewTarget && previewTarget.owner === user?.id && <SavedPackagePreview key={`${previewTarget.owner}:${previewTarget.id}:${previewTarget.source}`} target={previewTarget} onClose={() => setPreviewTarget(null)} />}
       <ConfirmDialog
         isOpen={Boolean(transitionTarget)}
         title={transitionTarget?.action === "restore" ? "Restore package?" : transitionTarget?.action === "archive" ? "Archive package?" : "Unpublish package?"}

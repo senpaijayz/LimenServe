@@ -29,6 +29,8 @@ export const listManagedPackages = (params, signal) =>
   request("get", "", params, { signal });
 export const getManagedPackage = async (id) =>
   (await request("get", `/${encodeURIComponent(id)}`)).package;
+export const getSavedPackagePreview = (id, params, signal) =>
+  request("get", `/${encodeURIComponent(id)}/saved-preview`, params, { signal });
 export const saveManagedPackage = async (draft) =>
   (await request("post", "", draft)).package;
 export const previewManagedPackage = (draft, signal) =>
