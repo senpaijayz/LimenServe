@@ -2,26 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { summarizeDashboardOperations } from '../services/dashboardApi';
 
 describe('dashboard operational summary', () => {
-  it('summarizes live sales, stock, service, and estimate data', () => {
+  it('uses authoritative global totals rather than bounded lists', () => {
     const summary = summarizeDashboardOperations({
-      sales: {
-        sales: [
-          { total_amount: 1250.5 },
-          { totalAmount: 749.5 },
-        ],
-        pagination: { total: 2 },
-      },
+      sales: {totalAmount:2000,transactionCount:2},
       catalog: { inventoryValue: 50000, totalProducts: 120 },
-      serviceOrders: [
-        { status: 'pending' },
-        { status: 'in_progress' },
-        { status: 'completed' },
-      ],
-      estimates: [
-        { status: 'draft' },
-        { status: 'sent' },
-        { status: 'expired' },
-      ],
+      serviceAttention:{summary:{active:150}},
+      quoteSummary:{activeCount:240},
     });
 
     expect(summary).toMatchObject({
@@ -29,18 +15,18 @@ describe('dashboard operational summary', () => {
       todaySalesCount: 2,
       inventoryValue: 50000,
       catalogProductCount: 120,
-      openServiceOrderCount: 2,
-      activeEstimateCount: 2,
+      openServiceOrderCount: 150,
+      activeEstimateCount: 240,
     });
   });
 
-  it('returns safe zero values when an optional source is unavailable', () => {
+  it('does not present unavailable sources as genuine zero totals', () => {
     expect(summarizeDashboardOperations({ errors: ['Inventory: unavailable'] })).toMatchObject({
-      todaySalesTotal: 0,
-      todaySalesCount: 0,
-      inventoryValue: 0,
-      openServiceOrderCount: 0,
-      activeEstimateCount: 0,
+      todaySalesTotal: null,
+      todaySalesCount: null,
+      inventoryValue: null,
+      openServiceOrderCount: null,
+      activeEstimateCount: null,
       errors: ['Inventory: unavailable'],
     });
   });

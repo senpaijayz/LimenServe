@@ -1,85 +1,40 @@
-import { listEstimates } from './estimatesApi';
-import { getPaidSalesDayTotals } from './posOrdersApi';
-import { listServiceOrders } from './serviceOrdersApi';
-import { getCatalogSummary } from './catalogApi';
+import {getPaidSalesDayTotals} from './posOrdersApi';
+import {getCatalogSummary} from './catalogApi';
+import {getServiceAttentionPage,getActiveEstimateCount} from './serviceAttentionApi';
 
-function formatLocalDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+export function dashboardBusinessDate(date=new Date()){
+  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date).map(part=>[part.type,part.value]));
+  return parts.year+'-'+parts.month+'-'+parts.day;
 }
+const settledValue=result=>result.status==='fulfilled'?result.value:null;
+const errorMessage=(result,label)=>result.status==='fulfilled'?null:label+': '+(result.reason?.message||'temporarily unavailable');
 
-function todayRange() {
-  const today = new Date();
-  const date = formatLocalDate(today);
-  return { startDate: date, endDate: date };
-}
-
-function settledValue(result) {
-  return result.status === 'fulfilled' ? result.value : null;
-}
-
-function errorMessage(result, label) {
-  if (result.status === 'fulfilled') {
-    return null;
-  }
-
-  return `${label}: ${result.reason?.message || 'temporarily unavailable'}`;
-}
-
-/**
- * Loads the operational numbers used by the dashboard in parallel. Each
- * source is independent so a missing optional table does not hide the other
- * live metrics.
- */
-export async function getDashboardOperationsSnapshot() {
-  const { startDate, endDate } = todayRange();
-  const [salesResult, catalogResult, serviceResult, estimateResult] = await Promise.allSettled([
-    getPaidSalesDayTotals(startDate),
-    getCatalogSummary(),
-    listServiceOrders({ status: 'all', limit: 100 }),
-    listEstimates('', 100),
+// Independent authoritative sources: one unavailable read must not hide others.
+export async function getDashboardOperationsSnapshot(){
+  const date=dashboardBusinessDate();
+  const [salesResult,catalogResult,serviceResult,estimateResult]=await Promise.allSettled([
+    getPaidSalesDayTotals(date),getCatalogSummary(),getServiceAttentionPage(),getActiveEstimateCount(),
   ]);
-
   return {
-    range: { startDate, endDate },
-    sales: settledValue(salesResult),
-    catalog: settledValue(catalogResult),
-    serviceOrders: settledValue(serviceResult),
-    estimates: settledValue(estimateResult),
-    errors: [
-      errorMessage(salesResult, 'Sales'),
-      errorMessage(catalogResult, 'Inventory'),
-      errorMessage(serviceResult, 'Service orders'),
-      errorMessage(estimateResult, 'Quotations'),
-    ].filter(Boolean),
-    loadedAt: new Date().toISOString(),
+    range:{startDate:date,endDate:date},
+    sales:settledValue(salesResult),catalog:settledValue(catalogResult),
+    serviceAttention:settledValue(serviceResult),quoteSummary:settledValue(estimateResult),
+    serviceError:errorMessage(serviceResult,'Service orders'),
+    errors:[errorMessage(salesResult,'Sales'),errorMessage(catalogResult,'Inventory'),errorMessage(serviceResult,'Service orders'),errorMessage(estimateResult,'Quotations')].filter(Boolean),
+    loadedAt:new Date().toISOString(),
   };
 }
+const numberOrNull=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0?value:null;
 
-const OPEN_SERVICE_STATUSES = new Set([
-  'pending',
-  'in_progress',
-  'scheduled',
-  'assigned',
-]);
-
-/** Converts the live endpoint responses into stable KPI values. */
-export function summarizeDashboardOperations(snapshot = {}) {
-  const sales = Array.isArray(snapshot.sales?.sales) ? snapshot.sales.sales.filter(sale=>sale.status==='completed') : [];
-  const salesTotal = sales.reduce((total, sale) => total + Number(sale.total_amount ?? sale.totalAmount ?? 0), 0);
-  const serviceOrders = Array.isArray(snapshot.serviceOrders) ? snapshot.serviceOrders : [];
-  const estimates = Array.isArray(snapshot.estimates) ? snapshot.estimates : [];
-
+// Never turn a failed read into zero or infer a global total from a loaded page.
+export function summarizeDashboardOperations(snapshot={}){
   return {
-    todaySalesTotal: Number(snapshot.sales?.totalAmount ?? salesTotal),
-    todaySalesCount: Number(snapshot.sales?.transactionCount ?? sales.length),
-    inventoryValue: Number(snapshot.catalog?.inventoryValue ?? 0),
-    catalogProductCount: Number(snapshot.catalog?.totalProducts ?? 0),
-    openServiceOrderCount: serviceOrders.filter((order) => OPEN_SERVICE_STATUSES.has(String(order.status || '').toLowerCase())).length,
-    activeEstimateCount: estimates.filter((estimate) => !['expired', 'rejected', 'converted_sale', 'converted_service'].includes(String(estimate.status || '').toLowerCase())).length,
-    errors: snapshot.errors ?? [],
-    loadedAt: snapshot.loadedAt ?? null,
+    todaySalesTotal:numberOrNull(snapshot.sales?.totalAmount),
+    todaySalesCount:numberOrNull(snapshot.sales?.transactionCount),
+    inventoryValue:numberOrNull(snapshot.catalog?.inventoryValue),
+    catalogProductCount:numberOrNull(snapshot.catalog?.totalProducts),
+    openServiceOrderCount:numberOrNull(snapshot.serviceAttention?.summary?.active),
+    activeEstimateCount:numberOrNull(snapshot.quoteSummary?.activeCount),
+    errors:snapshot.errors??[],loadedAt:snapshot.loadedAt??null,
   };
 }

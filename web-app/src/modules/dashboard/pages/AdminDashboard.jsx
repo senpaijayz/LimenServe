@@ -34,6 +34,8 @@ function DashboardPanelFallback({ title }) {
     );
 }
 
+function formatMetric(value,formatter){return value==null?'—':formatter(value);}
+
 function KPICard({ title, value, icon, trendValue }) {
     return (
         <div className="min-w-0 rounded-lg border border-primary-200 bg-white px-5 py-4">
@@ -45,6 +47,23 @@ function KPICard({ title, value, icon, trendValue }) {
             {trendValue && <p className="mt-2 text-xs text-primary-500">{trendValue}</p>}
         </div>
     );
+}
+
+const operationMetrics=[
+    {key:'todaySalesTotal',title:"Today's Sales",Icon:ShoppingCart,format:formatCurrency},
+    {key:'todaySalesCount',title:'Sales Count',Icon:DollarSign,format:formatNumber},
+    {key:'inventoryValue',title:'Inventory Value',Icon:Warehouse,format:formatCurrency},
+    {key:'openServiceOrderCount',title:'Open Service Orders',Icon:Wrench,format:formatNumber},
+    {key:'activeEstimateCount',title:'Active Quotations',Icon:FileText,format:formatNumber},
+];
+function OperationalMetrics({summary,loading}){
+    const [selected,setSelected]=useState('todaySalesTotal');
+    const selectedMetric=operationMetrics.find(metric=>metric.key===selected)||operationMetrics[0];
+    const card=metric=><KPICard key={metric.key} title={metric.title} value={loading?'Loading...':formatMetric(summary[metric.key],metric.format)} icon={<metric.Icon className="h-6 w-6" />} />;
+    return <>
+        <div className="space-y-3 sm:hidden"><label className="block text-sm font-semibold text-primary-900">Show shop total<select value={selected} onChange={event=>setSelected(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-primary-300 bg-white px-3 text-primary-950">{operationMetrics.map(metric=><option key={metric.key} value={metric.key}>{metric.title}</option>)}</select></label>{card(selectedMetric)}</div>
+        <div className="hidden grid-cols-2 gap-4 sm:grid lg:grid-cols-3">{operationMetrics.map(card)}</div>
+    </>;
 }
 
 const AdminDashboard = () => {
@@ -205,7 +224,7 @@ const AdminDashboard = () => {
                 </div>
             </div>
 
-            {operations?.serviceOrders && <ServiceAttentionList orders={operations.serviceOrders} />}
+            <ServiceAttentionList managed snapshot={operations?.serviceAttention} snapshotLoading={loading||refreshing} snapshotError={operations?.serviceError} onSnapshotRetry={handleDashboardRefresh} refreshKey={draftReviewRefresh} />
             <PackageDraftAttention refreshKey={draftReviewRefresh} />
             {profileWarning && (
                 <Card className="border border-amber-200 bg-amber-50" padding="sm">
@@ -255,13 +274,7 @@ const AdminDashboard = () => {
                             : 'Loading live data...'}
                     </p>
                 </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <KPICard title="Today's Sales" value={loading ? 'Loading...' : formatCurrency(operationalSummary.todaySalesTotal)} icon={<ShoppingCart className="h-6 w-6" />} accentColor="border-emerald-500" iconBg="bg-emerald-50 text-emerald-600" />
-                    <KPICard title="Sales Count" value={loading ? 'Loading...' : formatNumber(operationalSummary.todaySalesCount)} icon={<DollarSign className="h-6 w-6" />} accentColor="border-accent-blue" iconBg="bg-blue-50 text-accent-blue" />
-                    <KPICard title="Inventory Value" value={loading ? 'Loading...' : formatCurrency(operationalSummary.inventoryValue)} icon={<Warehouse className="h-6 w-6" />} accentColor="border-indigo-500" iconBg="bg-indigo-50 text-indigo-600" />
-                    <KPICard title="Open Service Orders" value={loading ? 'Loading...' : formatNumber(operationalSummary.openServiceOrderCount)} icon={<Wrench className="h-6 w-6" />} accentColor="border-amber-500" iconBg="bg-amber-50 text-amber-700" />
-                    <KPICard title="Active Quotations" value={loading ? 'Loading...' : formatNumber(operationalSummary.activeEstimateCount)} icon={<FileText className="h-6 w-6" />} accentColor="border-violet-500" iconBg="bg-violet-50 text-violet-600" />
-                </div>
+                <OperationalMetrics summary={operationalSummary} loading={loading} />
             </div>
 
             <section className="space-y-3" aria-label="Sales forecasts">
