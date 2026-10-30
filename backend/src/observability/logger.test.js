@@ -26,7 +26,7 @@ test('emits structured records while redacting credential-shaped fields', () => 
   assert.equal(records[0].record.nested.allowed, 'value');
 });
 
-test('serializes detailed errors for server logs without failing on cycles', () => {
+test('keeps diagnostic error codes without logging raw messages or stacks', () => {
   const cause = new Error('database detail');
   cause.code = 'XX001';
   const error = new Error('request failed', { cause });
@@ -34,8 +34,8 @@ test('serializes detailed errors for server logs without failing on cycles', () 
 
   const result = sanitizeLogValue({ error, value: 'line one\nline two' });
 
-  assert.equal(result.error.message, 'request failed');
-  assert.match(result.error.stack, /request failed/);
+  assert.equal(result.error.message, undefined);
+  assert.equal(result.error.stack, undefined);
   assert.equal(result.error.cause.code, 'XX001');
   assert.equal(result.value, 'line one line two');
 });
