@@ -391,6 +391,23 @@ router.post(
   publicEstimateRevisionHandler,
 );
 
+// Read-only recovery: a lost conversion response must not require another write.
+router.get('/:estimateId/service-order', requireRole('admin'), async (req, res, next) => {
+  if (!UUID_PATTERN.test(req.params.estimateId)) {
+    res.status(400).json({ error: 'Choose a valid quotation.' });
+    return;
+  }
+  res.set('Cache-Control', 'private, no-store');
+  try {
+    const { data, error } = await supabaseAdmin.schema('operations').from('service_orders')
+      .select('id, order_number, status').eq('estimate_id', req.params.estimateId).maybeSingle();
+    if (error) throw error;
+    res.json({ serviceOrder: data ?? null });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/:estimateId', requireRole('admin'), async (req, res, next) => {
   try {
     const estimate = await callRpc('get_estimate_detail', {
@@ -518,6 +535,11 @@ router.post('/:estimateId/convert-sale', requireRole('admin'), async (req, res, 
 });
 
 router.post('/:estimateId/convert-service-order', requireRole('admin'), async (req, res, next) => {
+  if (!UUID_PATTERN.test(req.params.estimateId)
+      || (req.body?.assignedTo != null && !UUID_PATTERN.test(req.body.assignedTo))) {
+    res.status(400).json({ error: 'Choose a valid quotation and staff assignment.' });
+    return;
+  }
   try {
     const serviceOrderId = await callRpc('convert_estimate_to_service_order', {
       p_estimate_id: req.params.estimateId,
