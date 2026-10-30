@@ -312,7 +312,7 @@ router.post('/sales/:saleId/settle',requireRole('admin','cashier'),async(req,res
 router.post('/sales',requireRole('admin','cashier'),async(req,res,next)=>{
   try{
     if(req.body?.requestId===undefined)throw Object.assign(new Error('Refresh POS before checkout. A saved retry reference is required.'),{statusCode:400});
-    const payload=buildSalePayload(req.body);
+    const payload={...buildSalePayload(req.body),...(Object.hasOwn(req.body,'customerId')?{customerId:req.body.customerId}:{})};
     validateSalePayload(payload);
     validatePosCheckout(payload,req.body.requestId);
     const result=await callRpc('checkout_pos_order',{payload,p_actor:req.user.id,p_request:posRequestId(req.body.requestId)});

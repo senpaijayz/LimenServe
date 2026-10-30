@@ -11,6 +11,7 @@ export function posPaymentEvidence(body={}){
 }
 export function validatePosCheckout(payload,requestId){
   posRequestId(requestId);
+  if(payload.customerId!==undefined&&(typeof payload.customerId!=='string'||!UUID.test(payload.customerId)))throw invalid('Choose a valid saved customer or use a walk-in name.');
   if(!['cash','gcash','bank_transfer','to_follow'].includes(payload.paymentMethod))throw invalid('Choose a supported payment method.');
   if(payload.paymentReference!==undefined && payload.paymentReference.length>120)throw invalid('Keep the transaction reference within 120 characters.');
   if(payload.paidAmount!==undefined && (!Number.isFinite(payload.paidAmount)||payload.paidAmount<0||payload.paidAmount>1000000000))throw invalid('Enter a valid received amount.');
