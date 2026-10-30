@@ -11,7 +11,10 @@ import BarcodeDisplay from '../../../components/ui/BarcodeDisplay';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import AddServiceModal from '../../../components/ui/AddServiceModal';
-import { createPosSale } from '../../../services/posApi';
+import { useAuth } from '../../../context/useAuth';
+import usePosPosting from '../hooks/usePosPosting';
+import PosRequestRecovery from '../components/PosRequestRecovery';
+import UnpaidPosOrders from '../components/UnpaidPosOrders';
 import SaleReceiptPreview from '../components/SaleReceiptPreview.jsx';
 import ProductPriceHistory from '../../inventory/components/ProductPriceHistory';
 import { getCurrentRetailPrices } from '../../../services/catalogApi';
@@ -68,7 +71,7 @@ function formatCatalogProduct(product) {
  * POS Terminal Page
  * Point of Sale interface for processing transactions
  */
-const POSTerminal = () => {
+const POSTerminalWorkspace = ({owner}) => {
     const {
         items, totals, addItem, removeItem, updateQuantity, clearCart, refreshProductPrices,
         customerName, setCustomerName, discountPercent, setDiscountPercent
@@ -87,12 +90,30 @@ const POSTerminal = () => {
     const [largeBarcodeProduct, setLargeBarcodeProduct] = useState(null);
     const [priceHistoryProduct, setPriceHistoryProduct] = useState(null);
     const [paymentAmount, setPaymentAmount] = useState('');
+    const [paymentMethod,setPaymentMethod]=useState('cash');
+    const [paymentNote,setPaymentNote]=useState('');
+    const [releaseConfirmed,setReleaseConfirmed]=useState(false);
+    const [unpaidRefresh,setUnpaidRefresh]=useState(0);
     const deferredSearchQuery = useDeferredValue(searchQuery);
     const [lastTransaction, setLastTransaction] = useState(null);
     const [paymentError, setPaymentError] = useState('');
     const [processingPayment, setProcessingPayment] = useState(false);
     const [checkingStock, setCheckingStock] = useState(false);
     const paymentLockRef = useRef(false);
+    const posting=usePosPosting(owner,(transaction,op)=>{
+        setLastTransaction(transaction);setShowPaymentModal(false);setShowSuccessModal(true);
+        setUnpaidRefresh(v=>v+1);
+        if(op.kind==='checkout'){
+            setPaymentAmount('');setPaymentNote('');setReleaseConfirmed(false);setPaymentMethod('cash');
+            try{clearCart();}catch{showScanError('The order was saved, but this device could not clear its cart. Do not submit the same items again.');}
+        }
+        success(transaction.status==='pending'?`Order ${transaction.transactionNumber} saved unpaid. Stock has been released.`:`Payment saved for ${transaction.transactionNumber}.`);
+    },(op,error)=>{
+        if(op.kind==='checkout'){
+            setPaymentMethod(op.payload.paymentMethod);setPaymentNote(op.payload.note || '');setPaymentAmount(String(op.payload.cashReceived || ''));
+            setCustomerName(op.payload.customerName || '');setReleaseConfirmed(false);setPaymentError(error.message);setShowPaymentModal(true);
+        }
+    });
     const {
         products,
         pagination,
@@ -106,6 +127,7 @@ const POSTerminal = () => {
         sortBy,
         stockFilter,
         includeCategories: false,
+        refreshKey: unpaidRefresh,
     });
 
     useEffect(() => {
@@ -167,14 +189,15 @@ const POSTerminal = () => {
     const amountShort = Math.max(0, totals.total - paymentReceived);
     const hasEnoughCash = paymentReceived >= totals.total;
     const cashTenderOptions = useMemo(() => buildCashTenderOptions(totals.total), [totals.total]);
-    const canCompletePayment = items.length > 0 && hasEnoughCash && !processingPayment;
+    const canCompletePayment = items.length > 0 && !processingPayment && !posting.pending && !posting.busy
+        && (paymentMethod==='cash'?hasEnoughCash:(totals.total>0 && customerName.trim() && paymentNote.trim() && releaseConfirmed));
     const canGoPrev = (pagination.page ?? currentPage) > 1;
     const canGoNext = (pagination.page ?? currentPage) < (pagination.totalPages ?? 1);
     const rangeStart = pagination.totalCount === 0 ? 0 : (((pagination.page ?? currentPage) - 1) * (pagination.pageSize ?? PAGE_SIZE)) + 1;
     const rangeEnd = pagination.totalCount === 0 ? 0 : Math.min((pagination.page ?? currentPage) * (pagination.pageSize ?? PAGE_SIZE), pagination.totalCount ?? 0);
 
     const openPaymentModal = async () => {
-        if (checkingStock) return;
+        if (checkingStock || posting.pending || posting.busy) return;
         setCheckingStock(true);
         try {
             const productIds = [...new Set(items.filter((item) => item.lineType !== 'service' && item.sku !== 'SERVICE').map((item) => item.productId || item.id))];
@@ -209,6 +232,8 @@ const POSTerminal = () => {
         if (!canCompletePayment) {
             if (items.length === 0) {
                 setPaymentError('Add at least one item before completing the sale.');
+            } else if (paymentMethod==='to_follow') {
+                setPaymentError('Enter the customer and a note, then confirm the parts are being released now.');
             } else if (!hasEnoughCash) {
                 setPaymentError(`Cash received is short by ${formatCurrency(amountShort)}.`);
             }
@@ -239,9 +264,11 @@ const POSTerminal = () => {
             }
             const payload = {
                 customerName,
-                paymentMethod: 'cash',
-                cashReceived: paymentReceived,
-                changeDue: Math.max(0, change),
+                paymentMethod,
+                note:paymentNote.trim(),
+                releaseConfirmed,
+                cashReceived: paymentMethod==='cash'?paymentReceived:0,
+                changeDue: paymentMethod==='cash'?Math.max(0, change):0,
                 discountPercent,
                 totals,
                 items: items.map((item) => ({
@@ -258,21 +285,8 @@ const POSTerminal = () => {
                 })),
             };
 
-            const transaction = await createPosSale(payload);
-
-            setLastTransaction({
-                saleId: transaction.saleId,
-                transactionNumber: transaction.transactionNumber,
-                sale: transaction.sale,
-                items: transaction.items ?? [],
-                receipt: transaction.receipt ?? null,
-            });
-
             setShowPaymentModal(false);
-            setShowSuccessModal(true);
-            clearCart();
-            setPaymentAmount('');
-            success(`Sale ${transaction.transactionNumber} completed`);
+            await posting.submit('checkout',payload);
         } catch (error) {
             setPaymentError(error.message || 'Failed to save the sale.');
         } finally {
@@ -292,6 +306,8 @@ const POSTerminal = () => {
         <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4 lg:h-[calc(100vh-8rem)] lg:flex-row">
             {/* Products Section */}
             <div className="flex-1 flex flex-col min-w-0">
+                <div className="mb-3 shrink-0"><UnpaidPosOrders refreshKey={unpaidRefresh} onPay={payload=>posting.submit('settlement',payload)} /></div>
+                {posting.error && !posting.pending && <p role="alert" className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{posting.error}</p>}
                 {/* Search Bar */}
                 <div className="relative mb-4 flex flex-col gap-2 sm:flex-row">
                     <div className="relative flex-1">
@@ -586,7 +602,7 @@ const POSTerminal = () => {
             <Modal
                 isOpen={showPaymentModal}
                 onClose={closePaymentModal}
-                title="Cash Checkout"
+                title="POS checkout"
                 size="lg"
             >
                 <div className="space-y-5">
@@ -625,8 +641,11 @@ const POSTerminal = () => {
                         </div>
                     </div>
 
+                    <label className="block text-sm font-semibold text-primary-900">Payment<select value={paymentMethod} disabled={processingPayment} onChange={e=>{setPaymentMethod(e.target.value);setReleaseConfirmed(false);setPaymentError('');}} className="mt-1 min-h-11 w-full rounded-xl border border-primary-300 bg-white p-3"><option value="cash">Cash — pay now</option><option value="to_follow">Payment to follow — release parts now</option></select></label>
+                    {paymentMethod==='to_follow' && <label className="block text-sm font-semibold text-primary-900">Customer name (required)<input value={customerName} maxLength={200} disabled={processingPayment} onChange={e=>setCustomerName(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-primary-300 p-3" /></label>}
+                    <label className="block text-sm font-semibold text-primary-900">Order note {paymentMethod==='to_follow'?'(required)':'(optional)'}<textarea value={paymentNote} maxLength={1000} disabled={processingPayment} onChange={e=>setPaymentNote(e.target.value)} rows={3} placeholder="Payment arrangement or instructions for this order" className="mt-1 w-full rounded-xl border border-primary-300 p-3 font-normal" /><span className="mt-1 block text-xs font-normal text-primary-700">Saved with this order and shown on its printed document.</span></label>
                     <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-                        <div className="space-y-4">
+                        {paymentMethod==='cash' ? <div className="space-y-4">
                             <div>
                                 <label className="mb-2 block text-sm font-semibold text-primary-700">Cash Received</label>
                                 <div className="relative">
@@ -636,6 +655,7 @@ const POSTerminal = () => {
                                         min="0"
                                         step="0.01"
                                         value={paymentAmount}
+                                        disabled={processingPayment}
                                         onChange={(e) => {
                                             setPaymentAmount(e.target.value);
                                             setPaymentError('');
@@ -657,6 +677,7 @@ const POSTerminal = () => {
                                     {cashTenderOptions.map((amount) => (
                                         <button
                                             key={amount}
+                                            disabled={processingPayment}
                                             type="button"
                                             onClick={() => setTenderAmount(amount)}
                                             className="min-h-12 rounded-lg border border-primary-200 bg-white px-3 py-2 text-left transition-all hover:border-accent-blue hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-accent-blue/30"
@@ -681,7 +702,7 @@ const POSTerminal = () => {
                                     {hasEnoughCash ? 'Ready to complete and print the receipt.' : 'Enter enough cash before completing the sale.'}
                                 </p>
                             </div>
-                        </div>
+                        </div> : <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><p className="font-semibold">Unpaid — stock will be deducted now</p><p className="mt-2">The customer will owe {formatCurrency(totals.total)}. This is not a paid sale. Record the payment later under Payments to follow in POS.</p><label className="mt-4 flex items-start gap-3"><input type="checkbox" checked={releaseConfirmed} disabled={processingPayment} onChange={e=>setReleaseConfirmed(e.target.checked)} className="mt-1 h-5 w-5 shrink-0" />I confirm these parts are being released now and stock should be deducted.</label></div>}
 
                         <div className="rounded-xl border border-primary-200 bg-white">
                             <div className="flex items-center justify-between border-b border-primary-100 px-4 py-3">
@@ -729,7 +750,7 @@ const POSTerminal = () => {
                             leftIcon={<Check className="w-4 h-4" />}
                             isLoading={processingPayment}
                         >
-                            {processingPayment ? 'Saving Sale' : 'Complete Sale'}
+                            {processingPayment ? 'Saving order…' : paymentMethod==='to_follow'?'Release parts · save unpaid':'Complete sale'}
                         </Button>
                     </div>
                 </div>
@@ -747,9 +768,10 @@ const POSTerminal = () => {
                         <Check className="w-8 h-8 text-accent-success" />
                     </div>
                     <h3 className="text-xl font-display font-bold text-primary-950 mb-1">
-                        Payment Successful!
+                        {lastTransaction?.status==='pending'?'Order saved — unpaid':'Payment recorded'}
                     </h3>
-                    <p className="text-primary-400 text-sm mb-4">Transaction completed</p>
+                    <p className="text-primary-700 text-sm mb-4">{lastTransaction?.status==='pending'?'Parts released and stock deducted. Collect the balance later under Payments to follow.':'The payment has been saved.'}</p>
+                    {lastTransaction?.detailUnavailable && <p role="alert" className="text-sm text-amber-900">The order was saved, but its document could not load. Reopen it from POS Payments to follow or Sales history. Do not submit it again.</p>}
                 </div>
 
                 {/* Receipt Preview */}
@@ -761,12 +783,13 @@ const POSTerminal = () => {
                     <Button variant="secondary" fullWidth onClick={() => setShowSuccessModal(false)}>
                         New Transaction
                     </Button>
-                    <Button variant="primary" fullWidth leftIcon={<Printer className="w-4 h-4" />} onClick={() => window.print()}>
-                        Print Receipt
+                    <Button variant="primary" fullWidth isDisabled={!lastTransaction?.receipt} leftIcon={<Printer className="w-4 h-4" />} onClick={() => window.print()}>
+                        {lastTransaction?.status==='pending'?'Print unpaid order':'Print receipt'}
                     </Button>
                 </div>
             </Modal>
 
+            <PosRequestRecovery posting={posting} />
             {/* Camera Scanner Modal */}
             <CameraScannerModal
                 isOpen={showCameraScanner}
@@ -792,5 +815,8 @@ const POSTerminal = () => {
     );
 };
 
-export default POSTerminal;
+export default function POSTerminal(){
+    const {user}=useAuth();
+    return user?.id ? <POSTerminalWorkspace key={user.id} owner={user.id} /> : null;
+}
 

@@ -1025,6 +1025,7 @@ const SalesReport = () => {
                                 <span className="rounded-full border border-primary-200 px-2.5 py-1 font-semibold uppercase tracking-wide text-primary-500">
                                     {PAYMENT_LABELS[sale.payment_method] || sale.payment_method}
                                 </span>
+                                {sale.status==='pending' && <span className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 font-semibold text-amber-900">UNPAID</span>}
                                 <span className={`rounded-full border px-2.5 py-1 font-semibold uppercase tracking-wide ${sale.sourceType === 'historical_encoded'
                                     ? 'border-amber-200 bg-amber-50 text-amber-700'
                                     : 'border-accent-success/20 bg-accent-success/10 text-accent-success'
@@ -1090,8 +1091,8 @@ const SalesReport = () => {
                                     <td className="text-right">{formatNumber(sale.item_count)}</td>
                                     <td>{PAYMENT_LABELS[sale.payment_method] || sale.payment_method}</td>
                                     <td>
-                                        <span className="inline-flex rounded-full border border-accent-success/20 bg-accent-success/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-accent-success">
-                                            {sale.status}
+                                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${sale.status==='pending'?'border-amber-300 bg-amber-50 text-amber-900':'border-accent-success/20 bg-accent-success/10 text-accent-success'}`}>
+                                            {sale.status==='pending' && sale.payment_method==='to_follow' ? 'Unpaid — payment to follow' : sale.status}
                                         </span>
                                     </td>
                                     <td className="text-right font-medium text-accent-blue">{formatCurrency(sale.total_amount)}</td>

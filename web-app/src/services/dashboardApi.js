@@ -1,5 +1,5 @@
 import { listEstimates } from './estimatesApi';
-import { listPosSales } from './posApi';
+import { getPaidSalesDayTotals } from './posOrdersApi';
 import { listServiceOrders } from './serviceOrdersApi';
 import { getCatalogSummary } from './catalogApi';
 
@@ -36,7 +36,7 @@ function errorMessage(result, label) {
 export async function getDashboardOperationsSnapshot() {
   const { startDate, endDate } = todayRange();
   const [salesResult, catalogResult, serviceResult, estimateResult] = await Promise.allSettled([
-    listPosSales({ limit: 100, page: 1, startDate, endDate }),
+    getPaidSalesDayTotals(startDate),
     getCatalogSummary(),
     listServiceOrders({ status: 'all', limit: 100 }),
     listEstimates('', 100),
@@ -67,14 +67,14 @@ const OPEN_SERVICE_STATUSES = new Set([
 
 /** Converts the live endpoint responses into stable KPI values. */
 export function summarizeDashboardOperations(snapshot = {}) {
-  const sales = Array.isArray(snapshot.sales?.sales) ? snapshot.sales.sales : [];
+  const sales = Array.isArray(snapshot.sales?.sales) ? snapshot.sales.sales.filter(sale=>sale.status==='completed') : [];
   const salesTotal = sales.reduce((total, sale) => total + Number(sale.total_amount ?? sale.totalAmount ?? 0), 0);
   const serviceOrders = Array.isArray(snapshot.serviceOrders) ? snapshot.serviceOrders : [];
   const estimates = Array.isArray(snapshot.estimates) ? snapshot.estimates : [];
 
   return {
-    todaySalesTotal: salesTotal,
-    todaySalesCount: Number(snapshot.sales?.pagination?.total ?? sales.length),
+    todaySalesTotal: Number(snapshot.sales?.totalAmount ?? salesTotal),
+    todaySalesCount: Number(snapshot.sales?.transactionCount ?? sales.length),
     inventoryValue: Number(snapshot.catalog?.inventoryValue ?? 0),
     catalogProductCount: Number(snapshot.catalog?.totalProducts ?? 0),
     openServiceOrderCount: serviceOrders.filter((order) => OPEN_SERVICE_STATUSES.has(String(order.status || '').toLowerCase())).length,

@@ -79,6 +79,7 @@ export const PAYMENT_METHODS = {
 };
 
 export const PAYMENT_LABELS = {
+    to_follow: 'Payment to follow',
     [PAYMENT_METHODS.CASH]: 'Cash',
     [PAYMENT_METHODS.GCASH]: 'GCash',
     [PAYMENT_METHODS.BANK_TRANSFER]: 'Bank Transfer',

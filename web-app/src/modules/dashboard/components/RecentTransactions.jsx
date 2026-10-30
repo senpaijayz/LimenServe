@@ -67,6 +67,7 @@ const RecentTransactions = () => {
                                 <p className="font-mono text-sm font-semibold text-primary-700">{txn.transaction_number}</p>
                                 <p className="mt-1 text-sm text-primary-950">{txn.customer_name}</p>
                                 <p className="text-xs text-primary-500">{txn.item_count} items</p>
+                                {txn.status==='pending' && <p className="mt-1 text-xs font-bold text-amber-900">UNPAID — payment to follow</p>}
                             </div>
                             <div className="text-right">
                                 <p className="font-bold text-accent-blue">{formatCurrency(txn.total_amount)}</p>
@@ -124,11 +125,11 @@ const RecentTransactions = () => {
                                 <td className="py-3 px-4 border-b border-primary-100 text-primary-600">{txn.item_count} items</td>
                                 <td className="py-3 px-4 border-b border-primary-100 text-right font-bold text-accent-blue">{formatCurrency(txn.total_amount)}</td>
                                 <td className="py-3 px-4 border-b border-primary-100">
-                                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold tracking-widest uppercase border ${txn.sourceType === 'historical_encoded'
+                                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold tracking-widest uppercase border ${txn.sourceType === 'historical_encoded' || txn.status==='pending'
                                         ? 'border-amber-200 bg-amber-50 text-amber-700'
                                         : 'bg-accent-success/10 text-accent-success border-accent-success/20'
                                         }`}>
-                                        {txn.sourceType === 'historical_encoded' ? 'Historical' : 'Sale'}
+                                        {txn.status==='pending'?'Unpaid order':txn.sourceType === 'historical_encoded' ? 'Historical' : 'Sale'}
                                     </span>
                                 </td>
                                 <td className="py-3 px-4 border-b border-primary-100 text-right text-sm text-primary-500">

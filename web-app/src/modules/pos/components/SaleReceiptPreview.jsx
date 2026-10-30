@@ -1,128 +1,44 @@
-import { formatCurrency, formatDateTime } from '../../../utils/formatters';
-import { useEffect, useState } from 'react';
-import { getPublicCmsSite } from '../../../services/cmsApi';
+import {useEffect,useState} from 'react';
+import {formatCurrency,formatDateTime} from '../../../utils/formatters';
+import {getPublicCmsSite} from '../../../services/cmsApi';
+import './SaleReceiptPreview.css';
 
-const ReceiptRow = ({ label, value, strong = false, danger = false }) => (
-    <div
-        style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            padding: '3px 0',
-            borderBottom: strong ? 'none' : '1px solid #ddd',
-            color: danger ? '#b91c1c' : '#111827',
-            fontWeight: strong ? '800' : danger ? '600' : '500',
-            fontSize: strong ? '14px' : '12px',
-        }}
-    >
-        <span>{label}</span>
-        <span>{value}</span>
+const Field=({label,value=''})=><div className="invoice-field"><span>{label}</span><span className="invoice-field-value">{value || '\u00a0'}</span></div>;
+const Total=({label,value,strong=false})=><div className={strong?'invoice-total-row invoice-total-strong':'invoice-total-row'}><span>{label}</span><span>{value}</span></div>;
+export default function SaleReceiptPreview({receipt,printId='pos-receipt'}){
+  const [business,setBusiness]=useState({});
+  useEffect(()=>{let active=true;getPublicCmsSite().then(site=>{if(active)setBusiness(site.settings ?? {});}).catch(()=>{});return()=>{active=false;};},[]);
+  if(!receipt)return null;
+  const items=receipt.items ?? [];
+  const unpaid=receipt.status==='pending' && receipt.paymentMethod==='to_follow';
+  const method=({cash:'Cash',gcash:'GCash',bank_transfer:'Bank transfer',to_follow:'Payment to follow'})[receipt.paymentMethod] || receipt.paymentMethod || '';
+  return <div className="invoice-preview-scroll"><div id={printId} className="receipt-preview paper-invoice">
+    <header className="invoice-business">
+      <h2>{business.company_name || 'LIMEN AUTO PARTS CENTER'}</h2>
+      {business.address && <p>{business.address}</p>}
+      {(business.primary_phone || business.landline) && <p>{[business.primary_phone,business.landline].filter(Boolean).join(' · ')}</p>}
+      <p>VAT Reg. TIN: {business.tin || '________________________'}</p>
+    </header>
+    <div className="invoice-heading"><h3>{unpaid?'UNPAID ORDER':'SALES INVOICE'}</h3><div>No. <strong>{receipt.transactionNumber}</strong></div></div>
+    {unpaid && <p className="invoice-unpaid">UNPAID — Parts released and stock deducted. This is not proof of payment.</p>}
+    <div className="invoice-fields">
+      <div><Field label="Sold to:" value={receipt.customerName || 'Walk-in Customer'} /><Field label="Address:" value={receipt.customerAddress} /><Field label="TIN:" value={receipt.customerTin} /><Field label="Business style:" value={receipt.businessStyle} /></div>
+      <div><Field label="Date:" value={formatDateTime(receipt.issuedAt || receipt.createdAt || receipt.businessDate)} /><Field label="Terms:" value={method} /><Field label="P.O. No.:" value={receipt.poNumber} /><Field label="OSCA/PWD ID No.:" value={receipt.oscaPwdId} /><Field label="Cardholder sig.:" /></div>
     </div>
-);
-
-const SaleReceiptPreview = ({ receipt, printId = 'pos-receipt' }) => {
-    const [business, setBusiness] = useState({});
-    useEffect(() => {
-        let active = true;
-        getPublicCmsSite().then((site) => { if (active) setBusiness(site.settings ?? {}); }).catch(() => { /* Never invent legal identifiers or contact details. */ });
-        return () => { active = false; };
-    }, []);
-    if (!receipt) {
-        return null;
-    }
-
-    const items = receipt.items ?? [];
-    const customerName = receipt.customerName || 'Walk-in Customer';
-
-    return (
-        <div className="receipt-preview" id={printId} style={{ fontFamily: 'Inter, Arial, sans-serif' }}>
-            <div style={{ textAlign: 'center', borderBottom: '2px solid black', paddingBottom: '12px', marginBottom: '12px' }}>
-                <img src="/LogoLimen.jpg" alt="Limen Logo" style={{ height: '48px', margin: '0 auto 6px', display: 'block', filter: 'grayscale(1) contrast(1.3)' }} />
-                <h2 style={{ fontSize: '16px', fontWeight: '800', margin: 0, letterSpacing: '-0.5px' }}>{business.company_name || 'LIMEN AUTO PARTS CENTER'}</h2>
-                {business.address && <p style={{ fontSize: '11px', margin: '2px 0 0', color: '#555' }}>{business.address}</p>}
-                {(business.primary_phone || business.landline) && <p style={{ fontSize: '11px', margin: '1px 0 0', color: '#555' }}>{[business.primary_phone && `Tel: ${business.primary_phone}`, business.landline && `Landline: ${business.landline}`].filter(Boolean).join(' | ')}</p>}
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', gap: '12px' }}>
-                <div>
-                    <div>
-                        <span style={{ fontWeight: '600' }}>Sold to: </span>
-                        <span style={{ borderBottom: '1px solid #aaa', display: 'inline-block', minWidth: '180px', paddingBottom: '1px' }}>
-                            {customerName}
-                        </span>
-                    </div>
-                    <div style={{ marginTop: '4px' }}>
-                        <span style={{ fontWeight: '600' }}>Payment: </span>
-                        <span style={{ textTransform: 'capitalize' }}>{receipt.paymentMethod || 'cash'}</span>
-                    </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                    <div><span style={{ fontWeight: '600' }}>Date: </span><span>{formatDateTime(receipt.createdAt || receipt.businessDate)}</span></div>
-                    <div><span style={{ fontWeight: '600' }}>Receipt No: </span><span>{receipt.transactionNumber}</span></div>
-                    <div><span style={{ fontWeight: '600' }}>Sold by: </span><span>{receipt.cashierName || 'Cashier'}</span></div>
-                </div>
-            </div>
-
-            <h3 style={{ textAlign: 'center', fontSize: '20px', fontWeight: '800', margin: '12px 0 14px', letterSpacing: '2px' }}>SALES INVOICE</h3>
-
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                    <tr>
-                        <th style={{ background: '#111', color: 'white', padding: '7px 10px', fontSize: '11px', fontWeight: '700', textAlign: 'left', textTransform: 'uppercase' }}>Qty</th>
-                        <th style={{ background: '#111', color: 'white', padding: '7px 10px', fontSize: '11px', fontWeight: '700', textAlign: 'left', textTransform: 'uppercase' }}>Item</th>
-                        <th style={{ background: '#111', color: 'white', padding: '7px 10px', fontSize: '11px', fontWeight: '700', textAlign: 'right', textTransform: 'uppercase' }}>Price/Unit</th>
-                        <th style={{ background: '#111', color: 'white', padding: '7px 10px', fontSize: '11px', fontWeight: '700', textAlign: 'right', textTransform: 'uppercase' }}>Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {items.map((item) => (
-                        <tr key={item.id}>
-                            <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>{item.quantity}</td>
-                            <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>
-                                <div style={{ fontWeight: '600' }}>{item.itemName}</div>
-                                {item.itemSku && <div style={{ fontSize: '10px', color: '#6b7280' }}>{item.itemSku}</div>}
-                            </td>
-                            <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right' }}>{formatCurrency(item.unitPrice)}</td>
-                            <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(item.lineTotal)}</td>
-                        </tr>
-                    ))}
-                    {items.length < 8 && Array.from({ length: 8 - items.length }).map((_, index) => (
-                        <tr key={`empty-${index}`}>
-                            <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}>&nbsp;</td>
-                            <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}></td>
-                            <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}></td>
-                            <td style={{ padding: '6px 10px', borderBottom: '1px solid #e0e0e0', fontSize: '12px' }}></td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
-                <div style={{ width: '220px' }}>
-                    <ReceiptRow label="Subtotal" value={formatCurrency(receipt.subtotal)} />
-
-                    {Number(receipt.discountTotal ?? 0) > 0 && (
-                        <ReceiptRow label="Discount" value={`-${formatCurrency(receipt.discountTotal)}`} danger />
-                    )}
-
-                    <ReceiptRow label="VAT (12%)" value={formatCurrency(receipt.taxTotal)} />
-
-                    <div style={{ borderTop: '2px solid black', marginTop: '4px', paddingTop: '4px' }}>
-                        <ReceiptRow label="Total" value={formatCurrency(receipt.totalAmount)} strong />
-                    </div>
-
-                    <ReceiptRow label="Cash Received" value={formatCurrency(receipt.cashReceived ?? 0)} />
-                    <div style={{ borderTop: '1px solid #ddd', marginTop: '4px', paddingTop: '4px' }}>
-                        <ReceiptRow label="Change Due" value={formatCurrency(receipt.changeDue ?? 0)} strong />
-                    </div>
-                </div>
-            </div>
-
-            <div style={{ textAlign: 'center', marginTop: '28px', paddingTop: '12px', borderTop: '1px solid #ccc' }}>
-                <p style={{ fontSize: '10px', color: '#666', fontWeight: '500' }}>Thank you for shopping at Limen Auto Parts Center!</p>
-                <p style={{ fontSize: '9px', color: '#888', marginTop: '2px' }}>"Your Trusted Partner on the Road"</p>
-            </div>
-        </div>
-    );
-};
-
-export default SaleReceiptPreview;
+    <table className="invoice-items"><colgroup><col className="invoice-qty" /><col className="invoice-unit" /><col className="invoice-item" /><col className="invoice-price" /><col className="invoice-amount" /></colgroup>
+      <thead><tr>{['QTY','UNIT','ITEM','PRICE','TOTAL'].map(label=><th key={label} scope="col">{label}</th>)}</tr></thead>
+      <tbody>{items.map((item,index)=><tr key={item.id || index}><td>{item.quantity}</td><td>{item.unit || item.uom || ''}</td><td>{item.itemSku && <strong className="invoice-part-number">{item.itemSku}</strong>}<span className="invoice-item-name">{item.itemName}</span></td><td>{formatCurrency(item.unitPrice)}</td><td>{formatCurrency(item.lineTotal)}</td></tr>)}
+        {Array.from({length:Math.max(0,8-items.length)},(_,index)=><tr className="invoice-empty-row" key={'blank-'+index}><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>)}
+      </tbody>
+    </table>
+    <div className="invoice-bottom">
+      <div className="invoice-tax-box"><Total label="Subtotal" value={formatCurrency(receipt.subtotal)} /><Total label="Discount" value={formatCurrency(receipt.discountTotal ?? 0)} /><Total label="VAT amount" value={formatCurrency(receipt.taxTotal)} /><div className="invoice-cashier">Prepared by: {receipt.cashierName || ''}</div></div>
+      <div className="invoice-totals"><Total label="Subtotal" value={formatCurrency(receipt.subtotal)} /><Total label="Less: Discount" value={formatCurrency(receipt.discountTotal ?? 0)} /><Total label="Add: VAT" value={formatCurrency(receipt.taxTotal)} /><Total label="TOTAL AMOUNT DUE" value={formatCurrency(receipt.totalAmount)} strong />
+        {unpaid ? <Total label="BALANCE DUE — UNPAID" value={formatCurrency(receipt.totalAmount)} strong /> : <><Total label="Cash received" value={receipt.cashReceived==null?'—':formatCurrency(receipt.cashReceived)} /><Total label="Change" value={formatCurrency(receipt.changeDue ?? 0)} /></>}
+      </div>
+    </div>
+    {receipt.note && <div className="invoice-note"><strong>Order note: </strong>{receipt.note}</div>}
+    {receipt.paidAt && <p className="invoice-paid-date">Payment recorded: {formatDateTime(receipt.paidAt)}</p>}
+    <footer className="invoice-signature"><p>Received the above items in good order and condition.</p><div>Signature over printed name / date</div></footer>
+  </div></div>;
+}
