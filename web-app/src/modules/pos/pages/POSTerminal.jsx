@@ -14,6 +14,8 @@ import AddServiceModal from '../../../components/ui/AddServiceModal';
 import { useAuth } from '../../../context/useAuth';
 import { useSearchParams } from 'react-router';
 import QuotePosCheckout from '../components/QuotePosCheckout';
+import ManualNonCashFields from '../components/ManualNonCashFields';
+import {isNonCash,matchesFullPayment} from '../utils/paymentMethods';
 import usePosPosting from '../hooks/usePosPosting';
 import PosRequestRecovery from '../components/PosRequestRecovery';
 import UnpaidPosOrders from '../components/UnpaidPosOrders';
@@ -94,6 +96,7 @@ const POSTerminalWorkspace = ({owner}) => {
     const [priceHistoryProduct, setPriceHistoryProduct] = useState(null);
     const [paymentAmount, setPaymentAmount] = useState('');
     const [paymentMethod,setPaymentMethod]=useState('cash');
+    const [paymentVerified,setPaymentVerified]=useState(false),[paidAmount,setPaidAmount]=useState(''),[paymentReference,setPaymentReference]=useState('');
     const [paymentNote,setPaymentNote]=useState('');
     const [releaseConfirmed,setReleaseConfirmed]=useState(false);
     const [unpaidRefresh,setUnpaidRefresh]=useState(0);
@@ -108,6 +111,7 @@ const POSTerminalWorkspace = ({owner}) => {
         setUnpaidRefresh(v=>v+1);
         if(op.kind==='checkout'){
             setPaymentAmount('');setPaymentNote('');setReleaseConfirmed(false);setPaymentMethod('cash');
+            setPaymentVerified(false);setPaidAmount('');setPaymentReference('');
             try{clearSavedCart();}catch{showScanError('The order was saved, but this device could not clear its cart. Do not submit the same items again.');return false;}
         }
         success(transaction.status==='pending'?`Order ${transaction.transactionNumber} saved unpaid. Stock has been released.`:`Payment saved for ${transaction.transactionNumber}.`);
@@ -115,6 +119,7 @@ const POSTerminalWorkspace = ({owner}) => {
         if(op.kind==='checkout'){
             setPaymentMethod(op.payload.paymentMethod);setPaymentNote(op.payload.note || '');setPaymentAmount(String(op.payload.cashReceived || ''));
             setCustomerName(op.payload.customerName || '');setReleaseConfirmed(false);setPaymentError(error.message);setShowPaymentModal(true);
+            setPaymentVerified(false);setPaidAmount(String(op.payload.paidAmount ?? ''));setPaymentReference(op.payload.paymentReference || '');
         }
     });
     const cartLocked=posting.busy || Boolean(posting.pending);
@@ -197,10 +202,10 @@ const POSTerminalWorkspace = ({owner}) => {
     const paymentReceived = Number(paymentAmount) || 0;
     const change = paymentReceived - totals.total;
     const amountShort = Math.max(0, totals.total - paymentReceived);
-    const hasEnoughCash = paymentReceived >= totals.total;
+    const hasEnoughCash = Math.round((paymentReceived+Number.EPSILON)*100) >= Math.round((totals.total+Number.EPSILON)*100);
     const cashTenderOptions = useMemo(() => buildCashTenderOptions(totals.total), [totals.total]);
     const canCompletePayment = items.length > 0 && !processingPayment && !posting.pending && !posting.busy
-        && (paymentMethod==='cash'?hasEnoughCash:(totals.total>0 && customerName.trim() && paymentNote.trim() && releaseConfirmed));
+        && (paymentMethod==='cash'?hasEnoughCash&&Number.isFinite(paymentReceived)&&paymentReceived<=1000000000&&paymentVerified:isNonCash(paymentMethod)?paymentVerified&&matchesFullPayment(paidAmount,totals.total,paymentReference):(Math.round(totals.total*100)>0 && customerName.trim() && paymentNote.trim() && releaseConfirmed));
     const canGoPrev = (pagination.page ?? currentPage) > 1;
     const canGoNext = (pagination.page ?? currentPage) < (pagination.totalPages ?? 1);
     const rangeStart = pagination.totalCount === 0 ? 0 : (((pagination.page ?? currentPage) - 1) * (pagination.pageSize ?? PAGE_SIZE)) + 1;
@@ -218,6 +223,7 @@ const POSTerminalWorkspace = ({owner}) => {
                 return;
             }
             setPaymentAmount('');
+            setPaymentVerified(false);setPaidAmount('');setPaymentReference('');
             setPaymentError('');
             setShowPaymentModal(true);
         } catch (error) {
@@ -233,6 +239,7 @@ const POSTerminalWorkspace = ({owner}) => {
 
     const setTenderAmount = (amount) => {
         setPaymentAmount(formatTenderAmount(amount));
+        setPaymentVerified(false);
         setPaymentError('');
     };
 
@@ -244,8 +251,10 @@ const POSTerminalWorkspace = ({owner}) => {
                 setPaymentError('Add at least one item before completing the sale.');
             } else if (paymentMethod==='to_follow') {
                 setPaymentError('Enter the customer and a note, then confirm the parts are being released now.');
-            } else if (!hasEnoughCash) {
+            } else if (paymentMethod==='cash'&&!hasEnoughCash) {
                 setPaymentError(`Cash received is short by ${formatCurrency(amountShort)}.`);
+            } else {
+                setPaymentError('Review the received amount and reference, then confirm the full payment was received.');
             }
             return;
         }
@@ -269,12 +278,16 @@ const POSTerminalWorkspace = ({owner}) => {
             }
             if (priceCheck.changed.length) {
                 refreshProductPrices(prices);
+                setPaymentVerified(false);
                 setPaymentError('Selling prices changed. The cart now uses current prices. Review the new total and cash received, then confirm again. No sale has been submitted.');
                 return;
             }
             const payload = {
                 customerName,
                 paymentMethod,
+                paymentVerified:paymentMethod!=='to_follow'&&paymentVerified,
+                paidAmount:isNonCash(paymentMethod)?Number(paidAmount):0,
+                paymentReference:isNonCash(paymentMethod)?paymentReference.trim():'',
                 note:paymentNote.trim(),
                 releaseConfirmed,
                 cashReceived: paymentMethod==='cash'?paymentReceived:0,
@@ -661,7 +674,7 @@ const POSTerminalWorkspace = ({owner}) => {
                         </div>
                     </div>
 
-                    <label className="block text-sm font-semibold text-primary-900">Payment<select value={paymentMethod} disabled={processingPayment} onChange={e=>{setPaymentMethod(e.target.value);setReleaseConfirmed(false);setPaymentError('');}} className="mt-1 min-h-11 w-full rounded-xl border border-primary-300 bg-white p-3"><option value="cash">Cash — pay now</option><option value="to_follow">Payment to follow — release parts now</option></select></label>
+                    <label className="block text-sm font-semibold text-primary-900">Payment<select value={paymentMethod} disabled={processingPayment} onChange={e=>{setPaymentMethod(e.target.value);setReleaseConfirmed(false);setPaymentVerified(false);setPaymentReference('');setPaidAmount('');setPaymentError('');}} className="mt-1 min-h-11 w-full rounded-xl border border-primary-300 bg-white p-3"><option value="cash">Cash — pay now</option><option value="gcash">GCash</option><option value="bank_transfer">Bank transfer</option><option value="to_follow">Payment to follow — release parts now</option></select></label>
                     {paymentMethod==='to_follow' && <label className="block text-sm font-semibold text-primary-900">Customer name (required)<input value={customerName} maxLength={200} disabled={processingPayment} onChange={e=>setCustomerName(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-primary-300 p-3" /></label>}
                     <label className="block text-sm font-semibold text-primary-900">Order note {paymentMethod==='to_follow'?'(required)':'(optional)'}<textarea value={paymentNote} maxLength={1000} disabled={processingPayment} onChange={e=>setPaymentNote(e.target.value)} rows={3} placeholder="Payment arrangement or instructions for this order" className="mt-1 w-full rounded-xl border border-primary-300 p-3 font-normal" /><span className="mt-1 block text-xs font-normal text-primary-700">Saved with this order and shown on its printed document.</span></label>
                     <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
@@ -678,6 +691,7 @@ const POSTerminalWorkspace = ({owner}) => {
                                         disabled={processingPayment}
                                         onChange={(e) => {
                                             setPaymentAmount(e.target.value);
+                                            setPaymentVerified(false);
                                             setPaymentError('');
                                         }}
                                         onKeyDown={handlePaymentInputKeyDown}
@@ -722,7 +736,7 @@ const POSTerminalWorkspace = ({owner}) => {
                                     {hasEnoughCash ? 'Ready to complete and print the receipt.' : 'Enter enough cash before completing the sale.'}
                                 </p>
                             </div>
-                        </div> : <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><p className="font-semibold">Unpaid — stock will be deducted now</p><p className="mt-2">The customer will owe {formatCurrency(totals.total)}. This is not a paid sale. Record the payment later under Payments to follow in POS.</p><label className="mt-4 flex items-start gap-3"><input type="checkbox" checked={releaseConfirmed} disabled={processingPayment} onChange={e=>setReleaseConfirmed(e.target.checked)} className="mt-1 h-5 w-5 shrink-0" />I confirm these parts are being released now and stock should be deducted.</label></div>}
+                        </div> : isNonCash(paymentMethod)?<ManualNonCashFields method={paymentMethod} total={totals.total} amount={paidAmount} onAmount={value=>{setPaidAmount(value);setPaymentVerified(false);}} reference={paymentReference} onReference={value=>{setPaymentReference(value);setPaymentVerified(false);}} disabled={processingPayment} /> : <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><p className="font-semibold">Unpaid — stock will be deducted now</p><p className="mt-2">The customer will owe {formatCurrency(totals.total)}. This is not a paid sale. Record the payment later under Payments to follow in POS.</p><label className="mt-4 flex items-start gap-3"><input type="checkbox" checked={releaseConfirmed} disabled={processingPayment} onChange={e=>setReleaseConfirmed(e.target.checked)} className="mt-1 h-5 w-5 shrink-0" />I confirm these parts are being released now and stock should be deducted.</label></div>}
 
                         <div className="rounded-xl border border-primary-200 bg-white">
                             <div className="flex items-center justify-between border-b border-primary-100 px-4 py-3">
@@ -746,6 +760,7 @@ const POSTerminalWorkspace = ({owner}) => {
                             </div>
                         </div>
                     </div>
+                    {paymentMethod!=='to_follow'&&<label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><input type="checkbox" checked={paymentVerified} disabled={processingPayment} onChange={event=>setPaymentVerified(event.target.checked)} className="mt-1 h-5 w-5 shrink-0" />I confirm the full payment has been received{paymentMethod==='cash'?' in cash':' in the GCash or bank account'}.</label>}
                     {paymentError && (
                         <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/10 px-4 py-3 text-sm text-accent-danger">
                             {paymentError}

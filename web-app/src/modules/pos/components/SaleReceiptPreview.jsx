@@ -35,10 +35,11 @@ export default function SaleReceiptPreview({receipt,printId='pos-receipt'}){
     <div className="invoice-bottom">
       <div className="invoice-tax-box"><Total label="Subtotal" value={formatCurrency(receipt.subtotal)} /><Total label="Discount" value={formatCurrency(receipt.discountTotal ?? 0)} /><Total label="VAT amount" value={formatCurrency(receipt.taxTotal)} /><div className="invoice-cashier">Prepared by: {receipt.cashierName || ''}</div></div>
       <div className="invoice-totals"><Total label="Subtotal" value={formatCurrency(receipt.subtotal)} /><Total label="Less: Discount" value={formatCurrency(receipt.discountTotal ?? 0)} /><Total label="Add: VAT" value={formatCurrency(receipt.taxTotal)} /><Total label="TOTAL AMOUNT DUE" value={formatCurrency(receipt.totalAmount)} strong />
-        {unpaid ? <Total label="BALANCE DUE — UNPAID" value={formatCurrency(receipt.totalAmount)} strong /> : <><Total label="Cash received" value={receipt.cashReceived==null?'—':formatCurrency(receipt.cashReceived)} /><Total label="Change" value={formatCurrency(receipt.changeDue ?? 0)} /></>}
+        {unpaid ? <Total label="BALANCE DUE — UNPAID" value={formatCurrency(receipt.totalAmount)} strong /> : receipt.paymentMethod==='cash'?<><Total label="Cash received" value={receipt.cashReceived==null?'—':formatCurrency(receipt.cashReceived)} /><Total label="Change" value={formatCurrency(receipt.changeDue ?? 0)} /></>:<Total label="Payment method" value={method} />}
       </div>
     </div>
     {receipt.note && <div className="invoice-note"><strong>Order note: </strong>{receipt.note}</div>}
+    {receipt.paymentReference && <div className="invoice-note"><strong>Payment reference: </strong>{receipt.paymentReference}</div>}
     {receipt.paidAt && <p className="invoice-paid-date">Payment recorded: {formatDateTime(receipt.paidAt)}</p>}
     <footer className="invoice-signature"><p>Received the above items in good order and condition.</p><div>Signature over printed name / date</div></footer>
   </div></div>;
