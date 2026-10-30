@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
     Archive,
@@ -31,9 +31,9 @@ import { isManagedBundle, managedSelectionsFromLines, savedManagedOffers } from 
 import { calculateQuoteTotals, clearBundlePricing, createQuoteLineKey } from "../../public/utils/bundleQuotePricing";
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 import { downloadQuotationPdf } from '../utils/downloadQuotationPdf';
+import QuoteServiceOrderHandoff from '../components/QuoteServiceOrderHandoff';
 import {
     createEstimate,
-    convertEstimateToServiceOrder,
     archiveEstimate,
     deleteEstimate,
     getEstimateDetail,
@@ -366,7 +366,16 @@ const QuoteBuilder = () => {
     const [savedEstimateSnapshot, setSavedEstimateSnapshot] = useState(null);
     const quoteMutationVersion = useRef(0);
     const quoteSaveBusy = useRef(false);
+    const quoteConversionBusy = useRef(false);
+    const [handoffBusy, setHandoffBusy] = useState(false);
     const quoteLoadRequest = useRef(0);
+    const handleHandoffBusy = useCallback((busy) => {
+        if (busy && (quoteSaveBusy.current || quoteConversionBusy.current)) return false;
+        quoteConversionBusy.current = busy;
+        if (busy) quoteLoadRequest.current += 1;
+        setHandoffBusy(busy);
+        return true;
+    }, []);
     const [currentEstimateStatus, setCurrentEstimateStatus] = useState('draft');
     const [quoteDirty, setQuoteDirty] = useState(false);
     const [changeNote, setChangeNote] = useState('Customer requested item updates');
@@ -376,8 +385,6 @@ const QuoteBuilder = () => {
     const [deletingQuoteId, setDeletingQuoteId] = useState(null);
     const [quoteToArchive, setQuoteToArchive] = useState(null);
     const [archivingQuoteId, setArchivingQuoteId] = useState(null);
-    const [quoteToConvert, setQuoteToConvert] = useState(null);
-    const [convertingQuote, setConvertingQuote] = useState(false);
 
     const {
         products: availableProducts,
@@ -533,7 +540,7 @@ const QuoteBuilder = () => {
 
 
     const loadQuote = async (estimateId) => {
-        if (quoteSaveBusy.current) return;
+        if (quoteSaveBusy.current || quoteConversionBusy.current) return;
         if (quoteDirty && !window.confirm('Load this quotation and discard your unsaved changes?')) return;
         const request = ++quoteLoadRequest.current;
         const version = quoteMutationVersion.current;
@@ -576,7 +583,7 @@ const QuoteBuilder = () => {
     };
 
     const resetQuotationEditor = () => {
-        if (quoteSaveBusy.current) return;
+        if (quoteSaveBusy.current || quoteConversionBusy.current) return;
         quoteLoadRequest.current += 1;
         setCurrentEstimateId(null);
         setCurrentEstimateNumber('');
@@ -597,6 +604,7 @@ const QuoteBuilder = () => {
     };
 
     const confirmDeleteQuote = async () => {
+        if (quoteConversionBusy.current) return;
         const quote = quoteToDelete;
         if (!quote?.id) {
             return;
@@ -621,6 +629,7 @@ const QuoteBuilder = () => {
     };
 
     const confirmArchiveQuote = async () => {
+        if (quoteConversionBusy.current) return;
         const quote = quoteToArchive;
         if (!quote?.id) {
             return;
@@ -644,23 +653,8 @@ const QuoteBuilder = () => {
         }
     };
 
-    const confirmConvertQuote = async () => {
-        if (!quoteToConvert?.id || convertingQuote) return;
-        setConvertingQuote(true);
-        try {
-            const orderId = await convertEstimateToServiceOrder(quoteToConvert.id);
-            success('Service order created from the approved quotation.');
-            setQuoteToConvert(null);
-            navigate(`/services/${orderId}`);
-        } catch (conversionError) {
-            showError(conversionError.message || 'Unable to create the service order from this quotation.');
-        } finally {
-            setConvertingQuote(false);
-        }
-    };
-
     const handleSave = async () => {
-        if (quoteSaveBusy.current) return;
+        if (quoteSaveBusy.current || quoteConversionBusy.current) return;
         if (!selectedParts.length && !selectedServices.length) {
             showError('Add at least one part or service before saving.');
             return;
@@ -1006,22 +1000,6 @@ const QuoteBuilder = () => {
                                             Save revisions without creating a brand new quotation. Customers can retrieve the same quotation for 30 days using the quote number and phone.
                                         </p>
                                     </div>
-                                    {currentEstimateId && currentEstimateStatus === 'approved' && (
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                if (quoteDirty) {
-                                                    showError('Save your quotation changes before creating a service order.');
-                                                    return;
-                                                }
-                                                setQuoteToConvert({ id: currentEstimateId, estimate_number: currentEstimateNumber });
-                                            }}
-                                            className="inline-flex items-center gap-2 rounded-xl bg-primary-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                                        >
-                                            <Wrench className="h-4 w-4" aria-hidden="true" />
-                                            Create service order
-                                        </button>
-                                    )}
                                     {currentEstimateId && currentEstimateStatus === 'draft' && (
                                         <button
                                             type="button"
@@ -1044,6 +1022,11 @@ const QuoteBuilder = () => {
                                     )}
                                 </div>
 
+                                {currentEstimateId && ['approved', 'converted_service'].includes(savedEstimateSnapshot?.estimate?.status) && (
+                                    <QuoteServiceOrderHandoff key={currentEstimateId} estimateId={currentEstimateId}
+                                        estimateNumber={currentEstimateNumber} status={savedEstimateSnapshot.estimate.status}
+                                        dirty={quoteDirty} saving={saving} onBusyChange={handleHandoffBusy} />
+                                )}
                                 <div className="mt-5 grid gap-4 lg:grid-cols-2">
                                     {currentEstimateId && !currentEstimateStatus.startsWith('converted_') && (
                                         <label className="text-sm font-semibold text-primary-700">
@@ -1319,7 +1302,7 @@ const QuoteBuilder = () => {
                                 leftIcon={<Save className="w-4 h-4" />}
                                 onClick={handleSave}
                                 isLoading={saving}
-                                disabled={!hasQuoteItems}
+                                disabled={!hasQuoteItems || handoffBusy}
                             >
                                 {currentEstimateId ? 'Save Revision' : 'Save Quotation'}
                             </Button>
@@ -1327,17 +1310,6 @@ const QuoteBuilder = () => {
                     </div>
                 </div>
             </div>
-
-            <ConfirmDialog
-                isOpen={Boolean(quoteToConvert)}
-                title="Create service order?"
-                message={`Use approved quotation ${quoteToConvert?.estimate_number || ''} to open a new service order? Its estimated parts and services will be copied, but stock will not be deducted until the final sale.`}
-                confirmLabel="Create service order"
-                confirmVariant="primary"
-                isLoading={convertingQuote}
-                onConfirm={confirmConvertQuote}
-                onClose={() => { if (!convertingQuote) setQuoteToConvert(null); }}
-            />
 
             <ConfirmDialog
                 isOpen={Boolean(quoteToDelete)}

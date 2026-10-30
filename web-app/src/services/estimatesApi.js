@@ -1,5 +1,7 @@
 import apiClient, { extractApiError } from './apiClient';
 
+const ORDER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export async function createEstimate(payload) {
   try {
     const { data } = await apiClient.post('/estimates', payload);
@@ -125,11 +127,25 @@ export async function convertEstimateToSale(estimateId, paymentMethod = 'cash') 
   }
 }
 
+export async function getEstimateServiceOrder(estimateId, { signal } = {}) {
+  try {
+    const { data } = await apiClient.get(`/estimates/${encodeURIComponent(estimateId)}/service-order`, { signal });
+    if (!data || !Object.hasOwn(data, 'serviceOrder')
+        || (data.serviceOrder !== null && !ORDER_ID_PATTERN.test(data.serviceOrder?.id))) {
+      throw new Error('The service order status could not be confirmed.');
+    }
+    return data.serviceOrder;
+  } catch (error) {
+    extractApiError(error, 'Unable to check the linked service order.');
+  }
+}
+
 export async function convertEstimateToServiceOrder(estimateId, assignedTo = null) {
   try {
-    const { data } = await apiClient.post(`/estimates/${estimateId}/convert-service-order`, {
+    const { data } = await apiClient.post(`/estimates/${encodeURIComponent(estimateId)}/convert-service-order`, {
       assignedTo,
     });
+    if (!ORDER_ID_PATTERN.test(data?.serviceOrderId)) throw new Error('The response did not confirm the service order. Check its status before trying again.');
     return data.serviceOrderId;
   } catch (error) {
     extractApiError(error, 'Failed to convert estimate to service order.');
