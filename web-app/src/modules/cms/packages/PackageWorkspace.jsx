@@ -741,7 +741,7 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-blue-800">
-                    {typeLabel(pkg.type)}
+                    Saved draft · {typeLabel(pkg.type)}
                   </p>
                   <h3 className="mt-1 break-words text-lg font-semibold text-primary-950">
                     {pkg.name}
@@ -755,11 +755,11 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
                 </span>
               </div>
               <p className="mt-3 text-sm text-primary-700">
-                Included items: {pkg.itemCount} · Package options: {pkg.variants.length}
+                {pkg.summaryError ? "Published contents unavailable" : `${pkg.summarySource === "published" ? "Published" : "Draft"} contents: ${pkg.itemCount} items · ${pkg.variants.length} options`}
               </p>
-              <p className="mt-1 break-words text-xs text-primary-600">
+              {!pkg.summaryError && <p className="mt-1 break-words text-xs text-primary-600">
                 {compatibility.join(" · ") || "Compatibility not reviewed"}
-              </p>
+              </p>}
               {pkg.hasUnpublishedChanges && (
                 <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
                   {pkg.status === "published"
@@ -775,9 +775,10 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
                     : "Working draft pricing"}
                   {pkg.variants.length > 1 ? ` · ${price?.label}` : ""}
                 </p>
-                {price?.error || !price ? (
-                  <p className="mt-2 text-sm text-amber-900">
-                    {price?.error || "Add items and preview pricing."}
+                {pkg.summaryName && <p className="mt-1 break-words text-sm font-semibold text-primary-950">{pkg.summaryName}{pkg.summaryRevision != null ? ` · revision ${pkg.summaryRevision}` : ""}</p>}
+                {pkg.summaryError || price?.error || !price ? (
+                  <p role="status" className="mt-2 text-sm text-amber-900">
+                    {pkg.summaryError || price?.error || "Add items and preview pricing."}
                   </p>
                 ) : (
                   <div className="mt-2 grid grid-cols-3 gap-2 text-sm tabular-nums">
@@ -825,7 +826,7 @@ export default function PackageWorkspace({ onUnsavedChange = noop }) {
                   onClick={() => open(pkg.id)}
                   className="min-h-10 rounded-xl bg-primary-950 px-4 text-sm font-semibold text-white disabled:opacity-40"
                 >
-                  {busy === pkg.id ? "Working…" : "Edit"}
+                  {busy === pkg.id ? "Working…" : "Edit draft"}
                 </button>
                 <button
                   type="button"
