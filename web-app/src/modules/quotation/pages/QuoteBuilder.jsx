@@ -21,7 +21,6 @@ import Card from '../../../components/ui/Card';
 import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import { formatCurrency } from '../../../utils/formatters';
 import { useToast } from '../../../components/ui/Toast';
-import { useCart } from '../../../context/CartContext';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
 import useManagedQuotePackages from '../../../hooks/useManagedQuotePackages';
@@ -309,7 +308,6 @@ function mapEstimateDetailToState(estimate) {
 const QuoteBuilder = () => {
     const navigate = useNavigate();
     const { success, error: showError, info, loading: showToastLoading, updateToast } = useToast();
-    const { addItem: addPosItem, clearCart, setCustomerName: setPosCustomerName } = useCart();
     const { services: availableServices, loading: servicesLoading, error: servicesError } = useServiceCatalog();
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
@@ -790,42 +788,11 @@ const QuoteBuilder = () => {
     };
 
     const handleAddToPos = () => {
-        if (!hasQuoteItems) {
-            showError('Add at least one part or service before sending to POS.');
+        if (!currentEstimateId || quoteDirty || saving || handoffBusy || !['approved','converted_sale'].includes(savedEstimateSnapshot?.estimate?.status)) {
+            showError('Save an approved quotation before opening its POS checkout.');
             return;
         }
-
-        clearCart();
-        setPosCustomerName(customerName || 'Walk-in Customer');
-
-        selectedParts.forEach((part) => {
-            addPosItem({
-                id: part.id,
-                productId: part.id,
-                lineType: 'product',
-                name: part.name,
-                sku: getProductPartNumber(part) || part.sku,
-                price: Number(part.price ?? 0),
-                quantity: Number(part.stock ?? part.maxQuantity ?? 999),
-                maxQuantity: Number(part.stock ?? part.maxQuantity ?? 999),
-            }, Number(part.quantity ?? 1));
-        });
-
-        selectedServices.forEach((service) => {
-            addPosItem({
-                id: `service-${service.id}`,
-                serviceId: service.id,
-                lineType: 'service',
-                name: service.name,
-                sku: 'SERVICE',
-                price: Number(service.price ?? 0),
-                quantity: 999,
-                maxQuantity: 999,
-            }, Number(service.quantity ?? 1));
-        });
-
-        success('Quotation summary added to POS cart.');
-        navigate('/pos');
+        navigate('/pos?estimateId=' + encodeURIComponent(currentEstimateId));
     };
 
     return (
@@ -1128,10 +1095,11 @@ const QuoteBuilder = () => {
                                 fullWidth
                                 leftIcon={<ShoppingCart className="w-4 h-4" />}
                                 onClick={handleAddToPos}
-                                disabled={!hasQuoteItems}
+                                disabled={!currentEstimateId || quoteDirty || saving || handoffBusy || !['approved','converted_sale'].includes(savedEstimateSnapshot?.estimate?.status)}
                             >
-                                Add to POS
+                                Open saved quote in POS
                             </Button>
+                            <p className="text-xs text-primary-700">Save an approved quotation first. Its POS checkout keeps the saved prices and leaves your regular cart unchanged.</p>
                             <Button
                                 variant="primary"
                                 fullWidth

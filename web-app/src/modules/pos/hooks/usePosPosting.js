@@ -1,12 +1,12 @@
 import {useEffect,useRef,useState} from 'react';
-import {recoverPosOrder,settlePosOrder,submitPosOrder} from '../../../services/posOrdersApi';
+import {recoverPosOrder,settlePosOrder,submitPosOrder,submitQuotePosOrder} from '../../../services/posOrdersApi';
 
 const storageKey=owner=>`limen-pos-request:v1:${owner}`;
 const ownerKey='limen-pos-request-owner:v1';
 const read=owner=>{
   try{const holder=sessionStorage.getItem(ownerKey);if(holder && holder!==owner && sessionStorage.getItem(storageKey(holder)))return {blocked:true};
     const text=sessionStorage.getItem(storageKey(owner));if(!text)return null;const op=JSON.parse(text);
-    return op.owner===owner && op.id && ['checkout','settlement'].includes(op.kind) && op.payload ? op : {blocked:true};
+    return op.owner===owner && op.id && ['checkout','settlement','quote_checkout'].includes(op.kind) && op.payload ? op : {blocked:true};
   }catch{return {blocked:true};}
 };
 export default function usePosPosting(owner,onSaved,onRejected){
@@ -26,7 +26,7 @@ export default function usePosPosting(owner,onSaved,onRejected){
     lock.current=true;setBusy(true);setError('');
     try{
       sessionStorage.setItem(ownerKey,owner);
-      const result=await (op.kind==='checkout'?submitPosOrder:settlePosOrder)({...op.payload,requestId:op.id});
+      const result=await (op.kind==='checkout'?submitPosOrder:op.kind==='quote_checkout'?submitQuotePosOrder:settlePosOrder)({...op.payload,requestId:op.id});
       finish(result,op);
     }catch(error){
       if(!active.current)return;

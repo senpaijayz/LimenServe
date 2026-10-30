@@ -20,6 +20,7 @@ export default function SaleReceiptPreview({receipt,printId='pos-receipt'}){
       <p>VAT Reg. TIN: {business.tin || '________________________'}</p>
     </header>
     <div className="invoice-heading"><h3>{unpaid?'UNPAID ORDER':'SALES INVOICE'}</h3><div>No. <strong>{receipt.transactionNumber}</strong></div></div>
+    {receipt.quotationNumber && <p className="mb-3 text-xs">Quotation: <strong>{receipt.quotationNumber}</strong></p>}
     {unpaid && <p className="invoice-unpaid">UNPAID — Parts released and stock deducted. This is not proof of payment.</p>}
     <div className="invoice-fields">
       <div><Field label="Sold to:" value={receipt.customerName || 'Walk-in Customer'} /><Field label="Address:" value={receipt.customerAddress} /><Field label="TIN:" value={receipt.customerTin} /><Field label="Business style:" value={receipt.businessStyle} /></div>

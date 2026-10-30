@@ -14,3 +14,5 @@ export const settlePosOrder=({saleId,...payload})=>request('post',`/sales/${enco
 export const recoverPosOrder=(id)=>request('get',`/requests/${encodeURIComponent(id)}`);
 export const listUnpaidPosOrders=(page,signal)=>request('get','/unpaid',{page},signal);
 export const getPaidSalesDayTotals=date=>request('get','/paid-day-totals',{date});
+export const getQuotePosContext=(id,signal)=>request('get',`/quotation/${encodeURIComponent(id)}`,undefined,signal);
+export const submitQuotePosOrder=({estimateId,...payload})=>request('post',`/quotation/${encodeURIComponent(estimateId)}/checkout`,payload);

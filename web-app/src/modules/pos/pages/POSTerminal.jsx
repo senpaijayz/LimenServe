@@ -12,6 +12,8 @@ import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import AddServiceModal from '../../../components/ui/AddServiceModal';
 import { useAuth } from '../../../context/useAuth';
+import { useSearchParams } from 'react-router';
+import QuotePosCheckout from '../components/QuotePosCheckout';
 import usePosPosting from '../hooks/usePosPosting';
 import PosRequestRecovery from '../components/PosRequestRecovery';
 import UnpaidPosOrders from '../components/UnpaidPosOrders';
@@ -72,6 +74,8 @@ function formatCatalogProduct(product) {
  * Point of Sale interface for processing transactions
  */
 const POSTerminalWorkspace = ({owner}) => {
+    const [searchParams,setSearchParams]=useSearchParams();
+    const sourceEstimate=searchParams.get('estimateId');
     const {
         items, totals, addItem, removeItem, updateQuantity, clearCart, refreshProductPrices,
         customerName, setCustomerName, discountPercent, setDiscountPercent
@@ -304,6 +308,7 @@ const POSTerminalWorkspace = ({owner}) => {
 
     return (
         <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4 lg:h-[calc(100vh-8rem)] lg:flex-row">
+            {sourceEstimate ? <div className="min-w-0 flex-1 space-y-4 overflow-y-auto"><QuotePosCheckout key={`${owner}:${sourceEstimate}`} estimateId={sourceEstimate} posting={posting} refreshKey={unpaidRefresh} onLeave={()=>setSearchParams(current=>{const next=new URLSearchParams(current);next.delete('estimateId');return next;},{replace:true})} /><UnpaidPosOrders refreshKey={unpaidRefresh} onPay={payload=>posting.submit('settlement',payload)} /></div> : <>
             {/* Products Section */}
             <div className="flex-1 flex flex-col min-w-0">
                 <div className="mb-3 shrink-0"><UnpaidPosOrders refreshKey={unpaidRefresh} onPay={payload=>posting.submit('settlement',payload)} /></div>
@@ -598,6 +603,7 @@ const POSTerminalWorkspace = ({owner}) => {
                 </Button>
             </div>
 
+            </>}
             {/* Payment Modal */}
             <Modal
                 isOpen={showPaymentModal}
