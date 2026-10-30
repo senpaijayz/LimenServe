@@ -64,7 +64,6 @@ function formatCatalogProduct(product) {
         status: product.status ?? 'in_stock',
         uom: product.uom ?? 'PC',
         brand: product.brand ?? 'Mitsubishi',
-        cost: Math.round(Number(product.price ?? 0) * 0.55),
         location: product.location ?? { floor: '-', section: '-', shelf: '-' },
     };
 }

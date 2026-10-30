@@ -2200,7 +2200,7 @@ router.delete('/categories/:categoryId', requireRole('admin'), async (req, res, 
 router.get('/products', async (req, res, next) => {
   try {
     const page = parsePositiveInteger(req.query.page, 1, 10000);
-    const pageSize = parsePositiveInteger(req.query.pageSize, 10, 250);
+    const pageSize = parsePositiveInteger(req.query.pageSize, 10, 100);
     const searchQuery = String(req.query.q || '').trim();
     const selectedCategory = String(req.query.category || 'all');
     const sortBy = String(req.query.sortBy || 'name-asc');
