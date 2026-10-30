@@ -533,16 +533,7 @@ router.patch('/:estimateId', requireRole('admin'), reviseTrustedEstimate);
 router.post('/:estimateId/revise', requireRole('admin'), reviseTrustedEstimate);
 
 router.post('/:estimateId/convert-sale', requireRole('admin'), async (req, res, next) => {
-  try {
-    const saleId = await callRpc('convert_estimate_to_sale', {
-      p_estimate_id: req.params.estimateId,
-      p_payment_method: req.body?.paymentMethod || 'cash',
-    });
-
-    res.json({ saleId });
-  } catch (error) {
-    next(error);
-  }
+  res.status(410).json({error:'Open the saved quotation in POS and confirm payment before creating a sale.'});
 });
 
 router.post('/:estimateId/convert-service-order', requireRole('admin'), async (req, res, next) => {

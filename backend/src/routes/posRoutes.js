@@ -279,6 +279,19 @@ router.get('/unpaid',requireRole('admin','cashier'),async(req,res,next)=>{
     res.json(await callRpc('list_unpaid_pos_orders',{p_page:page}));
   }catch(error){next(normalizePosError(error));}
 });
+router.get('/quotation/:estimateId',requireRole('admin'),async(req,res,next)=>{
+  try{res.set('Cache-Control','private, no-store');const quote=await callRpc('quote_pos_context',{p_id:posRequestId(req.params.estimateId)});
+    if(!quote){res.status(404).json({error:'Saved quotation not found.'});return;}res.json({quote});
+  }catch(error){next(normalizePosError(error));}
+});
+router.post('/quotation/:estimateId/checkout',requireRole('admin'),async(req,res,next)=>{
+  try{
+    if(typeof req.body?.version!=='string'||!/^[a-f0-9]{32}$/.test(req.body.version))throw Object.assign(new Error('Reload this saved quotation before checkout.'),{statusCode:400});
+    const result=await callRpc('checkout_quote_pos_order',{p_estimate:posRequestId(req.params.estimateId),p_version:req.body.version,p_actor:req.user.id,p_request:posRequestId(req.body.requestId),
+      payment:{paymentMethod:req.body.paymentMethod,cashReceived:req.body.cashReceived,note:typeof req.body.note==='string'?req.body.note.trim():'',paymentVerified:req.body.paymentVerified===true,releaseConfirmed:req.body.releaseConfirmed===true}});
+    res.status(201).json(await withPosDetail(result));
+  }catch(error){next(normalizePosError(error));}
+});
 router.get('/requests/:requestId',requireRole('admin','cashier'),async(req,res,next)=>{
   try{
     res.set('Cache-Control','private, no-store');
