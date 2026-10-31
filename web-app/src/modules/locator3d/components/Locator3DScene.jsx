@@ -1274,11 +1274,11 @@ export function Locator2DFallback({ message = 'The interactive 3D map is unavail
                     <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3"><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Floor</span><strong>Floor {activeFloor}</strong></div>
                     <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3"><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Shelves</span><strong>{shelfCount}</strong></div>
                 </div>
-                <div className="overflow-x-auto rounded-xl border border-white/10">
+                <div className="overflow-x-auto rounded-xl border border-white/10" tabIndex={0} role="region" aria-label="Saved product locations">
                     <table className="min-w-full text-left text-sm">
                         <thead className="bg-white/[0.06] text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Product</th><th className="px-3 py-2">Aisle</th><th className="px-3 py-2">Shelf</th><th className="px-3 py-2">Layer</th><th className="px-3 py-2">Bin</th></tr></thead>
                         <tbody>
-                            {rows.map((location) => <tr className="border-t border-white/10" key={`${location.productId}-${location.binNumber}`}><td className="px-3 py-2">{location.productName || location.sku || 'Unassigned product'}{location.productName && location.sku && <span className="mt-1 block font-mono text-xs text-slate-400">{location.sku}</span>}</td><td className="px-3 py-2">{normalizeAisle(location.aisle) || '-'}</td><td className="px-3 py-2">{location.shelfNumber || '-'}</td><td className="px-3 py-2">{location.layerNumber || 1}</td><td className="px-3 py-2">{location.binNumber || '-'}</td></tr>)}
+                            {rows.map((location) => <tr className="border-t border-white/10" key={`${location.productId}-${location.binNumber}`}><td className="px-3 py-2"><strong className="block font-mono text-slate-100">{location.sku || 'Part number not recorded'}</strong>{location.productName && <span className="mt-1 block text-xs text-slate-200">({location.productName})</span>}</td><td className="px-3 py-2">{normalizeAisle(location.aisle) || '-'}</td><td className="px-3 py-2">{location.shelfNumber || '-'}</td><td className="px-3 py-2">{location.layerNumber || '-'}</td><td className="px-3 py-2">{location.binNumber || '-'}</td></tr>)}
                             {rows.length === 0 && <tr><td className="px-3 py-5 text-slate-400" colSpan="5">No saved product locations on this floor.</td></tr>}
                         </tbody>
                     </table>
