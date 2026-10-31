@@ -1,5 +1,9 @@
 # Enterprise transformation — delivery ledger
 
+## Final reliability closure: require recoverable service intake
+
+The current staff intake form is the only caller of createServiceOrder and always supplies its persisted actor-scoped request reference. The backend still retained an older no-reference branch that created a job, separately saved priority and then performed an unguarded detail read. That branch could leave a committed job looking failed, without the new recovery identity. Staff creation now requires a valid reference and always uses the existing atomic intake wrapper; an old client gets an explicit keep-your-details/current-form message before any RPC. The lower-level database constructor remains available to its existing backend-only atomic/conversion callers; no schema, schedule rule, role permission, public informational route or business record changes. Enrichment failure after acknowledged atomic creation still returns the saved order/reference rather than inviting another creation attempt. Negative guards, syntax and deployed read-back are verified before handoff; no fake job or automated suite is used.
+
 ## Read-only phone acceptance: direct POS cart access
 
 An existing administrator session became available for read-only checks. The dashboard rendered at 320 pixels without horizontal overflow and its service-attention list paged from rows 1–6 to 7–12 of fourteen actual jobs. No job or financial action was submitted. The POS had no horizontal overflow, but its Current Sale heading was 4,975 pixels below the page top at that width because fourteen product cards preceded it. That contradicted the requested usable phone checkout flow.

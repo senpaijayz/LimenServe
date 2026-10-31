@@ -733,6 +733,10 @@ router.delete('/:orderId/assignment', requireRole('admin'), async (req, res, nex
 
 router.post('/', async (req, res, next) => {
   try {
+    const intakeRequestId = req.body?.intakeRequestId;
+    if (typeof intakeRequestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(intakeRequestId)) {
+      return res.status(400).json({ error: 'Open the current intake form before creating this job. Keep your entered details; a saved request reference is required for safe recovery.' });
+    }
     if (req.body?.customerId || req.body?.vehicleId) {
       const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const validId = (value) => typeof value === 'string' && uuid.test(value);
@@ -745,28 +749,17 @@ router.post('/', async (req, res, next) => {
       res.status(400).json({ error: 'Choose a valid service priority.' });
       return;
     }
-    if (req.body?.intakeRequestId) {
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.body.intakeRequestId)) {
-        res.status(400).json({ error: 'Reload the intake form to obtain a valid request reference.' }); return;
-      }
-      const timestampWithZone = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/i;
-      if (req.body.mechanicId && (!timestampWithZone.test(String(req.body.scheduledStart || '')) || !timestampWithZone.test(String(req.body.scheduledEnd || '')))) {
-        res.status(400).json({ error: 'Choose an appointment with a start and end time, including its time zone.' }); return;
-      }
-      const order = await callRpc('limen_create_service_intake', {
-        p_payload: req.body, p_actor: req.user.id, p_request_id: req.body.intakeRequestId,
-      });
-      // Creation has committed. An optional enrichment read must not turn that
-      // success into a misleading creation failure and invite a duplicate.
-      try { res.status(201).json({ order: await loadOrder(order.id) }); }
-      catch { res.status(201).json({ order, refreshRequired: true }); }
-      return;
+    const timestampWithZone = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/i;
+    if (req.body.mechanicId && (!timestampWithZone.test(String(req.body.scheduledStart || '')) || !timestampWithZone.test(String(req.body.scheduledEnd || '')))) {
+      res.status(400).json({ error: 'Choose an appointment with a start and end time, including its time zone.' }); return;
     }
-    const order = await callRpc('limen_create_service_order', {
-      p_payload: req.body ?? {},
+    const order = await callRpc('limen_create_service_intake', {
+      p_payload: req.body, p_actor: req.user.id, p_request_id: intakeRequestId,
     });
-    if (order?.id && req.body?.priority) await persistServiceOrderPriority(order.id, String(req.body.priority).toLowerCase());
-    res.status(201).json({ order: order?.id ? await loadOrder(order.id) : order });
+    // Creation has committed. An optional enrichment read must not turn that
+    // success into a misleading creation failure and invite a duplicate.
+    try { res.status(201).json({ order: await loadOrder(order.id) }); }
+    catch { res.status(201).json({ order, refreshRequired: true }); }
   } catch (error) {
     next(normalizeServiceOrderError(error));
   }
