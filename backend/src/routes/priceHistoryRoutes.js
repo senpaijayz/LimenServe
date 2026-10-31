@@ -23,7 +23,9 @@ export function createPriceHistoryRouter(client) {
     try {
       const { data, error } = await client.rpc('limen_current_retail_prices', { p_product_ids: [...new Set(ids)] });
       if (error) throw error;
-      res.set('Cache-Control', 'no-store').json({ prices: data ?? [] });
+      const prices=(data ?? []).map(row=>({...row,available:row.available===true && row.price!=null
+        && Number.isFinite(Number(row.price)) && Math.round((Number(row.price)+Number.EPSILON)*100)>0}));
+      res.set('Cache-Control', 'no-store').json({ prices });
     } catch (error) { next(error); }
   });
   return router;

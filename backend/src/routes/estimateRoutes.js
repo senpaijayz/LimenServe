@@ -18,6 +18,7 @@ import {
 } from '../services/publicEstimateCreate.js';
 import { createPublicEstimateLookupHandler } from '../services/publicEstimateLookup.js';
 import { createPublicEstimatePricingResolver } from '../services/publicEstimatePricing.js';
+import { getActiveEstimatePricelist } from '../services/estimatePricelistScope.js';
 import { createUnifiedEstimatePricingResolver } from '../services/unifiedEstimatePricing.js';
 import { createManagedEstimate, reviseManagedEstimate } from '../services/managedEstimatePersistence.js';
 import { packageError } from '../services/managedPackageDomain.js';
@@ -114,10 +115,14 @@ async function loadCurrentStagingPrices(skus) {
     return [];
   }
 
+  const { versionId } = await getActiveEstimatePricelist(supabaseAdmin);
+  if (!versionId) return [];
   const { data, error } = await supabaseAdmin
     .schema('catalog')
     .from('pricelist_import_staging')
     .select('sku, price, status')
+    .eq('pricelist_version_id', versionId)
+    .gt('price', 0)
     .in('sku', skus);
   if (error) {
     throw error;

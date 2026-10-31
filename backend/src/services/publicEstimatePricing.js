@@ -52,14 +52,14 @@ function findLatestCurrentPrice(rows, productId) {
 function getApprovedProductPrices({ product, currentPrices, stagingPrices }) {
   const prices = [];
   const latestRetail = findLatestCurrentPrice(currentPrices, product.id);
-  if (latestRetail) {
+  if (latestRetail && roundMoney(latestRetail.amount) > 0) {
     prices.push(roundMoney(latestRetail.amount));
   }
 
   stagingPrices
     .filter((row) => normalizedText(row.sku).toUpperCase() === normalizedText(product.sku).toUpperCase())
     .filter((row) => normalizedText(row.status).toLowerCase() !== 'discontinued')
-    .filter((row) => isMoney(row.price))
+    .filter((row) => isMoney(row.price) && roundMoney(row.price) > 0)
     .forEach((row) => prices.push(roundMoney(row.price)));
 
   return unique(prices.map((price) => price.toFixed(2))).map(Number);
