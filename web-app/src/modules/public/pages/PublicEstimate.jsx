@@ -18,6 +18,7 @@ import { createEstimate, lookupPublicEstimate, revisePublicEstimate } from '../.
 import PublicQuoteLookupCard from '../components/PublicQuoteLookupCard';
 import PublicVehicleSelector from '../components/PublicVehicleSelector';
 import { calculateQuoteTotals, clearBundlePricing, createQuoteLineKey, getAppliedBundleDisplaySummaries, getAppliedBundleSummaries, roundCurrency } from "../utils/bundleQuotePricing";
+import { hasPositivePartPrice } from '../../../utils/catalogPrice';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 
 const SORT_OPTIONS = [
@@ -591,6 +592,10 @@ const PublicEstimate = () => {
     };
 
     const addPart = (product, extra = {}) => {
+        if (!hasPositivePartPrice(product?.price)) {
+            setSaveError('This part needs a price check. Please ask the shop before adding it.');
+            return;
+        }
         if (!isUuid(product?.id)) {
             setSaveError('This pricelist item is not yet linked to an active catalogue product and cannot be quoted online.');
             return;
@@ -1728,13 +1733,14 @@ const PublicEstimate = () => {
                                         </div>
                                     ) : filteredProducts.map((product) => {
                                         const isSelected = selectedParts.some((part) => part.id === product.id);
-                                        const canQuoteOnline = isUuid(product.id);
+                                        const priceReady = hasPositivePartPrice(product.price);
+                                        const canQuoteOnline = isUuid(product.id) && priceReady;
                                         return (
                                             <button
                                                 key={product.catalogEntryId || product.id}
                                                 onClick={() => addPart(product)}
                                                 disabled={!canQuoteOnline}
-                                                title={canQuoteOnline ? `Add ${product.name} to the quote` : 'This pricelist item is not linked to an active catalogue product.'}
+                                                title={!priceReady ? 'Ask the shop to confirm this part’s price.' : canQuoteOnline ? `Add ${product.name} to the quote` : 'This pricelist item is not linked to an active catalogue product.'}
                                                 className={`min-h-[112px] rounded-xl border p-3 text-left flex flex-col gap-1.5 transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected
                                                     ? 'bg-accent-primary/5 border-accent-primary/30 ring-1 ring-accent-primary/30'
                                                     : 'bg-white border-primary-200 hover:border-accent-primary hover:bg-primary-50 shadow-sm'
@@ -1743,7 +1749,7 @@ const PublicEstimate = () => {
                                                 <span className="text-xs font-semibold text-primary-500">{getProductPartNumber(product)}</span>
                                                 <span className="text-base font-display font-medium text-primary-950 line-clamp-1">{product.name}</span>
                                                 <span className="line-clamp-1 text-xs text-primary-600">{product.model || 'Vehicle details not recorded'}</span>
-                                                <span className="text-sm font-bold text-accent-blue mt-auto">{formatCurrency(product.price)}</span>
+                                                <span className="text-sm font-bold text-accent-blue mt-auto">{priceReady ? formatCurrency(product.price) : 'Price needs review'}</span>
                                                 {!canQuoteOnline && <span className="text-[0.68rem] font-semibold text-accent-danger">Not yet available for online quotes</span>}
                                             </button>
                                         );

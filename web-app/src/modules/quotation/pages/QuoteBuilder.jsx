@@ -28,6 +28,7 @@ import ManagedQuotePackages from '../../public/components/ManagedQuotePackages';
 import PublicVehicleSelector from '../../public/components/PublicVehicleSelector';
 import { isManagedBundle, managedSelectionsFromLines, savedManagedOffers } from '../../public/utils/managedQuotePackages';
 import { calculateQuoteTotals, clearBundlePricing, createQuoteLineKey } from "../../public/utils/bundleQuotePricing";
+import { hasPositivePartPrice } from '../../../utils/catalogPrice';
 import { getPartNumberSearchSuggestions, getProductPartNumber } from '../../../utils/barcode';
 import { downloadQuotationPdf } from '../utils/downloadQuotationPdf';
 import QuoteServiceOrderHandoff from '../components/QuoteServiceOrderHandoff';
@@ -400,6 +401,10 @@ const QuoteBuilder = () => {
     };
 
     const addPart = (product, extra = {}) => {
+        if (!hasPositivePartPrice(product?.price)) {
+            showError('Confirm a positive selling price in Products before adding this part.');
+            return;
+        }
         markQuoteDirty();
         setFocusedProduct(product);
         setSelectedParts((parts) => {
@@ -937,12 +942,14 @@ const QuoteBuilder = () => {
                                     key={product.id}
                                     type="button"
                                     onClick={() => addPart(product)}
-                                    className={`rounded-xl border p-4 text-left transition-all ${focusedProduct?.id === product.id ? 'border-accent-blue bg-accent-blue/5 shadow-sm' : 'border-primary-200 bg-white hover:border-primary-300 hover:shadow-sm'}`}
+                                    disabled={!hasPositivePartPrice(product.price)}
+                                    title={hasPositivePartPrice(product.price) ? `Add ${getProductPartNumber(product) || product.name}` : 'Confirm this part’s price in Products first.'}
+                                    className={`rounded-xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:bg-primary-50 ${focusedProduct?.id === product.id ? 'border-accent-blue bg-accent-blue/5 shadow-sm' : 'border-primary-200 bg-white hover:border-primary-300 hover:shadow-sm'}`}
                                 >
                                     <p className="text-sm font-semibold text-primary-950 line-clamp-2">{product.name}</p>
                                     <p className="mt-1 text-xs font-mono text-primary-500">{getProductPartNumber(product) || 'No part number'}</p>
                                     <p className="text-[11px] text-primary-600 mt-1">{product.model || 'Vehicle details not recorded'}</p>
-                                    <p className="mt-3 text-sm font-bold text-accent-blue">{formatCurrency(product.price || 0)}</p>
+                                    <p className="mt-3 text-sm font-bold text-accent-blue">{hasPositivePartPrice(product.price) ? formatCurrency(product.price) : 'Price needs review'}</p>
                                 </button>
                             ))}
                         </div>

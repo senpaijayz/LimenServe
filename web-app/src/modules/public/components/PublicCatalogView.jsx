@@ -8,7 +8,6 @@ import {
   LayoutGrid,
   List,
   Check,
-  Award,
   ArrowUpDown,
   ChevronLeft,
   ChevronDown,
@@ -18,6 +17,8 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { formatCurrency } from '../../../utils/formatters';
+import { hasPositivePartPrice } from '../../../utils/catalogPrice';
+import { catalogAvailability } from '../../../utils/catalogAvailability';
 import { cleanVehicleModelLabel } from '../../../services/catalogApi';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import usePublicVehicleSelection from '../../../hooks/usePublicVehicleSelection';
@@ -30,7 +31,7 @@ import Button from '../../../components/ui/Button';
 
 const PAGE_SIZE = 12;
 
-const formatCatalogPrice = (value) => Number(value ?? 0) > 0 ? formatCurrency(value) : 'Price on request';
+const formatCatalogPrice = (value) => hasPositivePartPrice(value) ? formatCurrency(value) : 'Price on request';
 
 const SORT_OPTIONS = [
   { value: 'stock-desc', label: 'Stock: High to Low' },
@@ -42,15 +43,15 @@ const SORT_OPTIONS = [
 ];
 
 const PublicProductSummary = ({ product }) => {
-  const statusLabel = product.inStock ? `${product.availableStock} Available` : 'Out of Stock';
+  const availability = catalogAvailability(product);
 
   return (
     <div className="flex min-h-[270px] flex-col justify-between rounded-2xl border border-primary-100 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.45)]">
       <div>
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-accent-blue">Genuine part</p>
-          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${product.inStock ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-            {product.inStock ? 'In stock' : 'Unavailable'}
+          <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-accent-blue">Part details</p>
+          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${!availability.known ? 'bg-primary-100 text-primary-800' : availability.inStock ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            {availability.label}
           </span>
         </div>
         <h3 className="mt-3 line-clamp-3 text-xl font-display font-bold leading-tight text-primary-950">{product.name}</h3>
@@ -59,7 +60,7 @@ const PublicProductSummary = ({ product }) => {
       <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
         <p><span className="text-primary-500">Category</span><br /><span className="truncate font-semibold text-primary-950">{product.category}</span></p>
         <p className="text-right"><span className="text-primary-500">Price</span><br /><span className="font-semibold text-accent-blue">{formatCatalogPrice(product.price)}</span></p>
-        <p className="col-span-2 border-t border-primary-100 pt-3"><span className="text-primary-500">Availability</span><br /><span className={`font-semibold ${product.inStock ? 'text-accent-success' : 'text-red-700'}`}>{statusLabel}</span></p>
+        <p className="col-span-2 border-t border-primary-100 pt-3"><span className="text-primary-500">Availability</span><br /><span className={`font-semibold ${!availability.known ? 'text-primary-800' : availability.inStock ? 'text-accent-success' : 'text-red-700'}`}>{availability.detail}</span></p>
       </div>
     </div>
   );
@@ -201,23 +202,24 @@ const PublicCatalogView = () => {
     category: product.category,
     price: Number(product.price ?? 0),
     physicalStock: Number(product.physicalStock ?? product.stock ?? 0),
-    availableStock: Number(product.availableStock ?? product.stock ?? 0),
+    availableStock: product.availableStock == null && product.stock == null ? null : Number(product.availableStock ?? product.stock),
     inStock: Number(product.availableStock ?? product.stock ?? 0) > 0,
-    model: product.model || 'Universal',
-    compatibility: [product.model || 'Universal'],
-    description: `Genuine Mitsubishi ${product.name} for ${product.model || vehicle.displayLabel || 'Universal'}. Engineered for exact fitment.`,
-  })), [products, vehicle.displayLabel]);
+    model: product.model || 'Vehicle details not recorded',
+    compatibility: product.model ? [product.model] : [],
+    description: product.description || 'Confirm the part number and vehicle compatibility with the shop before ordering.',
+  })), [products]);
   const featuredProducts = useMemo(() => featuredItems.map((item) => ({
     id: item.productId,
     catalogEntryId: item.productId,
     name: item.name,
     sku: item.sku,
     category: item.category || 'Featured',
-    price: 0,
-    inStock: true,
-    model: item.label || 'Universal',
-    compatibility: [item.label || 'Universal'],
-    description: `${item.name} is curated by Limen Auto Parts Center for quick customer lookup.`,
+    price: null,
+    availableStock: null,
+    inStock: false,
+    model: 'Vehicle details not recorded',
+    compatibility: [],
+    description: item.description || 'Ask the shop to confirm this part’s price, availability and vehicle compatibility.',
     cmsFeatured: item,
   })).filter((product) => product.id && product.name), [featuredItems]);
   const selectedCategoryOption = useMemo(
@@ -566,7 +568,7 @@ const PublicCatalogView = () => {
                       transition={{ duration: 0.5, delay: index * 0.05 }}
                       onClick={() => setSelectedProduct(product)}
                       className="h-full text-left"
-                      aria-label={`View ${product.name}, ${product.inStock ? `${product.availableStock} available` : 'out of stock'}`}
+                      aria-label={`View ${product.name}, ${catalogAvailability(product).label}`}
                     >
                       <div className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-primary-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
                         <div className="absolute bottom-0 left-0 w-full h-1 bg-accent-primary scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left z-20" />
@@ -577,7 +579,7 @@ const PublicCatalogView = () => {
                               <span className="bg-accent-blue text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 shadow-[0_0_15px_rgba(37,99,235,0.4)] rounded-sm">Available</span>
                             )}
                             {!product.inStock && (
-                              <span className="rounded-sm bg-red-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white">Out of Stock</span>
+                              <span className="rounded-sm bg-primary-800 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white">{catalogAvailability(product).label}</span>
                             )}
                             {hasVehicle && (
                               <span className="bg-primary-950 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-sm">Vehicle matched</span>
@@ -626,7 +628,7 @@ const PublicCatalogView = () => {
                         <p className="font-mono text-sm text-primary-600">{product.sku}</p>
                         <p className="hidden text-sm font-semibold text-primary-800 xl:block">{product.category}</p>
                         <p className="text-sm font-bold text-accent-blue xl:text-right">{formatCatalogPrice(product.price)}</p>
-                        <p className={`text-sm font-semibold xl:text-right ${product.inStock ? 'text-accent-success' : 'text-red-700'}`}>{product.inStock ? 'In Stock' : 'Out of Stock'}</p>
+                        <p className={`text-sm font-semibold xl:text-right ${!catalogAvailability(product).known ? 'text-primary-800' : product.inStock ? 'text-accent-success' : 'text-red-700'}`}>{catalogAvailability(product).label}</p>
                         <span className="hidden h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-primary-500 xl:flex">
                           <ChevronRight className="h-4 w-4" />
                         </span>
@@ -711,8 +713,8 @@ const PublicCatalogView = () => {
                       </div>
                     </div>
                     <div className="relative z-10 flex items-center gap-2">
-                      <Award className="w-4 h-4 text-accent-primary" />
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-600 sm:text-xs">OEM Verified</span>
+                      <Search className="w-4 h-4 text-accent-primary" />
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-600 sm:text-xs">Part details</span>
                     </div>
                   </div>
 
@@ -725,27 +727,28 @@ const PublicCatalogView = () => {
                         </span>
                       )}
                       {!selectedProduct.inStock && (
-                        <span className="flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-red-700">
-                          Out of Stock
+                        <span className="flex items-center gap-1 rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary-800">
+                          {catalogAvailability(selectedProduct).label}
                         </span>
                       )}
                       {hasVehicle && (
-                        <span className="rounded-full bg-accent-blue/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-accent-blue">For {vehicle.displayLabel}</span>
+                        <span className="rounded-full bg-accent-blue/10 px-3 py-1 text-xs font-semibold text-accent-blue">Selected vehicle: {vehicle.displayLabel}</span>
                       )}
                     </div>
 
                     <h2 id="product-detail-title" className="mb-2 pr-12 text-xl font-display font-bold leading-tight text-primary-950 sm:text-2xl">{selectedProduct.name}</h2>
-                    <p className="mb-2 line-clamp-2 text-sm leading-relaxed text-primary-600">{selectedProduct.description} Designed to meet exact specifications and ensure optimal performance for your vehicle.</p>
-                    <div className={`mb-3 rounded-xl border px-4 py-3 text-sm ${selectedProduct.inStock ? 'border-blue-100 bg-blue-50 text-blue-900' : 'border-red-200 bg-red-50 text-red-900'}`}>
-                      <strong>{selectedProduct.availableStock} unit{selectedProduct.availableStock === 1 ? '' : 's'} available</strong>
+                    <p className="mb-2 line-clamp-2 text-sm leading-relaxed text-primary-600">{selectedProduct.description}</p>
+                    <div className={`mb-3 rounded-xl border px-4 py-3 text-sm ${!catalogAvailability(selectedProduct).known ? 'border-primary-200 bg-primary-50 text-primary-900' : selectedProduct.inStock ? 'border-blue-100 bg-blue-50 text-blue-900' : 'border-red-200 bg-red-50 text-red-900'}`}>
+                      <strong>{catalogAvailability(selectedProduct).detail}</strong>
                     </div>
 
                     <div className="mb-2">
-                      <h4 className="mb-2 text-[11px] font-bold uppercase tracking-[0.22em] text-primary-500">Model Compatibility</h4>
+                      <h4 className="mb-2 text-[11px] font-bold uppercase tracking-[0.22em] text-primary-500">Recorded vehicle details</h4>
                       <div className="flex flex-wrap gap-2">
                         {selectedProduct.compatibility.map((model, index) => (
                           <span key={index} className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs text-primary-600">{model}</span>
                         ))}
+                        {!selectedProduct.compatibility.length && <span className="text-xs text-primary-700">No vehicle details recorded. Ask us to check if it fits your vehicle.</span>}
                       </div>
                     </div>
 
@@ -755,7 +758,7 @@ const PublicCatalogView = () => {
 
                     <div className="mt-auto flex flex-col gap-3 border-t border-primary-200 pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                       <div>
-                        <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.22em] text-primary-500">Unit Valuation (VAT Inc.)</p>
+                        <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.22em] text-primary-500">Unit price</p>
                         <p className="text-2xl font-display font-bold text-accent-blue sm:text-[2rem]">{formatCatalogPrice(selectedProduct.price)}</p>
                       </div>
 

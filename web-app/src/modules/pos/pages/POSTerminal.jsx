@@ -24,6 +24,7 @@ import SaleReceiptPreview from '../components/SaleReceiptPreview.jsx';
 import ProductPriceHistory from '../../inventory/components/ProductPriceHistory';
 import { getCurrentRetailPrices } from '../../../services/catalogApi';
 import { checkCartPrices } from '../utils/priceCheck';
+import { hasPositivePartPrice } from '../../../utils/catalogPrice';
 import { getCartStockIssues } from '../utils/stockAvailability';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import { buildProductBarcodeValue, getBarcodeLookupCandidates, findProductByIdentifier } from '../../../utils/barcode';
@@ -158,6 +159,10 @@ const POSTerminalWorkspace = ({owner}) => {
     // Handle product click
     const handleProductClick = (product) => {
         if (cartLocked) return;
+        if (!hasPositivePartPrice(product.price)) {
+            showScanError(`${product.sku || product.name}: a positive selling price must be confirmed in Products before this part can be sold.`);
+            return;
+        }
         const quantityInCart = items.find((item) => item.id === product.id)?.quantity ?? 0;
         if (!Number.isFinite(product.maxQuantity) || quantityInCart + 1 > product.maxQuantity) {
             showScanError(`${product.name}: ${product.maxQuantity > 0 ? 'available quantity is already in the cart' : 'out of stock'}. Receive stock before selling this part.`);
@@ -220,6 +225,11 @@ const POSTerminalWorkspace = ({owner}) => {
         try {
             const productIds = [...new Set(items.filter((item) => item.lineType !== 'service' && item.sku !== 'SERVICE').map((item) => item.productId || item.id))];
             const rows = productIds.length ? await getCurrentRetailPrices(productIds) : [];
+            const priceCheck = checkCartPrices(items, rows);
+            if (priceCheck.unavailable.length) {
+                showScanError(`Unavailable part or price needs review: ${priceCheck.unavailable.map(item=>item.sku || item.name).join(', ')}. Check the active product and positive selling price in Products before checkout.`);
+                return;
+            }
             const unavailable = getCartStockIssues(items, rows);
             if (unavailable.length) {
                 showScanError(`Insufficient or unconfirmed available stock: ${unavailable.map((item) => item.sku || item.name).join(', ')}. Update the cart before checkout.`);
@@ -269,14 +279,14 @@ const POSTerminalWorkspace = ({owner}) => {
         try {
             const productIds = [...new Set(items.filter((item) => item.lineType !== 'service' && item.sku !== 'SERVICE').map((item) => item.productId || item.id))];
             const prices = productIds.length ? await getCurrentRetailPrices(productIds) : [];
+            const priceCheck = checkCartPrices(items, prices);
+            if (priceCheck.unavailable.length) {
+                setPaymentError(`Unavailable part or price needs review: ${priceCheck.unavailable.map(item=>item.sku || item.name).join(', ')}. Check the active product and positive selling price in Products. No sale has been submitted.`);
+                return;
+            }
             const stockIssues = getCartStockIssues(items, prices);
             if (stockIssues.length) {
                 setPaymentError(`Available stock changed or could not be confirmed for ${stockIssues.map((item) => item.sku || item.name).join(', ')}. Close checkout and update the cart. No sale has been submitted.`);
-                return;
-            }
-            const priceCheck = checkCartPrices(items, prices);
-            if (priceCheck.unavailable.length) {
-                setPaymentError(`No current selling price for ${priceCheck.unavailable.map((item) => item.sku || item.name).join(', ')}. Set a price in Products before selling; an old pricelist price is not automatically valid.`);
                 return;
             }
             if (priceCheck.changed.length) {
@@ -422,7 +432,9 @@ const POSTerminalWorkspace = ({owner}) => {
                                     <button
                                         type="button"
                                         onClick={() => handleProductClick(product)}
-                                        className="block w-full text-left"
+                                        disabled={!hasPositivePartPrice(product.price)}
+                                        title={hasPositivePartPrice(product.price) ? undefined : 'Confirm a positive selling price in Products first.'}
+                                        className="block w-full text-left disabled:cursor-not-allowed"
                                     >
                                         <div className="h-[4.5rem] bg-white rounded-lg mb-2 flex items-center justify-center border border-primary-100 p-2 overflow-hidden">
                                             <div className="w-full flex items-center justify-center">
@@ -441,7 +453,7 @@ const POSTerminalWorkspace = ({owner}) => {
                                         <p className={`text-xs font-medium ${product.maxQuantity > 0 ? 'text-primary-500' : 'text-accent-danger'}`}>{product.maxQuantity > 0 ? `${product.maxQuantity} available` : 'Out of stock'}</p>
                                         <p className="text-xs font-mono text-primary-500 mb-2">{product.sku}</p>
                                         <p className="text-lg font-bold text-accent-blue">
-                                            {formatCurrency(product.price)}
+                                            {hasPositivePartPrice(product.price) ? formatCurrency(product.price) : 'Price needs review'}
                                         </p>
                                     </button>
                                     <button
