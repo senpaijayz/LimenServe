@@ -648,8 +648,8 @@ const POSTerminalWorkspace = ({owner}) => {
                     variant="primary"
                     size="lg"
                     fullWidth
-                    className="mt-4"
-                    disabled={items.length === 0 || checkingStock}
+                    className="mt-4 hidden lg:inline-flex"
+                    disabled={items.length === 0 || checkingStock || cartLocked}
                     isLoading={checkingStock}
                     loadingLabel="Checking stock…"
                     onClick={openPaymentModal}
@@ -659,9 +659,11 @@ const POSTerminalWorkspace = ({owner}) => {
                 </Button>
             </div>
 
-            <nav aria-label="POS sections" className="fixed inset-x-3 bottom-3 z-30 grid grid-cols-[1fr_2fr] gap-2 rounded-2xl border border-primary-300 bg-white p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-lg lg:hidden print:hidden">
+            <nav aria-label="POS controls" className="fixed inset-x-3 bottom-3 z-30 grid grid-cols-[1fr_2fr] gap-2 rounded-2xl border border-primary-300 bg-white p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-lg lg:hidden print:hidden">
                 <button type="button" aria-controls="pos-products-pane" aria-pressed={!mobileCartOpen} onClick={()=>showMobilePane(false)} className={`min-h-14 rounded-xl border px-3 py-2 text-sm font-bold ${!mobileCartOpen?'border-blue-800 bg-blue-800 text-white':'border-primary-300 bg-white text-primary-950'}`}>Parts</button>
-                <button type="button" aria-controls="pos-current-sale-pane" aria-pressed={mobileCartOpen} onClick={()=>showMobilePane(true)} className={`min-h-14 rounded-xl border px-3 py-2 ${mobileCartOpen?'border-blue-800 bg-blue-800 text-white':'border-primary-300 bg-white text-primary-950'}`}><span className="block text-xs font-semibold">Current sale · {totals.itemCount}</span><span className="block break-all text-sm font-bold tabular-nums">{formatCurrency(totals.total)}</span></button>
+                {mobileCartOpen
+                    ? <button type="button" disabled={items.length===0 || checkingStock || cartLocked} onClick={openPaymentModal} className="min-h-14 rounded-xl border border-blue-800 bg-blue-800 px-3 py-2 text-white disabled:cursor-not-allowed disabled:border-primary-300 disabled:bg-primary-100 disabled:text-primary-700"><span className="block text-xs font-semibold">{checkingStock?'Checking stock…':'Process payment'}</span><span className="block break-all text-sm font-bold tabular-nums">{formatCurrency(totals.total)}</span></button>
+                    : <button type="button" aria-controls="pos-current-sale-pane" onClick={()=>showMobilePane(true)} className="min-h-14 rounded-xl border border-primary-300 bg-white px-3 py-2 text-primary-950"><span className="block text-xs font-semibold">Current sale · {totals.itemCount}</span><span className="block break-all text-sm font-bold tabular-nums">{formatCurrency(totals.total)}</span></button>}
             </nav>
             </>}
             {/* Payment Modal */}
