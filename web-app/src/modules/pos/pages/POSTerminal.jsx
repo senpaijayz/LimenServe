@@ -91,6 +91,12 @@ const POSTerminalWorkspace = ({owner}) => {
     const [sortBy, setSortBy] = useState('available-stock-desc');
     const [stockFilter, setStockFilter] = useState('all');
     const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [mobileCartOpen,setMobileCartOpen]=useState(false);
+    const productPaneRef=useRef(null),cartPaneRef=useRef(null);
+    const showMobilePane=cart=>{
+        setMobileCartOpen(cart);
+        requestAnimationFrame(()=>{(cart?cartPaneRef:productPaneRef).current?.focus();});
+    };
     const [showServiceModal, setShowServiceModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showCameraScanner, setShowCameraScanner] = useState(false);
@@ -340,10 +346,10 @@ const POSTerminalWorkspace = ({owner}) => {
     };
 
     return (
-        <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4 lg:h-[calc(100vh-8rem)] lg:flex-row">
+        <div className={`flex min-h-[calc(100dvh-8rem)] flex-col gap-4 lg:h-[calc(100vh-8rem)] lg:flex-row ${!sourceEstimate?'pb-24 lg:pb-0':''}`}>
             {sourceEstimate ? <div className="min-w-0 flex-1 space-y-4 overflow-y-auto"><QuotePosCheckout key={`${owner}:${sourceEstimate}`} estimateId={sourceEstimate} posting={posting} refreshKey={unpaidRefresh} onLeave={()=>setSearchParams(current=>{const next=new URLSearchParams(current);next.delete('estimateId');return next;},{replace:true})} /><UnpaidPosOrders refreshKey={unpaidRefresh} onPay={payload=>posting.submit('settlement',payload)} /></div> : <>
             {/* Products Section */}
-            <div className="flex-1 flex flex-col min-w-0">
+            <div id="pos-products-pane" role="region" aria-label="Parts and services" tabIndex={-1} ref={productPaneRef} className={`${mobileCartOpen?'hidden lg:flex':'flex'} min-w-0 flex-1 flex-col outline-none`}>
                 {legacyItems.length>0 && <details className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
                     <summary className="min-h-11 cursor-pointer py-2 font-semibold">Review older saved cart · {legacyItems.length} items</summary>
                     <p className="mt-2">These items were saved before carts were linked to staff accounts. Recover them only if they belong to your unfinished order and have not already been sold. The original copy stays on this device.</p>
@@ -512,7 +518,7 @@ const POSTerminalWorkspace = ({owner}) => {
             </Modal>
 
             {/* Cart Sidebar */}
-            <div className="flex max-h-[80dvh] w-full flex-col rounded-xl border border-primary-200 bg-white p-4 shadow-sm lg:sticky lg:top-20 lg:max-h-[calc(100dvh-7rem)] lg:w-96">
+            <div id="pos-current-sale-pane" role="region" aria-label="Current sale" tabIndex={-1} ref={cartPaneRef} className={`${mobileCartOpen?'flex':'hidden lg:flex'} w-full flex-col rounded-xl border border-primary-200 bg-white p-4 shadow-sm outline-none lg:sticky lg:top-20 lg:max-h-[calc(100dvh-7rem)] lg:w-96`}>
                 {/* Cart Header */}
                 <div className="flex items-center justify-between pb-3 border-b border-primary-100">
                     <h2 className="text-lg font-display font-bold text-primary-950">
@@ -653,6 +659,10 @@ const POSTerminalWorkspace = ({owner}) => {
                 </Button>
             </div>
 
+            <nav aria-label="POS sections" className="fixed inset-x-3 bottom-3 z-30 grid grid-cols-[1fr_2fr] gap-2 rounded-2xl border border-primary-300 bg-white p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-lg lg:hidden print:hidden">
+                <button type="button" aria-controls="pos-products-pane" aria-pressed={!mobileCartOpen} onClick={()=>showMobilePane(false)} className={`min-h-14 rounded-xl border px-3 py-2 text-sm font-bold ${!mobileCartOpen?'border-blue-800 bg-blue-800 text-white':'border-primary-300 bg-white text-primary-950'}`}>Parts</button>
+                <button type="button" aria-controls="pos-current-sale-pane" aria-pressed={mobileCartOpen} onClick={()=>showMobilePane(true)} className={`min-h-14 rounded-xl border px-3 py-2 ${mobileCartOpen?'border-blue-800 bg-blue-800 text-white':'border-primary-300 bg-white text-primary-950'}`}><span className="block text-xs font-semibold">Current sale · {totals.itemCount}</span><span className="block break-all text-sm font-bold tabular-nums">{formatCurrency(totals.total)}</span></button>
+            </nav>
             </>}
             {/* Payment Modal */}
             <Modal

@@ -1,5 +1,11 @@
 # Enterprise transformation — delivery ledger
 
+## Read-only phone acceptance: direct POS cart access
+
+An existing administrator session became available for read-only checks. The dashboard rendered at 320 pixels without horizontal overflow and its service-attention list paged from rows 1–6 to 7–12 of fourteen actual jobs. No job or financial action was submitted. The POS had no horizontal overflow, but its Current Sale heading was 4,975 pixels below the page top at that width because fourteen product cards preceded it. That contradicted the requested usable phone checkout flow.
+
+Added a phone/tablet-only Parts/Current sale switch with a persistent basket count/total, 44-plus-pixel targets, controlled-region labels and focus handoff. Both panels stay mounted, preserving search, quantities, buyer selection and request state; below the desktop breakpoint only the chosen panel is visible. The cart uses natural page height on phones instead of squeezing customer lookup, items and totals into a nested 80vh area. Desktop keeps its existing side-by-side layout. The saved-quotation workspace does not display this ordinary-cart switch. No checkout, approval, stock or payment logic changes. Build and actual post-release phone/desktop checks are required before claiming this defect resolved.
+
 ## Final requirement audit: prevent implicit free ordinary parts
 
 The explicit zero-price acceptance check found a real gap: a memory-only invocation of the ordinary quotation pricing gate accepted a current zero catalog amount and returned a free part. Eighteen active products currently have a zero retail row, including one with stock; none were repriced, deleted or sold. Public estimate browsing already filters its active pricelist to positive parts, but backend ordinary pricing and the staff quotation list still needed an independent safeguard. Ordinary part prices must now be positive after cent rounding. Staff/public add controls show Price needs review and refuse an unpriced part rather than substituting free. Generic vehicle context remains optional; approved package allocations and complimentary services keep their separate existing rules.
