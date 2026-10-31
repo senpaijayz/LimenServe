@@ -1,5 +1,7 @@
 # LimenServe transformation — implementation and release review
 
+Subsequent payment-policy revision, 31 October: current payment choices are Cash and Check. Payment to follow is a separate unpaid-release checkbox, not a third received-payment method. Check recording requires its number and staff confirmation of cleared funds. Existing GCash/bank-transfer history is retained, not rewritten. Migration `20261031133906_cash_check_payment_policy` follows the implementation snapshot below; its method-guard changes intentionally supersede the earlier stock-constructor fingerprint. See the latest delivery-ledger entry for verification.
+
 Verified 31 October 2026. This report consolidates the six implementation areas and distinguishes delivered code from business/device acceptance. Detailed earlier releases and superseded work are in [the delivery ledger](docs/enterprise-transformation-progress.md).
 
 ## A. Executive summary

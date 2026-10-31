@@ -173,7 +173,7 @@ export default function HistoricalAggregateEditorModal({
                             <option value="unknown">Unknown / paper summary</option>
                             <option value="mixed">Mixed methods</option>
                             {Object.entries(PAYMENT_LABELS)
-                                .filter(([value]) => Object.values(PAYMENT_METHODS).includes(value))
+                                .filter(([value]) => Object.values(PAYMENT_METHODS).includes(value) || value === form.paymentMethod)
                                 .map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                         </select>
                     </label>

@@ -498,7 +498,7 @@ export default function HistoricalSaleEditorModal({
                             value={form.paymentMethod}
                             onChange={(event) => setForm((current) => ({ ...current, paymentMethod: event.target.value }))}
                         >
-                            {Object.entries(PAYMENT_LABELS).map(([value, label]) => (
+                            {Object.entries(PAYMENT_LABELS).filter(([value]) => Object.values(PAYMENT_METHODS).includes(value) || value === form.paymentMethod).map(([value, label]) => (
                                 <option key={value} value={value}>{label}</option>
                             ))}
                         </select>

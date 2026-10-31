@@ -657,6 +657,7 @@ export const ServiceOrderDetailModal = ({
     const [removeConfirmationOpen, setRemoveConfirmationOpen] = useState(false);
     const [showCompletionReview, setShowCompletionReview] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState('cash');
+    const [paymentReference, setPaymentReference] = useState('');
     const [cashReceived, setCashReceived] = useState('');
     const [paymentReceivedConfirmed, setPaymentReceivedConfirmed] = useState(false);
     const [mechanicId, setMechanicId] = useState('');
@@ -767,10 +768,12 @@ export const ServiceOrderDetailModal = ({
         const received = Number(cashReceived);
         if (!paymentReceivedConfirmed) return;
         if (paymentMethod === 'cash' && (!Number.isFinite(received) || received < orderTotal)) return;
+        if (paymentMethod === 'check' && (!paymentReference.trim() || paymentReference.trim().length > 120)) return;
         setCompleting(true);
         try {
             await onComplete?.(order.id, {
                 paymentMethod,
+                paymentReference: paymentMethod === 'check' ? paymentReference.trim() : '',
                 cashReceived: paymentMethod === 'cash' ? received : 0,
                 changeDue: paymentMethod === 'cash' ? Math.max(received - orderTotal, 0) : 0,
                 paymentReceivedConfirmed: true,
@@ -1100,15 +1103,16 @@ export const ServiceOrderDetailModal = ({
                             <div className="space-y-2"><h4 className="font-semibold text-primary-950">Work and parts</h4>{[...serviceItems, ...partItems].length ? [...serviceItems, ...partItems].map(renderItemRow) : <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">No itemized lines were saved. The service note will be used as the receipt description.</p>}</div>
                             <div className="flex items-center justify-between rounded-xl border border-primary-200 bg-white p-4"><span className="font-semibold text-primary-700">Total due</span><strong className="text-xl text-primary-950">{formatCurrency(orderTotal)}</strong></div>
                             <div className="grid gap-3 sm:grid-cols-2">
-                                <label className="text-sm font-medium text-primary-700">Payment method <span className="text-red-600">*</span><select className="input mt-1" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="cash">Cash</option><option value="gcash">GCash</option><option value="bank_transfer">Bank transfer</option></select></label>
+                                <label className="text-sm font-medium text-primary-700">Payment method <span className="text-red-600">*</span><select className="input mt-1" value={paymentMethod} onChange={(event) => { setPaymentMethod(event.target.value); setPaymentReference(''); setPaymentReceivedConfirmed(false); }}><option value="cash">Cash</option><option value="check">Check</option></select></label>
+                                {paymentMethod === 'check' && <label className="text-sm font-medium text-primary-700">Check number <span className="text-red-600">*</span><input className="input mt-1" value={paymentReference} maxLength={120} onChange={event=>{setPaymentReference(event.target.value);setPaymentReceivedConfirmed(false);}} placeholder="Number on the cleared check" /></label>}
                                 {paymentMethod === 'cash' && <label className="text-sm font-medium text-primary-700">Cash received <span className="text-red-600">*</span><input className="input mt-1" type="number" min={orderTotal} step="0.01" value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} placeholder="Enter amount received" /></label>}
                             </div>
                             {paymentMethod === 'cash' && Number(cashReceived) >= orderTotal && <p className="text-sm text-primary-600">Change due: <strong>{formatCurrency(Number(cashReceived) - orderTotal)}</strong></p>}
-                            <label className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><input type="checkbox" className="mt-0.5 h-4 w-4 accent-accent-primary" checked={paymentReceivedConfirmed} onChange={(event) => setPaymentReceivedConfirmed(event.target.checked)} /><span><strong>Confirm work and payment.</strong> I checked the completed job, and the customer’s payment shown above has actually been received. This will post the receipt to Sales.</span></label>
+                            <label className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><input type="checkbox" className="mt-0.5 h-4 w-4 accent-accent-primary" checked={paymentReceivedConfirmed} onChange={(event) => setPaymentReceivedConfirmed(event.target.checked)} /><span><strong>Confirm work and payment.</strong> {paymentMethod==='check'?'I checked the completed job and confirmed the check cleared for the full amount.':'I checked the completed job, and the customer’s payment shown above has actually been received.'} This will post the receipt to Sales.</span></label>
                         </div>
                         <div className="flex flex-col-reverse gap-2 border-t border-primary-200 bg-primary-50 p-3 sm:flex-row sm:justify-end sm:px-6">
                             <Button variant="cancel" onClick={() => setShowCompletionReview(false)} isDisabled={completing}>Back to order</Button>
-                            <Button variant="success" onClick={handleComplete} isLoading={completing} isDisabled={!paymentReceivedConfirmed || (paymentMethod === 'cash' && Number(cashReceived) < orderTotal)} leftIcon={<Archive className="h-4 w-4" />}>Confirm Finish & Add to Sales</Button>
+                            <Button variant="success" onClick={handleComplete} isLoading={completing} isDisabled={!paymentReceivedConfirmed || (paymentMethod === 'cash' && Number(cashReceived) < orderTotal) || (paymentMethod === 'check' && !paymentReference.trim())} leftIcon={<Archive className="h-4 w-4" />}>Confirm Finish & Add to Sales</Button>
                         </div>
                     </Motion.div>
                 </Motion.div>

@@ -11,7 +11,7 @@ export default function SaleReceiptPreview({receipt,printId='pos-receipt'}){
   if(!receipt)return null;
   const items=receipt.items ?? [];
   const unpaid=receipt.status==='pending' && receipt.paymentMethod==='to_follow';
-  const method=({cash:'Cash',gcash:'GCash',bank_transfer:'Bank transfer',to_follow:'Payment to follow'})[receipt.paymentMethod] || receipt.paymentMethod || '';
+  const method=({cash:'Cash',check:'Check',gcash:'GCash',bank_transfer:'Bank transfer',to_follow:'Payment to follow'})[receipt.paymentMethod] || receipt.paymentMethod || '';
   return <div className="invoice-preview-scroll"><div id={printId} className="receipt-preview paper-invoice">
     <header className="invoice-business">
       <h2>{business.company_name || 'LIMEN AUTO PARTS CENTER'}</h2>
@@ -39,7 +39,7 @@ export default function SaleReceiptPreview({receipt,printId='pos-receipt'}){
       </div>
     </div>
     {receipt.note && <div className="invoice-note"><strong>Order note: </strong>{receipt.note}</div>}
-    {receipt.paymentReference && <div className="invoice-note"><strong>Payment reference: </strong>{receipt.paymentReference}</div>}
+    {receipt.paymentReference && <div className="invoice-note"><strong>{receipt.paymentMethod==='check'?'Check number: ':'Payment reference: '}</strong>{receipt.paymentReference}</div>}
     {receipt.paidAt && <p className="invoice-paid-date">Payment recorded: {formatDateTime(receipt.paidAt)}</p>}
     <footer className="invoice-signature"><p>Received the above items in good order and condition.</p><div>Signature over printed name / date</div></footer>
   </div></div>;

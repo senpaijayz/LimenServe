@@ -391,10 +391,14 @@ async function completeServiceOrder(orderId, operatorId, paymentDetails = {}) {
     error.statusCode = 400;
     throw error;
   }
-  if (!['cash', 'gcash', 'bank_transfer'].includes(paymentDetails.paymentMethod)) {
+  if (!['cash', 'check'].includes(paymentDetails.paymentMethod)) {
     const error = new Error('Choose a supported payment method.');
     error.statusCode = 400;
     throw error;
+  }
+
+  if (paymentDetails.paymentMethod === 'check' && (!String(paymentDetails.paymentReference || '').trim() || String(paymentDetails.paymentReference).trim().length > 120)) {
+    throw Object.assign(new Error('Enter the cleared check number (up to 120 characters).'), { statusCode: 400 });
   }
 
   const currentOrder = await loadOrder(orderId);
@@ -636,7 +640,7 @@ router.get('/:orderId/work', async (req, res, next) => {
     }
     const { data: sale, error: saleError } = await supabaseAdmin.schema('operations')
       .from('sales_transactions')
-      .select('id, transaction_number, total_amount, subtotal, discount_total, tax_total, payment_method, cash_received, change_due, created_at, original_reference')
+      .select('id, transaction_number, total_amount, subtotal, discount_total, tax_total, payment_method, pos_payment_reference, cash_received, change_due, created_at, original_reference')
       .eq('original_reference', buildServiceSaleReference(order)).order('created_at', { ascending: true }).limit(1).maybeSingle();
     if (saleError) throw saleError;
     const { data: saleLines, error: saleLinesError } = sale

@@ -71,7 +71,7 @@ export function normalizeHistoricalAggregatePayload(body = {}) {
         throw invalid('Historical totals require a whole transaction count of at least 1.');
     }
 
-    if (!['cash', 'gcash', 'bank_transfer', 'mixed', 'unknown'].includes(paymentMethod)) {
+    if (!['cash', 'check', 'gcash', 'bank_transfer', 'mixed', 'unknown'].includes(paymentMethod)) {
         throw invalid('Historical totals require a supported payment method.');
     }
 

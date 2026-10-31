@@ -17,6 +17,7 @@ import QuotePosCheckout from '../components/QuotePosCheckout';
 import ManualNonCashFields from '../components/ManualNonCashFields';
 import SavedPosCustomer from '../components/SavedPosCustomer';
 import {isNonCash,matchesFullPayment} from '../utils/paymentMethods';
+import PaymentOptions from '../components/PaymentOptions';
 import usePosPosting from '../hooks/usePosPosting';
 import PosRequestRecovery from '../components/PosRequestRecovery';
 import UnpaidPosOrders from '../components/UnpaidPosOrders';
@@ -219,7 +220,7 @@ const POSTerminalWorkspace = ({owner}) => {
     const hasEnoughCash = Math.round((paymentReceived+Number.EPSILON)*100) >= Math.round((totals.total+Number.EPSILON)*100);
     const cashTenderOptions = useMemo(() => buildCashTenderOptions(totals.total), [totals.total]);
     const canCompletePayment = items.length > 0 && !processingPayment && !posting.pending && !posting.busy
-        && (paymentMethod==='cash'?hasEnoughCash&&Number.isFinite(paymentReceived)&&paymentReceived<=1000000000&&paymentVerified:isNonCash(paymentMethod)?paymentVerified&&matchesFullPayment(paidAmount,totals.total,paymentReference):(Math.round(totals.total*100)>0 && customerName.trim() && paymentNote.trim() && releaseConfirmed));
+        && (paymentMethod==='cash'?hasEnoughCash&&Number.isFinite(paymentReceived)&&paymentReceived<=1000000000&&paymentVerified:isNonCash(paymentMethod)?paymentVerified&&matchesFullPayment(paidAmount,totals.total,paymentReference):(paymentMethod==='to_follow' && Math.round(totals.total*100)>0 && customerName.trim() && paymentNote.trim() && releaseConfirmed));
     const canGoPrev = (pagination.page ?? currentPage) > 1;
     const canGoNext = (pagination.page ?? currentPage) < (pagination.totalPages ?? 1);
     const rangeStart = pagination.totalCount === 0 ? 0 : (((pagination.page ?? currentPage) - 1) * (pagination.pageSize ?? PAGE_SIZE)) + 1;
@@ -709,7 +710,7 @@ const POSTerminalWorkspace = ({owner}) => {
                         </div>
                     </div>
 
-                    <label className="block text-sm font-semibold text-primary-900">Payment<select value={paymentMethod} disabled={processingPayment} onChange={e=>{setPaymentMethod(e.target.value);setReleaseConfirmed(false);setPaymentVerified(false);setPaymentReference('');setPaidAmount('');setPaymentError('');}} className="mt-1 min-h-11 w-full rounded-xl border border-primary-300 bg-white p-3"><option value="cash">Cash — pay now</option><option value="gcash">GCash</option><option value="bank_transfer">Bank transfer</option><option value="to_follow">Payment to follow — release parts now</option></select></label>
+                    <PaymentOptions value={paymentMethod} disabled={processingPayment} allowToFollow onChange={method=>{setPaymentMethod(method);setReleaseConfirmed(false);setPaymentVerified(false);setPaymentReference('');setPaidAmount('');setPaymentError('');}} />
                     {paymentMethod==='to_follow' && <label className="block text-sm font-semibold text-primary-900">Customer name (required)<input value={customerName} maxLength={200} disabled={processingPayment} readOnly={Boolean(selectedCustomer)} onChange={e=>changeCustomerName(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-primary-300 p-3" /></label>}
                     <label className="block text-sm font-semibold text-primary-900">Order note {paymentMethod==='to_follow'?'(required)':'(optional)'}<textarea value={paymentNote} maxLength={1000} disabled={processingPayment} onChange={e=>setPaymentNote(e.target.value)} rows={3} placeholder="Payment arrangement or instructions for this order" className="mt-1 w-full rounded-xl border border-primary-300 p-3 font-normal" /><span className="mt-1 block text-xs font-normal text-primary-700">Saved with this order and shown on its printed document.</span></label>
                     <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
@@ -797,7 +798,7 @@ const POSTerminalWorkspace = ({owner}) => {
                             </div>
                         </div>
                     </div>
-                    {paymentMethod!=='to_follow'&&<label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><input type="checkbox" checked={paymentVerified} disabled={processingPayment} onChange={event=>setPaymentVerified(event.target.checked)} className="mt-1 h-5 w-5 shrink-0" />I confirm the full payment has been received{paymentMethod==='cash'?' in cash':' in the GCash or bank account'}.</label>}
+                    {paymentMethod!=='to_follow'&&<label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><input type="checkbox" checked={paymentVerified} disabled={processingPayment} onChange={event=>setPaymentVerified(event.target.checked)} className="mt-1 h-5 w-5 shrink-0" />I confirm the full payment has been received{paymentMethod==='cash'?' in cash':' after the check cleared into the shop’s account'}.</label>}
                     {paymentError && (
                         <div className="rounded-xl border border-accent-danger/20 bg-accent-danger/10 px-4 py-3 text-sm text-accent-danger">
                             {paymentError}

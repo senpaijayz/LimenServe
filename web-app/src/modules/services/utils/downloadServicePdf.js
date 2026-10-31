@@ -17,7 +17,7 @@ const dateLabel = (value) => {
   }).format(new Date(value));
 };
 
-function createServicePdf({ title, reference, order, lines, total, paymentStatus, paymentMethod, paidAt, cashReceived, changeDue, mechanicName }) {
+function createServicePdf({ title, reference, order, lines, total, paymentStatus, paymentMethod, paymentReference, paidAt, cashReceived, changeDue, mechanicName }) {
   const doc = new jsPDF({ format: 'a4', unit: 'mm' });
   const width = doc.internal.pageSize.getWidth();
   const height = doc.internal.pageSize.getHeight();
@@ -63,6 +63,8 @@ function createServicePdf({ title, reference, order, lines, total, paymentStatus
   write(`Service order: ${order.orderNumber || order.order_number || order.id || 'Not recorded'}`, margin, width - margin * 2);
   write(`Date: ${dateLabel(paidAt || order.createdAt || order.created_at)}`, margin, width - margin * 2);
   write(`Payment: ${paymentStatus}${paymentMethod ? ` (${String(paymentMethod).replaceAll('_', ' ')})` : ''}`, margin, width - margin * 2);
+
+  if (paymentReference) write(`${paymentMethod === 'check' ? 'Check number' : 'Payment reference'}: ${paymentReference}`, margin, width - margin * 2);
 
   const note = order.description || order.note;
   if (note) {
@@ -144,7 +146,7 @@ export function downloadServiceReceiptPdf(order, sale) {
   const doc = createServicePdf({
     title: 'Service receipt', reference, order, lines,
     total: sale.total_amount, paymentStatus: 'Paid', paymentMethod: sale.payment_method,
-    paidAt: sale.created_at, cashReceived: sale.cash_received, changeDue: sale.change_due,
+    paymentReference: sale.pos_payment_reference, paidAt: sale.created_at, cashReceived: sale.cash_received, changeDue: sale.change_due,
   });
   doc.save(`LimenServe_Service_Receipt_${safeFilename(reference)}.pdf`);
 }

@@ -163,7 +163,7 @@ function validateSalePayload(payload) {
 }
 
 function validateHistoricalSalePayload(payload) {
-  if (!['cash','gcash','bank_transfer'].includes(payload.paymentMethod)) throw Object.assign(new Error('Choose a supported payment method for historical sales.'),{statusCode:400});
+  if (!['cash','check','gcash','bank_transfer'].includes(payload.paymentMethod)) throw Object.assign(new Error('Choose a supported payment method for historical sales.'),{statusCode:400});
   validateSalePayload(payload);
 
   if (!payload.saleAt || Number.isNaN(Date.parse(payload.saleAt))) {

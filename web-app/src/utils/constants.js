@@ -74,15 +74,15 @@ export const STOCK_LEVELS = {
 // Payment Methods
 export const PAYMENT_METHODS = {
     CASH: 'cash',
-    GCASH: 'gcash',
-    BANK_TRANSFER: 'bank_transfer',
+    CHECK: 'check',
 };
 
 export const PAYMENT_LABELS = {
     to_follow: 'Payment to follow',
     [PAYMENT_METHODS.CASH]: 'Cash',
-    [PAYMENT_METHODS.GCASH]: 'GCash',
-    [PAYMENT_METHODS.BANK_TRANSFER]: 'Bank Transfer',
+    [PAYMENT_METHODS.CHECK]: 'Check',
+    gcash: 'GCash',
+    bank_transfer: 'Bank Transfer',
 };
 
 // Currency
