@@ -238,9 +238,32 @@ async function postStockReceipt(payload: SupplierInvoiceStockReceiptInput, idemp
   }
 }
 
+async function prepareInvoiceUpload(file: File): Promise<Blob> {
+  if (!/^image\/(jpeg|png|webp)$/i.test(file.type)) throw new Error('Choose a JPG, PNG or WEBP invoice image.');
+  if (typeof createImageBitmap !== 'function') {
+    if (file.size > 8 * 1024 * 1024) throw new Error('Crop this image below 8 MB and try again.');
+    return file;
+  }
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Image preparation is unavailable. Try another browser.');
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const prepared = await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('The invoice image could not be prepared.')), 'image/jpeg', 0.9));
+    if (prepared.size > 8 * 1024 * 1024) throw new Error('This image is too large. Crop the invoice and try again.');
+    return prepared;
+  } finally { bitmap.close(); }
+}
+
 export async function analyzeSupplierInvoiceImage(file: File): Promise<InvoiceOcrAnalysisResult> {
   const formData = new FormData();
-  formData.append('invoice', file);
+  formData.append('invoice', await prepareInvoiceUpload(file), 'invoice.jpg');
 
   try {
     const { data } = await apiClient.post('/catalog/stock/invoice-ocr', formData, {

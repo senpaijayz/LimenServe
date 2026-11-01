@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { env } from '../config/env.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../observability/logger.js';
 
-let paddleServicePromise = null;
+import { recognizeInvoiceInProcess } from './invoiceOcrProcess.js';
+
+let invoiceAnalysisActive = false;
 
 function normalizePartNumber(value) {
   return String(value || '')
@@ -248,39 +250,8 @@ export function parseSupplierInvoiceOcrText(rawText) {
   };
 }
 
-async function getPaddleService() {
-  if (!paddleServicePromise) {
-    paddleServicePromise = import('ppu-paddle-ocr').then(async ({ PaddleOcrService }) => {
-      const service = new PaddleOcrService({
-        debugging: { debug: false, verbose: false },
-        processing: { engine: 'canvas-native' },
-        recognition: { strategy: 'per-line' },
-        session: {
-          executionProviders: ['cpu'],
-          executionMode: 'sequential',
-          interOpNumThreads: 1,
-          intraOpNumThreads: 1,
-        },
-      });
-      await service.initialize();
-      return service;
-    });
-  }
-
-  return paddleServicePromise;
-}
-
 async function recognizeImage(filePath) {
-  const service = await getPaddleService();
-  const file = await readFile(filePath);
-  const image = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
-  const result = await service.recognize(image, {
-    flatten: true,
-    strategy: 'per-line',
-    noCache: true,
-  });
-
-  return result?.text || '';
+  return recognizeInvoiceInProcess(filePath);
 }
 
 async function recognizeImageWithOcrSpace(file) {
@@ -295,7 +266,7 @@ async function recognizeImageWithOcrSpace(file) {
     throw new Error('OCR.space fallback is not configured. Set OCR_SPACE_API_KEY on the server.');
   }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 75_000);
+  const timeout = setTimeout(() => controller.abort(), 20_000);
   const formData = new FormData();
 
   formData.append('file', new Blob([file.buffer], { type: file.mimetype || 'image/jpeg' }), file.originalname || 'invoice.jpg');
@@ -453,7 +424,14 @@ async function classifyDetectedProducts(detectedItems) {
   };
 }
 
-export async function analyzeSupplierInvoiceImage(file, { requestId } = {}) {
+export async function analyzeSupplierInvoiceImage(file, options = {}) {
+  if (invoiceAnalysisActive) throw Object.assign(new Error('Another invoice is being read. Wait for it to finish, then try again.'), { statusCode: 429 });
+  invoiceAnalysisActive = true;
+  try { return await analyzeInvoice(file, options); }
+  finally { invoiceAnalysisActive = false; }
+}
+
+async function analyzeInvoice(file, { requestId } = {}) {
   if (!file?.buffer?.length) {
     const error = new Error('Invoice image is required.');
     error.statusCode = 400;
@@ -471,6 +449,7 @@ export async function analyzeSupplierInvoiceImage(file, { requestId } = {}) {
     });
     const error = new Error('The invoice OCR service could not read this invoice right now. Please try again, or enter the stock numbers and quantities manually.');
     error.statusCode = 503;
+    error.publicMessage = error.message;
     error.cause = cause;
     throw error;
   }

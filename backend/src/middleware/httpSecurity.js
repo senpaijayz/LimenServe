@@ -95,6 +95,9 @@ export function createRequestTimeout({
   }
 
   return (req, res, next) => {
+    // OCR has its own bounded 55s process + 20s fallback budget; ordinary APIs stay unchanged.
+    const requestTimeoutMs = req.method === 'POST' && req.path === '/api/catalog/stock/invoice-ocr'
+      ? Math.max(timeoutMs, 85_000) : timeoutMs;
     const abortController = new AbortController();
     let finished = false;
 
@@ -111,7 +114,7 @@ export function createRequestTimeout({
         requestId: req.requestId,
         method: req.method,
         path: req.path || String(req.url || '').split('?')[0],
-        timeoutMs,
+        timeoutMs: requestTimeoutMs,
       });
 
       if (!res.headersSent) {
@@ -124,7 +127,7 @@ export function createRequestTimeout({
       } else if (typeof res.destroy === 'function') {
         res.destroy();
       }
-    }, timeoutMs);
+    }, requestTimeoutMs);
     timer.unref?.();
 
     function cleanup() {

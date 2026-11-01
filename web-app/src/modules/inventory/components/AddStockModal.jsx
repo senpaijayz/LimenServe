@@ -275,7 +275,7 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
         try {
             const saved = invoiceStorageKey && JSON.parse(localStorage.getItem(invoiceStorageKey) || 'null');
             if (saved?.version === 1 && saved.invoiceDraft) {
-                setSupplier(saved.supplier || EMPTY_SUPPLIER); setInvoiceDraft(saved.invoiceDraft);
+                setSupplier(saved.supplier || EMPTY_SUPPLIER); setInvoiceDraft({ ...saved.invoiceDraft, previewUrl: '' });
                 setMode(initialMode === 'invoice' ? 'invoice' : saved.mode || initialMode); setBulkItems(saved.bulkItems || [emptyItem()]);
                 invoiceReceiptKeyRef.current = saved.requestKey || null;
                 setInvoiceSubmitted(Boolean(saved.submitted));
@@ -310,7 +310,7 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
     useEffect(() => {
         if (!isOpen || !draftReady || !invoiceStorageKey || bulkSuccess) return;
         try {
-            localStorage.setItem(invoiceStorageKey, JSON.stringify({ version: 1, mode, supplier, invoiceDraft, bulkItems, requestKey: invoiceReceiptKeyRef.current, submitted: invoiceSubmitted }));
+            localStorage.setItem(invoiceStorageKey, JSON.stringify({ version: 1, mode, supplier, invoiceDraft: { ...invoiceDraft, previewUrl: '' }, bulkItems, requestKey: invoiceReceiptKeyRef.current, submitted: invoiceSubmitted }));
             setInvoiceDraftStatus('Draft saved on this device. Reopen this form to continue.');
         } catch { setInvoiceDraftStatus('Draft storage is unavailable. Keep this form open to avoid losing your work.'); }
     }, [bulkItems, bulkSuccess, draftReady, invoiceDraft, invoiceStorageKey, invoiceSubmitted, isOpen, mode, supplier]);
@@ -502,7 +502,7 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
         setIsReadingInvoice(true);
         setError('');
         const previewUrl = URL.createObjectURL(file);
-        setInvoiceDraft((current) => ({ ...current, previewUrl }));
+        setInvoiceDraft((current) => { if (current.previewUrl) URL.revokeObjectURL(current.previewUrl); return { ...current, previewUrl }; });
 
         try {
             const analysis = await analyzeSupplierInvoiceImage(file);
@@ -588,7 +588,7 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
                 invoiceReceiptKeyRef.current = createIdempotencyKey('invoice');
             }
             setInvoiceSubmitted(true);
-            if (invoiceStorageKey) localStorage.setItem(invoiceStorageKey, JSON.stringify({ version: 1, mode, supplier, invoiceDraft, bulkItems, requestKey: invoiceReceiptKeyRef.current, submitted: true }));
+            if (invoiceStorageKey) localStorage.setItem(invoiceStorageKey, JSON.stringify({ version: 1, mode, supplier, invoiceDraft: { ...invoiceDraft, previewUrl: '' }, bulkItems, requestKey: invoiceReceiptKeyRef.current, submitted: true }));
             const receipt = await receiveStockFromSupplierInvoice({
                 invoiceNumber: invoiceDraft.invoiceNumber,
                 invoiceDate: invoiceDraft.invoiceDate,
