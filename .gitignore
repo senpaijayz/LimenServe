@@ -40,3 +40,6 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Generated from pinned packages during frontend dev/build; do not commit model binaries.
+/web-app/public/invoice-ocr/

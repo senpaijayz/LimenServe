@@ -4,7 +4,7 @@ import zlib from 'node:zlib';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireRole } from '../middleware/auth.js';
 import { clearPublicResponseCache } from '../middleware/cache.js';
-import { analyzeSupplierInvoiceImage } from '../services/invoiceOcrService.js';
+import { analyzeSupplierInvoiceText } from '../services/invoiceOcrService.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import { mapStockReceiptError, receiveCatalogStock, receiveSupplierInvoiceStock, requireIdempotencyKey } from '../services/stockReceipt.js';
 import { annotatePriceListImportError, classifyPriceListItem, parsePriceListActivation, parsePriceListVersionYear } from '../services/priceListVersionModel.js';
@@ -27,20 +27,6 @@ router.use(['/replenishment', '/inventory-followups'], requireRole('admin', 'sto
 router.use(createSupplierOrderRouter({ onInventoryChanged: invalidateProductCatalogCache }));
 router.use(publishedPackageRoutes);
 router.use(createPriceHistoryRouter(supabaseAdmin));
-const invoiceUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 8 * 1024 * 1024,
-  },
-  fileFilter(_req, file, callback) {
-    if (!/^image\/(jpeg|png|webp)$/i.test(file.mimetype || '')) {
-      callback(new Error('Upload a JPG, PNG, or WEBP invoice image.'));
-      return;
-    }
-
-    callback(null, true);
-  },
-});
 const priceListUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -2544,9 +2530,12 @@ router.post('/stock/receive-invoice', requireRole('admin', 'stock_clerk'), async
   }
 });
 
-router.post('/stock/invoice-ocr', requireRole('admin', 'stock_clerk'), invoiceUpload.single('invoice'), async (req, res, next) => {
+router.post('/stock/invoice-ocr', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
   try {
-    const result = await analyzeSupplierInvoiceImage(req.file, { requestId: req.requestId });
+    if (!req.is('application/json')) {
+      return res.status(409).json({ error: 'Refresh this page to use the updated on-device invoice scanner. Image processing on the server is no longer supported.' });
+    }
+    const result = await analyzeSupplierInvoiceText(req.body?.ocrText);
 
     res.json(result);
   } catch (error) {

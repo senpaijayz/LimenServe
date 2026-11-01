@@ -95,9 +95,7 @@ export function createRequestTimeout({
   }
 
   return (req, res, next) => {
-    // OCR has its own bounded 55s process + 20s fallback budget; ordinary APIs stay unchanged.
-    const requestTimeoutMs = req.method === 'POST' && req.path === '/api/catalog/stock/invoice-ocr'
-      ? Math.max(timeoutMs, 85_000) : timeoutMs;
+    const requestTimeoutMs = timeoutMs;
     const abortController = new AbortController();
     let finished = false;
 

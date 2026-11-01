@@ -262,16 +262,11 @@ async function prepareInvoiceUpload(file: File): Promise<Blob> {
 }
 
 export async function analyzeSupplierInvoiceImage(file: File): Promise<InvoiceOcrAnalysisResult> {
-  const formData = new FormData();
-  formData.append('invoice', await prepareInvoiceUpload(file), 'invoice.jpg');
-
+  const { readInvoiceOnDevice } = await import('./browserInvoiceOcr');
+  const image = await prepareInvoiceUpload(file);
+  const ocrText = await readInvoiceOnDevice(image);
   try {
-    const { data } = await apiClient.post('/catalog/stock/invoice-ocr', formData, {
-      timeout: 90_000,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const { data } = await apiClient.post('/catalog/stock/invoice-ocr', { ocrText }, { timeout: INVENTORY_API_TIMEOUT_MS });
 
     return data as InvoiceOcrAnalysisResult;
   } catch (error) {

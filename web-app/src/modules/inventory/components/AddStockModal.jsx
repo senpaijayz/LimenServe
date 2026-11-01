@@ -802,7 +802,7 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
                                         <div className="mt-4 space-y-2">
                                             <div className="flex items-center gap-2 text-sm font-semibold text-primary-700">
                                                 <LoaderCircle className="h-4 w-4 animate-spin" />
-                                                Reading invoice image on the backend
+                                                Reading invoice on this device
                                             </div>
                                             <div className="h-2 overflow-hidden rounded-full bg-white">
                                                 <div className="h-full w-2/3 animate-pulse rounded-full bg-accent-blue" />
@@ -833,7 +833,7 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
                                             <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
                                                 <ClipboardCheck className="h-10 w-10 text-primary-300" />
                                                 <p className="font-bold text-primary-700">No existing products detected yet</p>
-                                                <p className="max-w-sm text-sm text-primary-500">Upload a clear invoice image. New product part numbers will be listed separately for manual product creation.</p>
+                                                <p className="max-w-sm text-sm text-primary-500">Choose a clear invoice photo. It stays on this device. New part numbers will be listed for manual product creation.</p>
                                             </div>
                                         ) : (
                                             <div className="min-w-[660px]">

@@ -14,14 +14,9 @@
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "5.3.0",
-    "multer": "2.4.0",
-    "onnxruntime-node": "^1.23.2",
-    "ppu-paddle-ocr": "^5.1.1"
+    "multer": "2.4.0"
   },
   "overrides": {
-    "onnxruntime-node": {
-      "adm-zip": "0.6.1"
-    },
     "proxy-addr": "2.0.8",
     "qs": "6.16.0"
   }

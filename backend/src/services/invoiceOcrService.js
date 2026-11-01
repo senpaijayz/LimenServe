@@ -1,14 +1,4 @@
-import { randomUUID } from 'node:crypto';
-import { mkdir, unlink, writeFile } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { env } from '../config/env.js';
 import { supabaseAdmin } from '../config/supabase.js';
-import { logger } from '../observability/logger.js';
-
-import { recognizeInvoiceInProcess } from './invoiceOcrProcess.js';
-
-let invoiceAnalysisActive = false;
 
 function normalizePartNumber(value) {
   return String(value || '')
@@ -27,18 +17,6 @@ function parseMoney(value) {
     .replace(/\.(?=.*\.)/g, '');
   const parsed = Number(normalized);
   return Number.isFinite(parsed) && parsed >= 0 ? Number(parsed.toFixed(2)) : 0;
-}
-
-function getErrorMessage(error) {
-  if (!error) {
-    return 'Unknown OCR error';
-  }
-
-  if (Array.isArray(error)) {
-    return error.filter(Boolean).join(' ');
-  }
-
-  return error.message || String(error);
 }
 
 function toIsoDate(value) {
@@ -250,122 +228,6 @@ export function parseSupplierInvoiceOcrText(rawText) {
   };
 }
 
-async function recognizeImage(filePath) {
-  return recognizeInvoiceInProcess(filePath);
-}
-
-async function recognizeImageWithOcrSpace(file) {
-  if (!env.externalOcrFallbackEnabled) {
-    const error = new Error('External OCR fallback is disabled.');
-    error.code = 'OCR_EXTERNAL_FALLBACK_DISABLED';
-    throw error;
-  }
-
-  const apiKey = process.env.OCR_SPACE_API_KEY;
-  if (!apiKey) {
-    throw new Error('OCR.space fallback is not configured. Set OCR_SPACE_API_KEY on the server.');
-  }
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
-  const formData = new FormData();
-
-  formData.append('file', new Blob([file.buffer], { type: file.mimetype || 'image/jpeg' }), file.originalname || 'invoice.jpg');
-  formData.append('language', 'eng');
-  formData.append('isOverlayRequired', 'true');
-  formData.append('scale', 'true');
-  formData.append('OCREngine', '2');
-
-  try {
-    const response = await fetch('https://api.ocr.space/parse/image', {
-      method: 'POST',
-      headers: {
-        apikey: apiKey,
-      },
-      body: formData,
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      throw new Error(`OCR.space responded with ${response.status}.`);
-    }
-
-    const payload = await response.json();
-
-    if (payload?.IsErroredOnProcessing) {
-      throw new Error(getErrorMessage(payload?.ErrorMessage || payload?.ErrorDetails));
-    }
-
-    return (payload?.ParsedResults || [])
-      .map((result) => result?.ParsedText || '')
-      .filter(Boolean)
-      .join('\n')
-      .trim();
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function recognizeInvoiceText(file, { requestId } = {}) {
-  let paddleError = null;
-
-  try {
-    const paddleText = await withTempImage(file, recognizeImage, { requestId });
-
-    if (paddleText.trim()) {
-      return {
-        rawText: paddleText,
-        engine: 'paddle',
-      };
-    }
-  } catch (error) {
-    paddleError = error;
-    logger.warn('invoice_ocr.local_failed', {
-      requestId,
-      error,
-    });
-  }
-
-  try {
-    const fallbackText = await recognizeImageWithOcrSpace(file);
-
-    if (fallbackText.trim()) {
-      return {
-        rawText: fallbackText,
-        engine: 'ocr_space',
-      };
-    }
-  } catch (fallbackError) {
-    const error = new Error(`Invoice OCR failed. Paddle: ${getErrorMessage(paddleError)} OCR.space: ${getErrorMessage(fallbackError)}`);
-    error.cause = fallbackError;
-    throw error;
-  }
-
-  const error = new Error(`Invoice OCR returned no readable text. Paddle: ${getErrorMessage(paddleError)}`);
-  error.cause = paddleError;
-  throw error;
-}
-
-async function withTempImage(file, callback, { requestId } = {}) {
-  const uploadDir = path.join(os.tmpdir(), 'limenserve-invoice-ocr');
-  await mkdir(uploadDir, { recursive: true });
-  const extension = path.extname(file.originalname || '') || '.jpg';
-  const filePath = path.join(uploadDir, `${randomUUID()}${extension}`);
-
-  try {
-    await writeFile(filePath, file.buffer);
-    return await callback(filePath);
-  } finally {
-    try {
-      await unlink(filePath);
-    } catch (error) {
-      logger.warn('invoice_ocr.temp_cleanup_failed', {
-        requestId,
-        error,
-      });
-    }
-  }
-}
-
 async function classifyDetectedProducts(detectedItems) {
   const partNumbers = [...new Set(detectedItems.map((item) => item.partNumber).filter(Boolean))];
 
@@ -424,38 +286,12 @@ async function classifyDetectedProducts(detectedItems) {
   };
 }
 
-export async function analyzeSupplierInvoiceImage(file, options = {}) {
-  if (invoiceAnalysisActive) throw Object.assign(new Error('Another invoice is being read. Wait for it to finish, then try again.'), { statusCode: 429 });
-  invoiceAnalysisActive = true;
-  try { return await analyzeInvoice(file, options); }
-  finally { invoiceAnalysisActive = false; }
-}
-
-async function analyzeInvoice(file, { requestId } = {}) {
-  if (!file?.buffer?.length) {
-    const error = new Error('Invoice image is required.');
-    error.statusCode = 400;
-    throw error;
+export async function analyzeSupplierInvoiceText(rawText) {
+  if (typeof rawText !== 'string' || !rawText.trim() || rawText.length > 128_000) {
+    throw Object.assign(new Error('Read a clear invoice image first (maximum 128,000 text characters).'), { statusCode: 400 });
   }
-
-  let recognition = null;
-
-  try {
-    recognition = await recognizeInvoiceText(file, { requestId });
-  } catch (cause) {
-    logger.error('invoice_ocr.failed', {
-      requestId,
-      error: cause,
-    });
-    const error = new Error('The invoice OCR service could not read this invoice right now. Please try again, or enter the stock numbers and quantities manually.');
-    error.statusCode = 503;
-    error.publicMessage = error.message;
-    error.cause = cause;
-    throw error;
-  }
-
-  const rawText = recognition.rawText;
   const parsed = parseSupplierInvoiceOcrText(rawText);
+  if (parsed.detectedItems.length > 200) throw Object.assign(new Error('Split this invoice into sections of no more than 200 parts.'), { statusCode: 422 });
   const classified = await classifyDetectedProducts(parsed.detectedItems);
 
   return {
@@ -468,7 +304,7 @@ async function analyzeInvoice(file, { requestId } = {}) {
     existingProducts: classified.existingProducts,
     newProducts: classified.newProducts,
     rawText: parsed.rawText,
-    ocrEngine: recognition.engine,
+    ocrEngine: 'device_tesseract',
     summary: {
       detectedCount: parsed.detectedItems.length,
       existingCount: classified.existingProducts.length,
