@@ -5,29 +5,20 @@ import {formatCurrency} from '../../../utils/formatters';
 import {listUnpaidPosOrders} from '../../../services/posOrdersApi';
 import {getPosSaleDetail} from '../../../services/posApi';
 import SaleReceiptPreview from './SaleReceiptPreview';
-import ManualNonCashFields from './ManualNonCashFields';
-import PaymentOptions from './PaymentOptions';
-import {isNonCash,matchesFullPayment} from '../utils/paymentMethods';
+import PaymentCollectionPanel from './PaymentCollectionPanel';
 
 function CollectPayment({id,onClose,onPay}){
-  const [result,setResult]=useState(null),[error,setError]=useState(''),[amount,setAmount]=useState(''),[verified,setVerified]=useState(false);
-  const [method,setMethod]=useState('cash'),[reference,setReference]=useState(''),[paidAmount,setPaidAmount]=useState('');
+  const [result,setResult]=useState(null),[error,setError]=useState('');
   useEffect(()=>{let active=true;getPosSaleDetail(id).then(data=>{if(active)setResult(data);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[id]);
-  const unpaid=result?.sale?.status==='pending' && result.sale.paymentMethod==='to_follow';
-  const enough=Number(amount)>=Number(result?.sale?.totalAmount) && Number.isFinite(Number(amount)) && Number(amount)<=1000000000;
-  const canRecord=verified&&(method==='cash'?enough:matchesFullPayment(paidAmount,result?.sale?.totalAmount,reference));
-  return <Modal isOpen onClose={onClose} title="Payment to follow" size="lg"><div className="space-y-4">
-    {error ? <p role="alert" className="text-sm text-red-800">{error}</p> : !result ? <p role="status">Loading the saved order…</p> : <>
-      <SaleReceiptPreview receipt={result.receipt} printId="unpaid-pos-order" />
-      <div className="print:hidden">{!unpaid ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">This order is no longer awaiting payment. Do not collect it again.</p> : <>
-        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">The parts were already released and stock deducted. Record the full payment below; stock will not be deducted again.</p>
-        <PaymentOptions value={method} onChange={value=>{setMethod(value);setVerified(false);setReference('');setPaidAmount('');}} />
-        {method==='cash'?<label className="block text-sm font-semibold text-primary-900">Cash received<input type="number" min="0" max="1000000000" step="0.01" value={amount} onChange={event=>{setAmount(event.target.value);setVerified(false);}} className="mt-1 min-h-11 w-full rounded-lg border border-primary-300 p-3" /></label>:<ManualNonCashFields method={method} total={result.sale.totalAmount} amount={paidAmount} onAmount={value=>{setPaidAmount(value);setVerified(false);}} reference={reference} onReference={value=>{setReference(value);setVerified(false);}} />}
-        <label className="flex items-start gap-3 text-sm text-primary-900"><input type="checkbox" checked={verified} onChange={e=>setVerified(e.target.checked)} className="mt-1 h-5 w-5 shrink-0" />{method==='check'?'I confirm the check cleared and the full amount reached the shop’s account.':'I confirm the full cash payment has been received.'}</label>
-        <Button isDisabled={!canRecord} onClick={()=>{onClose();void onPay({saleId:id,paymentMethod:method,cashReceived:method==='cash'?Number(amount):0,paidAmount:isNonCash(method)?Number(paidAmount):0,paymentReference:isNonCash(method)?reference.trim():'',paymentVerified:verified});}}>Record payment</Button>
-      </>}<Button variant="secondary" onClick={()=>window.print()}>Print order</Button></div>
+  return <Modal isOpen onClose={onClose} title="Collect payment" size="lg"><div className="space-y-6">
+    {error ? <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p> : !result ? <p role="status">Loading the saved order…</p> : <>
+      <PaymentCollectionPanel sale={{...result.sale,id}} onClose={onClose} onPrint={()=>window.print()} onPay={payload=>{onClose();void onPay(payload);}} />
+      <div>
+        <p className="mb-3 border-t border-primary-200 pt-5 text-sm font-semibold text-primary-800 print:hidden">Order document</p>
+        <SaleReceiptPreview receipt={result.receipt} printId="unpaid-pos-order" />
+      </div>
     </>}
-    <div className="print:hidden"><Button variant="secondary" onClick={onClose}>Close</Button></div>
+    {(!result || error) && <div className="print:hidden"><Button variant="secondary" fullWidth onClick={onClose}>Close</Button></div>}
   </div></Modal>;
 }
 export default function UnpaidPosOrders({refreshKey,onPay}){

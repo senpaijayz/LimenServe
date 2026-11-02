@@ -1,5 +1,11 @@
 # Enterprise transformation — delivery ledger
 
+## Payment-to-follow collection form refinement — 2 November 2026
+
+Separated the existing collection controls into PaymentCollectionPanel and placed the form before the receipt, eliminating the need to scroll through the whole invoice before payment entry. Added a high-contrast balance/customer/reference header, a short stock-already-issued notice, grouped payment details, a large currency-labelled cash input, exact-amount shortcut, change preview, bordered confirmation block and separated print/record/close actions. Actions stack on narrow layouts. Cash/check choices and required cleared-check evidence remain unchanged; the amount shortcut never confirms payment automatically. Editing cash, check evidence or method resets attestation. Only pending payment-to-follow orders can enable Record payment.
+
+Manually checked the actual component in a local browser: initially disabled; exact cash plus confirmation enables; underpayment and edits reset confirmation; switching to Check requires amount/reference/confirmation. The local callback was exercised without any API call, sale, settlement or stock change. Console errors were empty and the verification image is retained in output/payment-layout-verified-20261102.png. React review informed explicit cash-label association and isolated UI state. Existing request recovery and settlement backend are unchanged. Local fixture removed before release; frontend lint/build and bundle budgets verified.
+
 ## POS invoice layout and optional printed details — 2 November 2026
 
 Added an optional native disclosure to regular POS and saved-quotation checkout for customer address, customer TIN, business style, terms, P.O. number, OSCA/PWD ID, contact and recipient printed name. Bounded text-only fields are validated both at the backend and database. New values are atomically snapshotted on the sale, included in the retry payload and returned by get_sale_detail for later reprints; omitted fields preserve old request fingerprints. Existing payment/replay/stock controls remain intact. No financial or inventory rows were created for verification.
