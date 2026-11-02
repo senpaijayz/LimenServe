@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { includedVat } from '../../../shared/vatPricing.js';
 
 import { getDefaultRateLimitKey } from '../middleware/rateLimit.js';
 import {
@@ -12,7 +13,6 @@ import { normalizeManagedPackageRepriceIds, normalizeManagedPackageSelections } 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/;
 const PUBLIC_QUOTE_VALID_DAYS = 30;
-const PUBLIC_QUOTE_TAX_RATE = 0.12;
 const MAX_PUBLIC_QUOTE_ITEMS = 100;
 const MAX_ITEM_QUANTITY = 1_000;
 const MAX_MONEY_AMOUNT = 100_000_000;
@@ -384,8 +384,8 @@ function normalizeEstimate(estimate, items, nowDate, { internal = false } = {}) 
   });
   const itemSubtotal = roundMoney(items.reduce((sum, item) => sum + item.line_total, 0));
   const subtotal = roundMoney(itemSubtotal + discountTotal);
-  const taxTotal = roundMoney(itemSubtotal * PUBLIC_QUOTE_TAX_RATE);
-  const grandTotal = roundMoney(itemSubtotal + taxTotal);
+  const taxTotal = includedVat(itemSubtotal);
+  const grandTotal = itemSubtotal;
 
   assertMoneyMatches(value.subtotal, subtotal, 'estimate.subtotal');
   assertMoneyMatches(value.tax_total, taxTotal, 'estimate.tax_total');
@@ -396,6 +396,7 @@ function normalizeEstimate(estimate, items, nowDate, { internal = false } = {}) 
 
   return {
     status,
+    price_includes_vat: true,
     source: internal ? 'internal' : 'public',
     note,
     subtotal,

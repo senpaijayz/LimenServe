@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import {includedVat,documentIncludesVat} from '../../../../../shared/vatPricing.js';
 
 const money = (value) => `PHP ${Number(value || 0).toLocaleString('en-PH', {
   minimumFractionDigits: 2,
@@ -17,7 +18,7 @@ const dateLabel = (value) => {
   }).format(new Date(value));
 };
 
-function createServicePdf({ title, reference, order, lines, total, paymentStatus, paymentMethod, paymentReference, paidAt, cashReceived, changeDue, mechanicName }) {
+function createServicePdf({ title, reference, order, lines, total, paymentStatus, paymentMethod, paymentReference, paidAt, cashReceived, changeDue, mechanicName, vat, vatIncluded = true }) {
   const doc = new jsPDF({ format: 'a4', unit: 'mm' });
   const width = doc.internal.pageSize.getWidth();
   const height = doc.internal.pageSize.getHeight();
@@ -104,6 +105,7 @@ function createServicePdf({ title, reference, order, lines, total, paymentStatus
   doc.setTextColor(24, 61, 145);
   doc.text(`TOTAL: ${money(total)}`, width - margin, y, { align: 'right' });
   y += 7;
+  if(vat != null){ doc.setFontSize(10); doc.text(`${vatIncluded?'VAT included (12%)':'VAT as recorded'}: ${money(vat)}`,width-margin,y,{align:'right'}); y+=7; }
   if (paymentMethod === 'cash') {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
@@ -128,6 +130,8 @@ export function downloadServiceOrderPdf({ order, serviceItems = [], partItems = 
   });
   const doc = createServicePdf({
     title: 'Service order', reference, order, lines, total: orderTotal,
+    vat: order.status === 'completed' ? Number(order.taxTotal ?? order.tax_total ?? 0) : includedVat(orderTotal),
+    vatIncluded: order.status !== 'completed' || documentIncludesVat(order),
     paymentStatus: order.paymentStatus || order.payment_status || 'Unpaid', mechanicName,
   });
   doc.save(`LimenServe_Service_Order_${safeFilename(reference)}.pdf`);
@@ -145,7 +149,7 @@ export function downloadServiceReceiptPdf(order, sale) {
   }));
   const doc = createServicePdf({
     title: 'Service receipt', reference, order, lines,
-    total: sale.total_amount, paymentStatus: 'Paid', paymentMethod: sale.payment_method,
+    total: sale.total_amount, vat: Number(sale.tax_total || 0), vatIncluded: documentIncludesVat(sale), paymentStatus: 'Paid', paymentMethod: sale.payment_method,
     paymentReference: sale.pos_payment_reference, paidAt: sale.created_at, cashReceived: sale.cash_received, changeDue: sale.change_due,
   });
   doc.save(`LimenServe_Service_Receipt_${safeFilename(reference)}.pdf`);

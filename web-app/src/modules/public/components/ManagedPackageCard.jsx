@@ -68,7 +68,7 @@ export default function ManagedPackageCard({
           </span>
           <div className="text-right">
             <span className="block text-xs text-primary-200">
-              Package total · before VAT
+              Package total · VAT included
             </span>
             <strong className="text-2xl tabular-nums text-white">
               {selected?.valid === false || !selected
@@ -172,7 +172,7 @@ export default function ManagedPackageCard({
                   </div>
                 )}
                 <div className="mt-2 flex justify-between gap-3 border-t border-primary-200 pt-2 font-bold">
-                  <span>With VAT (12%)</span>
+                  <span>Total (VAT included)</span>
                   <span>{formatCurrency(selected.grandTotal)}</span>
                 </div>
               </div>

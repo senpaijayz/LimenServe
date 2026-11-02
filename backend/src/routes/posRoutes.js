@@ -72,6 +72,7 @@ function buildSalePayload(body) {
   const items = Array.isArray(body?.items) ? body.items : [];
 
   return {
+    ...(body?.priceIncludesVat === true ? { priceIncludesVat: true } : {}),
     customerName: typeof body?.customerName === 'string' ? body.customerName.trim() : '',
     note: typeof body?.note === 'string' ? body.note.trim() : '',
     releaseConfirmed: body?.releaseConfirmed === true,

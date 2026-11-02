@@ -356,7 +356,7 @@ const PriceListManager = ({ onUpdated }) => {
                             </div>
                         ) : (
                             <p className="mt-2 text-sm text-primary-500">
-                                No file selected yet. Choose the Excel or CSV file, then click Update Pricelist.
+                                Choose the customer price list. Excel imports use SRP with VAT; CSV prices must already include VAT. Price increases are not added again.
                             </p>
                         )}
                     </div>

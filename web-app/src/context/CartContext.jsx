@@ -2,6 +2,7 @@
 import { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { STORAGE_KEYS } from '../utils/constants';
 import { useAuth } from './useAuth';
+import { vatInclusiveTotals } from '../../../shared/vatPricing.js';
 
 // Create Cart Context
 const CartContext = createContext(null);
@@ -146,17 +147,7 @@ function StaffCartProvider({ children, owner, canRecoverLegacy }) {
      * Calculate cart totals
      */
     const totals = useMemo(() => {
-        const rawSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-
-        // Calculate discount amount
-        const discountAmount = rawSubtotal * (discountPercent / 100);
-        const subtotal = rawSubtotal - discountAmount;
-
-        const tax = subtotal * 0.12; // 12% VAT
-        const total = subtotal + tax;
-        const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
-
-        return { rawSubtotal, discountAmount, subtotal, tax, total, itemCount };
+        return vatInclusiveTotals(items, discountPercent);
     }, [items, discountPercent]);
 
     /**

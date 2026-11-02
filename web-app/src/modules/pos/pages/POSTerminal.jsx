@@ -303,6 +303,7 @@ const POSTerminalWorkspace = ({owner}) => {
                 return;
             }
             const payload = {
+                priceIncludesVat: true,
                 customerName,
                 ...(selectedCustomer?{customerId:selectedCustomer.id}:{}),
                 paymentMethod,
@@ -613,8 +614,10 @@ const POSTerminalWorkspace = ({owner}) => {
                                 type="number"
                                 min="0"
                                 max="100"
+                                step="0.01"
+                                aria-label="Discount percentage"
                                 value={discountPercent}
-                                onChange={(e) => setDiscountPercent(parseFloat(e.target.value) || 0)}
+                                onChange={(e) => setDiscountPercent(Math.min(100, Math.max(0, Math.round((parseFloat(e.target.value) || 0) * 100) / 100)))}
                                 className="w-full px-2 py-1 text-right text-sm font-bold text-accent-danger bg-white border border-primary-200 rounded-md focus:outline-none focus:border-accent-danger focus:ring-1 focus:ring-accent-danger"
                             />
                         </div>
@@ -622,7 +625,7 @@ const POSTerminalWorkspace = ({owner}) => {
 
                     <div className="space-y-2">
                         <div className="flex justify-between text-sm text-primary-600 font-medium">
-                            <span>Subtotal</span>
+                            <span>Sales (VAT included)</span>
                             <span>{formatCurrency(totals.rawSubtotal)}</span>
                         </div>
 
@@ -634,7 +637,7 @@ const POSTerminalWorkspace = ({owner}) => {
                         )}
 
                         <div className="flex justify-between text-sm text-primary-600 font-medium">
-                            <span>VAT (12%)</span>
+                            <span>VAT included (12%)</span>
                             <span>{formatCurrency(totals.tax)}</span>
                         </div>
                         <div className="flex justify-between text-xl font-bold text-primary-950 pt-3 mt-1 border-t border-primary-200">
@@ -693,7 +696,7 @@ const POSTerminalWorkspace = ({owner}) => {
 
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         <div className="rounded-xl border border-primary-200 bg-primary-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-wider text-primary-400">Subtotal</p>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-primary-400">Sales (VAT included)</p>
                             <p className="mt-1 text-sm font-bold text-primary-950">{formatCurrency(totals.rawSubtotal)}</p>
                         </div>
                         <div className="rounded-xl border border-primary-200 bg-primary-50 p-3">
@@ -701,7 +704,7 @@ const POSTerminalWorkspace = ({owner}) => {
                             <p className="mt-1 text-sm font-bold text-accent-danger">-{formatCurrency(totals.discountAmount)}</p>
                         </div>
                         <div className="rounded-xl border border-primary-200 bg-primary-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-wider text-primary-400">VAT</p>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-primary-400">VAT included</p>
                             <p className="mt-1 text-sm font-bold text-primary-950">{formatCurrency(totals.tax)}</p>
                         </div>
                         <div className="rounded-xl border border-accent-blue/30 bg-accent-blue/10 p-3">

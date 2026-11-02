@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import {documentIncludesVat} from '../../../../../shared/vatPricing.js';
 import { useNavigate } from 'react-router';
 import {
     Archive,
@@ -185,7 +186,7 @@ function buildPrintableQuote({
                             <div class="summary-row"><span>Services subtotal</span><strong>${escapeHtml(formatCurrency(totals.servicesCatalogTotal))}</strong></div>
                             ${totals.bundleDiscountTotal > 0 ? `<div class="summary-row"><span>Bundle savings</span><strong>-${escapeHtml(formatCurrency(totals.bundleDiscountTotal))}</strong></div>` : ''}
                             <div class="summary-row"><span>Subtotal after savings</span><strong>${escapeHtml(formatCurrency(totals.subtotal))}</strong></div>
-                            <div class="summary-row"><span>VAT (12%)</span><strong>${escapeHtml(formatCurrency(totals.vat))}</strong></div>
+                            <div class="summary-row"><span>${totals.priceIncludesVat === false ? 'VAT (12%)' : 'VAT included (12%)'}</span><strong>${escapeHtml(formatCurrency(totals.vat))}</strong></div>
                             <div class="summary-row total"><span>Total estimate</span><span>${escapeHtml(formatCurrency(totals.total))}</span></div>
                         </div>
                     </section>
@@ -374,6 +375,11 @@ const QuoteBuilder = () => {
 
     const totals = useMemo(() => {
         const quoteTotals = calculateQuoteTotals(selectedParts, selectedServices);
+        const frozen = !quoteDirty && savedEstimateSnapshot?.estimate;
+        if(frozen) return { partsCatalogTotal:quoteTotals.partsCatalogSubtotal,servicesCatalogTotal:quoteTotals.servicesCatalogSubtotal,
+            partsTotal:quoteTotals.partsSubtotal,servicesTotal:quoteTotals.servicesSubtotal,appliedBundles:quoteTotals.appliedBundles,
+            bundleDiscountTotal:Number(frozen.discount_total),subtotalBeforeDiscount:Number(frozen.subtotal),
+            subtotal:Number(frozen.subtotal)-Number(frozen.discount_total),vat:Number(frozen.tax_total),total:Number(frozen.grand_total),priceIncludesVat:documentIncludesVat(frozen) };
         return {
             partsCatalogTotal: quoteTotals.partsCatalogSubtotal,
             servicesCatalogTotal: quoteTotals.servicesCatalogSubtotal,
@@ -385,8 +391,9 @@ const QuoteBuilder = () => {
             subtotal: quoteTotals.subtotal,
             vat: quoteTotals.vat,
             total: quoteTotals.total,
+            priceIncludesVat: true,
         };
-    }, [selectedParts, selectedServices]);
+    }, [selectedParts, selectedServices, quoteDirty, savedEstimateSnapshot]);
 
     const breakBundle = (bundleKey) => {
         if (!bundleKey) return true;
@@ -687,6 +694,7 @@ const QuoteBuilder = () => {
             partsCatalogTotal: calculated.partsCatalogSubtotal,
             servicesCatalogTotal: calculated.servicesCatalogSubtotal,
             appliedBundles: calculated.appliedBundles,
+            priceIncludesVat: documentIncludesVat(header),
             subtotalBeforeDiscount: Number(header.subtotal),
             bundleDiscountTotal: Number(header.discount_total),
             subtotal: Number(header.subtotal) - Number(header.discount_total),
@@ -749,6 +757,7 @@ const QuoteBuilder = () => {
                 issuedAt,
                 validUntil,
                 note: notes,
+                priceIncludesVat: totals.priceIncludesVat,
                 subtotalBeforeDiscount: totals.subtotalBeforeDiscount,
                 subtotalAfterDiscount: totals.subtotal,
                 discountTotal: totals.bundleDiscountTotal,
@@ -1087,7 +1096,7 @@ const QuoteBuilder = () => {
                                 <span>{formatCurrency(totals.subtotal)}</span>
                             </div>
                             <div className="flex justify-between text-sm text-primary-600 font-medium">
-                                <span>VAT (12%)</span>
+                                <span>{totals.priceIncludesVat === false ? 'VAT (12%)' : 'VAT included (12%)'}</span>
                                 <span>{formatCurrency(totals.vat)}</span>
                             </div>
                             <div className="flex justify-between text-xl font-bold text-primary-950 pt-3 mt-1 border-t border-primary-200">

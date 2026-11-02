@@ -1,4 +1,5 @@
 import { normalizeManagedPackageRepriceIds, normalizeManagedPackageSelections, packageError, packageMoneyToCents } from './managedPackageDomain.js';
+import { includedVat, documentIncludesVat } from '../../../shared/vatPricing.js';
 import { assertRequestedManagedLinesMatch, assertManagedPackageQualifications, MANAGED_BUNDLE_PREFIX, managedPackageBundleKey, resolveNewManagedPackageSelections } from './managedPackageQuotePricing.js';
 
 const money = (cents) => Number((cents / 100).toFixed(2));
@@ -96,6 +97,7 @@ export function createUnifiedEstimatePricingResolver({ resolveRegularPricing,
       if (!regular?.ok) return regular;
       const fresh = await resolveNewPackages({ selections: freshSelections,
         regularItems: [...regular.items, ...legacyItems, ...retained.flatMap((snapshot) => snapshot.items)], vehicle: vehicle || {} });
+      if(retained.length && existingQuote && !documentIncludesVat(existingQuote.estimate || existingQuote)) throw packageError('This quotation uses the older tax basis. Explicitly reprice its saved packages before saving a new revision.',409,'PACKAGE_REPRICE_REQUIRED');
       const snapshots = [...retained, ...fresh.snapshots];
       const managedItems = snapshots.flatMap((snapshot) => snapshot.items);
       const allQuoteItems = [...regular.items, ...legacyItems, ...managedItems];
@@ -110,8 +112,8 @@ export function createUnifiedEstimatePricingResolver({ resolveRegularPricing,
       const gross = packageMoneyToCents(regular.totals.subtotal) + legacyGross + sumSnapshots('catalogTotal');
       const net = packageMoneyToCents(regular.totals.subtotal) - packageMoneyToCents(regular.totals.discount_total) + legacyNet + sumSnapshots('effectiveTotal');
       if (gross > 10000000000 || net < 0 || net > gross) throw packageError('The quotation total exceeds the supported amount.');
-      const tax = Number((BigInt(net) * 12n + 50n) / 100n);
-      const totals = { subtotal: money(gross), discount_total: money(gross - net), tax_total: money(tax), grand_total: money(net + tax) };
+      const tax = includedVat(money(net));
+      const totals = { subtotal: money(gross), discount_total: money(gross - net), tax_total: tax, grand_total: money(net) };
       if (Object.keys(totals).some((key) => packageMoneyToCents(requestedEstimate[key]) !== packageMoneyToCents(totals[key]))) {
         throw packageError('Quotation prices changed. Review the current package totals before saving.', 409, 'QUOTE_PRICE_CHANGED');
       }

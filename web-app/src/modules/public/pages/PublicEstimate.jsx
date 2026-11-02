@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import {documentIncludesVat, includedVat} from '../../../../../shared/vatPricing.js';
 import { motion as Motion } from 'framer-motion';
 import { useSearchParams } from 'react-router';
 import { Search, Plus, Minus, Calculator, Printer, Pencil, User, Phone, Wrench, X, Package, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Sparkles, Copy, Download } from 'lucide-react';
@@ -283,8 +284,8 @@ export const buildEstimatePayload = ({
     ));
     const pricedSubtotal = roundCurrency(items.reduce((sum, item) => sum + Number(item.line_total), 0));
     const discountTotal = roundCurrency(Math.max(catalogSubtotal - pricedSubtotal, 0));
-    const taxTotal = roundCurrency(pricedSubtotal * 0.12);
-    const grandTotal = roundCurrency(pricedSubtotal + taxTotal);
+    const taxTotal = includedVat(pricedSubtotal);
+    const grandTotal = pricedSubtotal;
     const verifiedBundleLabels = [...new Set(items
         .filter((item) => item.bundle_key)
         .map((item) => `${item.bundle_name} (${item.bundle_tier_label})`))];
@@ -318,6 +319,7 @@ const buildRetrievedPrintableQuote = (quote) => {
     }
 
     return {
+        priceIncludesVat: documentIncludesVat(quote.estimate),
         issuedAt: quote.estimate?.issued_at || quote.estimate?.created_at || new Date(),
         referenceLabel: 'Quote No',
         referenceValue: quote.estimate?.estimate_number || 'N/A',
@@ -1212,7 +1214,7 @@ const PublicEstimate = () => {
                             <span className="font-semibold text-primary-950">{formatCurrency(subtotal)}</span>
                         </div>
                         <div className="flex justify-between text-sm text-primary-600">
-                            <span>VAT (12%)</span>
+                            <span>VAT included (12%)</span>
                             <span className="font-semibold text-primary-950">{formatCurrency(vat)}</span>
                         </div>
                         <div className="flex justify-between border-t border-primary-200 pt-3 text-lg font-bold text-primary-950">
@@ -2067,7 +2069,7 @@ const PublicEstimate = () => {
                                                 <span className="font-medium text-primary-950">{formatCurrency(subtotal)}</span>
                                             </div>
                                             <div className="flex justify-between text-sm text-primary-600">
-                                                <span>VAT (12%)</span>
+                                                <span>VAT included (12%)</span>
                                                 <span className="font-medium text-primary-950">{formatCurrency(vat)}</span>
                                             </div>
                                             <div className="flex justify-between border-t border-primary-200 pt-3 text-lg font-bold text-primary-950">
@@ -2186,7 +2188,7 @@ const PublicEstimate = () => {
                                         <span>{formatCurrency(Number(printableQuote.subtotal || 0) - Number(printableQuote.discountTotal || 0))}</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #ddd' }}>
-                                        <span style={{ fontWeight: '600' }}>VAT (12%)</span>
+                                        <span style={{ fontWeight: '600' }}>{printableQuote.priceIncludesVat === false ? 'VAT (12%)' : 'VAT included (12%)'}</span>
                                         <span>{formatCurrency(printableQuote.vat)}</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderTop: '2px solid black', marginTop: '4px', fontWeight: '800', fontSize: '14px' }}>

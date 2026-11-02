@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import {includedVat,documentIncludesVat} from '../../../../../shared/vatPricing.js';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { X, Wrench, User, Phone, Car, FileText, Save, CheckCircle, ArrowRight, Archive, CreditCard, Package, CalendarDays, UserCheck, Printer, Download, Search, Plus, Trash2, Clock } from 'lucide-react';
 import Button from '../../../components/ui/Button';
@@ -201,6 +202,7 @@ const printServiceOrderDocument = ({ order, serviceItems, partItems, orderTotal,
                     <section class="summary">
                         <div class="summary-card">
                             <div class="summary-row"><span>Service / parts total</span><strong>${escapeHtml(formatCurrency(orderTotal))}</strong></div>
+                            <div class="summary-row"><span>${order.status !== 'completed' || documentIncludesVat(order) ? 'VAT included (12%)' : 'VAT as recorded'}</span><strong>${escapeHtml(formatCurrency(order.status === 'completed' ? Number(order.taxTotal ?? order.tax_total ?? 0) : includedVat(orderTotal)))}</strong></div>
                             <div class="summary-row"><span>Payment status</span><strong>${escapeHtml(paymentStatus)}</strong></div>
                             <div class="summary-row total"><span>Final amount</span><span>${escapeHtml(formatCurrency(orderTotal))}</span></div>
                         </div>
@@ -741,8 +743,8 @@ export const ServiceOrderDetailModal = ({
     const partItems = items.filter((item) => !serviceItems.includes(item));
     const recordedTotal = Number(order.totalAmount ?? order.total_amount ?? order.estimatedCost ?? order.estimated_cost ?? 0);
     const itemSubtotal = items.reduce((sum, item, index) => sum + getLineItemDisplay(item, index).lineTotal, 0);
-    const orderTotal = items.length
-        ? Math.max(itemSubtotal - Number(order.discountTotal ?? order.discount_total ?? 0) + Number(order.taxTotal ?? order.tax_total ?? 0), 0)
+    const orderTotal = order.status === 'completed' ? recordedTotal : items.length
+        ? Math.max(itemSubtotal - Number(order.discountTotal ?? order.discount_total ?? 0), 0)
         : recordedTotal;
     const completedAt = order.completedAt ?? order.completed_at ?? null;
     const mechanicName = order.assignedMechanic?.name ?? order.assignment?.mechanic?.name ?? order.mechanicName ?? order.assignedMechanicName ?? order.assigned_to_name ?? order.assignedToName ?? '';

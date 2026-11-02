@@ -250,12 +250,12 @@ export function priceManagedPackageVariant(variant, references, { publishedBaseP
   const stocked = known.filter((line) => line.stock >= line.quantity);
   const availability = !productLines.length || stocked.length === productLines.length ? 'available'
     : !known.length ? 'unknown' : known.every((line) => line.stock <= 0) && known.length === productLines.length ? 'out_of_stock' : 'partially_available';
-  const taxCents = Number((BigInt(totalCents) * 12n + 50n) / 100n);
+  const taxCents = Number((BigInt(totalCents) * 12n + 56n) / 112n);
   return {
     variantId: variant.id, label: variant.label, pricing, lines: pricedLines, availability,
     catalogTotal: amount(catalogCents), packageTotal: amount(totalCents), savings: amount(catalogCents - totalCents),
     taxRate: 0.12, tax: amount(taxCents),
-    grandTotal: amount(totalCents + taxCents),
+    grandTotal: amount(totalCents),
   };
 }
 

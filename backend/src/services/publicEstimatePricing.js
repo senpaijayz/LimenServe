@@ -1,4 +1,4 @@
-const PUBLIC_QUOTE_TAX_RATE = 0.12;
+import { includedVat } from '../../../shared/vatPricing.js';
 const MONEY_TOLERANCE = 0.01;
 export const MAX_PUBLIC_BUNDLE_LINES = 12;
 export const MAX_PUBLIC_BUNDLE_PRODUCT_IDS = 8;
@@ -316,8 +316,8 @@ export function createPublicEstimatePricingResolver({
     }
 
     const discountTotal = roundMoney(subtotal - pricedSubtotal);
-    const taxTotal = roundMoney(pricedSubtotal * PUBLIC_QUOTE_TAX_RATE);
-    const grandTotal = roundMoney(pricedSubtotal + taxTotal);
+    const taxTotal = includedVat(pricedSubtotal);
+    const grandTotal = pricedSubtotal;
     const totals = {
       subtotal,
       discount_total: discountTotal,

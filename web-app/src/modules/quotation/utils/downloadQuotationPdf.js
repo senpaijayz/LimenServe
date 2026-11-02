@@ -167,7 +167,7 @@ export async function downloadQuotationPdf(quote = {}) {
     ['Subtotal before discount', quote.subtotalBeforeDiscount ?? quote.subtotal],
     ...(Number(quote.discountTotal || 0) > 0 ? [['Package savings', -Math.abs(Number(quote.discountTotal))]] : []),
     ['Subtotal after savings', quote.subtotalAfterDiscount ?? (Number(quote.subtotal ?? 0) - Number(quote.discountTotal ?? 0))],
-    ['VAT (12%)', quote.vat],
+    [quote.priceIncludesVat === false ? 'VAT (12%)' : 'VAT included (12%)', quote.vat],
   ];
   ensureSpace(42);
   y += 5;

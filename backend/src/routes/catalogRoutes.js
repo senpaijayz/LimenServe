@@ -338,8 +338,6 @@ const PRICE_LIST_COLUMN_ALIASES = {
       ['srpvatinclusive', 120],
       ['srpincludingvat', 120],
       ['srpvatin', 110],
-      ['srpwithoutvat', 70],
-      ['srpwithouttax', 70],
       ['newsrpwithvat', 130],
       ['newsrpwvat', 130],
       ['newprice', 110],
@@ -471,9 +469,24 @@ function parsePriceListUpload(file) {
 
   try {
     if (filename.endsWith('.xlsx') || mimetype.includes('spreadsheetml')) {
-      return parseXlsxWorksheetRows(file.buffer)
-        .map((rows) => rowsToPriceListItems(rows))
-        .sort((left, right) => right.length - left.length)[0] ?? [];
+      const candidates = parseXlsxWorksheetRows(file.buffer).map((rows) => {
+        const detected = findPriceListHeader(rows);
+        const priceHeader = detected ? detected.header[findColumnIndex(detected.header, 'price', { allowFallback: false })] : '';
+        return { items: rowsToPriceListItems(rows), inclusive: /withvat|wvat|vatinclusive|includingvat|vatin/.test(priceHeader) && !/without/.test(priceHeader) };
+      }).filter((candidate) => candidate.items.length).sort((a, b) => b.items.length - a.items.length);
+      if (!candidates.length) return [];
+      const allSkus = new Set(candidates[0].items.map((item) => item.sku));
+      const complete = candidates.filter((candidate) => {
+        if (!candidate.inclusive) return false;
+        const skus = new Set(candidate.items.map((item) => item.sku));
+        return [...allSkus].every((sku) => skus.has(sku));
+      });
+      if (!complete.length) throw new Error('Upload a complete customer price list with an SRP with VAT column. Pre-VAT and per-litre summary sheets are not imported as selling prices.');
+      const chosenPrices = new Map(complete[0].items.map((item) => [item.sku, item.price]));
+      if (complete.slice(1).some((candidate) => candidate.items.some((item) => chosenPrices.get(item.sku) !== item.price))) {
+        throw new Error('This workbook contains different complete VAT-inclusive price lists. Export the customer price sheet on its own before uploading.');
+      }
+      return complete[0].items;
     }
 
     return rowsToPriceListItems(parseCsvRows(file.buffer.toString('utf8').replace(/\t/g, ',')));

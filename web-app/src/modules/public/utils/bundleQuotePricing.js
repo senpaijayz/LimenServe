@@ -1,4 +1,5 @@
 import { toNumber } from './smartBundleUtils';
+import { includedVat } from '../../../../../shared/vatPricing.js';
 
 let quoteLineSequence = 0;
 
@@ -92,7 +93,7 @@ export function getAppliedBundleSummaries(lines = []) {
   return Array.from(bundleMap.values());
 }
 
-export function calculateQuoteTotals(parts = [], services = [], taxRate = 0.12) {
+export function calculateQuoteTotals(parts = [], services = []) {
   const partsCatalogSubtotal = centsToCurrency(sumLineAmountsCents(parts, 'catalogPrice'));
   const servicesCatalogSubtotal = centsToCurrency(sumLineAmountsCents(services, 'catalogPrice'));
   const partsSubtotal = centsToCurrency(sumLineAmountsCents(parts));
@@ -102,7 +103,7 @@ export function calculateQuoteTotals(parts = [], services = [], taxRate = 0.12) 
   const appliedBundles = getAppliedBundleSummaries([...parts, ...services]);
   const bundleDiscountTotal = roundCurrency(appliedBundles.reduce((sum, bundle) => sum + bundle.savings, 0));
   const subtotalBeforeDiscount = centsToCurrency(currencyToCents(subtotal) + currencyToCents(bundleDiscountTotal));
-  const vat = centsToCurrency(Math.round(subtotalCents * toNumber(taxRate, 0)));
+  const vat = includedVat(subtotal);
 
   return {
     partsCatalogSubtotal,
@@ -113,7 +114,7 @@ export function calculateQuoteTotals(parts = [], services = [], taxRate = 0.12) 
     bundleDiscountTotal,
     subtotal,
     vat,
-    total: centsToCurrency(subtotalCents + currencyToCents(vat)),
+    total: subtotal,
     appliedBundles,
   };
 }

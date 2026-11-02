@@ -256,7 +256,7 @@ export default function ManagedQuotePackages({
                   <strong className="text-primary-950 tabular-nums">
                     {formatCurrency(managedOfferTotal(offer))}
                     <span className="ml-1 text-xs font-normal text-primary-600">
-                      before VAT
+                      VAT included
                     </span>
                   </strong>
                 </div>
@@ -503,7 +503,7 @@ export default function ManagedQuotePackages({
                 </div>
               </dl>
               <p className="text-xs text-primary-600">
-                Amounts above are before VAT. Applying changes does not create a
+                Prices above already include VAT. Applying changes does not create a
                 sale or deduct stock.
               </p>
               <button
