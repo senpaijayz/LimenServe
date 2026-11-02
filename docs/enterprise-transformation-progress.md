@@ -1,5 +1,13 @@
 # Enterprise transformation — delivery ledger
 
+## Corrective outer checkout VAT guard — 2 November 2026
+
+Investigated the owner's failed payment-to-follow screenshot and matching Render 400/22023 request logs. The previous VAT release corrected the sale constructor but missed public.checkout_pos_order's earlier validation, which still expected an extra 12% instead of extracting 12/112. The displayed 48,332.48 gross / 5,178.48 VAT was correct; the outer guard rejected it before a sale or stock write. Corrected the live guard to require the existing inclusive-price flag, extract VAT, and enforce gross less discount equals total. Request replay still returns before the new validation; actor/customer locks, cash/check evidence, unpaid-release confirmation and exactly-once stock posting are unchanged.
+
+A database-wide search found the same remaining additive check in app.attach_managed_estimate_snapshot. Corrected only its tax/grand-total comparison, retaining all eligibility, snapshot, item, publication and catalog-price protections. Applied both guarded function patches directly to the intended LimenServe project; no row data, privileges or policies were changed. Local migration timestamp matches the remote ledger.
+
+Verified the actual live checkout validation block without invoking any sale constructor: the screenshot's exact amounts and a discounted 112 -> 100.80 case pass; extra tax, wrong VAT, stale clients and tampered totals fail. One-off in-memory backend checks pass the screenshot amount for cash, check and payment to follow. No live financial test transaction was posted and no stock was deducted for verification. Existing Supabase advisory notices were reviewed and remain unrelated to this correction.
+
 ## VAT-inclusive customer selling prices — 2 November 2026
 
 Reconciled all 35,622 rows of the owner's October customer workbook. The complete Price List worksheet's SRP with VAT equals Sheet1's new net SRP multiplied by 1.12 on every row. Existing PA-prefix canonicalization produces 35,613 unique part numbers; the existing first-source-row collision policy is preserved. Excel import now prioritizes a complete VAT-inclusive customer sheet and rejects incomplete or conflicting alternatives instead of selecting net/dealer prices. Oil per-litre summaries are not substituted for drum/box prices.
