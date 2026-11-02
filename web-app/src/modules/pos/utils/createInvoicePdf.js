@@ -58,7 +58,6 @@ export function createInvoicePdf(receipt,business={},logo=null) {
       y+=h;offset+=Math.max(1,chunk.length);
     }while(offset<description.length);
   }
-  y+=3;
   const totals=[
     [included?'Total sales (VAT inclusive)':'Subtotal',receipt.subtotal],
     ['Less: Discount',receipt.discountTotal],
@@ -69,6 +68,16 @@ export function createInvoicePdf(receipt,business={},logo=null) {
   const noteBlocks=[!unpaid && receipt.paymentMethod!=='cash' && 'Payment method: '+method,receipt.note && 'Order note: '+receipt.note,receipt.paymentReference && (receipt.paymentMethod==='check'?'Check number: ':'Payment reference: ')+receipt.paymentReference,receipt.paidAt && 'Payment recorded: '+date(receipt.paidAt)].filter(Boolean);
   const noteHeight=noteBlocks.reduce((sum,n)=>sum+lines(n,width-4).length*4.5+2,0);
   const closingHeight=totals.length*5.5+noteHeight+24;
+  // Blank writing rows may use spare room, never create an extra page.
+  // Reserve the closing block and long recipient names before allocating rows.
+  const recipientExtra=details.receivedBy?lines(details.receivedBy,92,8,true).length*3.5:0;
+  const blankRowHeight=7;
+  const blankRows=Math.min(5,Math.max(0,Math.floor((bottom-y-closingHeight-recipientExtra-10)/blankRowHeight)));
+  for(let row=0;row<blankRows;row++){
+    widths.forEach((w,col)=>{doc.setDrawColor(80);doc.rect(xs[col],y,w,blankRowHeight);});
+    y+=blankRowHeight;
+  }
+  y+=3;
   // Keep totals, short notes and acknowledgement together when they fit a page.
   ensure(Math.min(closingHeight,90));
   const start=y;

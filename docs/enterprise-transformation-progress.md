@@ -1,5 +1,11 @@
 # Enterprise transformation — delivery ledger
 
+## Optional writing rows in printed invoices — 2 November 2026
+
+Added up to five 7mm blank rows below the final printed item. Rows use the existing QTY/UNIT/ITEM/PRICE/TOTAL column boundaries and consume spare space only. Allocation reserves totals, notes, recipient-name wrapping and acknowledgement plus a safety gap; it does not call page creation for blank rows. Fewer rows (or none) are drawn when space is tight. No item values, totals, stock or payment behavior changed.
+
+Regenerated the actual one-item and 60-item verification PDFs: page counts remain 1 and 3 respectively. Visually inspected the one-page result with all five empty writing rows and the closing signature retained on the same sheet. Frontend lint, production build, bundle budgets and diff checks passed. Verification artifacts remain under output/; no live transaction was created.
+
 ## Responsive POS grid/list and display density — 2 November 2026
 
 Added accessible grid/list toggle buttons beside a Compact/Comfortable size selector in the POS product area. Display-only preferences are validated and retained locally under a versioned key; blocked storage does not disable the controls. Compact grid fits two cards at 320/390 CSS pixels, while comfortable grid uses larger cards and container-width-based automatic columns. List rows wrap prices below identity on narrow screens and retain separate 44px barcode/history targets. Part numbers are the dark primary line, with product description below. Motion-reduction preferences are honored.
