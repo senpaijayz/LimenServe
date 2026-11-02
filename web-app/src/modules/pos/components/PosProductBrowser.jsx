@@ -23,6 +23,7 @@ export default function PosProductBrowser({products,onSelect,onBarcode,onPriceHi
         </div>
       </div>
     </div>
+    {!products.length && <p role="status" className="rounded-xl border border-dashed border-primary-300 bg-white px-4 py-10 text-center text-sm text-primary-700">No matching parts. Try another part number or change the stock filter.</p>}
     <div className={`pos-products-display pos-products-${display.view} pos-products-${display.size}`}>
       {products.map(product=><article key={product.id} className="pos-product-result">
         <button type="button" onClick={()=>onSelect(product)} disabled={!hasPositivePartPrice(product.price)} title={hasPositivePartPrice(product.price)?'Add '+product.sku+' to current sale':'Confirm a positive selling price in Products first.'} className="pos-result-select">

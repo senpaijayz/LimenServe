@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, Check, Wrench, Camera, ChevronLeft, ChevronRight, AlertTriangle, Calculator, WalletCards } from 'lucide-react';
+import { Banknote, Check, ChevronLeft, ChevronRight, AlertTriangle, Calculator, WalletCards } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import { useCart } from '../../../context/CartContext';
@@ -8,6 +8,9 @@ import { useToast } from '../../../components/ui/Toast';
 import useBarcodeScanner from '../../../hooks/useBarcodeScanner';
 import useDataStore from '../../../store/useDataStore';
 import PosProductBrowser from '../components/PosProductBrowser';
+import PosCatalogToolbar from '../components/PosCatalogToolbar';
+import PosCartLines from '../components/PosCartLines';
+import PosSaleSummary from '../components/PosSaleSummary';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import AddServiceModal from '../../../components/ui/AddServiceModal';
@@ -352,10 +355,10 @@ const POSTerminalWorkspace = ({owner}) => {
     };
 
     return (
-        <div className={`flex min-h-[calc(100dvh-8rem)] flex-col gap-4 lg:h-[calc(100vh-8rem)] lg:flex-row ${!sourceEstimate?'pb-24 lg:pb-0':''}`}>
+        <div className={`flex min-h-[calc(100dvh-8rem)] flex-col gap-5 lg:flex-row lg:items-start ${!sourceEstimate?'pb-24 lg:pb-0':''}`}>
             {sourceEstimate ? <div className="min-w-0 flex-1 space-y-4 overflow-y-auto"><QuotePosCheckout key={`${owner}:${sourceEstimate}`} estimateId={sourceEstimate} posting={posting} refreshKey={unpaidRefresh} onLeave={()=>setSearchParams(current=>{const next=new URLSearchParams(current);next.delete('estimateId');return next;},{replace:true})} /><UnpaidPosOrders refreshKey={unpaidRefresh} onPay={payload=>posting.submit('settlement',payload)} /></div> : <>
             {/* Products Section */}
-            <div id="pos-products-pane" role="region" aria-label="Parts and services" tabIndex={-1} ref={productPaneRef} className={`${mobileCartOpen?'hidden lg:flex':'flex'} min-w-0 flex-1 flex-col outline-none`}>
+            <div id="pos-products-pane" role="region" aria-label="Parts and services" tabIndex={-1} ref={productPaneRef} className={`${mobileCartOpen?'hidden lg:flex':'flex'} pos-catalog-pane min-w-0 flex-1 flex-col outline-none`}>
                 {legacyItems.length>0 && <details className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
                     <summary className="min-h-11 cursor-pointer py-2 font-semibold">Review older saved cart · {legacyItems.length} items</summary>
                     <p className="mt-2">These items were saved before carts were linked to staff accounts. Recover them only if they belong to your unfinished order and have not already been sold. The original copy stays on this device.</p>
@@ -366,59 +369,7 @@ const POSTerminalWorkspace = ({owner}) => {
                 </details>}
                 <div className="mb-3 shrink-0"><UnpaidPosOrders refreshKey={unpaidRefresh} onPay={payload=>posting.submit('settlement',payload)} /></div>
                 {posting.error && !posting.pending && <p role="alert" className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{posting.error}</p>}
-                {/* Search Bar */}
-                <div className="relative mb-4 flex flex-col gap-2 sm:flex-row">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-primary-400" />
-                        <input
-                            type="text"
-                            placeholder="Search products or scan barcode..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-12 pr-4 py-3 bg-white border border-primary-200 rounded-xl text-lg text-primary-950 placeholder-primary-400 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue shadow-sm"
-                        />
-                    </div>
-                    <Button
-                        variant="secondary"
-                        className="px-4 py-3 h-auto"
-                        onClick={() => setShowCameraScanner(true)}
-                        title="Scan Barcode with Camera"
-                    >
-                        <Camera className="w-6 h-6 text-primary-600" />
-                    </Button>
-                    <Button
-                        variant="primary"
-                        className="px-4 py-3 h-auto whitespace-nowrap"
-                        onClick={() => setShowServiceModal(true)}
-                        leftIcon={<Wrench className="w-5 h-5" />}
-                    >
-                        Add Service
-                    </Button>
-                </div>
-
-                <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                    <label className="min-w-0 text-xs font-semibold uppercase tracking-wide text-primary-500">
-                        Product order
-                        <select value={sortBy} onChange={(event) => { setSortBy(event.target.value); setCurrentPage(1); }} className="input mt-1 text-sm normal-case tracking-normal">
-                            <option value="available-stock-desc">Available first</option>
-                            <option value="unavailable-stock-desc">Unavailable first</option>
-                            <option value="name-asc">Name: A to Z</option>
-                            <option value="name-desc">Name: Z to A</option>
-                            <option value="stock-desc">Stock: High to Low</option>
-                            <option value="stock-asc">Stock: Low to High</option>
-                            <option value="price-asc">Price: Low to High</option>
-                            <option value="price-desc">Price: High to Low</option>
-                        </select>
-                    </label>
-                    <label className="min-w-0 text-xs font-semibold uppercase tracking-wide text-primary-500">
-                        Stock filter
-                        <select value={stockFilter} onChange={(event) => { setStockFilter(event.target.value); setCurrentPage(1); }} className="input mt-1 text-sm normal-case tracking-normal">
-                            <option value="all">All products</option>
-                            <option value="available">Available stock only</option>
-                            <option value="out">Out of stock only</option>
-                        </select>
-                    </label>
-                </div>
+                <PosCatalogToolbar search={searchQuery} onSearch={setSearchQuery} sort={sortBy} onSort={value=>{setSortBy(value);setCurrentPage(1);}} stock={stockFilter} onStock={value=>{setStockFilter(value);setCurrentPage(1);}} onScan={()=>setShowCameraScanner(true)} onService={()=>setShowServiceModal(true)} />
 
                 {/* Responsive product display */}
                 {loading ? (
@@ -441,27 +392,29 @@ const POSTerminalWorkspace = ({owner}) => {
                                 <p className="text-sm text-primary-600">
                                     Showing <span className="font-semibold text-primary-950">{rangeStart}-{rangeEnd}</span> of <span className="font-semibold text-primary-950">{pagination.totalCount ?? 0}</span> products
                                 </p>
-                                <div className="flex w-full flex-col gap-2 min-[420px]:flex-row sm:w-auto sm:items-center">
+                                <div className="flex w-full items-center justify-between gap-2 sm:w-auto">
                                     <Button
                                         variant="secondary"
                                         onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
                                         disabled={!canGoPrev}
                                         leftIcon={<ChevronLeft className="h-4 w-4" />}
-                                        className="w-full min-[420px]:w-auto"
+                                        aria-label="Previous product page"
+                                        className="h-11 w-11 px-0 sm:w-auto sm:px-3"
                                     >
-                                        Previous
+                                        <span className="hidden sm:inline">Previous</span>
                                     </Button>
-                                    <span className="min-w-[108px] text-center text-sm font-semibold text-primary-700">
-                                        Page {pagination.page ?? currentPage} of {pagination.totalPages ?? 1}
+                                    <span className="min-w-0 whitespace-nowrap text-center text-xs font-semibold tabular-nums text-primary-700">
+                                        {pagination.page ?? currentPage} / {pagination.totalPages ?? 1}
                                     </span>
                                     <Button
                                         variant="secondary"
                                         onClick={() => setCurrentPage((page) => Math.min(page + 1, pagination.totalPages ?? page))}
                                         disabled={!canGoNext}
                                         rightIcon={<ChevronRight className="h-4 w-4" />}
-                                        className="w-full min-[420px]:w-auto"
+                                        aria-label="Next product page"
+                                        className="h-11 w-11 px-0 sm:w-auto sm:px-3"
                                     >
-                                        Next
+                                        <span className="hidden sm:inline">Next</span>
                                     </Button>
                                 </div>
                             </div>
@@ -475,16 +428,17 @@ const POSTerminalWorkspace = ({owner}) => {
             </Modal>
 
             {/* Cart Sidebar */}
-            <div id="pos-current-sale-pane" role="region" aria-label="Current sale" tabIndex={-1} ref={cartPaneRef} className={`${mobileCartOpen?'flex':'hidden lg:flex'} w-full flex-col rounded-xl border border-primary-200 bg-white p-4 shadow-sm outline-none lg:sticky lg:top-20 lg:max-h-[calc(100dvh-7rem)] lg:w-96`}>
+            <div id="pos-current-sale-pane" role="region" aria-label="Current sale" tabIndex={-1} ref={cartPaneRef} className={`pos-cart-shell ${mobileCartOpen?'flex':'hidden lg:flex'} w-full flex-col rounded-xl border border-primary-200 bg-white p-4 shadow-sm outline-none lg:sticky lg:top-20 lg:max-h-[calc(100dvh-7rem)] lg:w-96 lg:shrink-0`}>
                 {/* Cart Header */}
-                <div className="flex items-center justify-between pb-3 border-b border-primary-100">
+                <div className="flex items-center justify-between gap-3 border-b border-primary-200 pb-3">
                     <h2 className="text-lg font-display font-bold text-primary-950">
-                        Current Sale
+                        Current sale <span className="ml-2 rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-900">{totals.itemCount}</span>
                     </h2>
                     {items.length > 0 && (
                         <button
                             onClick={clearCart}
-                            className="text-sm text-accent-danger font-medium hover:underline"
+                            disabled={cartLocked}
+                            className="min-h-11 rounded-lg border border-red-200 px-3 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-40"
                         >
                             Clear All
                         </button>
@@ -508,114 +462,11 @@ const POSTerminalWorkspace = ({owner}) => {
                 </div>
 
                 <SavedPosCustomer owner={owner} selected={selectedCustomer} disabled={cartLocked} onSelect={customer=>{if(cartLocked)return;setSelectedCustomer(customer);setCustomerName(customer.name);setPaymentVerified(false);setReleaseConfirmed(false);}} onClear={()=>changeCustomerName('')} />
-                {/* Cart Items */}
-                <div className="flex-1 overflow-y-auto py-4 space-y-3">
-                    {items.length === 0 ? (
-                        <div className="text-center py-8">
-                            <Receipt className="w-12 h-12 text-primary-300 mx-auto mb-3" />
-                            <p className="text-primary-500 font-medium tracking-wide">Cart is empty</p>
-                            <p className="text-sm text-primary-400 mt-1">Click products to add</p>
-                        </div>
-                    ) : (
-                        items.map((item) => (
-                            <div key={item.id} className="cart-item bg-primary-50 border border-primary-100 p-3 rounded-xl flex items-center justify-between">
-                                <div className="flex-1 min-w-0 pr-3">
-                                    {item.sku && <p className="break-words font-mono text-sm font-bold text-primary-950">{item.sku}</p>}
-                                    <p className="text-sm font-semibold text-primary-950 truncate">
-                                        {item.name}
-                                    </p>
-                                    <p className="text-sm font-bold text-accent-blue mt-0.5">
-                                        {formatCurrency(item.price)}
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-1.5 sm:gap-2">
-                                    <button
-                                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                                        className="flex min-h-9 min-w-9 items-center justify-center rounded-md border border-primary-200 bg-white text-primary-600 shadow-sm transition-colors hover:bg-primary-50"
-                                        aria-label={`Decrease ${item.name} quantity`}
-                                    >
-                                        <Minus className="w-4 h-4" />
-                                    </button>
-                                    <span className="w-8 text-center font-bold text-primary-950">{item.quantity}</span>
-                                    <button
-                                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                                        disabled={item.lineType !== 'service' && item.quantity >= item.maxQuantity}
-                                        className="flex min-h-9 min-w-9 items-center justify-center rounded-md border border-primary-200 bg-white text-primary-600 shadow-sm transition-colors hover:bg-primary-50"
-                                        aria-label={`Increase ${item.name} quantity`}
-                                    >
-                                        <Plus className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                        onClick={() => removeItem(item.id)}
-                                        className="ml-1 flex min-h-9 min-w-9 items-center justify-center rounded-md text-accent-danger transition-colors hover:bg-accent-danger/10 sm:ml-2"
-                                        aria-label={`Remove ${item.name}`}
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
-                        ))
-                    )}
+                <div className="min-h-0 flex-1 overflow-y-auto py-4">
+                    <PosCartLines items={items} onQuantity={updateQuantity} onRemove={removeItem} locked={cartLocked} />
                 </div>
 
-                {/* Cart Totals */}
-                <div className="pt-4 mt-2 border-t border-primary-200">
-
-                    {/* Discount Input */}
-                    <div className="flex items-center justify-between mb-3 bg-primary-50 p-2 rounded-lg border border-primary-100">
-                        <span className="text-sm text-primary-700 font-semibold">Discount (%)</span>
-                        <div className="flex items-center gap-1 w-20">
-                            <input
-                                type="number"
-                                min="0"
-                                max="100"
-                                step="0.01"
-                                aria-label="Discount percentage"
-                                value={discountPercent}
-                                onChange={(e) => setDiscountPercent(Math.min(100, Math.max(0, Math.round((parseFloat(e.target.value) || 0) * 100) / 100)))}
-                                className="w-full px-2 py-1 text-right text-sm font-bold text-accent-danger bg-white border border-primary-200 rounded-md focus:outline-none focus:border-accent-danger focus:ring-1 focus:ring-accent-danger"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <div className="flex justify-between text-sm text-primary-600 font-medium">
-                            <span>Sales (VAT included)</span>
-                            <span>{formatCurrency(totals.rawSubtotal)}</span>
-                        </div>
-
-                        {discountPercent > 0 && (
-                            <div className="flex justify-between text-sm text-accent-danger font-semibold">
-                                <span>Discount ({discountPercent}%)</span>
-                                <span>-{formatCurrency(totals.discountAmount)}</span>
-                            </div>
-                        )}
-
-                        <div className="flex justify-between text-sm text-primary-600 font-medium">
-                            <span>VAT included (12%)</span>
-                            <span>{formatCurrency(totals.tax)}</span>
-                        </div>
-                        <div className="flex justify-between text-xl font-bold text-primary-950 pt-3 mt-1 border-t border-primary-200">
-                            <span>Total</span>
-                            <span className="text-accent-blue">{formatCurrency(totals.total)}</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Payment Button */}
-                <Button
-                    variant="primary"
-                    size="lg"
-                    fullWidth
-                    className="mt-4 hidden lg:inline-flex"
-                    disabled={items.length === 0 || checkingStock || cartLocked}
-                    isLoading={checkingStock}
-                    loadingLabel="Checking stock…"
-                    onClick={openPaymentModal}
-                    leftIcon={<CreditCard className="w-5 h-5" />}
-                >
-                    Process Payment
-                </Button>
+                <PosSaleSummary totals={totals} discount={discountPercent} onDiscount={setDiscountPercent} onPayment={openPaymentModal} disabled={items.length===0 || checkingStock || cartLocked} locked={cartLocked} checking={checkingStock} />
             </div>
 
             <nav aria-label="POS controls" className="fixed inset-x-3 bottom-3 z-30 grid grid-cols-[1fr_2fr] gap-2 rounded-2xl border border-primary-300 bg-white p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-lg lg:hidden print:hidden">
