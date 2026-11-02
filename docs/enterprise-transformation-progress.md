@@ -1,5 +1,13 @@
 # Enterprise transformation — delivery ledger
 
+## Responsive POS grid/list and display density — 2 November 2026
+
+Added accessible grid/list toggle buttons beside a Compact/Comfortable size selector in the POS product area. Display-only preferences are validated and retained locally under a versioned key; blocked storage does not disable the controls. Compact grid fits two cards at 320/390 CSS pixels, while comfortable grid uses larger cards and container-width-based automatic columns. List rows wrap prices below identity on narrow screens and retain separate 44px barcode/history targets. Part numbers are the dark primary line, with product description below. Motion-reduction preferences are honored.
+
+Extracted presentation into PosProductBrowser without altering product query, pagination, current prices, stock validation, cart handlers or payment logic. Positive-price gating and the existing parent add-to-cart checks remain; display changes never add a product or submit an order. Barcode and price-history actions remain separate controls, not nested buttons.
+
+Manually inspected the actual component in a local browser at desktop, 390px and 320px widths. Verified grid/list switching, size switching, preference survival after reload, long part-number wrapping, zero-price disabled state and all three local action callbacks. At 320/390px document scroll width equalled viewport width. Console errors were empty; no real cart, sale, payment or stock record was changed. Saved output/pos-compact-grid-390-20261102.png. React review informed isolated state, lazy preference reads, explicit pressed states and labelled controls. Local fixture removed before release; lint/build/bundle checks completed.
+
 ## Compact paginated invoice printing without browser furniture — 2 November 2026
 
 The owner's short invoice overflowed because eight placeholder rows, print spacing and an unbreakable signature block consumed the first sheet. Browser-generated date/title/URL/page numbering was also enabled. POS completion, unpaid-order collection, saved-quotation checkout and Sales history receipt buttons now open a client-generated A4 PDF instead of printing the surrounding webpage. This avoids browser webpage headers/footers without changing the user's global print preferences. Staff use the PDF viewer's printer icon (or save control). Popup blocking produces an explicit retry instruction, and generation errors never resubmit financial actions.

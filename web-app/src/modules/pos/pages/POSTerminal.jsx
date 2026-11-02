@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, Check, Wrench, Camera, ChevronLeft, ChevronRight, AlertTriangle, Calculator, WalletCards, ScanLine } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, Check, Wrench, Camera, ChevronLeft, ChevronRight, AlertTriangle, Calculator, WalletCards } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import { useCart } from '../../../context/CartContext';
@@ -7,7 +7,7 @@ import { formatCurrency } from '../../../utils/formatters';
 import { useToast } from '../../../components/ui/Toast';
 import useBarcodeScanner from '../../../hooks/useBarcodeScanner';
 import useDataStore from '../../../store/useDataStore';
-import BarcodeDisplay from '../../../components/ui/BarcodeDisplay';
+import PosProductBrowser from '../components/PosProductBrowser';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import AddServiceModal from '../../../components/ui/AddServiceModal';
@@ -420,7 +420,7 @@ const POSTerminalWorkspace = ({owner}) => {
                     </label>
                 </div>
 
-                {/* Products Grid */}
+                {/* Responsive product display */}
                 {loading ? (
                     <div className="flex-1 flex items-center justify-center text-primary-400">Loading catalog...</div>
                 ) : error ? (
@@ -435,56 +435,7 @@ const POSTerminalWorkspace = ({owner}) => {
                     </div>
                 ) : (
                     <div className="flex flex-1 flex-col">
-                        <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                            {visibleProducts.map((product) => (
-                                <div
-                                    key={product.id}
-                                    className="pos-item text-left"
-                                >
-                                    <button
-                                        type="button"
-                                        onClick={() => handleProductClick(product)}
-                                        disabled={!hasPositivePartPrice(product.price)}
-                                        title={hasPositivePartPrice(product.price) ? undefined : 'Confirm a positive selling price in Products first.'}
-                                        className="block w-full text-left disabled:cursor-not-allowed"
-                                    >
-                                        <div className="h-[4.5rem] bg-white rounded-lg mb-2 flex items-center justify-center border border-primary-100 p-2 overflow-hidden">
-                                            <div className="w-full flex items-center justify-center">
-                                                <BarcodeDisplay
-                                                    value={buildProductBarcodeValue(product.sku || 'UNKNOWN') || (product.sku || 'UNKNOWN')}
-                                                    size="small"
-                                                    height={48}
-                                                    fontSize={0}
-                                                    margin={16}
-                                                />
-                                            </div>
-                                        </div>
-                                        <p className="text-sm font-semibold text-primary-950 line-clamp-2 mb-1">
-                                            {product.name}
-                                        </p>
-                                        <p className={`text-xs font-medium ${product.maxQuantity > 0 ? 'text-primary-500' : 'text-accent-danger'}`}>{product.maxQuantity > 0 ? `${product.maxQuantity} available` : 'Out of stock'}</p>
-                                        <p className="text-xs font-mono text-primary-500 mb-2">{product.sku}</p>
-                                        <p className="text-lg font-bold text-accent-blue">
-                                            {hasPositivePartPrice(product.price) ? formatCurrency(product.price) : 'Price needs review'}
-                                        </p>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={(event) => {
-                                            event.stopPropagation();
-                                            setLargeBarcodeProduct(product);
-                                        }}
-                                        className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary-200 bg-white px-3 py-2 text-xs font-semibold text-primary-600 transition hover:border-accent-blue hover:text-accent-blue"
-                                    >
-                                        <ScanLine className="h-4 w-4" />
-                                        Large barcode
-                                    </button>
-                                    <button type="button" onClick={() => setPriceHistoryProduct(product)} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-lg border border-primary-200 text-xs font-semibold text-primary-600 hover:text-accent-blue">
-                                        Price history
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
+                        <PosProductBrowser products={visibleProducts} onSelect={handleProductClick} onBarcode={setLargeBarcodeProduct} onPriceHistory={setPriceHistoryProduct} />
                         <div className="mt-4 rounded-xl border border-primary-200 bg-white px-4 py-3 shadow-sm">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <p className="text-sm text-primary-600">
