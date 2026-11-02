@@ -6,6 +6,7 @@ import {formatCurrency} from '../../../utils/formatters';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import SaleReceiptPreview from './SaleReceiptPreview';
+import InvoicePrintButton from './InvoicePrintButton';
 import InvoiceDetailsFields from './InvoiceDetailsFields';
 import ManualNonCashFields from './ManualNonCashFields';
 import PaymentOptions from './PaymentOptions';
@@ -46,6 +47,6 @@ export default function QuotePosCheckout({estimateId,refreshKey,posting,onLeave}
     {posting.error&&!posting.pending&&<p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{posting.error}</p>}
     {documentError&&<p role="alert" className="text-sm text-red-800">{documentError}</p>}
     <Button variant="secondary" isDisabled={busy||!current} onClick={()=>setRetry(v=>v+1)}>Reload saved quotation</Button>
-    {document&&<Modal isOpen onClose={()=>setDocument(null)} title="Saved POS order" size="lg"><SaleReceiptPreview receipt={document.receipt} /><div className="mt-3 flex gap-2 print:hidden"><Button variant="secondary" onClick={()=>setDocument(null)}>Close</Button><Button onClick={()=>window.print()}>Print order</Button></div></Modal>}
+    {document&&<Modal isOpen onClose={()=>setDocument(null)} title="Saved POS order" size="lg"><SaleReceiptPreview receipt={document.receipt} /><div className="mt-3 flex gap-2 print:hidden"><Button variant="secondary" onClick={()=>setDocument(null)}>Close</Button><InvoicePrintButton receipt={document.receipt}>Print order</InvoicePrintButton></div></Modal>}
   </section>;
 }

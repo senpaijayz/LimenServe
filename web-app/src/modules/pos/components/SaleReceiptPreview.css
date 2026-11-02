@@ -41,11 +41,23 @@
 @page limen-invoice{size:A4 portrait;margin:12mm}
 @media print{
  .invoice-preview-scroll{overflow:visible!important}
+ .receipt-preview.paper-invoice{font-size:11px!important;line-height:1.3!important}
+ .paper-invoice .invoice-business{margin-bottom:12px}
+ .paper-invoice .invoice-business h2{font-size:20px}
+ .paper-invoice .invoice-business p{font-size:10px;margin:1px 0}
+ .paper-invoice .invoice-logo{width:160px;height:60px;margin-bottom:5px}
+ .paper-invoice .invoice-empty-row{display:none}
+ .paper-invoice .invoice-field{min-height:22px}
+ .paper-invoice .invoice-fields{margin-bottom:10px}
+ .paper-invoice .invoice-closing{break-inside:avoid}
+ .paper-invoice .invoice-total-row{min-height:22px}
+ .paper-invoice .invoice-signature{margin-top:12px}
+ .paper-invoice .invoice-signature p{margin-bottom:22px}
  .paper-invoice .invoice-logo{max-height:76px!important;filter:none!important}
  .paper-invoice .invoice-business,.paper-invoice .invoice-fields,.paper-invoice .invoice-heading{break-inside:avoid}
  .receipt-preview.paper-invoice{min-width:0!important;max-width:none!important;width:100%!important;padding:0!important;page:limen-invoice;page-break-inside:auto!important}
  .paper-invoice table.invoice-items th{background:white!important;color:#111!important;border:1px solid #333!important;text-align:center!important}
- .paper-invoice table.invoice-items td{border:1px solid #555!important;padding:7px 5px!important}
+ .paper-invoice table.invoice-items td{border:1px solid #555!important;padding:5px!important;font-size:11px!important}
  .paper-invoice table.invoice-items td:nth-child(3){text-align:left!important}
  .paper-invoice table.invoice-items td:nth-child(4),.paper-invoice table.invoice-items td:nth-child(5){text-align:right!important}
  .paper-invoice .invoice-items thead{display:table-header-group}

@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, Check, Printer, Wrench, Camera, ChevronLeft, ChevronRight, AlertTriangle, Calculator, WalletCards, ScanLine } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, Check, Wrench, Camera, ChevronLeft, ChevronRight, AlertTriangle, Calculator, WalletCards, ScanLine } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import { useCart } from '../../../context/CartContext';
@@ -22,6 +22,7 @@ import usePosPosting from '../hooks/usePosPosting';
 import PosRequestRecovery from '../components/PosRequestRecovery';
 import UnpaidPosOrders from '../components/UnpaidPosOrders';
 import SaleReceiptPreview from '../components/SaleReceiptPreview.jsx';
+import InvoicePrintButton from '../components/InvoicePrintButton';
 import InvoiceDetailsFields from '../components/InvoiceDetailsFields';
 import ProductPriceHistory from '../../inventory/components/ProductPriceHistory';
 import { getCurrentRetailPrices } from '../../../services/catalogApi';
@@ -863,9 +864,9 @@ const POSTerminalWorkspace = ({owner}) => {
                     <Button variant="secondary" fullWidth onClick={() => setShowSuccessModal(false)}>
                         New Transaction
                     </Button>
-                    <Button variant="primary" fullWidth isDisabled={!lastTransaction?.receipt} leftIcon={<Printer className="w-4 h-4" />} onClick={() => window.print()}>
+                    <InvoicePrintButton variant="primary" fullWidth receipt={lastTransaction?.receipt}>
                         {lastTransaction?.status==='pending'?'Print unpaid order':'Print receipt'}
-                    </Button>
+                    </InvoicePrintButton>
                 </div>
             </Modal>
 

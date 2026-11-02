@@ -16,6 +16,7 @@ import { getManagedCategories } from '../../../services/catalogApi';
 import { PAYMENT_LABELS } from '../../../utils/constants';
 import { useAuth } from '../../../context/useAuth';
 import SaleReceiptPreview from '../../pos/components/SaleReceiptPreview.jsx';
+import InvoicePrintButton from '../../pos/components/InvoicePrintButton';
 import HistoricalSaleEditorModal from '../components/HistoricalSaleEditorModal.jsx';
 import HistoricalAggregateEditorModal from '../components/HistoricalAggregateEditorModal.jsx';
 import formatReportProductName from '../utils/formatReportProductName.js';
@@ -1174,9 +1175,7 @@ const SalesReport = () => {
                             <Button variant="secondary" onClick={() => setSelectedSale(null)}>
                                 Close
                             </Button>
-                            <Button variant="primary" leftIcon={<Receipt className="h-4 w-4" />} onClick={() => window.print()}>
-                                Print Receipt
-                            </Button>
+                            <InvoicePrintButton receipt={selectedSale.receipt}>Print Receipt</InvoicePrintButton>
                         </div>
                     </div>
                 )}

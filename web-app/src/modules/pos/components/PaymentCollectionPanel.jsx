@@ -6,7 +6,7 @@ import ManualNonCashFields from './ManualNonCashFields';
 import PaymentOptions from './PaymentOptions';
 import {isNonCash,matchesFullPayment} from '../utils/paymentMethods';
 
-export default function PaymentCollectionPanel({sale,onClose,onPay,onPrint}) {
+export default function PaymentCollectionPanel({sale,onClose,onPay,onPrint,printControl}) {
   const [amount,setAmount]=useState(''),[verified,setVerified]=useState(false);
   const [method,setMethod]=useState('cash'),[reference,setReference]=useState(''),[paidAmount,setPaidAmount]=useState('');
   const cashInputId=useId();
@@ -37,7 +37,7 @@ export default function PaymentCollectionPanel({sale,onClose,onPay,onPrint}) {
     </> : <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">This order is no longer awaiting payment. Do not collect it again.</p>}
     <div className="space-y-3 border-t border-primary-200 pt-4">
       {unpaid && <p className="text-sm text-primary-700">{canRecord?'Ready to save this payment.':'Enter the full amount and confirm receipt to record payment.'}</p>}
-      <div className="grid gap-3 sm:grid-cols-2"><Button variant="secondary" fullWidth leftIcon={<Printer className="h-4 w-4" />} onClick={onPrint}>Print order</Button>{unpaid && <Button variant="success" fullWidth isDisabled={!canRecord} leftIcon={canRecord?<CheckCircle2 className="h-4 w-4" />:<Banknote className="h-4 w-4" />} onClick={()=>onPay({saleId:sale.id,paymentMethod:method,cashReceived:method==='cash'?Number(amount):0,paidAmount:isNonCash(method)?Number(paidAmount):0,paymentReference:isNonCash(method)?reference.trim():'',paymentVerified:verified})}>Record payment</Button>}</div>
+      <div className="grid gap-3 sm:grid-cols-2">{printControl || <Button variant="secondary" fullWidth leftIcon={<Printer className="h-4 w-4" />} onClick={onPrint}>Print order</Button>}{unpaid && <Button variant="success" fullWidth isDisabled={!canRecord} leftIcon={canRecord?<CheckCircle2 className="h-4 w-4" />:<Banknote className="h-4 w-4" />} onClick={()=>onPay({saleId:sale.id,paymentMethod:method,cashReceived:method==='cash'?Number(amount):0,paidAmount:isNonCash(method)?Number(paidAmount):0,paymentReference:isNonCash(method)?reference.trim():'',paymentVerified:verified})}>Record payment</Button>}</div>
       <Button variant="secondary" fullWidth onClick={onClose}>Close</Button>
     </div>
   </section>;

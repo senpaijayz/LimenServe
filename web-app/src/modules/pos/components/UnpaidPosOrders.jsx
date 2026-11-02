@@ -5,6 +5,7 @@ import {formatCurrency} from '../../../utils/formatters';
 import {listUnpaidPosOrders} from '../../../services/posOrdersApi';
 import {getPosSaleDetail} from '../../../services/posApi';
 import SaleReceiptPreview from './SaleReceiptPreview';
+import InvoicePrintButton from './InvoicePrintButton';
 import PaymentCollectionPanel from './PaymentCollectionPanel';
 
 function CollectPayment({id,onClose,onPay}){
@@ -12,7 +13,7 @@ function CollectPayment({id,onClose,onPay}){
   useEffect(()=>{let active=true;getPosSaleDetail(id).then(data=>{if(active)setResult(data);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[id]);
   return <Modal isOpen onClose={onClose} title="Collect payment" size="lg"><div className="space-y-6">
     {error ? <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p> : !result ? <p role="status">Loading the saved order…</p> : <>
-      <PaymentCollectionPanel sale={{...result.sale,id}} onClose={onClose} onPrint={()=>window.print()} onPay={payload=>{onClose();void onPay(payload);}} />
+      <PaymentCollectionPanel sale={{...result.sale,id}} onClose={onClose} printControl={<InvoicePrintButton receipt={result.receipt} variant="secondary" fullWidth />} onPay={payload=>{onClose();void onPay(payload);}} />
       <div>
         <p className="mb-3 border-t border-primary-200 pt-5 text-sm font-semibold text-primary-800 print:hidden">Order document</p>
         <SaleReceiptPreview receipt={result.receipt} printId="unpaid-pos-order" />

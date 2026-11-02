@@ -36,6 +36,7 @@ export default function SalesInvoiceBody({receipt,business={},printId='pos-recei
         {Array.from({length:Math.max(0,8-items.length)},(_,index)=><tr className="invoice-empty-row" key={'blank-'+index}><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>)}
       </tbody>
     </table>
+    <section className="invoice-closing">
     <div className="invoice-bottom">
       <div className="invoice-tax-box"><Total label={vatIncluded?"VATable sales":"Subtotal"} value={formatCurrency(vatIncluded?netAmount:receipt.subtotal)} /><Total label="Discount" value={formatCurrency(receipt.discountTotal ?? 0)} /><Total label="VAT amount" value={formatCurrency(receipt.taxTotal)} /><div className="invoice-cashier">Prepared by: {receipt.cashierName || ''}</div></div>
       <div className="invoice-totals"><Total label={vatIncluded?"Total sales (VAT inclusive)":"Subtotal"} value={formatCurrency(receipt.subtotal)} /><Total label="Less: Discount" value={formatCurrency(receipt.discountTotal ?? 0)} /><Total label={vatIncluded?"VAT included (12%)":"Add: VAT"} value={formatCurrency(receipt.taxTotal)} /><Total label="TOTAL AMOUNT DUE" value={formatCurrency(receipt.totalAmount)} strong />
@@ -46,5 +47,6 @@ export default function SalesInvoiceBody({receipt,business={},printId='pos-recei
     {receipt.paymentReference && <div className="invoice-note"><strong>{receipt.paymentMethod==='check'?'Check number: ':'Payment reference: '}</strong>{receipt.paymentReference}</div>}
     {receipt.paidAt && <p className="invoice-paid-date">Payment recorded: {formatDateTime(receipt.paidAt)}</p>}
     <footer className="invoice-signature"><p>Received the above items in good order and condition.</p>{details.receivedBy && <strong className="invoice-recipient">{details.receivedBy}</strong>}<div>Received by / signature / date</div></footer>
+    </section>
   </div></div>;
 }
