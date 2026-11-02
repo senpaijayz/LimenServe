@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import {normalizeInvoiceDetails} from '../../../shared/invoiceDetails.js';
+const invoiceDetailsPayload=body=>{if(!Object.hasOwn(body || {},'invoiceDetails'))return {};try{return {invoiceDetails:normalizeInvoiceDetails(body.invoiceDetails)};}catch(error){error.statusCode=400;throw error;}};
 import { requireRole } from '../middleware/auth.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import { normalizeHistoricalAggregatePayload } from '../services/historicalSalesModel.js';
@@ -73,6 +75,7 @@ function buildSalePayload(body) {
 
   return {
     ...(body?.priceIncludesVat === true ? { priceIncludesVat: true } : {}),
+    ...invoiceDetailsPayload(body),
     customerName: typeof body?.customerName === 'string' ? body.customerName.trim() : '',
     note: typeof body?.note === 'string' ? body.note.trim() : '',
     releaseConfirmed: body?.releaseConfirmed === true,
@@ -292,7 +295,7 @@ router.post('/quotation/:estimateId/checkout',requireRole('admin'),async(req,res
   try{
     if(typeof req.body?.version!=='string'||!/^[a-f0-9]{32}$/.test(req.body.version))throw Object.assign(new Error('Reload this saved quotation before checkout.'),{statusCode:400});
     const result=await callRpc('checkout_quote_pos_order',{p_estimate:posRequestId(req.params.estimateId),p_version:req.body.version,p_actor:req.user.id,p_request:posRequestId(req.body.requestId),
-      payment:{paymentMethod:req.body.paymentMethod,cashReceived:req.body.cashReceived,note:typeof req.body.note==='string'?req.body.note.trim():'',paymentVerified:req.body.paymentVerified===true,releaseConfirmed:req.body.releaseConfirmed===true,...posPaymentEvidence(req.body)}});
+      payment:{...invoiceDetailsPayload(req.body),paymentMethod:req.body.paymentMethod,cashReceived:req.body.cashReceived,note:typeof req.body.note==='string'?req.body.note.trim():'',paymentVerified:req.body.paymentVerified===true,releaseConfirmed:req.body.releaseConfirmed===true,...posPaymentEvidence(req.body)}});
     res.status(201).json(await withPosDetail(result));
   }catch(error){next(normalizePosError(error));}
 });

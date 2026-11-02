@@ -6,11 +6,13 @@ import {formatCurrency} from '../../../utils/formatters';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import SaleReceiptPreview from './SaleReceiptPreview';
+import InvoiceDetailsFields from './InvoiceDetailsFields';
 import ManualNonCashFields from './ManualNonCashFields';
 import PaymentOptions from './PaymentOptions';
 import {isNonCash,matchesFullPayment} from '../utils/paymentMethods';
 
 export default function QuotePosCheckout({estimateId,refreshKey,posting,onLeave}){
+  const [invoiceDetails,setInvoiceDetails]=useState({});
   const [retry,setRetry]=useState(0),[result,setResult]=useState({key:'',quote:null,error:''});
   const [method,setMethod]=useState('cash'),[amount,setAmount]=useState(''),[note,setNote]=useState(''),[confirmed,setConfirmed]=useState(false);
   const [paidAmount,setPaidAmount]=useState(''),[reference,setReference]=useState('');
@@ -35,8 +37,9 @@ export default function QuotePosCheckout({estimateId,refreshKey,posting,onLeave}
         {method==='cash'&&<label className="block text-sm font-semibold">Cash received<input type="number" min="0" max="1000000000" step="0.01" value={amount} disabled={busy} onChange={e=>{setAmount(e.target.value);setConfirmed(false);}} className="mt-1 min-h-11 w-full rounded-lg border border-primary-300 p-3" /></label>}
         {isNonCash(method)&&<ManualNonCashFields method={method} total={quote.totalAmount} amount={paidAmount} onAmount={value=>{setPaidAmount(value);setConfirmed(false);}} reference={reference} onReference={value=>{setReference(value);setConfirmed(false);}} disabled={busy} />}
         <label className="block text-sm font-semibold">Order note {method==='to_follow'?'(required)':'(optional)'}<textarea value={note} maxLength={1000} disabled={busy} onChange={e=>setNote(e.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-primary-300 p-3" /></label>
+        <InvoiceDetailsFields value={invoiceDetails} onChange={setInvoiceDetails} disabled={busy} />
         <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)} className="mt-1 h-5 w-5 shrink-0" />{isNonCash(method)?'I confirm the check cleared and the full amount reached the shop’s account.':method==='cash'?'I confirm the cash has been received and these saved quotation terms are approved.':'I confirm this unpaid order is being released now. Part stock will be deducted immediately.'}</label>
-        <Button isDisabled={!canPay} onClick={()=>posting.submit('quote_checkout',{estimateId,version:quote.version,paymentMethod:method,cashReceived:method==='cash'?Number(amount):0,note:note.trim(),paymentVerified:method!=='to_follow'&&confirmed,paidAmount:isNonCash(method)?Number(paidAmount):0,paymentReference:isNonCash(method)?reference.trim():'',releaseConfirmed:method==='to_follow'&&confirmed})}>{method==='to_follow'?'Release order · payment to follow':'Record payment · release order'}</Button>
+        <Button isDisabled={!canPay} onClick={()=>posting.submit('quote_checkout',{invoiceDetails,estimateId,version:quote.version,paymentMethod:method,cashReceived:method==='cash'?Number(amount):0,note:note.trim(),paymentVerified:method!=='to_follow'&&confirmed,paidAmount:isNonCash(method)?Number(paidAmount):0,paymentReference:isNonCash(method)?reference.trim():'',releaseConfirmed:method==='to_follow'&&confirmed})}>{method==='to_follow'?'Release order · payment to follow':'Record payment · release order'}</Button>
       </div>}
       {quote.saleId&&<Button variant="secondary" onClick={async()=>{try{setDocumentError('');setDocument(await getPosSaleDetail(quote.saleId));}catch(error){setDocumentError(error.message);}}}>View existing POS order</Button>}
     </>}

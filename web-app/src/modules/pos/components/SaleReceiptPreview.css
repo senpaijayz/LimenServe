@@ -1,6 +1,9 @@
 .invoice-preview-scroll{max-width:100%;overflow-x:auto;background:#fff}
-.receipt-preview.paper-invoice{width:100%;min-width:490px;max-width:760px;box-sizing:border-box;margin:0 auto;padding:18px;background:white;color:#111;font:12px/1.4 Arial,sans-serif}
-.paper-invoice .invoice-business{text-align:center;margin-bottom:19px}
+.receipt-preview.paper-invoice{width:100%;min-width:490px;max-width:760px;box-sizing:border-box;margin:0 auto;padding:26px;background:white;color:#111;font:12px/1.4 Arial,sans-serif}
+.paper-invoice .invoice-business{text-align:center;margin-bottom:18px}
+.paper-invoice .invoice-logo{display:block;width:200px;height:76px;object-fit:cover;object-position:50% 54%;margin:0 auto 8px}
+.paper-invoice .invoice-hours{font-size:11px}
+.paper-invoice .invoice-recipient{display:block;margin-bottom:5px;font-size:12px}
 .paper-invoice .invoice-business h2{font:bold 23px/1.15 Georgia,serif;margin:0 0 5px;letter-spacing:.5px}
 .paper-invoice .invoice-business p{margin:2px 0;font-size:12px}
 .paper-invoice .invoice-heading{display:flex;justify-content:space-between;gap:16px;align-items:start;margin-bottom:15px}
@@ -35,9 +38,12 @@
 .paper-invoice .invoice-signature{margin-top:24px;margin-left:auto;width:60%;font-size:10px;text-align:center;break-inside:avoid}
 .paper-invoice .invoice-signature p{margin:0 0 38px}
 .paper-invoice .invoice-signature>div{border-top:1px solid #333;padding-top:5px;text-transform:uppercase}
+@page limen-invoice{size:A4 portrait;margin:12mm}
 @media print{
  .invoice-preview-scroll{overflow:visible!important}
- .receipt-preview.paper-invoice{min-width:0!important;max-width:none!important;width:100%!important;padding:0!important;page-break-inside:auto!important}
+ .paper-invoice .invoice-logo{max-height:76px!important;filter:none!important}
+ .paper-invoice .invoice-business,.paper-invoice .invoice-fields,.paper-invoice .invoice-heading{break-inside:avoid}
+ .receipt-preview.paper-invoice{min-width:0!important;max-width:none!important;width:100%!important;padding:0!important;page:limen-invoice;page-break-inside:auto!important}
  .paper-invoice table.invoice-items th{background:white!important;color:#111!important;border:1px solid #333!important;text-align:center!important}
  .paper-invoice table.invoice-items td{border:1px solid #555!important;padding:7px 5px!important}
  .paper-invoice table.invoice-items td:nth-child(3){text-align:left!important}

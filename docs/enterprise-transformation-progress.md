@@ -1,5 +1,13 @@
 # Enterprise transformation — delivery ledger
 
+## POS invoice layout and optional printed details — 2 November 2026
+
+Added an optional native disclosure to regular POS and saved-quotation checkout for customer address, customer TIN, business style, terms, P.O. number, OSCA/PWD ID, contact and recipient printed name. Bounded text-only fields are validated both at the backend and database. New values are atomically snapshotted on the sale, included in the retry payload and returned by get_sale_detail for later reprints; omitted fields preserve old request fingerprints. Existing payment/replay/stock controls remain intact. No financial or inventory rows were created for verification.
+
+The receipt now uses the existing Limen logo, the owner's specified Unit 5-B address, Wilson A. Limen - Prop., and VAT Reg TIN 213-000-580-00000. Phone numbers and opening hours come from the existing public CMS, with the verified values as fallbacks. A named A4 print page uses 12 mm margins rather than the old zero-margin page; the logo's built-in white space is handled by CSS without editing the source asset. QTY/UNIT/ITEM/PRICE/TOTAL and VAT-inclusive calculations remain unchanged. Removed the irrelevant cardholder-signature field for cash/check and added the entered contact; recipient name can be printed but no signature is fabricated.
+
+Applied the schema/function migration directly to the intended Supabase project and reconciled its timestamp with the remote ledger. Existing sale metadata defaults empty and no historical monetary values are rewritten. Frontend lint/build/bundle checks and backend syntax passed. Manually inspected the actual components in a local browser, filled five optional fields, confirmed the logo loaded, confirmed named print rules and no console errors; saved output/invoice-layout-verified-20261102.png. This verifies browser layout, not a physical printer. Local fixture was removed before release.
+
 ## Corrective outer checkout VAT guard — 2 November 2026
 
 Investigated the owner's failed payment-to-follow screenshot and matching Render 400/22023 request logs. The previous VAT release corrected the sale constructor but missed public.checkout_pos_order's earlier validation, which still expected an extra 12% instead of extracting 12/112. The displayed 48,332.48 gross / 5,178.48 VAT was correct; the outer guard rejected it before a sale or stock write. Corrected the live guard to require the existing inclusive-price flag, extract VAT, and enforce gross less discount equals total. Request replay still returns before the new validation; actor/customer locks, cash/check evidence, unpaid-release confirmation and exactly-once stock posting are unchanged.

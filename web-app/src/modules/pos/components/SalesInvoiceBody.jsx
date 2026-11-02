@@ -7,23 +7,28 @@ const Total=({label,value,strong=false})=><div className={strong?'invoice-total-
 export default function SalesInvoiceBody({receipt,business={},printId='pos-receipt'}){
   if(!receipt)return null;
   const items=receipt.items ?? [];
+  const details=receipt.invoiceDetails || {};
   const vatIncluded=documentIncludesVat(receipt);
   const netAmount=Number(receipt.totalAmount)-Number(receipt.taxTotal || 0);
   const unpaid=receipt.status==='pending' && receipt.paymentMethod==='to_follow';
   const method=({cash:'Cash',check:'Check',gcash:'GCash',bank_transfer:'Bank transfer',to_follow:'Payment to follow'})[receipt.paymentMethod] || receipt.paymentMethod || '';
   return <div className="invoice-preview-scroll"><div id={printId} className="receipt-preview paper-invoice">
     <header className="invoice-business">
+      <img className="invoice-logo" src={business.logo_url || '/LogoLimen.jpg'} alt="Limen Auto Parts Center" width="200" height="76" />
       <h2>{business.company_name || 'LIMEN AUTO PARTS CENTER'}</h2>
-      {business.address && <p>{business.address}</p>}
-      {(business.primary_phone || business.landline) && <p>{[business.primary_phone,business.landline].filter(Boolean).join(' · ')}</p>}
-      <p>VAT Reg. TIN: {business.tin || '________________________'}</p>
+      <p>Unit 5-B Edsa Extension Brgy. 76 1300 Pasay City</p>
+      <p>NCR Fourth District Philippines</p>
+      <p>Wilson A. Limen - Prop.</p>
+      <p>{[business.primary_phone || '(0915) 522 5629',business.landline || '02 8551 3518'].join(' · ')}</p>
+      <p>VAT Reg TIN: 213-000-580-00000</p>
+      <p className="invoice-hours">{business.business_hours || 'Mon-Sat 8:00 AM-5:00 PM | Sun 8:00 AM-12:00 PM'}</p>
     </header>
     <div className="invoice-heading"><h3>{unpaid?'UNPAID ORDER':'SALES INVOICE'}</h3><div>No. <strong>{receipt.transactionNumber}</strong></div></div>
     {receipt.quotationNumber && <p className="mb-3 text-xs">Quotation: <strong>{receipt.quotationNumber}</strong></p>}
     {unpaid && <p className="invoice-unpaid">UNPAID — Parts released and stock deducted. This is not proof of payment.</p>}
     <div className="invoice-fields">
-      <div><Field label="Sold to:" value={receipt.customerName || 'Walk-in Customer'} /><Field label="Address:" value={receipt.customerAddress} /><Field label="TIN:" value={receipt.customerTin} /><Field label="Business style:" value={receipt.businessStyle} /></div>
-      <div><Field label="Date:" value={formatDateTime(receipt.issuedAt || receipt.createdAt || receipt.businessDate)} /><Field label="Terms:" value={method} /><Field label="P.O. No.:" value={receipt.poNumber} /><Field label="OSCA/PWD ID No.:" value={receipt.oscaPwdId} /><Field label="Cardholder sig.:" /></div>
+      <div><Field label="Sold to:" value={receipt.customerName || 'Walk-in Customer'} /><Field label="Address:" value={details.customerAddress || receipt.customerAddress} /><Field label="TIN:" value={details.customerTin || receipt.customerTin} /><Field label="Business style:" value={details.businessStyle || receipt.businessStyle} /></div>
+      <div><Field label="Date:" value={formatDateTime(receipt.issuedAt || receipt.createdAt || receipt.businessDate)} /><Field label="Terms:" value={details.terms || method} /><Field label="P.O. No.:" value={details.poNumber || receipt.poNumber} /><Field label="OSCA/PWD ID No.:" value={details.oscaPwdId || receipt.oscaPwdId} /><Field label="Contact:" value={details.customerContact} /></div>
     </div>
     <table className="invoice-items"><colgroup><col className="invoice-qty" /><col className="invoice-unit" /><col className="invoice-item" /><col className="invoice-price" /><col className="invoice-amount" /></colgroup>
       <thead><tr>{['QTY','UNIT','ITEM','PRICE','TOTAL'].map(label=><th key={label} scope="col">{label}</th>)}</tr></thead>
@@ -40,6 +45,6 @@ export default function SalesInvoiceBody({receipt,business={},printId='pos-recei
     {receipt.note && <div className="invoice-note"><strong>Order note: </strong>{receipt.note}</div>}
     {receipt.paymentReference && <div className="invoice-note"><strong>{receipt.paymentMethod==='check'?'Check number: ':'Payment reference: '}</strong>{receipt.paymentReference}</div>}
     {receipt.paidAt && <p className="invoice-paid-date">Payment recorded: {formatDateTime(receipt.paidAt)}</p>}
-    <footer className="invoice-signature"><p>Received the above items in good order and condition.</p><div>Signature over printed name / date</div></footer>
+    <footer className="invoice-signature"><p>Received the above items in good order and condition.</p>{details.receivedBy && <strong className="invoice-recipient">{details.receivedBy}</strong>}<div>Received by / signature / date</div></footer>
   </div></div>;
 }

@@ -22,6 +22,7 @@ import usePosPosting from '../hooks/usePosPosting';
 import PosRequestRecovery from '../components/PosRequestRecovery';
 import UnpaidPosOrders from '../components/UnpaidPosOrders';
 import SaleReceiptPreview from '../components/SaleReceiptPreview.jsx';
+import InvoiceDetailsFields from '../components/InvoiceDetailsFields';
 import ProductPriceHistory from '../../inventory/components/ProductPriceHistory';
 import { getCurrentRetailPrices } from '../../../services/catalogApi';
 import { checkCartPrices } from '../utils/priceCheck';
@@ -111,6 +112,7 @@ const POSTerminalWorkspace = ({owner}) => {
     const [unpaidRefresh,setUnpaidRefresh]=useState(0);
     const deferredSearchQuery = useDeferredValue(searchQuery);
     const [lastTransaction, setLastTransaction] = useState(null);
+    const [invoiceDetails,setInvoiceDetails]=useState({});
     const [paymentError, setPaymentError] = useState('');
     const [processingPayment, setProcessingPayment] = useState(false);
     const [checkingStock, setCheckingStock] = useState(false);
@@ -119,14 +121,14 @@ const POSTerminalWorkspace = ({owner}) => {
         setLastTransaction(transaction);setShowPaymentModal(false);setShowSuccessModal(true);
         setUnpaidRefresh(v=>v+1);
         if(op.kind==='checkout'){
-            setPaymentAmount('');setPaymentNote('');setReleaseConfirmed(false);setPaymentMethod('cash');
+            setInvoiceDetails({});setPaymentAmount('');setPaymentNote('');setReleaseConfirmed(false);setPaymentMethod('cash');
             setPaymentVerified(false);setPaidAmount('');setPaymentReference('');
             try{clearSavedCart();}catch{showScanError('The order was saved, but this device could not clear its cart. Do not submit the same items again.');return false;}
         }
         success(transaction.status==='pending'?`Order ${transaction.transactionNumber} saved unpaid. Stock has been released.`:`Payment saved for ${transaction.transactionNumber}.`);
     },(op,error)=>{
         if(op.kind==='checkout'){
-            setPaymentMethod(op.payload.paymentMethod);setPaymentNote(op.payload.note || '');setPaymentAmount(String(op.payload.cashReceived || ''));
+            setInvoiceDetails(op.payload.invoiceDetails || {});setPaymentMethod(op.payload.paymentMethod);setPaymentNote(op.payload.note || '');setPaymentAmount(String(op.payload.cashReceived || ''));
             setCustomerName(op.payload.customerName || '');setReleaseConfirmed(false);setPaymentError(error.message);setShowPaymentModal(true);
             setPaymentVerified(false);setPaidAmount(String(op.payload.paidAmount ?? ''));setPaymentReference(op.payload.paymentReference || '');
             setSelectedCustomer(current=>op.payload.customerId?(current?.id===op.payload.customerId?current:{id:op.payload.customerId,name:op.payload.customerName}):null);
@@ -304,6 +306,7 @@ const POSTerminalWorkspace = ({owner}) => {
             }
             const payload = {
                 priceIncludesVat: true,
+                invoiceDetails,
                 customerName,
                 ...(selectedCustomer?{customerId:selectedCustomer.id}:{}),
                 paymentMethod,
@@ -716,6 +719,7 @@ const POSTerminalWorkspace = ({owner}) => {
                     <PaymentOptions value={paymentMethod} disabled={processingPayment} allowToFollow onChange={method=>{setPaymentMethod(method);setReleaseConfirmed(false);setPaymentVerified(false);setPaymentReference('');setPaidAmount('');setPaymentError('');}} />
                     {paymentMethod==='to_follow' && <label className="block text-sm font-semibold text-primary-900">Customer name (required)<input value={customerName} maxLength={200} disabled={processingPayment} readOnly={Boolean(selectedCustomer)} onChange={e=>changeCustomerName(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-primary-300 p-3" /></label>}
                     <label className="block text-sm font-semibold text-primary-900">Order note {paymentMethod==='to_follow'?'(required)':'(optional)'}<textarea value={paymentNote} maxLength={1000} disabled={processingPayment} onChange={e=>setPaymentNote(e.target.value)} rows={3} placeholder="Payment arrangement or instructions for this order" className="mt-1 w-full rounded-xl border border-primary-300 p-3 font-normal" /><span className="mt-1 block text-xs font-normal text-primary-700">Saved with this order and shown on its printed document.</span></label>
+                    <InvoiceDetailsFields value={invoiceDetails} onChange={setInvoiceDetails} disabled={processingPayment} />
                     <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
                         {paymentMethod==='cash' ? <div className="space-y-4">
                             <div>
