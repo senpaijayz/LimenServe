@@ -46,9 +46,11 @@ export interface InvoiceOcrExistingProduct {
   partNumber: string;
   description: string;
   detectedDescription?: string;
-  quantity: number;
+  quantity: number | null;
   brand?: string;
   uom?: string;
+  reviewNote?: string;
+  sourceRow?: number;
 }
 
 export interface InvoiceOcrNewProduct {
@@ -57,8 +59,10 @@ export interface InvoiceOcrNewProduct {
   partNumber: string;
   description: string;
   detectedDescription?: string;
-  quantity: number;
+  quantity: number | null;
   requiredAction: string;
+  reviewNote?: string;
+  sourceRow?: number;
 }
 
 export interface InvoiceOcrAnalysisResult {
@@ -238,40 +242,25 @@ async function postStockReceipt(payload: SupplierInvoiceStockReceiptInput, idemp
   }
 }
 
-async function prepareInvoiceUpload(file: File): Promise<Blob> {
-  if (!/^image\/(jpeg|png|webp)$/i.test(file.type)) throw new Error('Choose a JPG, PNG or WEBP invoice image.');
-  if (typeof createImageBitmap !== 'function') {
-    if (file.size > 8 * 1024 * 1024) throw new Error('Crop this image below 8 MB and try again.');
-    return file;
-  }
-  const bitmap = await createImageBitmap(file);
-  try {
-    const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('Image preparation is unavailable. Try another browser.');
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const prepared = await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('The invoice image could not be prepared.')), 'image/jpeg', 0.9));
-    if (prepared.size > 8 * 1024 * 1024) throw new Error('This image is too large. Crop the invoice and try again.');
-    return prepared;
-  } finally { bitmap.close(); }
-}
-
 export async function analyzeSupplierInvoiceImage(file: File): Promise<InvoiceOcrAnalysisResult> {
   const { readInvoiceOnDevice } = await import('./browserInvoiceOcr');
-  const image = await prepareInvoiceUpload(file);
-  const ocrText = await readInvoiceOnDevice(image);
+  const { prepareInvoiceImage } = await import('./prepareInvoiceImage');
+  const image = await prepareInvoiceImage(file);
+  const { ocrText, ocrRows } = await readInvoiceOnDevice(image);
+  let analysis: InvoiceOcrAnalysisResult | null = null;
   try {
-    const { data } = await apiClient.post('/catalog/stock/invoice-ocr', { ocrText }, { timeout: INVENTORY_API_TIMEOUT_MS });
-
-    return data as InvoiceOcrAnalysisResult;
+    const { data } = await apiClient.post('/catalog/stock/invoice-ocr', { ocrText, ocrRows }, { timeout: INVENTORY_API_TIMEOUT_MS });
+    analysis = data as InvoiceOcrAnalysisResult;
   } catch (error) {
     extractApiError(error, 'Failed to analyze supplier invoice image.');
   }
+  if (!analysis || !Array.isArray(analysis.existingProducts) || !Array.isArray(analysis.newProducts)) {
+    throw new Error('The invoice reader returned an incomplete result. Please try again.');
+  }
+  if (ocrRows && analysis.existingProducts.length + analysis.newProducts.length !== ocrRows.length) {
+    throw new Error('Not all scanned rows reached the review table. Refresh and scan again after the scanner update finishes.');
+  }
+  return analysis;
 }
 
 /**

@@ -1,5 +1,13 @@
 # Enterprise transformation — delivery ledger
 
+## Invoice table accuracy and explicit receiving review — 2 November 2026
+
+Checked the owner's original Downloads/PARTSINVOICE.jpg, which contains 17 item rows. The old reader treated the page as a single block, and the parser discarded lines with unreadable quantities. Browser recognition now preserves image detail in a bounded, lossless PNG (3072-pixel longest side, at most 2× enlargement), detects table geometry, and rereads each row, its stock-number column and its numeric section with one disposable on-device worker. Quantities are cross-checked between views of the same row and exact integer price/amount arithmetic. Competing scans are never concatenated or summed. Recognition is bounded to two minutes, then offers manual entry; the API still receives text/structured rows only, never photo pixels or native OCR models.
+
+The actual browser run detected all 17 rows, with 15 quantities correct against the photo and two intentionally blank for manual entry. Twelve part numbers read correctly; five pen-obscured numbers still need correction. This is not a claim of perfect automatic recognition. Both exact catalog matches and unmatched/unreadable rows now stay in the editable review table in source order. Alternative part numbers inside descriptions cannot replace the stock-number column. Exact catalog matching remains read-only; no fuzzy substitution or automatic product creation was added. A read-only production catalog lookup confirmed the sample's catalog records without changing them.
+
+Posting requires every retained row to have a part number, a positive whole-number quantity, a catalog match, and the staff review checkbox. Editing, adding, removing or rescanning rows resets that checkbox. Stable row keys prevent focus loss while correcting a part number. The ordinary text fallback also retains unreadable quantities instead of silently dropping their rows. Existing receiving idempotency and atomic stock posting are unchanged. Validation uses the real-photo browser walkthrough, memory-only request/classification inspection, frontend lint/build/bundle budgets and backend syntax checks, not an automated test suite or a live stock receipt. Verification screenshot is retained in output/; the local fixture is removed before release.
+
 ## Corrective OCR redesign after confirmed Render memory exhaustion — 2 November 2026
 
 The owner's Render email confirms memory exhaustion and restart after the isolated-process release. Metrics show 536,543,230 bytes used against a 536,870,900-byte limit during that retry. A child process shares the instance's total memory budget: the preceding isolation change was insufficient and must not be presented as a completed resource fix.

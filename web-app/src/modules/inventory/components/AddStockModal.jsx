@@ -219,6 +219,7 @@ const emptyInvoiceDraft = () => ({
     orderNumber: '',
     supplierName: 'Diamond Motor Corporation',
     rawText: '',
+    reviewConfirmed: false,
     items: [],
     newProducts: [],
     previewUrl: '',
@@ -383,6 +384,7 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
 
         return {
             ...item,
+            rowKey: item.rowKey || crypto.randomUUID(),
             partNumber,
             productId: product?.id || item.productId || '',
             description: product?.name || item.description || '',
@@ -395,7 +397,8 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
     const applyInvoiceAnalysis = useCallback((analysis) => {
         const supplierName = analysis.invoice?.supplierName || '';
         const matchedSupplier = suppliers.find((item) => item.name?.toLowerCase().includes(supplierName.toLowerCase().replace(' corporation', '')));
-        const existingProducts = (analysis.existingProducts || []).map(buildInvoiceItemFromCatalog);
+        const detectedItems = [...(analysis.existingProducts || []), ...(analysis.newProducts || [])]
+            .sort((a, b) => (a.sourceRow || 0) - (b.sourceRow || 0)).map(buildInvoiceItemFromCatalog);
 
         setInvoiceDraft((current) => ({
             ...current,
@@ -404,7 +407,8 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
             orderNumber: analysis.invoice?.orderNumber || '',
             supplierName,
             rawText: analysis.rawText || '',
-            items: existingProducts,
+            reviewConfirmed: false,
+            items: detectedItems,
             newProducts: analysis.newProducts || [],
         }));
         setSupplier((current) => ({
@@ -423,6 +427,7 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
     const updateInvoiceItem = useCallback((index, changes) => {
         setInvoiceDraft((current) => ({
             ...current,
+            reviewConfirmed: false,
             items: current.items.map((item, itemIndex) => (itemIndex === index ? { ...item, ...changes } : item)),
         }));
     }, []);
@@ -479,6 +484,7 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
     const removeInvoiceItem = (index) => {
         setInvoiceDraft((current) => ({
             ...current,
+            reviewConfirmed: false,
             items: current.items.filter((_, itemIndex) => itemIndex !== index),
         }));
     };
@@ -486,7 +492,8 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
     const addInvoiceItem = () => {
         setInvoiceDraft((current) => ({
             ...current,
-            items: [...current.items, { status: 'existing', productId: '', partNumber: '', description: '', quantity: 1, uom: 'PC', brand: 'Mitsubishi' }],
+            reviewConfirmed: false,
+            items: [...current.items, { rowKey: crypto.randomUUID(), status: 'existing', productId: '', partNumber: '', description: '', quantity: 1, uom: 'PC', brand: 'Mitsubishi' }],
         }));
     };
 
@@ -550,6 +557,14 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
 
     const handlePostInvoice = async () => {
         if (invoiceSubmitted && !invoiceReceiptKeyRef.current) { setError('The submitted invoice identity is missing. Do not post it again. Check inventory and receipt history first.'); return; }
+        if (invoiceDraft.items.some((item) => !normalizeInvoicePartNumber(item.partNumber) || !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1)) {
+            setError('Check every invoice row. Enter its part number and whole-number quantity, or remove a row you do not want to receive.');
+            return;
+        }
+        if (invoiceDraft.rawText && !invoiceDraft.reviewConfirmed) {
+            setError('Check the detected rows against the invoice, then tick the confirmation below the table.');
+            return;
+        }
         const items = invoiceDraft.items
             .map((item) => ({
                 partNumber: normalizeInvoicePartNumber(item.partNumber),
@@ -823,10 +838,10 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
                                 <div className="overflow-hidden rounded-2xl border border-primary-200 bg-white">
                                     <div className="flex items-center justify-between border-b border-primary-100 px-4 py-3">
                                         <div>
-                                            <p className="text-sm font-black text-primary-950">Existing Products Ready to Receive</p>
-                                            <p className="text-xs text-primary-500">{invoiceDraft.items.length} existing parts / {formatNumber(invoiceTotals.totalQuantity)} total qty</p>
+                                            <p className="text-sm font-black text-primary-950">Review invoice rows</p>
+                                            <p className="text-xs text-primary-600">{invoiceDraft.items.length} invoice rows / {formatNumber(invoiceTotals.totalQuantity)} qty read · Check highlighted rows against the photo.</p>
                                         </div>
-                                        <Button variant="secondary" type="button" onClick={addInvoiceItem} leftIcon={<ListPlus className="h-4 w-4" />}>Add Existing Row</Button>
+                                        <Button variant="secondary" type="button" onClick={addInvoiceItem} leftIcon={<ListPlus className="h-4 w-4" />}>Add row</Button>
                                     </div>
                                     <div className="max-h-[300px] overflow-y-auto">
                                         {invoiceDraft.items.length === 0 ? (
@@ -844,7 +859,7 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
                                                     <span />
                                                 </div>
                                                 {invoiceDraft.items.map((item, index) => (
-                                                    <div key={`${item.partNumber}-${index}`} className="grid grid-cols-[160px_1fr_90px_44px] gap-2 border-t border-primary-100 px-3 py-2">
+                                                    <div key={item.rowKey || index} className="grid grid-cols-[160px_1fr_90px_44px] gap-2 border-t border-primary-100 px-3 py-2">
                                                         <input
                                                             className={`input px-3 py-2 font-mono text-xs uppercase ${
                                                                 item.status === 'new' ? 'border-amber-300 bg-amber-50 text-amber-950' : ''
@@ -873,13 +888,14 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
                                                                     : 'border-emerald-200 bg-emerald-50 text-emerald-900'
                                                         }`}>
                                                             <p className="truncate font-semibold">
-                                                                {item.description || (item.partNumber ? 'Not found in imported price list' : 'Enter part number')}
+                                                                {item.description || item.detectedDescription || (item.partNumber ? 'Part number not found — check the photo' : 'Enter part number from the photo')}
                                                             </p>
                                                             <p className="text-[11px] font-medium uppercase tracking-wide opacity-70">
-                                                                {item.status === 'new' ? 'Needs product record first' : item.status === 'checking' ? 'Checking catalog' : 'Auto-filled from price list'}
+                                                                {item.status === 'new' ? 'Check part number — no catalog match' : item.status === 'checking' ? 'Checking catalog' : 'Matched to price list'}
                                                             </p>
+                                                            {item.reviewNote && <p className="mt-1 text-xs font-medium text-amber-800">{item.reviewNote}</p>}
                                                         </div>
-                                                        <input className="input px-3 py-2 text-sm" type="number" min="1" value={item.quantity} onChange={(event) => updateInvoiceItem(index, { quantity: event.target.value })} />
+                                                        <input className="input px-3 py-2 text-sm" aria-label={`Quantity for invoice row ${index + 1}`} type="number" min="1" step="1" value={item.quantity ?? ''} onChange={(event) => updateInvoiceItem(index, { quantity: event.target.value })} />
                                                         <button type="button" className="flex h-10 w-10 items-center justify-center rounded-lg text-primary-400 hover:bg-red-50 hover:text-red-600" onClick={() => removeInvoiceItem(index)} aria-label="Remove invoice row">
                                                             <Trash2 className="h-4 w-4" />
                                                         </button>
@@ -888,23 +904,29 @@ const AddStockModal = ({ isOpen, onClose, onInvoicePosted, initialMode = 'barcod
                                             </div>
                                         )}
                                     </div>
+                                    {invoiceDraft.rawText && invoiceDraft.items.length > 0 && (
+                                        <label className="flex items-start gap-3 rounded-xl border border-primary-300 bg-primary-50 p-3 text-sm font-semibold text-primary-800">
+                                            <input type="checkbox" className="mt-0.5 h-4 w-4" checked={Boolean(invoiceDraft.reviewConfirmed)} onChange={(event) => setInvoiceDraft((current) => ({ ...current, reviewConfirmed: event.target.checked }))} />
+                                            I checked all part numbers and quantities against the invoice photo.
+                                        </label>
+                                    )}
                                 </div>
 
                                 <div className="overflow-hidden rounded-2xl border border-amber-200 bg-amber-50">
                                     <div className="flex items-start gap-3 border-b border-amber-200 px-4 py-3">
                                         <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-600" />
                                         <div>
-                                            <p className="text-sm font-black text-amber-950">New Products Detected</p>
-                                            <p className="text-xs text-amber-700">These part numbers are not in Products yet. They will not be received into stock until staff create and complete the product record.</p>
+                                            <p className="text-sm font-black text-amber-950">Check unmatched part numbers</p>
+                                            <p className="text-xs text-amber-700">Correct a misread part number in the table above. Create a product only if its part number is truly new. Unmatched rows cannot be posted.</p>
                                         </div>
                                     </div>
                                     <div className="max-h-52 overflow-y-auto">
-                                        {invoiceDraft.newProducts.length === 0 ? (
-                                            <p className="px-4 py-5 text-sm font-medium text-amber-700">No new product part numbers detected.</p>
+                                        {invoiceDraft.items.every((item) => item.productId) ? (
+                                            <p className="px-4 py-5 text-sm font-medium text-amber-700">All detected part numbers matched the price list.</p>
                                         ) : (
-                                            invoiceDraft.newProducts.map((item) => (
-                                                <div key={item.partNumber} className="grid gap-1 border-t border-amber-200 px-4 py-3 sm:grid-cols-[150px_1fr_80px] sm:items-center">
-                                                    <span className="font-mono text-sm font-black text-amber-950">{item.partNumber}</span>
+                                            invoiceDraft.items.filter((item) => !item.productId).map((item, index) => (
+                                                <div key={item.rowKey || index} className="grid gap-1 border-t border-amber-200 px-4 py-3 sm:grid-cols-[150px_1fr_80px] sm:items-center">
+                                                    <span className="font-mono text-sm font-black text-amber-950">{item.partNumber || 'Unreadable — enter above'}</span>
                                                     <span className="text-sm text-amber-800">{item.detectedDescription || 'Needs product description'}</span>
                                                     <span className="text-sm font-bold text-amber-950">Qty {formatNumber(item.quantity)}</span>
                                                 </div>

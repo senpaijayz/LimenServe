@@ -2535,7 +2535,7 @@ router.post('/stock/invoice-ocr', requireRole('admin', 'stock_clerk'), async (re
     if (!req.is('application/json')) {
       return res.status(409).json({ error: 'Refresh this page to use the updated on-device invoice scanner. Image processing on the server is no longer supported.' });
     }
-    const result = await analyzeSupplierInvoiceText(req.body?.ocrText);
+    const result = await analyzeSupplierInvoiceText(req.body?.ocrText, req.body?.ocrRows);
 
     res.json(result);
   } catch (error) {

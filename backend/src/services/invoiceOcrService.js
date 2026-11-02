@@ -105,10 +105,6 @@ function parseInvoiceLine(line) {
   const qtyMatch = beforeMoney.match(/\s\.?(\d{1,4})(?:\s*)$/);
   const quantity = qtyMatch ? Number(qtyMatch[1]) : Number.NaN;
 
-  if (!Number.isFinite(quantity) || quantity <= 0) {
-    return null;
-  }
-
   const descriptionStart = cleaned.indexOf(tokens[partIndex]) + tokens[partIndex].length;
   const descriptionEnd = qtyMatch ? beforeMoney.lastIndexOf(qtyMatch[1]) : beforeMoney.length;
   const description = cleaned
@@ -120,7 +116,8 @@ function parseInvoiceLine(line) {
   return {
     partNumber,
     detectedDescription: description || '',
-    quantity,
+    quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : null,
+    reviewNote: Number.isFinite(quantity) && quantity > 0 ? '' : 'Enter the quantity from the photo.',
     unitCost: 0,
   };
 }
@@ -139,7 +136,7 @@ function mergeDetectedItems(items) {
     merged.set(item.partNumber, {
       ...current,
       detectedDescription: current.detectedDescription || item.detectedDescription,
-      quantity: Number(current.quantity) + Number(item.quantity),
+      quantity: current.quantity == null || item.quantity == null ? null : Number(current.quantity) + Number(item.quantity),
       unitCost: 0,
     });
   });
@@ -195,20 +192,25 @@ function parseColumnarInvoiceItems(lines) {
   if (stockNumbers.length < 2 || descriptions.length < 2) {
     return [];
   }
+  // Filtered/missing cells cannot safely be paired by their new array indexes.
+  if (descriptions.length !== stockNumbers.length) return [];
+  const alignedQuantities = quantities.length === stockNumbers.length;
+  const alignedAmounts = unitCosts.length === stockNumbers.length && amounts.length === stockNumbers.length;
 
   return stockNumbers.map((partNumber, index) => {
-    const unitCost = unitCosts[index] || 0;
-    const amount = amounts[index] || 0;
-    const inferredQuantity = unitCost > 0 && amount > 0 ? Math.round(amount / unitCost) : 0;
-    const quantity = quantities.length === stockNumbers.length ? quantities[index] : inferredQuantity;
+    const unitCents = Math.round((unitCosts[index] || 0) * 100);
+    const amountCents = Math.round((amounts[index] || 0) * 100);
+    const inferredQuantity = alignedAmounts && unitCents > 0 && amountCents > 0 && amountCents % unitCents === 0 ? amountCents / unitCents : null;
+    const quantity = alignedQuantities ? quantities[index] : inferredQuantity;
 
     return {
       partNumber,
       detectedDescription: descriptions[index] || '',
       quantity,
+      reviewNote: !quantity ? 'Enter the quantity from the photo.' : !alignedQuantities ? 'Quantity cross-checked using the row amounts. Check it against the photo.' : '',
       unitCost: 0,
     };
-  }).filter((item) => Number.isFinite(item.quantity) && item.quantity > 0);
+  });
 }
 
 export function parseSupplierInvoiceOcrText(rawText) {
@@ -231,18 +233,11 @@ export function parseSupplierInvoiceOcrText(rawText) {
 async function classifyDetectedProducts(detectedItems) {
   const partNumbers = [...new Set(detectedItems.map((item) => item.partNumber).filter(Boolean))];
 
-  if (partNumbers.length === 0) {
-    return {
-      existingProducts: [],
-      newProducts: [],
-    };
-  }
-
-  const { data, error } = await supabaseAdmin
+  const { data, error } = partNumbers.length ? await supabaseAdmin
     .schema('catalog')
     .from('products')
     .select('id, sku, name, brand, uom')
-    .in('sku', partNumbers);
+    .in('sku', partNumbers) : { data: [], error: null };
 
   if (error) {
     throw error;
@@ -263,6 +258,8 @@ async function classifyDetectedProducts(detectedItems) {
         description: product.name,
         detectedDescription: item.detectedDescription,
         quantity: item.quantity,
+        reviewNote: item.reviewNote || '',
+        sourceRow: item.sourceRow,
         brand: product.brand || 'Mitsubishi',
         uom: product.uom || 'PC',
       });
@@ -276,7 +273,9 @@ async function classifyDetectedProducts(detectedItems) {
       description: '',
       detectedDescription: item.detectedDescription,
       quantity: item.quantity,
-      requiredAction: 'Create product manually before receiving stock.',
+      reviewNote: item.reviewNote || '',
+      sourceRow: item.sourceRow,
+      requiredAction: 'Check the part number against the photo. Create a product only if this is a new part.',
     });
   });
 
@@ -286,11 +285,29 @@ async function classifyDetectedProducts(detectedItems) {
   };
 }
 
-export async function analyzeSupplierInvoiceText(rawText) {
+export async function analyzeSupplierInvoiceText(rawText, rawRows) {
   if (typeof rawText !== 'string' || !rawText.trim() || rawText.length > 128_000) {
     throw Object.assign(new Error('Read a clear invoice image first (maximum 128,000 text characters).'), { statusCode: 400 });
   }
   const parsed = parseSupplierInvoiceOcrText(rawText);
+  if (rawRows !== undefined) {
+    if (!Array.isArray(rawRows) || !rawRows.length || rawRows.length > 200) {
+      throw Object.assign(new Error('Provide between 1 and 200 invoice rows, or scan a smaller section.'), { statusCode: 400 });
+    }
+    parsed.detectedItems = rawRows.map((row, index) => {
+      if (!row || typeof row !== 'object' || typeof row.partNumber !== 'string' || row.partNumber.length > 64 || ![null, undefined].includes(row.quantity) && (!Number.isInteger(row.quantity) || row.quantity < 1 || row.quantity > 10_000)) {
+        throw Object.assign(new Error(`Invoice row ${index + 1} is invalid. Check its part number and quantity.`), { statusCode: 400 });
+      }
+      return {
+        partNumber: normalizePartNumber(row.partNumber),
+        detectedDescription: typeof row.detectedDescription === 'string' ? row.detectedDescription.slice(0, 300) : '',
+        quantity: row.quantity ?? null,
+        unitCost: 0,
+        sourceRow: index + 1,
+        reviewNote: typeof row.reviewNote === 'string' ? row.reviewNote.slice(0, 500) : '',
+      };
+    });
+  }
   if (parsed.detectedItems.length > 200) throw Object.assign(new Error('Split this invoice into sections of no more than 200 parts.'), { statusCode: 422 });
   const classified = await classifyDetectedProducts(parsed.detectedItems);
 
