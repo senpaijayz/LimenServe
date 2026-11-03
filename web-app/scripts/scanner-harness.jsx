@@ -11,6 +11,12 @@ function symbol(bcid = 'code39', text = 'MD094120') {
     bwip.toCanvas(canvas, { bcid, text, scale: 3, height: 20, padding: 20, backgroundcolor: 'FFFFFF', includecheck: bcid === 'code93' });
     return canvas;
 }
+function textLabel(code = '6370A933HA') {
+    const frame = document.createElement('canvas'); frame.width = 1280; frame.height = 720;
+    const ctx = frame.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, frame.width, frame.height);
+    ctx.fillStyle = '#111827'; ctx.font = '72px Arial'; ctx.textAlign = 'center'; ctx.fillText(code, 640, 385);
+    return frame;
+}
 let fakeStream;
 window.scannerTest = {
     async decodeCases() {
@@ -34,10 +40,10 @@ window.scannerTest = {
         } finally { decoder.close(); }
         return results;
     },
-    fakeCamera() {
+    fakeCamera(kind = 'barcode') {
         // Real MediaStream/video/worker pipeline, synthetic label source. This
         // does NOT stand in for physical iPhone/Android acceptance testing.
-        const frame = symbol();
+        const frame = kind === 'part-number' ? textLabel() : symbol();
         Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: true, value: async () => {
             fakeStream = frame.captureStream(10);
             const track = fakeStream.getVideoTracks()[0];
@@ -59,8 +65,24 @@ window.scannerTest = {
 
 export default function Harness() {
     const [open, setOpen] = useState(false); const [values, setValues] = useState([]);
+    const [checks, setChecks] = useState('Not run');
+    const accuracy = async () => {
+        setChecks('Running');
+        try {
+            const { readPartNumberLabel } = await import('../src/utils/partNumberReader');
+            const results = [];
+            for (const code of ['MD094120', 'MR446308', '1800A062', '6370A933HA', '11045W010P', 'MZ320897', 'CPMW400120', 'DP010374']) {
+                const canvas = textLabel(code); const result = await readPartNumberLabel(canvas);
+                results.push({ expected: code, found: result.candidates, passed: result.candidates.includes(code) }); canvas.width = canvas.height = 0;
+            }
+            setChecks(JSON.stringify(results));
+        } catch (error) { setChecks(error.message); }
+    };
     return <main style={{ padding: 24 }}><h1>Scanner verification</h1>
+        <button onClick={() => window.scannerTest.fakeCamera('part-number')}>Use label test camera</button>{' '}
+        <button onClick={accuracy}>Run label accuracy checks</button>{' '}
         <button onClick={() => setOpen(true)}>Open scanner</button>
+        <output aria-label="Label accuracy results">{checks}</output>
         <output aria-label="Scanned results">{values.join(', ')}</output>
         <CameraScannerModal isOpen={open} onClose={() => setOpen(false)} onScan={async (value) => { setValues((old) => [...old, value]); return { found: true }; }} />
     </main>;

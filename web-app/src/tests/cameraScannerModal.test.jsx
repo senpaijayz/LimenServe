@@ -5,7 +5,10 @@ const { decode, dispose, createDecoder } = vi.hoisted(() => {
     const decode = vi.fn(); const dispose = vi.fn();
     return { decode, dispose, createDecoder: vi.fn(() => ({ decode, close: dispose })) };
 });
+const textMocks = vi.hoisted(() => ({ read: vi.fn(), image: { width: 1600, height: 300, toDataURL: () => 'data:image/png;base64,fixture' } }));
 vi.mock('../utils/scannerDecoder', () => ({ createScannerDecoder: createDecoder }));
+vi.mock('../utils/partNumberReader', () => ({ readPartNumberLabel: textMocks.read }));
+vi.mock('../utils/partNumberImage', () => ({ capturePartNumberFrame: () => ({ ...textMocks.image }), preparePartNumberPhoto: async () => ({ ...textMocks.image }) }));
 import CameraScannerModal from '../components/ui/CameraScannerModal';
 import Modal from '../components/ui/Modal';
 
@@ -23,11 +26,57 @@ beforeEach(() => {
     vi.spyOn(HTMLVideoElement.prototype, 'videoWidth', 'get').mockReturnValue(1280);
     vi.spyOn(HTMLVideoElement.prototype, 'videoHeight', 'get').mockReturnValue(720);
     decode.mockReset().mockResolvedValue({ text: '' }); dispose.mockClear(); createDecoder.mockClear();
+    textMocks.read.mockReset().mockResolvedValue({ candidates: [], confidence: 0 });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 const ready = () => waitFor(() => expect(screen.getByRole('status').textContent).toContain('Ready to scan'));
 
 describe('camera scanner lifecycle', () => {
+    it('has one camera interface with automatic text reading and no mode switch or Read Part Number button', async () => {
+        render(<CameraScannerModal {...props()} />); await ready();
+        expect(screen.queryByRole('button', { name: /read part number/i })).toBeNull();
+        expect(screen.queryByRole('group', { name: 'Product identification method' })).toBeNull();
+        expect(screen.getByText('Automatic barcode + part-number detection')).toBeTruthy();
+    });
+    it('automatically proposes printed text, then waits for corrected confirmation before lookup', async () => {
+        textMocks.read.mockResolvedValue({ candidates: ['MROO1234', 'MR001234'], confidence: 82 });
+        const p = props(); render(<CameraScannerModal {...p} />); await ready();
+        const input = await screen.findByLabelText('Confirm detected number', {}, { timeout: 4000 });
+        expect(input.value).toBe('MROO1234'); expect(p.onScan).not.toHaveBeenCalled();
+        expect(track.stop).toHaveBeenCalled(); expect(screen.getByLabelText('Detected part numbers')).toBeTruthy();
+        fireEvent.change(input, { target: { value: 'MR001234' } }); fireEvent.click(screen.getByText('Use code'));
+        await waitFor(() => expect(p.onScan).toHaveBeenCalledWith('MR001234'));
+        expect(getUserMedia).toHaveBeenCalledTimes(1);
+    });
+    it('keeps barcode detection active while text reading is pending and accepts only the barcode result', async () => {
+        const text = deferred(); textMocks.read.mockReturnValue(text.promise);
+        const p = props(); render(<CameraScannerModal {...p} />); await ready();
+        await waitFor(() => expect(textMocks.read).toHaveBeenCalled(), { timeout: 4000 });
+        const signal = textMocks.read.mock.calls[0][1].signal;
+        decode.mockResolvedValue({ text: 'MD094120', format: 'CODE_128' });
+        await waitFor(() => expect(p.onScan).toHaveBeenCalledWith('MD094120'));
+        expect(signal.aborted).toBe(true);
+        await act(async () => text.resolve({ candidates: ['WRONG1234'] }));
+        expect(p.onScan).toHaveBeenCalledTimes(1); expect(screen.queryByLabelText('Confirm detected number')).toBeNull();
+    });
+    it('aborts text recognition after closing and ignores late results', async () => {
+        const text = deferred(); textMocks.read.mockReturnValue(text.promise);
+        const p = props(); const view = render(<CameraScannerModal {...p} />); await ready();
+        await waitFor(() => expect(textMocks.read).toHaveBeenCalled(), { timeout: 4000 });
+        const signal = textMocks.read.mock.calls[0][1].signal; view.unmount();
+        expect(signal.aborted).toBe(true);
+        await act(async () => text.resolve({ candidates: ['MD094120'] }));
+        expect(p.onScan).not.toHaveBeenCalled();
+    });
+    it('does not overwrite a number typed while automatic text reading was pending', async () => {
+        const text = deferred(); textMocks.read.mockReturnValue(text.promise);
+        const p = props(); render(<CameraScannerModal {...p} />); await ready();
+        await waitFor(() => expect(textMocks.read).toHaveBeenCalled(), { timeout: 4000 });
+        fireEvent.change(screen.getByLabelText('Enter barcode manually'), { target: { value: 'MY12345' } });
+        await act(async () => text.resolve({ candidates: ['OTHER12345'] }));
+        expect(screen.getByLabelText('Enter barcode manually').value).toBe('MY12345');
+        expect(screen.queryByLabelText('Confirm detected number')).toBeNull(); expect(p.onScan).not.toHaveBeenCalled();
+    });
     it('prefers rear camera, uses supported autofocus, and does not restart on parent rerender', async () => {
         const p = props(); const view = render(<CameraScannerModal {...p} />); await ready();
         expect(getUserMedia).toHaveBeenCalledWith({ audio: false, video: expect.objectContaining({ facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }) });
@@ -137,7 +186,7 @@ describe('camera scanner lifecycle', () => {
     it('rejects invalid manual codes without calling the parent', async () => {
         const p = props(); render(<CameraScannerModal {...p} />); await ready();
         fireEvent.change(screen.getByLabelText('Enter barcode manually'), { target: { value: 'https://bad.example' } }); fireEvent.click(screen.getByText('Use code'));
-        expect(screen.getByRole('status').textContent).toContain('not a valid product barcode'); expect(p.onScan).not.toHaveBeenCalled();
+        expect(screen.getByRole('status').textContent).toContain('valid barcode or printed part number'); expect(p.onScan).not.toHaveBeenCalled();
     });
     it('handles torch rejection without stopping scanning', async () => {
         render(<CameraScannerModal {...props()} />); await ready(); track.applyConstraints.mockRejectedValue(new Error('unsupported'));

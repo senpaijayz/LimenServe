@@ -40,3 +40,6 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Generated, same-origin product-label reader assets (not invoice scanning).
+/web-app/public/part-number-reader/

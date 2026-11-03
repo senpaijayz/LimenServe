@@ -25,6 +25,7 @@ const FORBIDDEN_INITIAL_CHUNKS = [
   /zxing|barcodeDecoder|CameraScannerModal/i,
   /(?:^|[-_])scanner(?:[-_]|$)/i,
   /locator3d/i,
+  /tesseract|partNumberReader/i,
 ];
 
 const ROUTE_BUDGETS = [

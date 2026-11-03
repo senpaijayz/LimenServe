@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Camera, Check, ImageUp, Loader2, RefreshCw, SwitchCamera, Zap, ZapOff } from 'lucide-react';
+import { Camera, Check, ImageUp, Loader2, RefreshCw, ScanText, SwitchCamera, Zap, ZapOff } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
 import { cameraError, claimCamera, stopTracks, validateScan, withTimeout } from '../../utils/scannerPolicy';
 import { createScannerDecoder } from '../../utils/scannerDecoder';
+import { capturePartNumberFrame, preparePartNumberPhoto } from '../../utils/partNumberImage';
 import './cameraScanner.css';
 
 // Fresh session per open; new parent callbacks do not restart a camera.
@@ -21,9 +22,15 @@ function ScannerSession({ onClose, onScan }) {
     const session = useRef(null);
     const locked = useRef(false);
     const photoJob = useRef(null);
+    const textJob = useRef(null);
+    const autoText = useRef(null);
+    const textUnavailable = useRef(false);
+    const manualEditing = useRef(false);
     const processingTimer = useRef(null);
     const closeTimer = useRef(null);
     const [restart, setRestart] = useState(0);
+    const [candidates, setCandidates] = useState([]);
+    const [labelImage, setLabelImage] = useState('');
     const [cameraId, setCameraId] = useState('');
     const [cameras, setCameras] = useState([]);
     const [state, setState] = useState('initializing');
@@ -37,12 +44,12 @@ function ScannerSession({ onClose, onScan }) {
     const [activeCameraId, setActiveCameraId] = useState('');
 
     const stop = () => session.current?.stop();
-    const close = () => { alive.current = false; stop(); photoJob.current?.close(); clearTimeout(closeTimer.current); callbacks.current.onClose(); };
+    const close = () => { alive.current = false; stop(); photoJob.current?.close(); textJob.current?.abort(); clearTimeout(closeTimer.current); callbacks.current.onClose(); };
     useEffect(() => {
         alive.current = true;
         return () => {
             alive.current = false;
-            session.current?.stop(); photoJob.current?.close();
+            session.current?.stop(); photoJob.current?.close(); textJob.current?.abort();
             clearTimeout(processingTimer.current); clearTimeout(closeTimer.current);
         };
     }, []);
@@ -74,10 +81,10 @@ function ScannerSession({ onClose, onScan }) {
             if (!alive.current || locked.current) return;
             const code = validateScan(raw);
             if (!code) {
-                setState('invalid'); setMessage('This is not a valid product barcode. Try the printed part number.'); return;
+                setState('invalid'); setMessage('Enter a valid barcode or printed part number.'); return;
             }
-            locked.current = true; stop(); photoJob.current?.close();
-            setDetected(code); setState('processing'); setMessage('Barcode detected. Looking up the result…');
+            locked.current = true; stop(); photoJob.current?.close(); textJob.current?.abort();
+            setDetected(code); setState('processing'); setMessage(labelImage ? 'Part number confirmed. Looking up the result…' : 'Barcode detected. Looking up the result…');
             try { navigator.vibrate?.(50); } catch { /* Optional device feedback. */ }
             processingTimer.current = setTimeout(() => {
                 if (alive.current) setMessage('The lookup is taking longer than expected. You can close this scanner; do not submit the same code again while it is processing.');
@@ -86,7 +93,7 @@ function ScannerSession({ onClose, onScan }) {
                 const result = await callbacks.current.onScan(code);
                 if (!alive.current) return;
                 if (result?.found === false) {
-                    setState('not-found'); setMessage('Barcode read, but no matching part was found. Check the printed number or try another barcode.'); locked.current = false; return;
+                    setState('not-found'); setDetected(''); setMessage('Number read, but no matching part was found. Check the printed number or try another label.'); locked.current = false; return;
                 }
                 setState('success'); setMessage('Scan successful');
                 closeTimer.current = setTimeout(() => { if (alive.current) callbacks.current.onClose(); }, 650);
@@ -100,7 +107,7 @@ function ScannerSession({ onClose, onScan }) {
 
     useEffect(() => {
         let cancelled = false; let stream; let lease; let decoder; let frameTimer; let hintTimer;
-        let attempt = 0; let lastText = ''; let lastAt = 0; let repeated = 0; let lastFrameAt = Date.now();
+        let attempt = 0; let lastText = ''; let lastAt = 0; let repeated = 0; let lastFrameAt = Date.now(); let lastLabelAt = 0;
         const controller = new AbortController();
         const video = videoRef.current;
         const clean = () => {
@@ -139,6 +146,12 @@ function ScannerSession({ onClose, onScan }) {
                     lastText = ''; repeated = 0;
                     update('scanning', 'Keep the barcode steady and entirely inside the camera view.');
                 }
+                if (!result.text && !lastText && attempt >= 8 && Date.now() - lastLabelAt > 8000 && !textUnavailable.current && !textJob.current) {
+                    lastLabelAt = Date.now();
+                    // One bounded text snapshot; barcode decoding keeps priority
+                    // and continues while the on-device reader initializes.
+                    autoText.current?.();
+                }
             } catch {
                 if (!cancelled) { update('camera-error', 'The scanner could not read camera frames. Retry or use a photo or manual entry.'); clean(); }
             }
@@ -151,7 +164,7 @@ function ScannerSession({ onClose, onScan }) {
         };
         const start = async () => {
             if (cancelled) return;
-            locked.current = false; setDetected(''); setTorchAvailable(false); setTorchOn(false);
+            locked.current = false; setDetected(''); setLabelImage(''); setCandidates([]); setTorchAvailable(false); setTorchOn(false);
             if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
                 update('camera-error', 'Camera scanning needs HTTPS and a compatible browser. Open this page in Safari or Chrome, or use a photo or manual entry.'); return;
             }
@@ -180,13 +193,13 @@ function ScannerSession({ onClose, onScan }) {
                 }).catch(() => {});
                 decoder = createScannerDecoder();
                 lastFrameAt = Date.now();
-                update('scanning', 'Ready to scan. Keep the whole barcode in view.');
-                hintTimer = setTimeout(() => update('no-code', 'No barcode detected yet. Hold steady, move closer, or tilt the label to reduce glare.'), 10000);
+                update('scanning', 'Ready to scan. Show a barcode or printed part number inside the frame.');
+                hintTimer = setTimeout(() => update('no-code', 'No number detected yet. Hold steady, move closer, or tilt the label to reduce glare.'), 10000);
                 void tick();
             } catch (error) { if (!cancelled) fail(error); }
         };
         const hidden = () => {
-            if (document.hidden && !cancelled) { update('paused', 'Camera paused while this page is hidden. Tap Restart scanner to continue.'); clean(); }
+            if (document.hidden && !cancelled) { textJob.current?.abort(); update('paused', 'Camera paused while this page is hidden. Tap Restart scanner to continue.'); clean(); }
         };
         document.addEventListener('visibilitychange', hidden);
         window.addEventListener('pagehide', clean);
@@ -198,7 +211,10 @@ function ScannerSession({ onClose, onScan }) {
 
     const restartCamera = () => {
         if (locked.current) return;
-        photoJob.current?.close(); photoJob.current = null; stop(); setRestart((value) => value + 1);
+        photoJob.current?.close(); photoJob.current = null; textJob.current?.abort(); textJob.current = null;
+        textUnavailable.current = false;
+        manualEditing.current = false; setManualCode('');
+        setCandidates([]); setLabelImage(''); stop(); setRestart((value) => value + 1);
     };
     const toggleTorch = async () => {
         const track = session.current?.track;
@@ -211,9 +227,58 @@ function ScannerSession({ onClose, onScan }) {
         finally { if (alive.current) setControlBusy(false); }
     };
 
+    const readLabel = async (source, background = false) => {
+        if (locked.current || textJob.current || photoJob.current) return;
+        const controller = new AbortController(); textJob.current = controller;
+        if (!background) {
+            stop(); setTorchAvailable(false); setCandidates([]); setDetected(''); setManualCode(''); setLabelImage('');
+            setState('text-reading');
+        }
+        setMessage('Looking for a barcode or printed part number. First text read may take longer…');
+        let image;
+        try {
+            if (source instanceof File) {
+                image = await preparePartNumberPhoto(source, controller.signal);
+            } else image = source;
+            if (controller.signal.aborted || !alive.current) return;
+            const preview = image.toDataURL('image/png');
+            if (!background) setLabelImage(preview);
+            const { readPartNumberLabel } = await import('../../utils/partNumberReader');
+            if (controller.signal.aborted || !alive.current) return;
+            const result = await readPartNumberLabel(image, { signal: controller.signal, onProgress: ({ status, progress }) => {
+                if (!alive.current || controller.signal.aborted) return;
+                if (!background) setMessage(status === 'recognizing text' ? `Reading label… ${Math.round((progress || 0) * 100)}%` : 'Loading the label reader on this device…');
+            } });
+            if (!alive.current || controller.signal.aborted || locked.current || (background && manualEditing.current)) return;
+            if (background && !result.candidates.length) { setMessage('Keep the barcode or printed number steady. Move closer if needed.'); return; }
+            stop(); setLabelImage(preview);
+            setCandidates(result.candidates); setManualCode(result.candidates[0] || ''); setState('text-review');
+            setMessage(result.candidates.length ? 'Check the number against the label. Correct any letters or digits, then confirm.' : 'No clear part number was found. Retake a close-up or enter the number below.');
+        } catch (error) {
+            if (alive.current && !controller.signal.aborted && !locked.current) {
+                if (background) { textUnavailable.current = true; setMessage('Barcode scanning is still active. If printed text cannot be read, enter the part number below.'); }
+                else { setState('text-review'); setMessage(error.message || 'Unable to read this label. Enter the part number below.'); }
+            }
+        } finally {
+            if (image) { image.width = 0; image.height = 0; }
+            if (textJob.current === controller) textJob.current = null;
+        }
+    };
+    useEffect(() => {
+        autoText.current = () => {
+            if (!cameraRunning || textJob.current || locked.current || manualEditing.current) return;
+            try { void readLabel(capturePartNumberFrame(videoRef.current), true); }
+            catch { /* A missing video frame will be retried by a later camera tick. */ }
+        };
+    });
+    const cancelRead = () => {
+        textJob.current?.abort(); textJob.current = null;
+        setState('text-review'); setMessage('Reading cancelled. Enter the part number or restart the camera.');
+    };
     const scanPhoto = async (event) => {
         const file = event.target.files?.[0]; event.target.value = '';
         if (!file || locked.current || photoJob.current) return;
+        textJob.current?.abort(); textJob.current = null;
         if (!file.type.startsWith('image/') || file.size > 20 * 1024 * 1024) { setMessage('Choose an image smaller than 20 MB.'); return; }
         stop(); setTorchAvailable(false); setState('photo'); setMessage('Reading barcode photo…');
         let url; let decoder; let image;
@@ -231,34 +296,42 @@ function ScannerSession({ onClose, onScan }) {
                 if (job.cancelled) return;
                 if (result.text) { void completeRef.current(result.text); return; }
             }
-            if (alive.current) { setState('no-code'); setMessage('No barcode found. Try a sharper photo with the entire barcode visible, restart the camera, or enter the code manually.'); }
+            // Same photo, same scanner: use label text only if no barcode was decoded.
+            job.close(); if (photoJob.current === job) photoJob.current = null;
+            if (alive.current) await readLabel(file);
         } catch {
             if (!job.cancelled && alive.current) { setState('camera-error'); setMessage('Unable to read that photo. Try a clear JPG or PNG, or enter the code manually.'); }
         } finally { job.close(); if (photoJob.current === job) photoJob.current = null; }
     };
 
-    const busy = ['processing', 'success', 'result-error', 'photo'].includes(state);
-    return <Modal isOpen onClose={close} title="Scan barcode" size="md" className="barcode-scanner-modal" closeOnBackdrop={false}>
+    const busy = ['processing', 'success', 'result-error', 'photo', 'text-reading'].includes(state);
+    return <Modal isOpen onClose={close} title="Scan product" size="md" className="barcode-scanner-modal" closeOnBackdrop={false}>
         <div ref={rootRef} className="barcode-scanner" data-barcode-scanner>
-            <div className={`barcode-viewport ${detected ? 'barcode-accepted' : ''}`}>
-                <video ref={videoRef} muted playsInline autoPlay aria-label="Barcode camera preview" />
-                <div className="barcode-guide" aria-hidden="true"><span /></div>
+            <p className="scanner-label-help"><ScanText size={17} aria-hidden="true" />Automatic barcode + part-number detection</p>
+            <div className={`barcode-viewport ${detected ? 'barcode-accepted' : ''} ${labelImage ? 'barcode-label-found' : ''}`}>
+                <video ref={videoRef} muted playsInline autoPlay aria-label="Barcode camera preview" className={labelImage ? 'hidden' : ''} />
+                {labelImage ? <img src={labelImage} alt="Captured product label to compare with the detected number" /> : <div className="barcode-guide" aria-hidden="true"><span /></div>}
                 {['initializing', 'permission'].includes(state) && <div className="barcode-camera-state"><Loader2 className="motion-safe:animate-spin" /><span>{state === 'permission' ? 'Camera permission' : 'Starting camera'}</span></div>}
                 {['camera-error', 'permission-denied', 'paused'].includes(state) && <div className="barcode-camera-state"><Camera size={30} /><span>Camera unavailable</span></div>}
-                {detected && <div className="barcode-camera-state"><Check size={32} /><strong>Barcode detected</strong><code>{detected}</code></div>}
+                {state === 'text-reading' && <div className="barcode-camera-state"><Loader2 className="motion-safe:animate-spin" /><span>Reading label on your device</span></div>}
+                {detected && <div className="barcode-camera-state"><Check size={32} /><strong>{labelImage ? 'Part number confirmed' : 'Barcode detected'}</strong><code>{detected}</code></div>}
             </div>
             <p className="barcode-status" role="status" aria-live="polite">{message}</p>
+            {state === 'text-reading' && <Button variant="secondary" onClick={cancelRead}>Cancel reading</Button>}
             <div className="barcode-controls">
                 <Button variant="secondary" onClick={restartCamera} disabled={busy} aria-label="Restart scanner" title="Restart scanner"><RefreshCw size={20} /></Button>
-                {cameras.length > 1 && <label className="barcode-camera-select"><SwitchCamera size={20} aria-hidden="true" /><select aria-label="Choose camera" value={cameraId || activeCameraId} onChange={(event) => { stop(); setCameraId(event.target.value); }} disabled={busy}>
+                {cameras.length > 1 && <label className="barcode-camera-select"><SwitchCamera size={20} aria-hidden="true" /><select aria-label="Choose camera" value={cameraId || activeCameraId} onChange={(event) => { textJob.current?.abort(); stop(); setCameraId(event.target.value); }} disabled={busy}>
                     {cameras.map((camera, index) => <option key={camera.deviceId} value={camera.deviceId}>{camera.label || `Camera ${index + 1}`}</option>)}
                 </select></label>}
                 {torchAvailable && cameraRunning && <Button variant="secondary" onClick={toggleTorch} disabled={controlBusy || busy} aria-label={torchOn ? 'Turn flash off' : 'Turn flash on'} aria-pressed={torchOn}>{torchOn ? <ZapOff size={20} /> : <Zap size={20} />}</Button>}
-                <label className={`barcode-photo-button ${busy ? 'opacity-50' : ''}`}><ImageUp size={20} aria-hidden="true" /> Photo<input type="file" accept="image/*" capture="environment" aria-label="Take or choose a barcode photo" onChange={scanPhoto} disabled={busy} /></label>
+                <label className={`barcode-photo-button ${busy ? 'opacity-50' : ''}`}><ImageUp size={20} aria-hidden="true" />Photo<input type="file" accept="image/*" capture="environment" aria-label="Take or choose a barcode photo" onChange={scanPhoto} disabled={busy} /></label>
             </div>
+            {labelImage && <div className="scanner-label-review"><p>Check against the label: O / 0 and I / 1 can look alike.</p>
+                {candidates.length > 1 && <label>Numbers found<select aria-label="Detected part numbers" value={candidates.includes(manualCode) ? manualCode : ''} onChange={(event) => { manualEditing.current = true; setManualCode(event.target.value); }} disabled={busy}><option value="" disabled>Choose a number from this label</option>{candidates.map(code => <option key={code} value={code}>{code}</option>)}</select></label>}
+            </div>}
             <form className="barcode-manual" onSubmit={(event) => { event.preventDefault(); void completeRef.current(manualCode); }}>
-                <label htmlFor={id}>Enter barcode manually</label>
-                <div><input id={id} value={manualCode} onChange={(event) => setManualCode(event.target.value)} placeholder="Barcode or printed part number" autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={160} disabled={busy} /><Button type="submit" disabled={busy || !manualCode.trim()}>Use code</Button></div>
+                <label htmlFor={id}>{labelImage ? 'Confirm detected number' : 'Enter barcode manually'}</label>
+                <div><input id={id} value={manualCode} onChange={(event) => { manualEditing.current = Boolean(event.target.value.trim()); setManualCode(event.target.value); }} placeholder="Barcode or printed part number" autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={160} disabled={busy} /><Button type="submit" disabled={busy || !manualCode.trim()}>Use code</Button></div>
             </form>
         </div>
     </Modal>;
