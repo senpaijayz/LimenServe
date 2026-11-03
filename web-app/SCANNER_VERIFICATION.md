@@ -4,7 +4,7 @@
 
 - Scanner UI and lifecycle: `src/components/ui/CameraScannerModal.jsx`, new `cameraScanner.css`, nested-dialog cleanup in `Modal.jsx`.
 - Detection and validation: new `src/utils/scannerDecoder.js`, `barcodeDecoder.worker.js`, `scannerPolicy.js`; identifier matching in `barcode.js`.
-- Integration: `src/hooks/useBarcodeScanner.js`, POS `POSTerminal.jsx`, inventory `InventoryList.jsx` / `AddStockModal.jsx`, `src/store/useDataStore.js`.
+- Integration: `src/hooks/useBarcodeScanner.js`, POS `POSTerminal.jsx`, inventory `InventoryList.jsx` / `ReceiveStock.jsx`, `src/store/useDataStore.js`. Invoice OCR and its old modal were removed on 3 November 2026; product barcode scanning remains available.
 - Dependencies: `package.json` and `package-lock.json`. Regenerating the lockfile also pruned stale, unused PWA dependencies left from the earlier PWA removal; no PWA functionality was changed here.
 - Verification: seven scanner/barcode test files, local browser harness, `scripts/verify-scanner-production.mjs`, `scripts/verify-bundle-budget.mjs`, and the repository README.
 

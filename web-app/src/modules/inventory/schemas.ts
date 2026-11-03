@@ -57,7 +57,7 @@ export const supplierInvoiceHeaderSchema = z.object({
   supplierAddress: optionalTrimmedString,
   poReference: optionalTrimmedString,
   notes: optionalTrimmedString,
-  source: z.enum(['manual_invoice', 'ocr_upload', 'api_import']).default('manual_invoice'),
+  source: z.enum(['manual_invoice', 'api_import']).default('manual_invoice'),
 });
 
 export const supplierInvoiceStockReceiptSchema = supplierInvoiceHeaderSchema
@@ -65,7 +65,6 @@ export const supplierInvoiceStockReceiptSchema = supplierInvoiceHeaderSchema
     items: z
       .array(supplierInvoiceLineItemSchema)
       .min(1, 'Add at least one invoice line item.'),
-    ocrReady: z.boolean().optional().default(false),
     allowNewProducts: z.boolean().optional().default(true),
   }) satisfies z.ZodType<SupplierInvoiceStockReceiptInput>;
 

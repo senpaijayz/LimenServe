@@ -81,7 +81,7 @@ describe('receiveStockFromSupplierInvoice', () => {
     });
   });
 
-  it('exposes normalized payloads for future OCR flows without posting', () => {
+  it('exposes normalized manual invoice payloads without posting', () => {
     const normalized = normalizeSupplierInvoicePayload({
       invoiceNumber: 'INV-102',
       invoiceDate: '2026-05-19',

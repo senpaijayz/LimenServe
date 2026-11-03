@@ -7,7 +7,6 @@ import { getProductCatalog, getSuppliers, receiveInventoryBatch } from '../../..
 import { getProductPartNumber } from '../../../utils/barcode';
 import { createIdempotencyKey } from '../../../utils/idempotency';
 import CameraScannerModal from '../../../components/ui/CameraScannerModal';
-import AddStockModal from '../components/AddStockModal';
 import { useLocator3DStore } from '../../locator3d/store/useLocator3DStore';
 import ReceivedStockHandoff from '../components/ReceivedStockHandoff';
 
@@ -32,7 +31,6 @@ export default function ReceiveStock() {
     const [error, setError] = useState('');
     const [receipt, setReceipt] = useState(null);
     const [camera, setCamera] = useState(false);
-    const [invoice, setInvoice] = useState(false);
     const [uncertain, setUncertain] = useState(false);
     const inFlight = useRef(false);
 
@@ -118,7 +116,7 @@ export default function ReceiveStock() {
     if (!['admin', 'stock_clerk'].includes(user?.role)) return <p>You do not have permission to receive stock.</p>;
     if (receipt) return <div className="mx-auto max-w-3xl space-y-5 rounded-2xl border bg-white p-5"><h1 className="text-2xl font-bold">Stock received</h1><p>{receipt.totalLines} products · {receipt.totalQuantity} units · {receipt.referenceNumber}</p><p>Stock is confirmed. You can now assign physical locations, or do that later.</p><ReceivedStockHandoff receipt={receipt} /><div className="flex flex-wrap gap-3"><button className="btn btn-primary" onClick={() => navigate('/locator-3d?received=1')}>Assign Locations in 3D</button><Link className="btn btn-secondary" to="/inventory">Back to Inventory</Link><button className="btn btn-secondary" onClick={() => { setReceipt(null); setUncertain(false); setDraft(empty()); }}>Receive more stock</button></div></div>;
     return <div className="mx-auto max-w-5xl space-y-5 pb-40">
-        <header className="flex flex-wrap items-start justify-between gap-3"><div><Link className="inline-flex min-h-11 items-center gap-2 text-sm text-primary-600" to="/inventory"><ArrowLeft size={16} /> Back to Inventory</Link><h1 className="text-2xl font-bold">Receive Stock</h1><p role="status" className="mt-1 text-sm text-primary-500">{draftStatus}</p></div><button className="btn btn-secondary" disabled={busy || uncertain} onClick={() => setInvoice(true)}>Scan / enter invoice</button></header>
+        <header><Link className="inline-flex min-h-11 items-center gap-2 text-sm text-primary-600" to="/inventory"><ArrowLeft size={16} /> Back to Inventory</Link><h1 className="text-2xl font-bold">Receive Stock</h1><p role="status" className="mt-1 text-sm text-primary-500">{draftStatus}</p></header>
         {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>}
         {uncertain && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">This receipt was submitted. Its details are locked until the server confirms the result. Retry safely below.</div>}
         <fieldset disabled={busy || uncertain} className="rounded-2xl border bg-white p-4"><legend className="px-2 font-semibold">Receipt details</legend><div className="grid gap-4 sm:grid-cols-2"><label>Supplier (Optional)<select className={`${field} mt-1`} value={draft.supplierId} onChange={(e) => change({ supplierId: e.target.value })}><option value="">No supplier / Not provided</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>Reference number (Optional)<input className={`${field} mt-1`} value={draft.referenceNumber} maxLength={120} onChange={(e) => change({ referenceNumber: e.target.value })} /></label><label>Received date<input type="date" required className={`${field} mt-1`} value={draft.receivedDate} onChange={(e) => change({ receivedDate: e.target.value })} /></label><label>Notes (Optional)<input className={`${field} mt-1`} value={draft.notes} maxLength={1000} onChange={(e) => change({ notes: e.target.value })} /></label></div></fieldset>
@@ -127,6 +125,5 @@ export default function ReceiveStock() {
         {review && <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4"><h2 className="font-bold">Review this receipt</h2><p className="mt-2 text-sm">{draft.items.length} distinct products · {units} incoming units. Supplier: {suppliers.find((s) => s.id === draft.supplierId)?.name || 'Not provided'}. All lines will be received together.</p><p className="mt-2 text-xs">Displayed stock is a snapshot. The server records the actual balances when it receives the stock.</p></section>}
         <footer style={{ '--sidebar-width': sidebarCollapsed ? '5rem' : '16rem' }} className="fixed inset-x-0 bottom-0 z-30 border-t bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lg lg:left-[var(--sidebar-width,0px)]"><div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold">{draft.items.length} products · {units} incoming units</p><div className="flex flex-wrap gap-2"><button className="btn btn-secondary" disabled={busy || uncertain} onClick={discard}>Discard Draft</button><button className="btn btn-secondary" disabled={busy} onClick={() => { try { localStorage.setItem(storageKey, JSON.stringify(draft)); setDraftStatus('Draft Saved'); } catch { setError('Draft storage is unavailable.'); } }}>Save Draft</button><button className="btn btn-primary" disabled={busy || !draft.items.length} onClick={() => { if (review || uncertain) void receive(); else setReview(true); }}>{busy ? 'Receiving...' : uncertain ? 'Check / retry receipt' : review ? 'Confirm Receive Stock' : 'Review & Receive Stock'}</button></div></div></footer>
         <CameraScannerModal isOpen={camera} onClose={() => setCamera(false)} onScan={(value) => { setCamera(false); void scan(value); }} />
-        <AddStockModal isOpen={invoice} initialMode="invoice" onClose={() => setInvoice(false)} />
     </div>;
 }

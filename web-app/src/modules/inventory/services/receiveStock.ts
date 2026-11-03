@@ -40,49 +40,6 @@ export type FlexibleSupplierInvoicePayload = Partial<SupplierInvoiceStockReceipt
   items?: FlexibleInvoiceLineItem[];
 };
 
-export interface InvoiceOcrExistingProduct {
-  status: 'existing';
-  productId: string;
-  partNumber: string;
-  description: string;
-  detectedDescription?: string;
-  quantity: number | null;
-  brand?: string;
-  uom?: string;
-  reviewNote?: string;
-  sourceRow?: number;
-}
-
-export interface InvoiceOcrNewProduct {
-  status: 'new';
-  productId: null;
-  partNumber: string;
-  description: string;
-  detectedDescription?: string;
-  quantity: number | null;
-  requiredAction: string;
-  reviewNote?: string;
-  sourceRow?: number;
-}
-
-export interface InvoiceOcrAnalysisResult {
-  invoice: {
-    invoiceNumber: string;
-    orderNumber: string;
-    invoiceDate: string;
-    supplierName: string;
-  };
-  existingProducts: InvoiceOcrExistingProduct[];
-  newProducts: InvoiceOcrNewProduct[];
-  rawText: string;
-  summary: {
-    detectedCount: number;
-    existingCount: number;
-    newCount: number;
-    totalQuantity: number;
-  };
-}
-
 export interface StockReceiptProcessingIssue {
   partNumber?: string;
   path?: Array<string | number>;
@@ -151,7 +108,6 @@ function buildCandidatePayload(payload: FlexibleSupplierInvoicePayload): Supplie
     poReference: asText(payload.poReference) ?? asText(payload.po_reference) ?? asText(payload.order_no),
     notes: asText(payload.notes),
     source: payload.source ?? 'manual_invoice',
-    ocrReady: Boolean(payload.ocrReady),
     allowNewProducts: payload.allowNewProducts ?? true,
     items: rawItems.map((item) => ({
       lineId: asText(item.lineId),
@@ -242,31 +198,10 @@ async function postStockReceipt(payload: SupplierInvoiceStockReceiptInput, idemp
   }
 }
 
-export async function analyzeSupplierInvoiceImage(file: File): Promise<InvoiceOcrAnalysisResult> {
-  const { readInvoiceOnDevice } = await import('./browserInvoiceOcr');
-  const { prepareInvoiceImage } = await import('./prepareInvoiceImage');
-  const image = await prepareInvoiceImage(file);
-  const { ocrText, ocrRows } = await readInvoiceOnDevice(image);
-  let analysis: InvoiceOcrAnalysisResult | null = null;
-  try {
-    const { data } = await apiClient.post('/catalog/stock/invoice-ocr', { ocrText, ocrRows }, { timeout: INVENTORY_API_TIMEOUT_MS });
-    analysis = data as InvoiceOcrAnalysisResult;
-  } catch (error) {
-    extractApiError(error, 'Failed to analyze supplier invoice image.');
-  }
-  if (!analysis || !Array.isArray(analysis.existingProducts) || !Array.isArray(analysis.newProducts)) {
-    throw new Error('The invoice reader returned an incomplete result. Please try again.');
-  }
-  if (ocrRows && analysis.existingProducts.length + analysis.newProducts.length !== ocrRows.length) {
-    throw new Error('Not all scanned rows reached the review table. Refresh and scan again after the scanner update finishes.');
-  }
-  return analysis;
-}
-
 /**
  * Validates and posts a supplier invoice stock receipt through the atomic database RPC.
  *
- * This function is intentionally UI-agnostic: manual forms and future OCR upload flows can
+ * This function is intentionally UI-agnostic: manual forms and imports can
  * pass either camelCase app fields or invoice-style snake_case fields. Duplicate part numbers
  * in the same invoice are merged before posting so the database receives one stock-in line per
  * product, while the RPC still protects atomicity for product upserts, movements, and balances.

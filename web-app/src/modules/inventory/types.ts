@@ -1,4 +1,4 @@
-export type StockReceiptSource = 'manual_invoice' | 'ocr_upload' | 'api_import';
+export type StockReceiptSource = 'manual_invoice' | 'api_import';
 
 export interface SupplierInvoiceHeader {
   invoiceNumber: string;
@@ -27,7 +27,6 @@ export interface SupplierInvoiceLineItem {
 
 export interface SupplierInvoiceStockReceiptInput extends SupplierInvoiceHeader {
   items: SupplierInvoiceLineItem[];
-  ocrReady?: boolean;
   allowNewProducts?: boolean;
 }
 

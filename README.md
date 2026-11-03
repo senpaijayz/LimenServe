@@ -66,7 +66,6 @@ Use `cp` instead of `copy` on macOS/Linux. The frontend defaults to `http://loca
 | Render backend | `TRUST_PROXY_HOPS` | Trusted reverse-proxy hop count; required in hosted modes |
 | Render backend | `PUBLIC_RATE_LIMIT_STORE` | `memory` only locally; `supabase` in every hosted environment after the Phase 2 migration |
 | Render backend | `PORT` | Supplied by Render; local default is `3001` |
-| Render backend | `OCR_SPACE_API_KEY` | Optional invoice OCR provider key |
 | Vercel frontend | `VITE_SUPABASE_URL` | Matching environment's Supabase URL |
 | Vercel frontend | `VITE_SUPABASE_ANON_KEY` | Public anon key; never use the service-role key |
 | Vercel frontend | `VITE_APP_ENV` | Explicit `development`, `staging`, `preview`, or `production` label |

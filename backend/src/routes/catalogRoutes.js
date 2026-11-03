@@ -4,7 +4,6 @@ import zlib from 'node:zlib';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireRole } from '../middleware/auth.js';
 import { clearPublicResponseCache } from '../middleware/cache.js';
-import { analyzeSupplierInvoiceText } from '../services/invoiceOcrService.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import { mapStockReceiptError, receiveCatalogStock, receiveSupplierInvoiceStock, requireIdempotencyKey } from '../services/stockReceipt.js';
 import { annotatePriceListImportError, classifyPriceListItem, parsePriceListActivation, parsePriceListVersionYear } from '../services/priceListVersionModel.js';
@@ -2543,17 +2542,11 @@ router.post('/stock/receive-invoice', requireRole('admin', 'stock_clerk'), async
   }
 });
 
-router.post('/stock/invoice-ocr', requireRole('admin', 'stock_clerk'), async (req, res, next) => {
-  try {
-    if (!req.is('application/json')) {
-      return res.status(409).json({ error: 'Refresh this page to use the updated on-device invoice scanner. Image processing on the server is no longer supported.' });
-    }
-    const result = await analyzeSupplierInvoiceText(req.body?.ocrText, req.body?.ocrRows);
-
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
+// A stale browser tab must not restart the removed invoice-scanning workflow.
+router.all('/stock/invoice-ocr', requireRole('admin', 'stock_clerk'), (_req, res) => {
+  res.set('Cache-Control', 'private, no-store').status(410).json({
+    error: 'Invoice scanning has been removed. Refresh the page and enter incoming stock in Receive Stock.',
+  });
 });
 
 router.post('/products', requireRole('admin'), async (req, res, next) => {

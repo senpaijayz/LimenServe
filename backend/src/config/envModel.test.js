@@ -110,11 +110,6 @@ test('validates bounded numeric security settings', () => {
   );
 });
 
-test('keeps external OCR disabled unless explicitly approved', () => {
-  assert.equal(buildEnv(baseEnvironment()).externalOcrFallbackEnabled, false);
-  assert.equal(buildEnv(baseEnvironment({ OCR_EXTERNAL_FALLBACK_ENABLED: 'true' })).externalOcrFallbackEnabled, true);
-  assert.throws(
-    () => buildEnv(baseEnvironment({ OCR_EXTERNAL_FALLBACK_ENABLED: 'enabled' })),
-    /OCR_EXTERNAL_FALLBACK_ENABLED must be either true or false/,
-  );
+test('does not expose removed invoice scanning configuration', () => {
+  assert.equal('externalOcrFallbackEnabled' in buildEnv(baseEnvironment({ OCR_EXTERNAL_FALLBACK_ENABLED: 'true' })), false);
 });

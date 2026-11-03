@@ -206,7 +206,6 @@ export function buildEnv(source = process.env) {
       maximum: 1_000_000,
     }),
     publicRateLimitStore: parsePublicRateLimitStore(source, applicationEnvironment),
-    externalOcrFallbackEnabled: readBoolean(source, 'OCR_EXTERNAL_FALLBACK_ENABLED', false),
     supabaseUrl: requireValue(source, 'SUPABASE_URL'),
     supabaseAnonKey,
     supabaseServiceRoleKey,
