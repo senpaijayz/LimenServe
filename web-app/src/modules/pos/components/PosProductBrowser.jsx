@@ -28,7 +28,7 @@ export default function PosProductBrowser({products,onSelect,onBarcode,onPriceHi
       {products.map(product=><article key={product.id} className="pos-product-result">
         <button type="button" onClick={()=>onSelect(product)} disabled={!hasPositivePartPrice(product.price)} title={hasPositivePartPrice(product.price)?'Add '+product.sku+' to current sale':'Confirm a positive selling price in Products first.'} className="pos-result-select">
           {display.view==='grid' && <div className="pos-result-barcode"><BarcodeDisplay value={buildProductBarcodeValue(product.sku || 'UNKNOWN') || product.sku || 'UNKNOWN'} size="small" height={compact?30:46} fontSize={0} margin={8} /></div>}
-          <span className="pos-result-identity"><strong className="pos-result-sku">{product.sku}</strong><span className="pos-result-name">{product.name}</span><span className={`pos-result-stock ${product.maxQuantity>0?'text-primary-700':'text-red-700'}`}>{product.maxQuantity>0?`${product.maxQuantity} available`:'Out of stock'}</span></span>
+          <span className="pos-result-identity"><strong className="pos-result-sku">{product.sku}</strong><span className="pos-result-name">{product.name}</span><span className={`pos-result-stock ${product.maxQuantity>0?'pos-result-stock-available':'text-red-700'}`}>{product.maxQuantity>0?`${product.maxQuantity} available`:'Out of stock'}</span></span>
           <strong className="pos-result-price">{hasPositivePartPrice(product.price)?formatCurrency(product.price):'Price needs review'}</strong>
         </button>
         <div className="pos-result-actions">

@@ -12,6 +12,7 @@
 .pos-result-sku{font:700 13px/1.4 ui-monospace,monospace;overflow-wrap:anywhere;color:#172554}
 .pos-result-name{font-size:13px;line-height:1.45;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .pos-result-stock{font-size:12px;line-height:1.4}
+.pos-result-stock-available{display:inline-flex;align-self:flex-start;align-items:center;border:1px solid #a7f3d0;border-radius:999px;background:#ecfdf5;padding:2px 8px;color:#047857;font-weight:700}
 .pos-result-price{font-size:17px;line-height:1.3;color:#1d4ed8;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .pos-result-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 10px 10px}
 .pos-result-actions button{display:flex;min-height:44px;min-width:0;align-items:center;justify-content:center;gap:5px;border:1px solid #d5dce7;border-radius:8px;color:#334155;font-size:12px;font-weight:600}
