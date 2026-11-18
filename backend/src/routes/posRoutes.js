@@ -5,6 +5,7 @@ import { requireRole } from '../middleware/auth.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import { normalizeHistoricalAggregatePayload } from '../services/historicalSalesModel.js';
 import { posRequestId, validatePosCheckout, posPaymentEvidence } from '../services/posCheckoutValidation.js';
+import { validatePosReturnPayload } from '../services/posReturnValidation.js';
 
 const router = Router();
 router.use((_req,res,next)=>{res.set('Cache-Control','private, no-store');next();});
@@ -463,6 +464,38 @@ router.get('/sales', requireRole('admin', 'cashier', 'stock_clerk'), async (req,
         hasMore: offset + limit < total,
       },
     });
+  } catch (error) {
+    next(normalizePosError(error));
+  }
+});
+
+router.get('/sales/:saleId/returns', requireRole('admin', 'cashier'), async (req, res, next) => {
+  try {
+    const context = await callRpc('get_pos_sale_return_context', {
+      p_sale_id: posRequestId(req.params.saleId),
+    });
+    if (!context) {
+      res.status(404).json({ error: 'Sale not found.' });
+      return;
+    }
+    res.set('Cache-Control', 'private, no-store');
+    res.json(context);
+  } catch (error) {
+    next(normalizePosError(error));
+  }
+});
+
+router.post('/sales/:saleId/returns', requireRole('admin', 'cashier'), async (req, res, next) => {
+  try {
+    const saleId = posRequestId(req.params.saleId);
+    const { requestId, payload } = validatePosReturnPayload(req.body);
+    const result = await callRpc('create_pos_sale_return', {
+      p_sale_id: saleId,
+      p_payload: payload,
+      p_actor: req.user.id,
+      p_request: posRequestId(requestId),
+    });
+    res.status(201).json(result);
   } catch (error) {
     next(normalizePosError(error));
   }

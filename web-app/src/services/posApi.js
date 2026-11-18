@@ -33,6 +33,31 @@ export async function getPosSaleDetail(saleId) {
     }
 }
 
+export async function getPosSaleReturnContext(saleId) {
+    try {
+        const { data } = await apiClient.get(`/pos/sales/${saleId}/returns`);
+        return data;
+    } catch (error) {
+        extractApiError(error, 'Failed to load return details for this receipt.');
+    }
+}
+
+export async function createPosSaleReturn(saleId, payload) {
+    try {
+        const { data } = await apiClient.post(`/pos/sales/${saleId}/returns`, payload);
+        return data;
+    } catch (error) {
+        try {
+            extractApiError(error, 'Failed to record the return. Check the receipt history before retrying.');
+        } catch (friendlyError) {
+            // Keep the response status so the form can distinguish a rejected
+            // request from a timeout where the write might already have saved.
+            friendlyError.statusCode = error?.response?.status;
+            throw friendlyError;
+        }
+    }
+}
+
 export async function createHistoricalPosSale(payload) {
     try {
         const { data } = await apiClient.post('/pos/sales/historical', payload);

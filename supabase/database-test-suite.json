@@ -17,6 +17,7 @@
     "20260914_locator_workspace.sql",
     "20260923_analytics_vehicle_make_conflict.sql",
     "20260923_analytics_refresh_api_timeout.sql",
-    "20260923_catalog_summary_dashboard.sql"
+    "20260923_catalog_summary_dashboard.sql",
+    "20261119_sales_returns_invariants.sql"
   ]
 }

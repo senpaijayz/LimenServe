@@ -20,6 +20,7 @@ import InvoicePrintButton from '../../pos/components/InvoicePrintButton';
 import HistoricalSaleEditorModal from '../components/HistoricalSaleEditorModal.jsx';
 import HistoricalAggregateEditorModal from '../components/HistoricalAggregateEditorModal.jsx';
 import formatReportProductName from '../utils/formatReportProductName.js';
+import SaleReturnModal from '../../pos/components/SaleReturnModal.jsx';
 
 function toReportNumber(value, fallback = 0) {
     const parsed = Number(value);
@@ -384,6 +385,7 @@ const SalesReport = () => {
     const [historyPagination, setHistoryPagination] = useState(null);
     const [selectedSale, setSelectedSale] = useState(null);
     const [loadingSaleDetail, setLoadingSaleDetail] = useState(false);
+    const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
     const [isHistoricalEditorOpen, setIsHistoricalEditorOpen] = useState(false);
     const [editingHistoricalSale, setEditingHistoricalSale] = useState(null);
     const [historicalAggregates, setHistoricalAggregates] = useState([]);
@@ -607,6 +609,17 @@ const SalesReport = () => {
             return (new Date(getSaleTimestamp(left) || 0).getTime() - new Date(getSaleTimestamp(right) || 0).getTime()) * multiplier;
         });
     }, [historySort, salesHistory]);
+
+    const selectedSaleCanReturn = selectedSale?.sale?.status === 'completed'
+        && selectedSale?.sale?.inventoryApplied
+        && ['pos', 'estimate_conversion'].includes(selectedSale?.sale?.sourceType)
+        && Boolean(selectedSale?.sale?.issuedAt)
+        && Boolean(selectedSale?.sale?.paidAt);
+    const canProcessSaleReturns = isAdmin || user?.role === 'cashier';
+
+    const handleSaleReturnSaved = async () => {
+        await Promise.all([loadAnalytics(), loadSalesHistory()]);
+    };
 
     const handleExport = useCallback(async () => {
         setIsExporting(true);
@@ -1160,6 +1173,11 @@ const SalesReport = () => {
                         <SaleReceiptPreview receipt={selectedSale.receipt} printId="report-sale-receipt" />
 
                         <div className="flex justify-end gap-3 print:hidden">
+                            {canProcessSaleReturns && selectedSaleCanReturn && (
+                                <Button variant="warning" onClick={() => setIsReturnModalOpen(true)}>
+                                    Return Items
+                                </Button>
+                            )}
                             {isAdmin && selectedSale?.sale?.sourceType === 'historical_encoded' && (
                                 <Button
                                     variant="outline"
@@ -1180,6 +1198,15 @@ const SalesReport = () => {
                     </div>
                 )}
             </Modal>
+
+            {canProcessSaleReturns && (
+                <SaleReturnModal
+                    isOpen={isReturnModalOpen}
+                    onClose={() => setIsReturnModalOpen(false)}
+                    saleDetail={selectedSale}
+                    onSaved={handleSaleReturnSaved}
+                />
+            )}
 
             {isAdmin && (
                 <HistoricalSaleEditorModal
