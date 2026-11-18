@@ -7,6 +7,7 @@ declare
   v_execute_count integer;
   v_client_execute_count integer;
   v_function_definition text;
+  v_settlement_definition text;
   v_view_definition text;
 begin
   foreach v_name in array array['operations.sales_returns', 'operations.sales_return_items', 'operations.sales_return_requests'] loop
@@ -41,6 +42,20 @@ begin
     or position('sales_return_requests' in v_function_definition) = 0
     or position('inventory_balances' in v_function_definition) = 0 then
     raise exception 'Return flow must lock the sale, persist idempotency, and adjust inventory atomically';
+  end if;
+  if position('account_credit' in v_function_definition) = 0
+    or position('wrong_fitment' in v_function_definition) = 0
+    or position('inspection' in v_function_definition) = 0
+    or position('opened_resalable' in v_function_definition) = 0
+    or position('settlement_type' in v_function_definition) = 0 then
+    raise exception 'Returns must support unpaid balance credits, fitment reasons, and practical item conditions';
+  end if;
+
+  select pg_get_functiondef('public.settle_pos_order(uuid,jsonb,uuid,uuid)'::regprocedure)
+    into v_settlement_definition;
+  if position('balance_credit' in v_settlement_definition) = 0
+    or position('assert_recorded_pos_payment' in v_settlement_definition) = 0 then
+    raise exception 'Unpaid collection must subtract return credits before validating the amount received';
   end if;
 
   select pg_get_viewdef('private.recorded_product_sales'::regclass, true)

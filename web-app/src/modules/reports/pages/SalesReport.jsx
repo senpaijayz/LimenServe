@@ -11,7 +11,7 @@ import {
     getRecordedSalesReport,
 } from '../../../services/analyticsApi';
 import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/formatters';
-import { getPosSaleDetail, listHistoricalSalesAggregates, listPosSales } from '../../../services/posApi';
+import { getPosSaleDetail, getPosSaleReturnContext, listHistoricalSalesAggregates, listPosSales } from '../../../services/posApi';
 import { getManagedCategories } from '../../../services/catalogApi';
 import { PAYMENT_LABELS } from '../../../utils/constants';
 import { useAuth } from '../../../context/useAuth';
@@ -43,6 +43,24 @@ function isDemoSale(sale) {
     return transactionNumber.startsWith('SALE-DEMO-')
         || customerName.toLowerCase().startsWith('demo customer')
         || originalReference.toUpperCase().startsWith('DEMO-');
+}
+
+async function getSaleDetailWithReturnContext(saleId) {
+    const [detail, returnContext] = await Promise.all([
+        getPosSaleDetail(saleId),
+        getPosSaleReturnContext(saleId).catch(() => null),
+    ]);
+    return {
+        ...detail,
+        sale: { ...detail.sale, canReturn: Boolean(returnContext?.canReturn), balanceDue: returnContext?.balanceDue ?? null },
+        returnContext,
+        receipt: detail.receipt ? {
+            ...detail.receipt,
+            balanceDue: returnContext?.balanceDue ?? null,
+            returnCreditTotal: returnContext?.totalCredited ?? 0,
+            latestReturnNumber: returnContext?.returns?.[0]?.returnNumber ?? null,
+        } : detail.receipt,
+    };
 }
 
 function getSaleSourceLabel(sale) {
@@ -544,7 +562,7 @@ const SalesReport = () => {
         setSelectedSale(null);
 
         try {
-            const detail = await getPosSaleDetail(saleId);
+            const detail = await getSaleDetailWithReturnContext(saleId);
             if (activeSaleRequestRef.current === saleId) {
                 setSelectedSale(detail);
             }
@@ -610,15 +628,15 @@ const SalesReport = () => {
         });
     }, [historySort, salesHistory]);
 
-    const selectedSaleCanReturn = selectedSale?.sale?.status === 'completed'
-        && selectedSale?.sale?.inventoryApplied
-        && ['pos', 'estimate_conversion'].includes(selectedSale?.sale?.sourceType)
-        && Boolean(selectedSale?.sale?.issuedAt)
-        && Boolean(selectedSale?.sale?.paidAt);
+    const selectedSaleCanReturn = Boolean(selectedSale?.returnContext?.canReturn ?? selectedSale?.sale?.canReturn);
     const canProcessSaleReturns = isAdmin || user?.role === 'cashier';
 
     const handleSaleReturnSaved = async () => {
         await Promise.all([loadAnalytics(), loadSalesHistory()]);
+        if (selectedSale?.sale?.id) {
+            const refreshed = await getSaleDetailWithReturnContext(selectedSale.sale.id);
+            setSelectedSale(refreshed);
+        }
     };
 
     const handleExport = useCallback(async () => {

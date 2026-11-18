@@ -1,7 +1,7 @@
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const REASONS = new Set(['wrong_part', 'defective', 'excess', 'other']);
-const CONDITIONS = new Set(['resalable', 'damaged']);
-const REFUND_METHODS = new Set(['cash', 'check', 'store_credit']);
+const REASONS = new Set(['wrong_part', 'wrong_fitment', 'ordered_by_mistake', 'defective', 'excess', 'changed_mind', 'other']);
+const CONDITIONS = new Set(['resalable', 'opened_resalable', 'inspection', 'installed', 'damaged']);
+const REFUND_METHODS = new Set(['cash', 'check', 'store_credit', 'account_credit']);
 
 function invalid(message) {
   return Object.assign(new Error(message), { statusCode: 400 });
@@ -41,9 +41,16 @@ export function validatePosReturnPayload(body = {}) {
   const refundReference = typeof body.refundReference === 'string' ? body.refundReference.trim() : '';
   if (!REASONS.has(reason) || reasonNote.length > 500) throw invalid('Choose a return reason and keep the note within 500 characters.');
   if (reason === 'other' && !reasonNote) throw invalid('Add a short note when the return reason is Other.');
-  if (!REFUND_METHODS.has(refundMethod) || refundReference.length > 120) throw invalid('Choose a refund method and keep its reference within 120 characters.');
+  if (reason === 'defective' && items.some((item) => item.condition === 'resalable' || item.condition === 'opened_resalable')) {
+    throw invalid('A defective part must be held for inspection or marked damaged; do not return it directly to saleable stock.');
+  }
+  if (!REFUND_METHODS.has(refundMethod) || refundReference.length > 120) throw invalid('Choose a settlement method and keep its reference within 120 characters.');
   if (refundMethod === 'check' && !refundReference) throw invalid('Enter the check number before recording a check refund.');
-  if (body.refundConfirmed !== true) throw invalid('Confirm the refund was actually issued before saving the return.');
+  if (body.refundConfirmed !== true) {
+    throw invalid(refundMethod === 'account_credit'
+      ? 'Confirm the returned parts were received and the unpaid balance should be reduced.'
+      : 'Confirm the refund or store credit was actually issued before saving the return.');
+  }
 
   return {
     requestId: body.requestId,

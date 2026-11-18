@@ -10,7 +10,7 @@ export default function PaymentCollectionPanel({sale,onClose,onPay,onPrint,print
   const [amount,setAmount]=useState(''),[verified,setVerified]=useState(false);
   const [method,setMethod]=useState('cash'),[reference,setReference]=useState(''),[paidAmount,setPaidAmount]=useState('');
   const cashInputId=useId();
-  const total=Number(sale.totalAmount);
+  const total=Number(sale.balanceDue ?? sale.totalAmount);
   const unpaid=sale.status==='pending' && sale.paymentMethod==='to_follow';
   const enough=amount.trim()!=='' && Number(amount)>=total && Number.isFinite(Number(amount)) && Number(amount)<=1000000000;
   const canRecord=unpaid && verified && (method==='cash'?enough:matchesFullPayment(paidAmount,total,reference));

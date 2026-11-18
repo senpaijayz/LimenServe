@@ -10,6 +10,9 @@ export default function SalesInvoiceBody({receipt,business={},printId='pos-recei
   const details=receipt.invoiceDetails || {};
   const vatIncluded=documentIncludesVat(receipt);
   const netAmount=Number(receipt.totalAmount)-Number(receipt.taxTotal || 0);
+  const returnCreditTotal=Math.max(0,Number(receipt.returnCreditTotal||0));
+  const unpaidBalanceDue=Math.max(0,Number(receipt.balanceDue??receipt.totalAmount));
+  const adjustedAmountDue=Math.max(0,Number(receipt.totalAmount)-returnCreditTotal);
   const unpaid=receipt.status==='pending' && receipt.paymentMethod==='to_follow';
   const method=({cash:'Cash',check:'Check',gcash:'GCash',bank_transfer:'Bank transfer',to_follow:'Payment to follow'})[receipt.paymentMethod] || receipt.paymentMethod || '';
   return <div className="invoice-preview-scroll"><div id={printId} className="receipt-preview paper-invoice">
@@ -39,10 +42,13 @@ export default function SalesInvoiceBody({receipt,business={},printId='pos-recei
     <section className="invoice-closing">
     <div className="invoice-bottom">
       <div className="invoice-tax-box"><Total label={vatIncluded?"VATable sales":"Subtotal"} value={formatCurrency(vatIncluded?netAmount:receipt.subtotal)} /><Total label="Discount" value={formatCurrency(receipt.discountTotal ?? 0)} /><Total label="VAT amount" value={formatCurrency(receipt.taxTotal)} /><div className="invoice-cashier">Prepared by: {receipt.cashierName || ''}</div></div>
-      <div className="invoice-totals"><Total label={vatIncluded?"Total sales (VAT inclusive)":"Subtotal"} value={formatCurrency(receipt.subtotal)} /><Total label="Less: Discount" value={formatCurrency(receipt.discountTotal ?? 0)} /><Total label={vatIncluded?"VAT included (12%)":"Add: VAT"} value={formatCurrency(receipt.taxTotal)} /><Total label="TOTAL AMOUNT DUE" value={formatCurrency(receipt.totalAmount)} strong />
-        {unpaid ? <Total label="BALANCE DUE — UNPAID" value={formatCurrency(receipt.totalAmount)} strong /> : receipt.paymentMethod==='cash'?<><Total label="Cash received" value={receipt.cashReceived==null?'—':formatCurrency(receipt.cashReceived)} /><Total label="Change" value={formatCurrency(receipt.changeDue ?? 0)} /></>:<Total label="Payment method" value={method} />}
+      <div className="invoice-totals"><Total label={vatIncluded?"Total sales (VAT inclusive)":"Subtotal"} value={formatCurrency(receipt.subtotal)} /><Total label="Less: Discount" value={formatCurrency(receipt.discountTotal ?? 0)} /><Total label={vatIncluded?"VAT included (12%)":"Add: VAT"} value={formatCurrency(receipt.taxTotal)} />
+        {returnCreditTotal > 0 && <><Total label="Original amount due" value={formatCurrency(receipt.totalAmount)} /><Total label="Less: Return credit" value={`−${formatCurrency(returnCreditTotal)}`} /></>}
+        <Total label="TOTAL AMOUNT DUE" value={formatCurrency(returnCreditTotal > 0 ? adjustedAmountDue : unpaid ? unpaidBalanceDue : receipt.totalAmount)} strong />
+        {unpaid ? <Total label="BALANCE DUE — UNPAID" value={formatCurrency(unpaidBalanceDue)} strong /> : receipt.paymentMethod==='cash'?<><Total label="Cash received" value={receipt.cashReceived==null?'—':formatCurrency(receipt.cashReceived)} /><Total label="Change" value={formatCurrency(receipt.changeDue ?? 0)} /></>:<Total label="Payment method" value={method} />}
       </div>
     </div>
+    {returnCreditTotal > 0 && <div className="invoice-note"><strong>Return credit: </strong>{formatCurrency(returnCreditTotal)}{receipt.latestReturnNumber ? ` · See return ${receipt.latestReturnNumber}` : ''}</div>}
     {receipt.note && <div className="invoice-note"><strong>Order note: </strong>{receipt.note}</div>}
     {receipt.paymentReference && <div className="invoice-note"><strong>{receipt.paymentMethod==='check'?'Check number: ':'Payment reference: '}</strong>{receipt.paymentReference}</div>}
     {receipt.paidAt && <p className="invoice-paid-date">Payment recorded: {formatDateTime(receipt.paidAt)}</p>}

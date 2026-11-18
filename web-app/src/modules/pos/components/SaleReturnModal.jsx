@@ -6,9 +6,12 @@ import { formatCurrency, formatDateTime, formatNumber } from '../../../utils/for
 import { createPosSaleReturn, getPosSaleReturnContext } from '../../../services/posApi';
 
 const REASONS = [
-    { value: 'wrong_part', label: 'Wrong part' },
+    { value: 'wrong_part', label: 'Wrong part supplied' },
+    { value: 'wrong_fitment', label: 'Part does not fit the vehicle' },
+    { value: 'ordered_by_mistake', label: 'Wrong part ordered' },
     { value: 'defective', label: 'Defective' },
-    { value: 'excess', label: 'No longer needed / excess' },
+    { value: 'excess', label: 'Excess quantity' },
+    { value: 'changed_mind', label: 'Customer changed their mind' },
     { value: 'other', label: 'Other' },
 ];
 
@@ -16,7 +19,24 @@ const REFUND_METHODS = [
     { value: 'cash', label: 'Cash' },
     { value: 'check', label: 'Check' },
     { value: 'store_credit', label: 'Store credit' },
+    { value: 'account_credit', label: 'Credit against unpaid balance' },
 ];
+
+function wasRestocked(condition) {
+    return condition === 'resalable' || condition === 'opened_resalable';
+}
+
+function defaultCondition(reason) {
+    return reason === 'defective' ? 'inspection' : 'resalable';
+}
+
+function conditionOutcome(condition) {
+    if (condition === 'resalable') return 'Restocked';
+    if (condition === 'opened_resalable') return 'Restocked after inspection';
+    if (condition === 'inspection') return 'Held for inspection';
+    if (condition === 'installed') return 'Not restocked — installed or used';
+    return 'Not restocked — damaged';
+}
 
 function estimateRefund(item, quantity) {
     const returnableQuantity = Number(item.returnableQuantity || 0);
@@ -30,7 +50,7 @@ export default function SaleReturnModal({ isOpen, onClose, saleDetail, onSaved }
     const [context, setContext] = useState(null);
     const [quantities, setQuantities] = useState({});
     const [conditions, setConditions] = useState({});
-    const [reason, setReason] = useState('wrong_part');
+    const [reason, setReason] = useState('wrong_fitment');
     const [reasonNote, setReasonNote] = useState('');
     const [refundMethod, setRefundMethod] = useState('cash');
     const [refundReference, setRefundReference] = useState('');
@@ -68,7 +88,7 @@ export default function SaleReturnModal({ isOpen, onClose, saleDetail, onSaved }
             setContext(null);
             setQuantities({});
             setConditions({});
-            setReason('wrong_part');
+            setReason('wrong_fitment');
             setReasonNote('');
             setRefundMethod('cash');
             setRefundReference('');
@@ -83,12 +103,13 @@ export default function SaleReturnModal({ isOpen, onClose, saleDetail, onSaved }
     }, [isOpen, reloadContext, saleId]);
 
     const availableItems = context?.items?.filter((item) => Number(item.returnableQuantity) > 0) ?? [];
+    const isUnpaidReturn = context?.sale?.status === 'pending' && context?.sale?.paymentMethod === 'to_follow';
     const selectedItems = availableItems
         .filter((item) => Number(quantities[item.id] || 0) > 0)
         .map((item) => ({
             saleItemId: item.id,
             quantity: Number(quantities[item.id]),
-            condition: conditions[item.id] || 'resalable',
+            condition: conditions[item.id] || defaultCondition(reason),
         }));
     const refundEstimate = availableItems.reduce((total, item) => (
         total + estimateRefund(item, Number(quantities[item.id] || 0))
@@ -96,13 +117,14 @@ export default function SaleReturnModal({ isOpen, onClose, saleDetail, onSaved }
     const savedReturn = context?.returns?.find((entry) => entry.id === savedReturnId)
         ?? context?.returns?.[0];
     const isReadOnly = Boolean(pendingRetry);
+    const defectivePartMarkedForSale = reason === 'defective' && selectedItems.some((item) => wasRestocked(item.condition));
 
     const buildPayload = () => ({
         requestId: requestRef.current?.id ?? window.crypto.randomUUID(),
         items: selectedItems,
         reason,
         reasonNote: reasonNote.trim(),
-        refundMethod,
+        refundMethod: isUnpaidReturn ? 'account_credit' : refundMethod,
         refundReference: refundReference.trim(),
         refundConfirmed,
     });
@@ -173,12 +195,18 @@ export default function SaleReturnModal({ isOpen, onClose, saleDetail, onSaved }
                 {!loading && context && !context.canReturn && (
                     <div role="status" className="flex gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
                         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-                        <p>Only paid, completed itemized POS receipts can be returned. Unpaid, historical, and service-only records are not eligible.</p>
+                        <p>This receipt is not eligible for a return. Paid completed sales and released unpaid POS orders with itemized parts can be returned; historical and service-only records are not eligible.</p>
                     </div>
                 )}
 
                 {!loading && context?.canReturn && !savedReturnId && (
                     <>
+                        {isUnpaidReturn && (
+                            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                                <p className="font-bold">Payment to follow — parts were already released</p>
+                                <p className="mt-1">A return reduces the amount the customer owes. No cash or check refund will be recorded. Current balance: {formatCurrency(context.balanceDue)}.</p>
+                            </div>
+                        )}
                         {availableItems.length === 0 ? (
                             <div className="rounded-xl border border-primary-200 bg-white p-5 text-sm text-primary-700">
                                 All parts on this receipt have already been returned, or none of the remaining lines can be restocked.
@@ -210,13 +238,16 @@ export default function SaleReturnModal({ isOpen, onClose, saleDetail, onSaved }
                                             </label>
                                             <label className="text-xs font-semibold text-primary-600">Condition
                                                 <select
-                                                    value={conditions[item.id] || 'resalable'}
+                                                    value={conditions[item.id] || defaultCondition(reason)}
                                                     onChange={(event) => setConditions((current) => ({ ...current, [item.id]: event.target.value }))}
                                                     disabled={isReadOnly}
                                                     className="input mt-1 py-2 text-sm"
                                                     aria-label={`Condition for ${item.itemName}`}
                                                 >
-                                                    <option value="resalable">Resalable — restock</option>
+                                                    <option value="resalable">Unused, resalable — restock</option>
+                                                    <option value="opened_resalable">Opened but unused — inspect and restock</option>
+                                                    <option value="inspection">Needs inspection — hold, not available for sale</option>
+                                                    <option value="installed">Installed or used — do not restock</option>
                                                     <option value="damaged">Damaged — do not restock</option>
                                                 </select>
                                             </label>
@@ -230,38 +261,45 @@ export default function SaleReturnModal({ isOpen, onClose, saleDetail, onSaved }
                             </div>
                         )}
 
-                        <div className="grid gap-4 sm:grid-cols-2">
+                        <div className={`grid gap-4 ${isUnpaidReturn ? '' : 'sm:grid-cols-2'}`}>
                             <label className="text-sm font-semibold text-primary-800">Return reason
                                 <select value={reason} onChange={(event) => setReason(event.target.value)} disabled={isReadOnly} className="input mt-1">
                                     {REASONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                                 </select>
                             </label>
-                            <label className="text-sm font-semibold text-primary-800">Refund method
+                            {!isUnpaidReturn && <label className="text-sm font-semibold text-primary-800">Refund method
                                 <select value={refundMethod} onChange={(event) => setRefundMethod(event.target.value)} disabled={isReadOnly} className="input mt-1">
-                                    {REFUND_METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                                    {REFUND_METHODS.filter((option) => option.value !== 'account_credit').map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                                 </select>
-                            </label>
+                            </label>}
                         </div>
-                        {(reason === 'other' || reasonNote) && (
-                            <label className="block text-sm font-semibold text-primary-800">Return note{reason === 'other' ? ' (required)' : ' (optional)'}
-                                <textarea value={reasonNote} onChange={(event) => setReasonNote(event.target.value)} maxLength={500} disabled={isReadOnly} rows={2} className="input mt-1 resize-y" placeholder="Add a short explanation" />
-                            </label>
-                        )}
-                        {refundMethod === 'check' && (
+                        <label className="block text-sm font-semibold text-primary-800">Return note{reason === 'other' ? ' (required)' : ' (optional)'}
+                            <textarea value={reasonNote} onChange={(event) => setReasonNote(event.target.value)} maxLength={500} disabled={isReadOnly} rows={2} className="input mt-1 resize-y" placeholder="Add fitment details, condition, missing parts, or other notes" />
+                        </label>
+                        {!isUnpaidReturn && refundMethod === 'check' && (
                             <label className="block text-sm font-semibold text-primary-800">Refund check number
                                 <input value={refundReference} onChange={(event) => setRefundReference(event.target.value)} maxLength={120} disabled={isReadOnly} className="input mt-1" />
                             </label>
                         )}
 
                         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-                            <strong>Refund amount (estimate): {formatCurrency(refundEstimate)}</strong>
-                            <p className="mt-1">The system calculates the final amount from the original VAT-inclusive sale price and discount. It records the refund; cash/check must be issued manually.</p>
+                            <strong>{isUnpaidReturn ? 'Credit to unpaid balance (estimate)' : 'Refund amount (estimate)'}: {formatCurrency(refundEstimate)}</strong>
+                            <p className="mt-1">{isUnpaidReturn
+                                ? `Estimated balance after this return: ${formatCurrency(Math.max(Number(context.balanceDue || 0) - refundEstimate, 0))}. The final credit uses the original VAT-inclusive prices and discount.`
+                                : 'The system calculates the final amount from the original VAT-inclusive sale price and discount. It records the refund; cash/check must be issued manually.'}</p>
                         </div>
+                        {defectivePartMarkedForSale && (
+                            <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+                                A part reported as defective cannot be returned directly to saleable stock. Mark it for inspection or damaged condition first.
+                            </p>
+                        )}
 
                         {!isReadOnly && (
                             <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-primary-200 bg-white p-3 text-sm text-primary-800">
                                 <input type="checkbox" checked={refundConfirmed} onChange={(event) => setRefundConfirmed(event.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-700" />
-                                <span>I confirm this refund or store credit has actually been issued to the customer.</span>
+                                <span>{isUnpaidReturn
+                                    ? 'I confirm the returned parts were received and this credit should reduce the unpaid balance. No money is being refunded.'
+                                    : 'I confirm this refund or store credit has actually been issued to the customer.'}</span>
                             </label>
                         )}
                         {pendingRetry && <p role="status" className="text-sm text-amber-900">The save result may be unclear. Retry uses the same request, so it cannot record a second refund.</p>}
@@ -272,7 +310,14 @@ export default function SaleReturnModal({ isOpen, onClose, saleDetail, onSaved }
                     <div className="space-y-4">
                         <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-950">
                             <p className="font-bold">Return recorded · {savedReturn.returnNumber}</p>
-                            <p className="mt-1">Refund: {formatCurrency(savedReturn.refundTotal)} via {REFUND_METHODS.find((method) => method.value === savedReturn.refundMethod)?.label || savedReturn.refundMethod}</p>
+                            {savedReturn.settlementType === 'balance_credit' ? (
+                                <>
+                                    <p className="mt-1">Credited to the unpaid balance: {formatCurrency(savedReturn.refundTotal)}. No refund was issued.</p>
+                                    <p className="mt-1">Remaining balance: {formatCurrency(context.balanceDue)}.</p>
+                                </>
+                            ) : (
+                                <p className="mt-1">Refund: {formatCurrency(savedReturn.refundTotal)} via {REFUND_METHODS.find((method) => method.value === savedReturn.refundMethod)?.label || savedReturn.refundMethod}</p>
+                            )}
                             <p className="mt-1">Net sale after returns: {formatCurrency(context.netAmount)}</p>
                         </div>
                         <div className="rounded-xl border border-primary-200 bg-white p-4">
@@ -280,7 +325,7 @@ export default function SaleReturnModal({ isOpen, onClose, saleDetail, onSaved }
                             <ul className="mt-2 divide-y divide-primary-100">
                                 {savedReturn.items?.map((item) => (
                                     <li key={item.id} className="flex flex-wrap justify-between gap-2 py-2 text-sm">
-                                        <span className="min-w-0 break-words">{item.itemName} · {formatNumber(item.quantity)} · {item.condition === 'resalable' ? 'Restocked' : 'Not restocked'}</span>
+                                        <span className="min-w-0 break-words">{item.itemName} · {formatNumber(item.quantity)} · {conditionOutcome(item.condition)}</span>
                                         <strong>{formatCurrency(item.refundAmount)}</strong>
                                     </li>
                                 ))}
@@ -292,12 +337,12 @@ export default function SaleReturnModal({ isOpen, onClose, saleDetail, onSaved }
 
                 {!loading && context?.returns?.length > 0 && !savedReturnId && (
                     <details className="rounded-xl border border-primary-200 bg-white p-4">
-                        <summary className="cursor-pointer text-sm font-semibold text-primary-800">Return history ({context.returns.length}) · Total refunded {formatCurrency(context.totalRefunded)}</summary>
+                        <summary className="cursor-pointer text-sm font-semibold text-primary-800">Return history ({context.returns.length}) · Refunded {formatCurrency(context.totalRefunded)} · Balance credits {formatCurrency(context.totalCredited)}</summary>
                         <ul className="mt-3 divide-y divide-primary-100">
                             {context.returns.map((entry) => (
                                 <li key={entry.id} className="py-3 text-sm">
                                     <div className="flex flex-wrap justify-between gap-2"><strong>{entry.returnNumber} · {formatCurrency(entry.refundTotal)}</strong><span>{formatDateTime(entry.createdAt)}</span></div>
-                                    <p className="mt-1 text-primary-600">{REASONS.find((option) => option.value === entry.reason)?.label || entry.reason} · {entry.items?.map((item) => `${item.itemName} × ${formatNumber(item.quantity)}`).join(', ')}</p>
+                                    <p className="mt-1 text-primary-600">{REASONS.find((option) => option.value === entry.reason)?.label || entry.reason} · {entry.settlementType === 'balance_credit' ? 'credited to unpaid balance' : `refund via ${REFUND_METHODS.find((method) => method.value === entry.refundMethod)?.label || entry.refundMethod}`} · {entry.items?.map((item) => `${item.itemName} × ${formatNumber(item.quantity)}`).join(', ')}</p>
                                 </li>
                             ))}
                         </ul>
@@ -311,10 +356,10 @@ export default function SaleReturnModal({ isOpen, onClose, saleDetail, onSaved }
                         <Button
                             leftIcon={<RotateCcw className="h-4 w-4" />}
                             isLoading={saving}
-                            isDisabled={loading || saving || (pendingRetry ? false : (!selectedItems.length || !refundConfirmed || (reason === 'other' && !reasonNote.trim()) || (refundMethod === 'check' && !refundReference.trim())))}
+                            isDisabled={loading || saving || (pendingRetry ? false : (!selectedItems.length || !refundConfirmed || defectivePartMarkedForSale || (reason === 'other' && !reasonNote.trim()) || (refundMethod === 'check' && !refundReference.trim())))}
                             onClick={() => void submitReturn()}
                         >
-                            {pendingRetry ? 'Retry same return' : 'Record return and refund'}
+                            {pendingRetry ? 'Retry same return' : isUnpaidReturn ? 'Record return and apply credit' : 'Record return and refund'}
                         </Button>
                     )}
                 </div>
