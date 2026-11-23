@@ -34,7 +34,6 @@ export default function ManagedQuotePackages({
   contextProductIds = [],
   interestedPackageId = "",
 }) {
-  const [browseAll, setBrowseAll] = useState(false);
   const queryKey = JSON.stringify({
     productIds: ids([...parts, ...contextProductIds.map((id) => ({ id }))]),
     serviceIds: ids(services),
@@ -44,7 +43,6 @@ export default function ManagedQuotePackages({
     vehicleVariant: vehicle?.variant || vehicle?.metadata?.variant || "",
     vehicleMake: vehicle?.make || (vehicle?.model || vehicle?.model_name ? "Mitsubishi" : ""),
     fitmentId: vehicle?.fitmentId || vehicle?.metadata?.fitmentId || "",
-    ...(!browseAll && preferredPackageId ? { packageId: preferredPackageId } : {}),
   });
   const [pageCursor, setPageCursor] = useState({ key: "", page: 1 });
   const page = pageCursor.key === queryKey ? pageCursor.page : 1;
@@ -107,6 +105,7 @@ export default function ManagedQuotePackages({
   const fresh = state.key === queryKey && state.page === page;
   const chosen =
     state.packages.find((row) => row.definition.id === chosenId) ||
+    state.packages.find((row) => row.definition.id === preferredPackageId) ||
     state.packages.find((row) => row.definition.id === interestedPackageId) ||
     state.packages[0];
   const openReview = async (offer) => {
@@ -322,11 +321,10 @@ export default function ManagedQuotePackages({
             <button
               type="button"
               onClick={() => {
-                setBrowseAll(true);
                 setPage(1);
                 setRetry((value) => value + 1);
               }}
-              aria-label={preferredPackageId && !browseAll ? "Browse all matching packages" : "Refresh available packages"}
+              aria-label="Refresh available packages"
               className="rounded-lg border border-primary-200 p-2 text-primary-700"
             >
               <RefreshCw className="h-4 w-4" />
