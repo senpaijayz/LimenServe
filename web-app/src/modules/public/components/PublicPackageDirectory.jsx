@@ -85,7 +85,7 @@ export default function PublicPackageDirectory({ buildQuoteHref }) {
                     <label className="block text-sm font-bold text-primary-950">2. Choose an offer<select value={chosen.id} onChange={e=>setChosenId(e.target.value)} className="mt-2 min-h-12 w-full rounded-lg border-2 border-blue-400 bg-white px-3 text-base font-semibold text-primary-950 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200">{data.packages.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
                 </div>
                 <article className="min-w-0 overflow-hidden rounded-xl border border-primary-300 bg-white shadow-sm">
-                    <div className="border-b border-primary-800 bg-primary-900 px-4 py-3 text-white"><p className="text-xs font-bold uppercase tracking-wider text-blue-100">Selected offer</p><h3 className="mt-1 break-words text-lg font-bold">{chosen.name}</h3></div>
+                    <div className="border-b border-primary-800 bg-primary-900 px-4 py-3 text-white"><p className="text-xs font-bold uppercase tracking-wider text-blue-100">Selected offer</p><h3 className="mt-1 break-words text-lg font-bold text-white">{chosen.name}</h3></div>
                     <div className="space-y-3 p-4 sm:p-5">
                     {chosen.description && <p className="whitespace-pre-line break-words text-sm leading-relaxed text-primary-800">{chosen.description}</p>}
                     {chosen.variants.length>1 && <label className="mt-3 block text-sm font-semibold text-primary-800">Package option<select value={variant?.id || ''} onChange={e=>setVariantChoice({packageId:chosen.id,id:e.target.value})} className={field}>{chosen.variants.map(v=><option key={v.id} value={v.id}>{v.label}</option>)}</select></label>}
