@@ -127,8 +127,18 @@ function CtaSection({ section }) {
   return (
     <section className="px-4 py-16 md:px-8 xl:px-12">
       <div className="mx-auto max-w-[1200px] rounded-[2rem] border border-primary-200 bg-primary-950 p-8 text-white shadow-xl md:p-12">
-        <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/60">{content.eyebrow || 'Next step'}</p>
-        <h2 className="mt-3 max-w-3xl text-4xl font-bold">{content.title || section.title}</h2>
+        <p
+          className="text-xs font-bold uppercase tracking-[0.22em] text-white"
+          style={{ color: '#fff', WebkitTextFillColor: '#fff' }}
+        >
+          {String(content.eyebrow || '').trim() || 'Next step'}
+        </p>
+        <h2
+          className="mt-3 max-w-3xl text-4xl font-bold !text-white"
+          style={{ color: '#fff', WebkitTextFillColor: '#fff', opacity: 1 }}
+        >
+          {String(content.title || section.title || '').trim() || 'Ready to order? Browse parts or request a quote.'}
+        </h2>
         {content.subtitle && <p className="mt-4 max-w-2xl text-white/75">{content.subtitle}</p>}
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <CmsButton cta={content.primaryCta} />
