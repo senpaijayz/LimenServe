@@ -546,8 +546,8 @@ const PublicHome = () => {
             <section className="px-4 pb-16 md:px-8 xl:px-12">
                 <div className="mx-auto flex max-w-[1600px] flex-col gap-6 rounded-[2rem] bg-primary-950 px-6 py-10 text-white md:flex-row md:items-center md:justify-between md:px-10">
                     <div className="max-w-3xl">
-                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/60">{ctaCms.eyebrow || 'Ready to order'}</p>
-                        <h2 className="mt-3 text-4xl font-bold text-white">{ctaCms.title || 'Search parts now or move straight into a quote request.'}</h2>
+                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-white">{ctaCms.eyebrow || 'Ready to order'}</p>
+                        <h2 className="mt-3 text-4xl font-bold !text-white">{ctaCms.title || 'Search parts now or move straight into a quote request.'}</h2>
                     </div>
                     <div className="flex flex-col gap-3 sm:flex-row">
                         <Link to={ctaCms.primaryCta?.href || '/catalog'} className="btn bg-white text-primary-950 hover:bg-primary-100">
