@@ -9,6 +9,7 @@ import {
   escapeHtml,
   sendSecurityEmail,
 } from '../services/recoveryDelivery.js';
+import { getUserNameFields } from '../utils/userName.js';
 
 const router = Router();
 const ALLOWED_ROLES = new Set(['admin', 'cashier', 'stock_clerk']);
@@ -43,14 +44,6 @@ async function limitRecoverySetup(scope, identity, limit) {
   };
 }
 
-function splitName(fullName = '') {
-  const [firstName = '', ...lastNameParts] = String(fullName || '').trim().split(/\s+/).filter(Boolean);
-  return {
-    firstName,
-    lastName: lastNameParts.join(' '),
-  };
-}
-
 function normalizeRole(role) {
   if (role === 'staff' || role === 'viewer') {
     return 'stock_clerk';
@@ -65,8 +58,7 @@ function normalizeStaffRole(role) {
 }
 
 function mapUser(authUser, profile = null) {
-  const fullName = authUser?.user_metadata?.full_name || profile?.full_name || '';
-  const name = splitName(fullName);
+  const name = getUserNameFields(authUser, profile);
   const bannedUntil = authUser?.banned_until ? new Date(authUser.banned_until) : null;
   const isBanned = Boolean(bannedUntil && bannedUntil.getTime() > Date.now());
   const isDeactivated = authUser?.app_metadata?.account_status === 'deactivated';
@@ -81,7 +73,7 @@ function mapUser(authUser, profile = null) {
     userId: authUser.id,
     firstName: name.firstName,
     lastName: name.lastName,
-    fullName,
+    fullName: name.fullName,
     email: authUser.email || profile?.email || '',
     role: normalizeRole(role),
     status: isBanned || isDeactivated ? 'inactive' : 'active',
@@ -527,7 +519,11 @@ router.post('/', async (req, res, next) => {
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name: fullName },
+      user_metadata: {
+        full_name: fullName,
+        first_name: String(req.body?.firstName || '').trim(),
+        last_name: String(req.body?.lastName || '').trim(),
+      },
       app_metadata: { role },
     });
 
@@ -838,7 +834,11 @@ router.patch('/:userId', async (req, res, next) => {
     const email = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '');
     const authAttributes = {
-      user_metadata: { full_name: fullName },
+      user_metadata: {
+        full_name: fullName,
+        first_name: String(req.body?.firstName || '').trim(),
+        last_name: String(req.body?.lastName || '').trim(),
+      },
       app_metadata: { ...currentTarget.app_metadata, role },
     };
 
