@@ -224,6 +224,21 @@ const AdminDashboard = () => {
                 </div>
             </div>
 
+            <div>
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                        <h2 className="text-base font-semibold text-primary-950">Current operations</h2>
+                        <p className="mt-1 text-xs text-primary-500">Today's sales and current stock, orders and quotations</p>
+                    </div>
+                    <p className="text-xs text-primary-500">
+                        {operationalSummary.loadedAt
+                            ? `Updated ${new Date(operationalSummary.loadedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+                            : 'Loading live data...'}
+                    </p>
+                </div>
+                <OperationalMetrics summary={operationalSummary} loading={loading} />
+            </div>
+
             <ServiceAttentionList managed snapshot={operations?.serviceAttention} snapshotLoading={loading||refreshing} snapshotError={operations?.serviceError} onSnapshotRetry={handleDashboardRefresh} refreshKey={draftReviewRefresh} />
             <PackageDraftAttention refreshKey={draftReviewRefresh} />
             {profileWarning && (
@@ -261,21 +276,6 @@ const AdminDashboard = () => {
                     </div>
                 </Card>
             )}
-
-            <div>
-                <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-                    <div>
-                        <h2 className="text-base font-semibold text-primary-950">Current operations</h2>
-                        <p className="mt-1 text-xs text-primary-500">Today's sales and current stock, orders and quotations</p>
-                    </div>
-                    <p className="text-xs text-primary-500">
-                        {operationalSummary.loadedAt
-                            ? `Updated ${new Date(operationalSummary.loadedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
-                            : 'Loading live data...'}
-                    </p>
-                </div>
-                <OperationalMetrics summary={operationalSummary} loading={loading} />
-            </div>
 
             <section className="space-y-3" aria-label="Sales forecasts">
                 <div>
