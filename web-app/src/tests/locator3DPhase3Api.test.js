@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../services/apiClient', () => ({ default: { post: vi.fn() }, STOCKROOM_API_TIMEOUT_MS: 15000 }));
 import api from '../services/apiClient';
-import { assignProductLocation, getProductLocations, listStoreLayouts, loadStoreLayout, removeProductLocation, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
+import { assignProductLocation, getLayoutRevision, getProductLocations, listStoreLayouts, loadStoreLayout, removeProductLocation, saveStoreLayout, setStoreLayoutPriority } from '../modules/locator3d/services/locator3DApi';
 const row = { id: 'layout-a', name: 'Workshop', store_id: 'store-a', revision: 5, status: 'published', metadata: { scene: { objects: [] }, locations: [{ productId: 'part-a', shelfObjectId: 'shelf-a', layoutId: 'layout-a' }] } };
 describe('normalized locator API', () => {
     beforeEach(() => { vi.resetAllMocks(); api.post.mockResolvedValue({ data: { result: row } }); });
@@ -21,6 +21,10 @@ describe('normalized locator API', () => {
         await setStoreLayoutPriority('Workshop', { layoutId: 'layout-a', expectedRevision: 5 });
         expect(api.post).toHaveBeenCalledTimes(1);
         expect(api.post.mock.calls[0][1].action).toBe('publish');
+    });
+    it('loads a historical revision through the read-only route', async () => {
+        await getLayoutRevision('layout-a', 4);
+        expect(api.post).toHaveBeenCalledWith('/locator/command', { action: 'view_revision', payload: { layoutId: 'layout-a', revision: 4 } }, { timeout: 15000 });
     });
     it('uses only the published snapshot for inventory assignments', async () => {
         const location = await assignProductLocation({ productId: 'part-a', shelfObjectId: 'shelf-a' });

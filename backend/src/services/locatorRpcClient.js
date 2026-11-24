@@ -12,14 +12,15 @@ export function createLocatorRpcClient({
   supabaseUrl, serviceRoleKey, request = httpsRequest,
   timeoutMs = LOCATOR_RPC_TIMEOUT_MS,
 } = {}) {
-  const endpoint = new URL('/rest/v1/rpc/limen_locator_command', supabaseUrl);
-  if (endpoint.protocol !== 'https:') throw new Error('Locator RPC requires HTTPS.');
+  const baseUrl = new URL(supabaseUrl);
+  if (baseUrl.protocol !== 'https:') throw new Error('Locator RPC requires HTTPS.');
   if (!serviceRoleKey) throw new Error('Locator RPC server credentials are missing.');
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) throw new Error('Invalid locator timeout.');
 
   return {
     rpc(name, args, { signal } = {}) {
-      if (name !== 'limen_locator_command') return Promise.reject(new Error('Unsupported locator RPC.'));
+      if (!['limen_locator_command', 'limen_locator_revision_snapshot'].includes(name)) return Promise.reject(new Error('Unsupported locator RPC.'));
+      const endpoint = new URL(`/rest/v1/rpc/${name}`, baseUrl);
       const body = JSON.stringify(args);
       return new Promise((resolve) => {
         const started = performance.now();

@@ -251,7 +251,8 @@ describe('Stockroom workspace workflows', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Publish for staff' }));
         await waitFor(() => expect(setStoreLayoutPriority).toHaveBeenCalledTimes(2));
         expect(setStoreLayoutPriority).toHaveBeenLastCalledWith('New design', { layoutId: 'draft-2', expectedRevision: 2 });
-        expect(saveStoreLayout).toHaveBeenCalledTimes(1);
+        expect(saveStoreLayout).toHaveBeenCalledTimes(2);
+        expect(saveStoreLayout).toHaveBeenLastCalledWith(expect.any(Array), 'New design', { layoutId: 'draft-2', expectedRevision: 3 });
     });
 
     it('keeps edits open on a stale revision and never publishes an ordinary save', async () => {

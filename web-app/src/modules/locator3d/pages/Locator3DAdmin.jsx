@@ -49,6 +49,8 @@ import {
     SHELF_BIN_RANGE,
     getLocatorObjectById,
     getLocatorObjectSummary,
+    getShelfLayerCapacity,
+    getShelfLayerSpacing,
     getShelfObjectByLocation,
     isShelfObject,
     locationBelongsToShelf,
@@ -59,6 +61,7 @@ import {
     assignProductLocation,
     removeProductLocation,
     getLayoutHistory,
+    getLayoutRevision,
     restoreLayoutRevision,
     listStoreLayouts,
     loadStoreLayout,
@@ -351,6 +354,7 @@ function HeaderActions({
     canEditLayout,
     hasUnsavedChanges,
     isSaving,
+    readOnlyView,
     layoutName,
     layoutOptions,
     onExitDesignMode,
@@ -431,7 +435,7 @@ function HeaderActions({
                         <Button className="mt-2 w-full" onClick={() => {
                             setIsMoreOpen(false);
                             onLoadLayout(selectedLayout || layoutName);
-                        }}
+                        }} disabled={isSaving || readOnlyView}
                         >
                             <RefreshCw className="h-4 w-4" />
                             Load selected layout
@@ -937,7 +941,7 @@ function AutosaveRecoveryBanner({ onDiscard, onRecover, snapshot }) {
     );
 }
 
-function ShelfInspector({ onOpenAssignment, productLocations, products }) {
+function ShelfInspector({ onLayerSelect, onOpenAssignment, productLocations, products, selectedShelfLayer }) {
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
@@ -950,15 +954,17 @@ function ShelfInspector({ onOpenAssignment, productLocations, products }) {
     return (
         <ShelfInspectorForm
             key={shelf.id}
+            onLayerSelect={onLayerSelect}
             onOpenAssignment={onOpenAssignment}
             productLocations={productLocations}
             products={products}
             shelf={shelf}
+            selectedLayerNumber={selectedShelfLayer?.shelfId === shelf.id ? selectedShelfLayer.layerNumber : 1}
         />
     );
 }
 
-function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shelf }) {
+function ShelfInspectorForm({ onLayerSelect, onOpenAssignment, productLocations, products, shelf, selectedLayerNumber }) {
     const { warning } = useToast();
     const updateShelfProperties = useLocator3DStore((state) => state.updateShelfProperties);
     const [nameDraft, setNameDraft] = useState(shelf.name || '');
@@ -981,6 +987,11 @@ function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shel
     }, [productLocations, products, shelf]);
 
     const layerCount = Math.max(1, Number(shelf.layerCount || 1));
+    const activeLayer = Math.min(layerCount, Math.max(1, Number(selectedLayerNumber) || 1));
+    const activeLayerAssignments = assignedProducts.filter((location) => Number(location.layerNumber) === activeLayer);
+    const layerCapacity = getShelfLayerCapacity(shelf, activeLayer);
+    const layerSpacing = getShelfLayerSpacing(shelf, activeLayer);
+    const layerIsOverCapacity = activeLayerAssignments.length > layerCapacity;
     const saveDetails = () => {
         const candidate = { ...shelf, aisle: normalizeAisle(aisleDraft), shelfNumber: Number(numberDraft) };
         const issue = validateShelfIdentifiers(useLocator3DStore.getState().sceneObjects.map((object) => object.id === shelf.id ? candidate : object))[0];
@@ -1041,6 +1052,40 @@ function ShelfInspectorForm({ onOpenAssignment, productLocations, products, shel
                         value={descriptionDraft}
                     />
                 </label>
+                <section aria-label="Selected shelf layer settings" className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">Layer distribution</p>
+                            <p className="mt-1 text-xs font-bold text-slate-800">Select a layer in the 3D shelf or below</p>
+                        </div>
+                        <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-blue-800">Layer {activeLayer}</span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-4 gap-1.5">
+                        {Array.from({ length: layerCount }, (_, index) => index + 1).map((layer) => (
+                            <button key={layer} aria-pressed={activeLayer === layer} className={`min-h-9 rounded-lg border text-xs font-bold ${activeLayer === layer ? 'border-blue-600 bg-blue-600 text-white' : 'border-blue-200 bg-white text-blue-800'}`} onClick={() => onLayerSelect?.(shelf, layer)} type="button">
+                                Layer {layer}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-slate-700">Max parts on this layer</span>
+                        <div className="flex gap-1.5" role="group" aria-label={`Layer ${activeLayer} maximum parts`}>
+                            {[3, 4, 5].map((capacity) => (
+                                <button key={capacity} aria-pressed={layerCapacity === capacity} className={`min-h-9 min-w-10 rounded-lg border text-sm font-black ${layerCapacity === capacity ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-200 bg-white text-slate-700'}`} disabled={shelf.isLocked} onClick={() => updateShelfProperties(shelf.id, { layerCapacities: { [activeLayer]: capacity } })} type="button">
+                                    {capacity}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <label className="mt-3 block text-xs font-semibold text-slate-700" htmlFor="layer-spacing">
+                        Spacing · {Math.round(layerSpacing * 100)}% of shelf width
+                        <input aria-label="Layer spacing" className="mt-2 block w-full accent-blue-700" disabled={shelf.isLocked} id="layer-spacing" max="100" min="80" onChange={(event) => updateShelfProperties(shelf.id, { layerSpacingByNumber: { [activeLayer]: Number(event.target.value) / 100 } })} step="5" type="range" value={Math.round(layerSpacing * 100)} />
+                    </label>
+                    <p className="mt-2 text-xs font-medium text-slate-700">Assigned: {activeLayerAssignments.length} / {layerCapacity} parts</p>
+                    {layerIsOverCapacity && <p role="status" className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold leading-4 text-amber-900">Existing product locations are preserved. Reassign some parts or choose a higher limit before adding more.</p>}
+                    {shelf.isLocked && <p className="mt-2 text-[11px] font-semibold text-amber-800">Unlock this shelf to change layer settings.</p>}
+                    <p className="mt-2 text-[10px] font-medium leading-4 text-slate-500">Preview is immediate. Save the layout to keep these settings after reopening it.</p>
+                </section>
                 <Button className="w-full justify-center" onClick={saveDetails} tone="primary">
                     Save shelf details
                 </Button>
@@ -1117,6 +1162,13 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, mutationLock
     }, [isOpen, shelf, productLocations]);
 
     const assignedProducts = useMemo(() => productLocations.filter((location) => locationBelongsToShelf(location, shelf)), [productLocations, shelf]);
+    const currentProductLocation = assignedProducts.find((location) => String(location.productId) === String(selectedProduct?.id));
+    const countLayerAssignments = (layer) => assignedProducts.filter((location) => (
+        Number(location.layerNumber || 1) === layer
+        && String(location.productId) !== String(selectedProduct?.id)
+    )).length;
+    const layerAtCapacity = countLayerAssignments(layerNumber) >= getShelfLayerCapacity(shelf, layerNumber)
+        && !(currentProductLocation && Number(currentProductLocation.layerNumber || 1) === layerNumber);
 
     const results = useMemo(() => {
         const normalized = query.trim().toLowerCase();
@@ -1132,7 +1184,7 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, mutationLock
         ].filter(Boolean).join(' ').toLowerCase().includes(normalized)).slice(0, 6);
     }, [products, query, remoteProducts]);
 
-    const validSlot = Number.isInteger(layerNumber) && layerNumber >= 1 && layerNumber <= Number(shelf?.layerCount || (shelf?.type === 'shelf-4-layer' ? 4 : 2)) && Number.isInteger(binNumber) && binNumber >= 1 && binNumber <= Number(shelf?.binCount || 1);
+    const validSlot = Number.isInteger(layerNumber) && layerNumber >= 1 && layerNumber <= Number(shelf?.layerCount || (shelf?.type === 'shelf-4-layer' ? 4 : 2)) && Number.isInteger(binNumber) && binNumber >= 1 && binNumber <= Number(shelf?.binCount || 1) && !layerAtCapacity;
     const saveAssignment = async () => {
         if (!canAssign || !validSlot || !shelf || !selectedProduct || assignmentInFlight.current || mutationLock?.current) {
             return;
@@ -1246,9 +1298,14 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, mutationLock
                         onChange={(event) => setLayerNumber(Number(event.target.value))}
                         value={layerNumber}
                     >
-                        {Array.from({ length: Math.max(1, Math.min(shelf?.layerCount || 1, 12)) }, (_, index) => index + 1).map((layer) => (
-                            <option key={layer} value={layer}>Layer {layer}{layer === 1 ? ' (bottom)' : ''}</option>
-                        ))}
+                        {Array.from({ length: Math.max(1, Math.min(shelf?.layerCount || 1, 12)) }, (_, index) => index + 1).map((layer) => {
+                            const layerCount = countLayerAssignments(layer);
+                            const capacity = getShelfLayerCapacity(shelf, layer);
+                            const existingHere = currentProductLocation && Number(currentProductLocation.layerNumber || 1) === layer;
+                            const full = layerCount >= capacity && !existingHere;
+                            const projectedCount = layerCount + (selectedProduct ? 1 : 0);
+                            return <option disabled={full} key={layer} value={layer}>Layer {layer}{layer === 1 ? ' (bottom)' : ''} · {projectedCount}/{capacity}{full ? ' · full' : ''}</option>;
+                        })}
                     </select>
                 </div>
                 <div>
@@ -1268,7 +1325,8 @@ function ProductAssignmentModal({ canAssign = false, layoutContext, mutationLock
                 {selectedProduct && <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950">
                     <p className="font-bold">Assignment preview — not saved yet</p><p className="mt-1">{formatProductLocationLabel({ floor: shelf?.floor, aisle: shelf?.aisle, shelfNumber: shelf?.shelfNumber, layerNumber, binNumber })}</p>
                     <div className="mt-2 grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.min(8, Number(shelf?.binCount || 1))}, minmax(0, 1fr))` }}>{Array.from({ length: Number(shelf?.binCount || 1) }, (_, i) => <button type="button" key={i + 1} disabled={isSaving} onClick={() => setBinNumber(i + 1)} aria-label={`Preview bin ${i + 1}`} aria-pressed={binNumber === i + 1} className={`min-h-11 rounded border text-xs font-bold ${binNumber === i + 1 ? 'border-violet-700 bg-violet-600 text-white' : 'border-violet-200 bg-white'}`}>{i + 1}</button>)}</div>
-                    <p className="mt-2 text-xs">{assignedProducts.filter((x) => Number(x.layerNumber) === layerNumber && Number(x.binNumber) === binNumber).length} products currently share this slot.</p>
+                    <p className="mt-2 text-xs">Layer capacity after this assignment: {countLayerAssignments(layerNumber) + (selectedProduct ? 1 : 0)} / {getShelfLayerCapacity(shelf, layerNumber)} products.</p>
+                    {layerAtCapacity && <p role="status" className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs font-semibold text-amber-900">This layer is full. Choose another layer or increase its capacity in Edit Mode.</p>}
                 </div>}
                 </>}
                 <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
@@ -1402,6 +1460,8 @@ export default function Locator3DAdmin() {
     const [currentLayout, setCurrentLayout] = useState(null);
     const [draftLayoutNames, setDraftLayoutNames] = useState([]);
     const [history, setHistory] = useState(null);
+    const [selectedShelfLayer, setSelectedShelfLayer] = useState(null);
+    const [readOnlyLayout, setReadOnlyLayout] = useState(null);
     const [layoutOptions, setLayoutOptions] = useState([LOCATOR_LAYOUT_NAME]);
     const [priorityLayoutName, setPriorityLayoutName] = useState('');
     const [locationNotice, setLocationNotice] = useState(EMPTY_LOCATION_NOTICE);
@@ -1421,6 +1481,7 @@ export default function Locator3DAdmin() {
     const canvasShellRef = useRef(null);
     const saveInFlight = useRef(false);
     const loadSequence = useRef(0);
+    const editorSessionRef = useRef(null);
     const canEditLayout = Boolean(authContext?.isAdmin);
     const recoveryUserId = authContext?.user?.id;
 
@@ -1449,8 +1510,35 @@ export default function Locator3DAdmin() {
         return () => window.removeEventListener('beforeunload', onBeforeUnload);
     }, [hasUnsavedChanges]);
 
+    const continueWithEditableDraft = useCallback(async (publishedLayout, name, objects) => {
+        try {
+            const draft = await saveStoreLayout(objects, name, {
+                layoutId: publishedLayout.id,
+                expectedRevision: publishedLayout.revision,
+            });
+            setCurrentLayout(draft);
+            setLayoutName(draft.layoutName || name);
+            setProductLocations(draft.locations || []);
+            setLayoutOptions((current) => [...new Set([draft.layoutName || name, ...current])]);
+            setDraftLayoutNames((current) => [...new Set([draft.layoutName || name, ...current])]);
+            markLayoutSaved();
+            setAutosaveSnapshot(null);
+            return true;
+        } catch (error) {
+            // Publishing has already committed. Keep that published revision intact
+            // and leave the current scene available so the user can retry Save As.
+            setCurrentLayout(publishedLayout);
+            showError(`Published successfully, but a new editable draft could not be created. Your layout is still published. ${error.message || 'Use Save As to continue editing.'}`);
+            return false;
+        }
+    }, [markLayoutSaved, setProductLocations, showError]);
+
     const handleSaveLayout = useCallback(async (name = layoutName, options = {}) => {
         if (!canEditLayout || saveInFlight.current) return false;
+        if (readOnlyLayout) {
+            warning('This is a read-only layout view. Return to the editor before saving changes.');
+            return false;
+        }
         if (isLoadingLayout) {
             warning('Wait for the saved layout to finish loading before saving.');
             return false;
@@ -1462,6 +1550,7 @@ export default function Locator3DAdmin() {
         const priority = options.priority === true;
         setIsSavingLayout(true);
         setSaveFailure(false);
+        let followUpDraftCreated = true;
         try {
             // A saved, unchanged draft can be acknowledged/published directly.
             // Published layouts still require a new draft; save-as still writes.
@@ -1485,12 +1574,14 @@ export default function Locator3DAdmin() {
                     saved = await setStoreLayoutPriority(safeName, { layoutId: saved.id, expectedRevision: saved.revision });
                     setCurrentLayout(saved);
                     setPriorityLayoutName(safeName);
+                    followUpDraftCreated = await continueWithEditableDraft(saved, safeName, sceneObjects);
                 } catch (publishError) {
                     showError(`Draft saved, but publishing failed. ${publishError.message || 'Try Publish for staff again.'}`);
                     return false;
                 }
             }
-            success(priority ? 'Layout published for staff.' : 'Draft saved. Publish it when ready for staff.');
+            if (priority && !followUpDraftCreated) return true;
+            success(priority ? 'Layout published for staff. An editable draft copy is ready.' : 'Draft saved. Publish it when ready for staff.');
             return true;
         } catch (saveError) {
             setSaveFailure(true);
@@ -1500,10 +1591,14 @@ export default function Locator3DAdmin() {
             saveInFlight.current = false;
             setIsSavingLayout(false);
         }
-    }, [canEditLayout, currentLayout, hasUnsavedChanges, isLoadingLayout, layoutName, markLayoutSaved, sceneObjects, setProductLocations, showError, success, warning]);
+    }, [canEditLayout, continueWithEditableDraft, currentLayout, hasUnsavedChanges, isLoadingLayout, layoutName, markLayoutSaved, readOnlyLayout, sceneObjects, setProductLocations, showError, success, warning]);
 
     const handleSetPriority = useCallback(async (name) => {
         if (!canEditLayout || saveInFlight.current) return;
+        if (readOnlyLayout) {
+            warning('Return to the editor before publishing a layout.');
+            return;
+        }
         if (hasUnsavedChanges || !currentLayout?.id) {
             warning('Save your draft before publishing.');
             return;
@@ -1518,14 +1613,16 @@ export default function Locator3DAdmin() {
             const saved = await setStoreLayoutPriority(safeName, { layoutId: currentLayout.id, expectedRevision: currentLayout.revision });
             setCurrentLayout(saved);
             setPriorityLayoutName(safeName);
-            success(`“${safeName}” is now the priority stockroom.`);
+            const followUpDraftCreated = await continueWithEditableDraft(saved, safeName, sceneObjects);
+            if (!followUpDraftCreated) return;
+            success(`“${safeName}” is published for staff. An editable draft copy is ready.`);
         } catch (priorityError) {
             showError(priorityError.message || 'Could not update the priority stockroom.');
         } finally {
             saveInFlight.current = false;
             setIsSavingLayout(false);
         }
-    }, [canEditLayout, currentLayout, hasUnsavedChanges, showError, success, warning]);
+    }, [canEditLayout, continueWithEditableDraft, currentLayout, hasUnsavedChanges, readOnlyLayout, sceneObjects, showError, success, warning]);
 
     const locateFromProduct = useCallback((product, locations = productLocations) => {
         const location = locations.find((item) => String(item.productId) === String(product.id)) ?? null;
@@ -1575,6 +1672,10 @@ export default function Locator3DAdmin() {
     }, [locateProduct, productLocations, products, setSelectedProductForLocation, warning]);
 
     const handleLoadLayout = useCallback(async (name = layoutName, discard = false, publishedOnly = false) => {
+        if (readOnlyLayout) {
+            warning('Return to the editor before loading another layout.');
+            return;
+        }
         const safeName = String(name || LOCATOR_LAYOUT_NAME).trim() || LOCATOR_LAYOUT_NAME;
         if (saveInFlight.current) return;
         if (useLocator3DStore.getState().hasUnsavedChanges && !discard) {
@@ -1613,7 +1714,7 @@ export default function Locator3DAdmin() {
         } finally {
             if (sequence === loadSequence.current) setIsLoadingLayout(false);
         }
-    }, [info, layoutName, loadLayoutData, markLayoutSaved, resetToDefaultLayout, setProductLocations, showError, success, warning]);
+    }, [info, layoutName, loadLayoutData, markLayoutSaved, readOnlyLayout, resetToDefaultLayout, setProductLocations, showError, success, warning]);
 
     const addedShelfMappings = useMemo(() => {
         const defaultIds = new Set(defaultLayoutObjects.map((object) => object.id));
@@ -1697,6 +1798,10 @@ export default function Locator3DAdmin() {
 
     const enterDesignMode = async () => {
         if (saveInFlight.current) return;
+        if (readOnlyLayout) {
+            warning('This layout is read-only. Return to the editor to resume editing your draft.');
+            return;
+        }
         // Resume a known saved draft before editing the published model. Never
         // replace recovered/local edits or silently overwrite a newer draft.
         if (currentLayout?.status !== 'published' || hasUnsavedChanges
@@ -1804,27 +1909,113 @@ export default function Locator3DAdmin() {
         };
     }, [loadLayoutData, locateProduct, productFromRoute, productId, productName, productSku, setProductLocations, setSelectedProductForLocation, showError]);
 
-    useLocatorKeyboardShortcuts(() => void handleSaveLayout(), canEditLayout);
+    useLocatorKeyboardShortcuts(() => void handleSaveLayout(), canEditLayout && !readOnlyLayout);
+
+    const enterReadOnlyView = (layout, source = {}) => {
+        if (!layout?.layoutData || readOnlyLayout) return;
+        editorSessionRef.current = {
+            currentLayout,
+            layoutName,
+            autosaveSnapshot,
+            assignmentShelf,
+            selectedShelfLayer,
+            storeState: useLocator3DStore.getState(),
+        };
+        setReadOnlyLayout({ ...layout, ...source });
+        loadLayoutData(layout.layoutData);
+        setProductLocations(layout.locations || []);
+        setDesignMode(false);
+        setAssignmentShelf(null);
+        setSelectedShelfLayer(null);
+        setAutosaveSnapshot(null);
+        setLocationNotice(EMPTY_LOCATION_NOTICE);
+        setHistory(null);
+    };
+
+    const viewPublishedLayout = async () => {
+        if (!priorityLayoutName || isLoadingLayout || readOnlyLayout) return;
+        setIsLoadingLayout(true);
+        try {
+            const published = await loadStoreLayout(priorityLayoutName, { publishedOnly: true });
+            if (!published || published.status !== 'published') {
+                showError('There is no currently published stockroom layout to view.');
+                return;
+            }
+            enterReadOnlyView(published, { viewKind: 'published' });
+        } catch (error) { showError(error.message || 'Could not load the published layout.'); }
+        finally { setIsLoadingLayout(false); }
+    };
+
+    const viewRevision = async (entry) => {
+        if (!currentLayout?.id || !entry?.revision || isLoadingLayout || readOnlyLayout) return;
+        setIsLoadingLayout(true);
+        try {
+            const revisionLayout = await getLayoutRevision(currentLayout.id, entry.revision);
+            if (!revisionLayout?.layoutData) {
+                showError('That saved revision could not be opened. Your draft has not changed.');
+                return;
+            }
+            enterReadOnlyView(revisionLayout, {
+                eventType: entry.event_type,
+                viewKind: 'revision',
+                viewedRevision: entry.revision,
+            });
+        } catch (error) { showError(error.message || 'Could not load this revision.'); }
+        finally { setIsLoadingLayout(false); }
+    };
+
+    const returnToEditor = () => {
+        const savedSession = editorSessionRef.current;
+        if (!savedSession) {
+            setReadOnlyLayout(null);
+            return;
+        }
+        useLocator3DStore.setState(savedSession.storeState);
+        setCurrentLayout(savedSession.currentLayout);
+        setLayoutName(savedSession.layoutName);
+        setAutosaveSnapshot(savedSession.autosaveSnapshot);
+        setAssignmentShelf(savedSession.assignmentShelf);
+        setSelectedShelfLayer(savedSession.selectedShelfLayer);
+        editorSessionRef.current = null;
+        setReadOnlyLayout(null);
+    };
+
+    const handleLayerSelect = (shelf, layerNumber) => {
+        if (!useLocator3DStore.getState().isDesignMode || readOnlyLayout) return;
+        useLocator3DStore.getState().selectObject(shelf.id, { allowLocked: true });
+        setSelectedShelfLayer({ shelfId: shelf.id, layerNumber });
+    };
 
     const showHistory = async () => {
+        if (!currentLayout?.id || readOnlyLayout) return;
         try {
             setHistory(await getLayoutHistory({ layoutId: currentLayout.id }) || []);
         } catch (error) { showError(error.message); }
     };
     const restoreRevision = async (revision) => {
-        if (saveInFlight.current || hasUnsavedChanges) return;
+        if (!currentLayout?.id || saveInFlight.current || hasUnsavedChanges || readOnlyLayout) return;
+        const confirmed = window.confirm(`Restore Revision ${revision} as a separate draft? Your current draft and the published layout will remain unchanged.`);
+        if (!confirmed) return;
+        const stamp = Date.now().toString(36);
+        const restoredName = `${String(layoutName || LOCATOR_LAYOUT_NAME).slice(0, 58)} (restored R${revision}-${stamp})`.slice(0, 100);
         saveInFlight.current = true;
         setIsSavingLayout(true);
         try {
             const restored = await restoreLayoutRevision({
-                layoutId: currentLayout.id, expectedRevision: currentLayout.revision, restoreRevision: revision,
+                layoutId: currentLayout.id,
+                expectedRevision: currentLayout.revision,
+                restoreRevision: revision,
+                name: restoredName,
             });
             setCurrentLayout(restored);
+            setLayoutName(restored.layoutName || restoredName);
+            setLayoutOptions((current) => [...new Set([restored.layoutName || restoredName, ...current])]);
+            setDraftLayoutNames((current) => [...new Set([restored.layoutName || restoredName, ...current])]);
             loadLayoutData(restored.layoutData);
-            setProductLocations(restored.locations);
+            setProductLocations(restored.locations || []);
             markLayoutSaved();
             setHistory(null);
-            success('Revision restored as a draft. Review it before publishing.');
+            success(`Revision ${revision} restored as a separate draft. Review it before publishing.`);
         } catch (error) { showError(error.message); }
         finally { saveInFlight.current = false; setIsSavingLayout(false); }
     };
@@ -1839,20 +2030,24 @@ export default function Locator3DAdmin() {
                 : pendingAction?.type === 'delete-mapped-shelf'
                     ? 'Delete ' + (pendingAction?.shelf?.name || 'shelf') + '?'
                     : 'Product locations need attention';
+    const visibleLayout = readOnlyLayout || currentLayout;
+    const readOnlyReturnLabel = currentLayout?.status === 'draft' ? 'Return to Current Draft' : 'Back to Editor';
 
     return (
         <div className="locator-workspace min-w-0 space-y-4 bg-[#f6f8fc] p-3 text-slate-950 sm:p-5 lg:p-6">
             <StockroomHeader
-                canEditLayout={canEditLayout}
+                canEditLayout={canEditLayout && !readOnlyLayout}
                 hasUnsavedChanges={hasUnsavedChanges}
                 isLoadingProducts={isLoadingProducts}
                 isSaving={isSavingLayout}
-                layoutName={layoutName}
+                layoutName={readOnlyLayout?.layoutName || layoutName}
                 layoutOptions={layoutOptions}
-                priorityLayoutName={currentLayout?.status === 'published' ? priorityLayoutName : ''}
+                priorityLayoutName={visibleLayout?.status === 'published' || readOnlyLayout?.viewKind === 'published' ? priorityLayoutName : ''}
+                readOnlyView={Boolean(readOnlyLayout)}
                 onSetPriority={(name) => void handleSetPriority(name)}
                 locationNotice={locationNotice}
                 onExitDesignMode={exitDesignMode}
+                onReturnToEditor={returnToEditor}
                 onLoadLayout={(name) => void handleLoadLayout(name)}
                 onEnterDesignMode={() => void enterDesignMode()}
                 onLocateProduct={locateFromProduct}
@@ -1864,33 +2059,49 @@ export default function Locator3DAdmin() {
                 sceneObjects={sceneObjects}
             />
 
+            {readOnlyLayout && <section aria-label="Read-only layout view" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+                <div>
+                    <p className="text-sm font-bold text-blue-950">
+                        {readOnlyLayout.viewKind === 'revision'
+                            ? `Viewing historical Revision ${readOnlyLayout.viewedRevision} · read-only`
+                            : `Viewing published layout · Revision ${readOnlyLayout.revision} · read-only`}
+                    </p>
+                    <p className="mt-1 text-xs text-blue-800">Your editor session is preserved. This view cannot change the saved draft or published layout.</p>
+                </div>
+                <Button onClick={returnToEditor} tone="primary">{readOnlyReturnLabel}</Button>
+            </section>}
+
             <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3">
                 <label className="min-w-0 flex-1 text-xs font-bold text-slate-600">Open shelf / assign location
-                    <select aria-label="Choose shelf for assignment" className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm" value="" onChange={(e) => setAssignmentShelf(sceneObjects.find((o) => o.id === e.target.value) || null)}>
+                    <select aria-label="Choose shelf for assignment" className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm" disabled={Boolean(readOnlyLayout)} value="" onChange={(e) => setAssignmentShelf(sceneObjects.find((o) => o.id === e.target.value) || null)}>
                         <option value="">Choose floor, aisle and shelf…</option>{sceneObjects.filter(isShelfObject).map((o) => <option key={o.id} value={o.id}>Floor {o.floor} · Aisle {o.aisle} · Shelf {o.shelfNumber} — {o.name}</option>)}
                     </select>
                 </label>
-                <span role="status" className="text-sm font-semibold text-slate-700">{isSavingLayout ? 'Saving...' : saveFailure ? 'Save Failed — Changes Preserved' : hasUnsavedChanges ? 'Unsaved Changes — recovery copy on this device' : currentLayout?.status === 'published' ? 'Published' : 'Draft Saved'}</span>
+                <span role="status" className="text-sm font-semibold text-slate-700">{readOnlyLayout ? 'Read-only view — changes are disabled' : isSavingLayout ? 'Saving...' : saveFailure ? 'Save Failed — Changes Preserved' : hasUnsavedChanges ? 'Unsaved Changes — recovery copy on this device' : currentLayout?.status === 'published' ? 'Published' : 'Draft Saved'}</span>
             </div>
             {recentStock?.items?.length > 0 && <details className="rounded-xl border border-emerald-200 bg-emerald-50 p-3" open={searchParams.get('received') === '1' || undefined}><summary className="cursor-pointer text-sm font-bold">Recently received · {recentStock.items.length} products</summary><div className="mt-2 grid gap-2 sm:grid-cols-2">{recentStock.items.map((item) => <button key={item.productId || item.partNumber} className="min-h-14 rounded-xl border border-emerald-100 bg-white p-3 text-left" onClick={() => { const product = { id: item.productId, sku: item.partNumber, name: item.description }; setSelectedProductForLocation(product); void locateFromProduct(product); }}><strong className="block break-all font-mono text-xs">{item.partNumber} · +{item.quantity}</strong><span className="block text-sm">{item.description}</span><span className="text-xs text-emerald-800">{productLocations.some((x) => x.productId === item.productId) ? 'Location assigned' : 'Not assigned — choose a shelf above'}</span></button>)}</div></details>}
-            {currentLayout && (
+            {visibleLayout && (
                 <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
-                    <span className="font-semibold text-slate-800">{currentLayout.status === 'published' ? 'Published for staff' : 'Design draft'} · Revision {currentLayout.revision}</span>
-                    {canEditLayout && <>
-                        <Button disabled={isSavingLayout || hasUnsavedChanges} onClick={() => void showHistory()}>Version history</Button>
-                        {currentLayout.status !== 'published' && priorityLayoutName && <Button disabled={isSavingLayout || hasUnsavedChanges} onClick={() => void handleLoadLayout(priorityLayoutName, false, true)}>View published layout</Button>}
+                    <span className="font-semibold text-slate-800">{readOnlyLayout ? (readOnlyLayout.viewKind === 'revision' ? 'Historical revision' : 'Published for staff') : currentLayout.status === 'published' ? 'Published for staff' : 'Design draft'} · Revision {visibleLayout.revision}</span>
+                    {canEditLayout && !readOnlyLayout && <>
+                        <Button disabled={isSavingLayout || isLoadingLayout} onClick={() => void showHistory()}>Version history</Button>
+                        {currentLayout.status !== 'published' && priorityLayoutName && <Button disabled={isSavingLayout || isLoadingLayout} onClick={() => void viewPublishedLayout()}>View published layout</Button>}
                         {currentLayout.status !== 'published' && <Button disabled={isSavingLayout || hasUnsavedChanges} onClick={() => void handleSetPriority(layoutName)} tone="primary">Publish for staff</Button>}
                         {hasUnsavedChanges && <span className="text-slate-600">Save changes before publishing or assigning products.</span>}
                     </>}
                 </div>
             )}
             <Modal isOpen={history !== null} onClose={() => setHistory(null)} title="Layout version history">
-                <p className="mb-4 text-sm text-slate-600">Restoring creates a draft. The published layout stays available to staff until you publish again.</p>
+                <p className="mb-4 text-sm text-slate-600">View a saved revision without changing the editor. Restore creates a separate draft; it does not overwrite this draft or the published layout.</p>
+                {hasUnsavedChanges && <p role="status" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Save or discard your current changes before restoring a revision.</p>}
                 <div className="max-h-80 space-y-2 overflow-y-auto">
                     {(history || []).map((entry) => (
                         <div key={entry.revision} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
-                            <div><p className="font-semibold">Revision {entry.revision} · {entry.event_type}</p><p className="text-xs text-slate-500">{new Date(entry.created_at).toLocaleString()}</p></div>
-                            <Button disabled={isSavingLayout || hasUnsavedChanges} onClick={() => void restoreRevision(entry.revision)}>Restore draft</Button>
+                            <div><p className="font-semibold">Revision {entry.revision} · {entry.event_type === 'published' ? 'Published' : entry.event_type === 'updated' ? 'Updated' : entry.event_type === 'archived' ? 'Updated' : 'Draft'}</p><p className="text-xs text-slate-500">{new Date(entry.created_at).toLocaleString()}</p></div>
+                            <div className="flex shrink-0 gap-2">
+                                <Button disabled={isSavingLayout || isLoadingLayout} onClick={() => void viewRevision(entry)}>View Revision</Button>
+                                <Button disabled={isSavingLayout || isLoadingLayout || hasUnsavedChanges} onClick={() => void restoreRevision(entry.revision)}>Restore as Draft</Button>
+                            </div>
                         </div>
                     ))}
                     {!history?.length && <p>No saved revisions yet.</p>}
@@ -1933,8 +2144,8 @@ export default function Locator3DAdmin() {
                 ref={canvasShellRef}
             >
                 {viewMode === '2d'
-                    ? <StockroomFloorPlan onShelfClick={setAssignmentShelf} />
-                    : <Suspense fallback={<p role="status" className="p-6">Opening 3D stockroom… You can use the shelf selector while it loads.</p>}><Locator3DScene onShelfClick={setAssignmentShelf} /></Suspense>}
+                    ? <StockroomFloorPlan onShelfClick={readOnlyLayout ? undefined : setAssignmentShelf} />
+                    : <Suspense fallback={<p role="status" className="p-6">Opening 3D stockroom… You can use the shelf selector while it loads.</p>}><Locator3DScene onShelfClick={readOnlyLayout ? undefined : setAssignmentShelf} onLayerSelect={handleLayerSelect} /></Suspense>}
                 {viewMode === '3d' && <FloorInfo />}
                 <ViewportControls canvasShellRef={canvasShellRef} viewMode={viewMode} />
                 {isLoadingLayout && (
@@ -1955,13 +2166,13 @@ export default function Locator3DAdmin() {
                 )}
                 {viewMode === '3d' && <div className="pointer-events-none absolute bottom-4 right-4 z-10 hidden rounded-lg bg-white/90 px-3 py-2 text-[11px] font-medium text-slate-600 backdrop-blur sm:block">Drag to rotate · Pinch or scroll to zoom</div>}
             </main>
-                <ShelfInspector onOpenAssignment={setAssignmentShelf} productLocations={productLocations} products={products} />
+                <ShelfInspector onLayerSelect={handleLayerSelect} onOpenAssignment={readOnlyLayout ? undefined : setAssignmentShelf} productLocations={productLocations} products={products} selectedShelfLayer={selectedShelfLayer} />
             </div>
 
             <SummaryCards />
 
             <ProductAssignmentModal
-                canAssign={canEditLayout && !hasUnsavedChanges && !isLoadingLayout && !isSavingLayout && Boolean(currentLayout?.id)}
+                canAssign={canEditLayout && !readOnlyLayout && !hasUnsavedChanges && !isLoadingLayout && !isSavingLayout && Boolean(currentLayout?.id)}
                 mutationLock={saveInFlight}
                 layoutContext={{ layoutId: currentLayout?.id, expectedRevision: currentLayout?.revision }}
                 isOpen={Boolean(assignmentShelf)}

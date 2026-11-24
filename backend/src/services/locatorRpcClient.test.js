@@ -47,6 +47,14 @@ test('uses a fresh HTTPS connection and preserves the RPC contract', async () =>
   assert.deepEqual(f.calls[0].body, args);
   assert.ok(Number.isFinite(result.durationMs));
 });
+test('allows only the existing command RPC and the new read-only revision snapshot RPC', async () => {
+  const f = fixture();
+  const result = await f.client.rpc('limen_locator_revision_snapshot', { p_layout_id: 'layout', p_revision: 4 });
+  assert.deepEqual(result.data, { id: 'saved' });
+  assert.equal(f.calls[0].url, 'https://example.supabase.co/rest/v1/rpc/limen_locator_revision_snapshot');
+  assert.deepEqual(f.calls[0].body, { p_layout_id: 'layout', p_revision: 4 });
+  await assert.rejects(f.client.rpc('limen_locator_command_admin', args), /Unsupported locator RPC/);
+});
 test('stalled commands finish within the deadline and are never replayed', async () => {
   const f = fixture({ hang: true, timeoutMs: 15 });
   const result = await f.client.rpc('limen_locator_command', args);

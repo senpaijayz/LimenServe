@@ -26,7 +26,7 @@ test('anonymous requests cannot read layouts', async () => {
   assert.equal((await request(null, { action: 'list' })).status, 401);
 });
 test('staff cannot write or inspect draft history', async () => {
-  for (const action of ['save', 'assign', 'unassign', 'publish', 'restore', 'history'])
+  for (const action of ['save', 'assign', 'unassign', 'publish', 'restore', 'history', 'view_revision'])
     assert.equal((await request({ role: 'cashier' }, { action })).status, 403);
 });
 test('admin can remove one saved product location through the locator command', async () => {
@@ -57,8 +57,35 @@ test('revision conflicts return 409 and never automatically retry', async () => 
     calls++; return { error: { code: 'PT409', message: 'private SQL details' } };
   });
   assert.equal(result.status, 409); assert.equal(calls, 1);
-  assert.equal(result.body.code, 'LOCATOR_CONFLICT');
+  assert.equal(result.body.code, 'LOCATOR_REVISION_CONFLICT');
+  assert.match(result.body.error, /changed after you opened it/);
   assert.doesNotMatch(result.body.error, /private SQL/);
+});
+test('revision snapshot reads the requested existing revision with the read-only RPC', async () => {
+  const snapshot = { id: 'ffbd5f12-0000-4000-8000-000000000004', revision: 4, metadata: { scene: { objects: [] }, locations: [] } };
+  const result = await request({ id: 'admin-id', role: 'admin' }, { action: 'view_revision', payload: { layoutId: snapshot.id, revision: 4 } }, async (name, args) => {
+    assert.equal(name, 'limen_locator_revision_snapshot');
+    assert.deepEqual(args, { p_layout_id: snapshot.id, p_revision: 4 });
+    return { data: snapshot };
+  });
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.result, snapshot);
+});
+test('duplicate draft names get a distinct conflict message', async () => {
+  const result = await request({ id: 'admin-id', role: 'admin' }, { action: 'restore', payload: {} }, async () => ({
+    error: { code: '40001', message: 'A draft with this name already exists. Load it before saving.' },
+  }));
+  assert.equal(result.status, 409);
+  assert.equal(result.body.code, 'LOCATOR_DRAFT_NAME_EXISTS');
+  assert.match(result.body.error, /choose a different name/);
+});
+test('layer capacity conflicts are returned clearly without losing assignment context', async () => {
+  const result = await request({ id: 'admin-id', role: 'admin' }, { action: 'assign', payload: {} }, async () => ({
+    error: { code: '23514', message: 'This shelf layer has reached its configured capacity. Choose another layer or increase the capacity.' },
+  }));
+  assert.equal(result.status, 409);
+  assert.equal(result.body.code, 'LOCATOR_LAYER_FULL');
+  assert.match(result.body.error, /configured capacity/);
 });
 test('database failures remain sanitized', async () => {
   const result = await request({ role: 'admin' }, { action: 'load' }, async () => ({ error: { message: 'secret database host' } }));
@@ -93,4 +120,19 @@ test('duplicate or invalid shelf labels fail before writing; labels may repeat o
     assert.equal(result.status, 400);
   }
   assert.equal((await request({ role: 'admin' }, { action: 'save', payload: { objects: [shelf, { ...shelf, id: 'b', floor: 2 }] } })).status, 200);
+});
+test('invalid layer capacity and spacing settings fail before saving', async () => {
+  const shelf = { id: 'shelf', type: 'shelf-4-layer', aisle: 'A', shelfNumber: 1, layerCount: 4 };
+  const invalidCases = [
+    { ...shelf, layerCapacities: { 1: 6 } },
+    { ...shelf, layerCapacities: { 5: 4 } },
+    { ...shelf, layerSpacingByNumber: { 1: 0.5 } },
+    { ...shelf, layerSpacingByNumber: { 4: '0.9' } },
+  ];
+  for (const object of invalidCases) {
+    const result = await request({ role: 'admin' }, { action: 'save', payload: { objects: [object] } }, () => { assert.fail('Invalid layer settings must not be saved'); });
+    assert.equal(result.status, 400);
+  }
+  const valid = await request({ role: 'admin' }, { action: 'save', payload: { objects: [{ ...shelf, layerCapacities: { 1: 3 }, layerSpacingByNumber: { 1: 0.8 } }] } });
+  assert.equal(valid.status, 200);
 });

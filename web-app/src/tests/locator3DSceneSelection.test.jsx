@@ -207,7 +207,7 @@ describe('Locator3DScene selection', () => {
 
         expect(screen.getByTestId('locator-2d-fallback')).toBeTruthy();
         expect(screen.getByRole('table')).toBeTruthy();
-        expect(screen.getByText('Oil Filter')).toBeTruthy();
+        expect(screen.getByText('(Oil Filter)')).toBeTruthy();
         expect(screen.getByText('2D stockroom fallback')).toBeTruthy();
         expect(screen.getByRole('columnheader', { name: 'Layer' })).toBeTruthy();
         expect(screen.getByText('OF-1')).toBeTruthy();

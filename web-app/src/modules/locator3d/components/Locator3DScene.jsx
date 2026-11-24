@@ -7,6 +7,9 @@ import {
     FLOOR_HEIGHT,
     SNAP_STEP,
     getCounterObject,
+    getShelfLayerCapacity,
+    getShelfLayerSlotCount,
+    getShelfLayerSpacing,
     getShelfGeometry,
     getShelfSlotLocalPosition,
     getShelfSlotWorldPosition,
@@ -29,7 +32,7 @@ const LOCATED_EDGE = '#facc15';
 const LOCATED_EMISSIVE = '#fde047';
 const SHARED_FLOOR_TYPES = new Set(['floor']);
 const LocatorQualityContext = createContext(getLocatorQualityProfile('high'));
-const LocatorInteractionContext = createContext({ onShelfClick: null });
+const LocatorInteractionContext = createContext({ onShelfClick: null, onLayerSelect: null });
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
 
 const CAMERA_TARGETS = {
@@ -82,6 +85,7 @@ function Block({
     rotation,
     located,
     selected,
+    onClick,
 }) {
     const xrayMode = useLocator3DStore((state) => state.xrayMode);
     const visibleLock = locked && selected;
@@ -89,7 +93,7 @@ function Block({
     const active = selected || located;
 
     return (
-        <mesh castShadow receiveShadow={receiveShadow} position={position} rotation={rotation} geometry={UNIT_BOX} scale={args}>
+        <mesh castShadow receiveShadow={receiveShadow} position={position} rotation={rotation} geometry={UNIT_BOX} scale={args} onClick={onClick}>
             <meshStandardMaterial
                 color={located ? '#fff7a8' : selected ? '#1e3a5f' : color}
                 emissive={located ? LOCATED_EMISSIVE : selected ? SELECTED_EMISSIVE : emissive}
@@ -623,24 +627,27 @@ function ProductMarker({ highlighted, location, position }) {
     );
 }
 
-function InstancedShelfBins({ levels, positions, slotWidth, depth }) {
+function InstancedShelfBins({ levels, positionsByLayer, slotWidthsByLayer, depth }) {
     const mesh = useRef();
     useEffect(() => {
         if (!mesh.current?.setMatrixAt) return;
         const matrix = new THREE.Matrix4();
         const rotation = new THREE.Quaternion();
-        const size = new THREE.Vector3(Math.max(slotWidth * 0.72, 0.12), 0.12, 0.22);
         let index = 0;
-        for (const level of levels) for (const [column, x] of positions.entries()) {
-            matrix.compose(new THREE.Vector3(x, level + 0.17, -depth / 3), rotation, size);
-            mesh.current.setMatrixAt(index, matrix);
-            mesh.current.setColorAt(index++, new THREE.Color(column % 2 ? '#60a5fa' : '#93c5fd'));
+        for (const [layerIndex, level] of levels.entries()) {
+            for (const [column, x] of positionsByLayer[layerIndex].entries()) {
+                const size = new THREE.Vector3(Math.max(slotWidthsByLayer[layerIndex] * 0.72, 0.12), 0.12, 0.22);
+                matrix.compose(new THREE.Vector3(x, level + 0.17, -depth / 3), rotation, size);
+                mesh.current.setMatrixAt(index, matrix);
+                mesh.current.setColorAt(index++, new THREE.Color(column % 2 ? '#60a5fa' : '#93c5fd'));
+            }
         }
         mesh.current.instanceMatrix.needsUpdate = true;
         if (mesh.current.instanceColor) mesh.current.instanceColor.needsUpdate = true;
         mesh.current.computeBoundingSphere();
-    }, [depth, levels, positions, slotWidth]);
-    return <instancedMesh ref={mesh} args={[UNIT_BOX, undefined, levels.length * positions.length]} castShadow receiveShadow>
+    }, [depth, levels, positionsByLayer, slotWidthsByLayer]);
+    const count = positionsByLayer.reduce((total, positions) => total + positions.length, 0);
+    return <instancedMesh ref={mesh} args={[UNIT_BOX, undefined, count]} castShadow receiveShadow>
         <meshStandardMaterial roughness={0.56} metalness={0.1} />
     </instancedMesh>;
 }
@@ -648,24 +655,38 @@ function InstancedShelfBins({ levels, positions, slotWidth, depth }) {
 function ShelfObject({ object, onTransformingChange }) {
     const productLocations = useLocator3DStore((state) => state.productLocations);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
+    const { onLayerSelect } = useContext(LocatorInteractionContext);
     const quality = useContext(LocatorQualityContext);
     const xrayMode = useLocator3DStore((state) => state.xrayMode);
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
     const recentlyReceived = useLocator3DStore((state) => state.recentlyReceivedStock);
     const layers = Math.min(12, Math.max(1, Math.round(Number(object.layerCount ?? (object.type === 'shelf-4-layer' ? 4 : 2)))));
-    const binCount = object.binCount ?? 6;
     const width = Number(object.dimensions?.width || 3.2);
     const depth = Number(object.dimensions?.depth || 0.9);
     const height = Number(object.dimensions?.height || (0.72 + layers * 0.46));
     const shelfLevels = useMemo(() => getShelfGeometry(object).levels, [object]);
     const preview = useLocator3DStore((state) => state.assignmentPreview);
     const target = preview?.shelfObjectId === object.id ? preview : locatedProduct?.shelfObjectId === object.id ? locatedProduct : null;
-    const targetSlot = getShelfSlotLocalPosition(object, target?.layerNumber, target?.binNumber);
+    const shelfLocations = useMemo(
+        () => productLocations.filter((location) => locationBelongsToShelf(location, object)),
+        [object, productLocations],
+    );
+    const layerSlotCounts = useMemo(() => shelfLevels.map((_level, index) => (
+        getShelfLayerSlotCount(object, index + 1, shelfLocations, target)
+    )), [object, shelfLocations, shelfLevels, target]);
+    const slotWidthsByLayer = useMemo(() => layerSlotCounts.map((count, index) => (
+        (width * getShelfLayerSpacing(object, index + 1)) / count
+    )), [layerSlotCounts, object, width]);
+    const slotPositionsByLayer = useMemo(() => layerSlotCounts.map((count, index) => {
+        const spacing = getShelfLayerSpacing(object, index + 1);
+        return Array.from({ length: count }, (_unused, column) => (
+            (-width * spacing / 2) + slotWidthsByLayer[index] * (column + 0.5)
+        ));
+    }), [layerSlotCounts, object, slotWidthsByLayer, width]);
+    const targetLayerIndex = Number(target?.layerNumber) - 1;
+    const targetSlot = getShelfSlotLocalPosition(object, target?.layerNumber, target?.binNumber, layerSlotCounts[targetLayerIndex]);
     const frameColor = '#4A5568';
     const accentColor = '#3182CE';
-    const slotWidth = width / binCount;
-    const slotPositions = useMemo(() => Array.from({ length: binCount }, (_, index) => (-width / 2) + slotWidth / 2 + index * slotWidth), [binCount, slotWidth, width]);
-    const shelfLocations = productLocations.filter((location) => locationBelongsToShelf(location, object));
 
     return (
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
@@ -679,13 +700,17 @@ function ShelfObject({ object, onTransformingChange }) {
                     ].map((position) => (
                         <Block key={position.join('-')} args={[0.12, height, 0.12]} color={frameColor} located={false} locked={locked} position={position} selected={selected} />
                     ))}
-                    {shelfLevels.map((level) => (
+                    {shelfLevels.map((level, layerIndex) => (
                         <group key={level}>
                             <Block
                                 args={[width + 0.1, 0.08, 0.05]}
                                 color="#f3c969"
                                 located={false}
                                 locked={locked}
+                                onClick={isDesignMode ? (event) => {
+                                    event.stopPropagation?.();
+                                    onLayerSelect?.(object, layerIndex + 1);
+                                } : undefined}
                                 position={[0, level + 0.09, depth / 2 + 0.02]}
                                 selected={selected}
                             />
@@ -697,10 +722,10 @@ function ShelfObject({ object, onTransformingChange }) {
                                 position={[0, level, 0]}
                                 selected={selected}
                             />
-                            {quality.tier !== 'low' && (selected || located || xrayMode) && slotPositions.map((x, index) => (
+                            {quality.tier !== 'low' && (selected || located || xrayMode) && slotPositionsByLayer[layerIndex].map((x, index) => (
                                 <Block
                                     key={`${level}-${index}`}
-                                    args={[Math.max(slotWidth * 0.72, 0.12), 0.12, 0.22]}
+                                    args={[Math.max(slotWidthsByLayer[layerIndex] * 0.72, 0.12), 0.12, 0.22]}
                                     color={index % 2 === 0 ? '#93c5fd' : '#60a5fa'}
                                     located={locatedProduct?.shelfObjectId === object.id && Number(locatedProduct.binNumber) === index + 1 && shelfLevels[Number(locatedProduct.layerNumber || 1) - 1] === level}
                                     locked={locked}
@@ -708,6 +733,9 @@ function ShelfObject({ object, onTransformingChange }) {
                                     selected={selected}
                                 />
                             ))}
+                            {isDesignMode && selected && <Label position={[-width / 2 - 0.2, level + 0.22, depth / 2 + 0.12]} tone="floor">
+                                {`Layer ${layerIndex + 1} · ${shelfLocations.filter((location) => Number(location.layerNumber || 1) === layerIndex + 1).length}/${getShelfLayerCapacity(object, layerIndex + 1)} parts`}
+                            </Label>}
                         </group>
                     ))}
                     <Block
@@ -727,7 +755,7 @@ function ShelfObject({ object, onTransformingChange }) {
                         position={[0, height + 0.14, 0]}
                         selected={selected}
                     />
-                    {quality.tier !== 'low' && !selected && !located && !xrayMode && <InstancedShelfBins key={`${layers}-${binCount}`} levels={shelfLevels} positions={slotPositions} slotWidth={slotWidth} depth={depth} />}
+                    {quality.tier !== 'low' && !selected && !located && !xrayMode && <InstancedShelfBins key={`${layers}-${layerSlotCounts.join('-')}`} levels={shelfLevels} positionsByLayer={slotPositionsByLayer} slotWidthsByLayer={slotWidthsByLayer} depth={depth} />}
                     {isDesignMode && <Label position={[0, height + 0.38, depth / 2 + 0.18]} tone="floor">
                         {`AISLE ${normalizeAisle(object.aisle)} · ${object.binCount || 0} BINS`}
                     </Label>}
@@ -737,13 +765,14 @@ function ShelfObject({ object, onTransformingChange }) {
                             <meshBasicMaterial color={preview ? '#8b5cf6' : '#38bdf8'} toneMapped={false} />
                         </mesh>
                         <mesh position={targetSlot} renderOrder={10}>
-                            <boxGeometry args={[slotWidth * 0.9, 0.34, Math.max(0.25, depth * 0.65)]} />
+                            <boxGeometry args={[Math.max(0.12, slotWidthsByLayer[targetLayerIndex] * 0.9), 0.34, Math.max(0.25, depth * 0.65)]} />
                             <meshBasicMaterial color={preview ? '#8b5cf6' : '#facc15'} transparent opacity={0.35} depthTest={false} toneMapped={false} />
                             <Edges color={preview ? '#7c3aed' : '#ca8a04'} threshold={8} />
                         </mesh>
                     </group>}
                     {shelfLocations.filter((location) => isDesignMode || location.productId === locatedProduct?.productId || (recentlyReceived?.items?.length && useLocator3DStore.getState().isRecentlyReceivedProduct(location.productId || location.sku))).map((location) => {
-                        const position = getShelfSlotLocalPosition(object, location.layerNumber, location.binNumber);
+                        const layerIndex = Number(location.layerNumber || 1) - 1;
+                        const position = getShelfSlotLocalPosition(object, location.layerNumber, location.binNumber, layerSlotCounts[layerIndex]);
                         if (!position) return null;
                         return <ProductMarker highlighted={locatedProduct?.productId === location.productId} key={location.productId} location={location} position={position} />;
                     })}
@@ -758,23 +787,40 @@ function ShelfObject({ object, onTransformingChange }) {
 }
 
 function PartsCabinetObject({ object, onTransformingChange }) {
-    const { width, depth, height, layerCount, binCount, levels, slotWidth } = getShelfGeometry(object);
+    const { width, depth, height, layerCount, levels } = getShelfGeometry(object);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
+    const productLocations = useLocator3DStore((state) => state.productLocations);
+    const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
+    const { onLayerSelect } = useContext(LocatorInteractionContext);
+    const shelfLocations = useMemo(
+        () => productLocations.filter((location) => locationBelongsToShelf(location, object)),
+        [object, productLocations],
+    );
     const preview = useLocator3DStore((state) => state.assignmentPreview);
     const target = preview?.shelfObjectId === object.id ? preview : locatedProduct?.shelfObjectId === object.id ? locatedProduct : null;
-    const targetSlot = getShelfSlotLocalPosition(object, target?.layerNumber, target?.binNumber);
+    const layerSlotCounts = levels.map((_level, index) => (
+        getShelfLayerSlotCount(object, index + 1, shelfLocations, target)
+    ));
+    const targetLayerIndex = Number(target?.layerNumber) - 1;
+    const targetSlot = getShelfSlotLocalPosition(object, target?.layerNumber, target?.binNumber, layerSlotCounts[targetLayerIndex]);
     const drawerHeight = Math.max(0.12, Math.min(0.42, (height - 0.3) / layerCount));
     return (
         <TransformableObject object={object} onTransformingChange={onTransformingChange}>
             {({ locked, selected }) => <>
                 <Block args={[width, height, depth]} color="#312e81" located={false} locked={locked} position={[0, height / 2, 0]} selected={selected} />
-                {levels.map((level, layer) => Array.from({ length: binCount }, (_, bin) => (
-                    <Block key={`drawer-${layer}-${bin}`} args={[Math.max(0.04, slotWidth - 0.05), drawerHeight, 0.08]}
+                {levels.map((level, layer) => Array.from({ length: layerSlotCounts[layer] }, (_, bin) => {
+                    const spacing = getShelfLayerSpacing(object, layer + 1);
+                    const layerSlotWidth = (width * spacing) / layerSlotCounts[layer];
+                    return <Block key={`drawer-${layer}-${bin}`} args={[Math.max(0.04, layerSlotWidth - 0.05), drawerHeight, 0.08]}
                         color={bin % 3 === 0 ? '#8b5cf6' : '#6366f1'} located={false} locked={locked}
-                        position={[-width / 2 + slotWidth * (bin + 0.5), level + 0.23, depth / 2 + 0.04]} selected={selected} />
-                )))}
+                        onClick={isDesignMode ? (event) => {
+                            event.stopPropagation?.();
+                            onLayerSelect?.(object, layer + 1);
+                        } : undefined}
+                        position={[-width * spacing / 2 + layerSlotWidth * (bin + 0.5), level + 0.23, depth / 2 + 0.04]} selected={selected} />;
+                }))}
                 {targetSlot && <mesh position={[targetSlot[0], targetSlot[1], depth / 2 + 0.1]} renderOrder={10}>
-                    <boxGeometry args={[Math.max(0.06, slotWidth - 0.02), drawerHeight + 0.04, 0.03]} />
+                    <boxGeometry args={[Math.max(0.06, (width * getShelfLayerSpacing(object, targetLayerIndex + 1)) / layerSlotCounts[targetLayerIndex] - 0.02), drawerHeight + 0.04, 0.03]} />
                     <meshBasicMaterial color={preview ? '#a855f7' : '#facc15'} transparent opacity={0.65} depthTest={false} />
                     <Edges color="#ffffff" />
                 </mesh>}
@@ -1081,6 +1127,7 @@ function CameraRig({ controlsRef, isTransforming }) {
     const cameraPresetRequest = useLocator3DStore((state) => state.cameraPresetRequest);
     const locatedProduct = useLocator3DStore((state) => state.locatedProduct);
     const sceneObjects = useLocator3DStore((state) => state.sceneObjects);
+    const productLocations = useLocator3DStore((state) => state.productLocations);
     const selectedObjectId = useLocator3DStore((state) => state.selectedObjectId);
     const { camera, size, invalidate = () => {} } = useThree();
     const aspect = size?.width && size?.height ? size.width / size.height : 1.5;
@@ -1124,7 +1171,8 @@ function CameraRig({ controlsRef, isTransforming }) {
 
         if (locatedProduct?.targetPosition) {
             const shelf = sceneObjects.find((object) => object.id === locatedProduct.shelfObjectId);
-            const exact = getShelfSlotWorldPosition(shelf, locatedProduct.layerNumber, locatedProduct.binNumber) || locatedProduct.targetPosition;
+            const slotCount = getShelfLayerSlotCount(shelf, locatedProduct.layerNumber, productLocations, locatedProduct);
+            const exact = getShelfSlotWorldPosition(shelf, locatedProduct.layerNumber, locatedProduct.binNumber, slotCount) || locatedProduct.targetPosition;
             const [x, y, z] = exact;
             const angle = Number(shelf?.rotation?.[1] || 0);
             const distance = Math.max(3.5, Number(shelf?.dimensions?.width || 3.2) * 1.2 / Math.min(1, aspect));
@@ -1161,7 +1209,7 @@ function CameraRig({ controlsRef, isTransforming }) {
         }
 
         return buildFloorCameraTarget(activeFloor, floorHeight, sceneObjects, aspect);
-    }, [activeFloor, aspect, cameraFocusRequest, cameraPresetRequest, floorHeight, locatedProduct, sceneObjects, selectedObjectId]);
+    }, [activeFloor, aspect, cameraFocusRequest, cameraPresetRequest, floorHeight, locatedProduct, productLocations, sceneObjects, selectedObjectId]);
 
     const targetTrigger = [
         activeFloor,
@@ -1317,7 +1365,7 @@ function MeasuredQuality({ quality, enabled, onDowngrade }) {
     return null;
 }
 
-function SceneContents({ onContextLost, onShelfClick, quality, autoQuality, onDowngrade }) {
+function SceneContents({ onContextLost, onShelfClick, onLayerSelect, quality, autoQuality, onDowngrade }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const floorHeight = useSceneFloorHeight();
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
@@ -1333,7 +1381,7 @@ function SceneContents({ onContextLost, onShelfClick, quality, autoQuality, onDo
     const activeGridY = activeFloor === 2 ? floorHeight + 0.012 : 0.012;
 
     return (
-        <LocatorInteractionContext.Provider value={{ onShelfClick }}>
+        <LocatorInteractionContext.Provider value={{ onShelfClick, onLayerSelect }}>
             <LocatorQualityContext.Provider value={quality}>
             <RenderScheduler />
             <MeasuredQuality quality={quality} enabled={autoQuality} onDowngrade={onDowngrade} />
@@ -1417,7 +1465,7 @@ function SceneContents({ onContextLost, onShelfClick, quality, autoQuality, onDo
     );
 }
 
-export default function Locator3DScene({ onShelfClick = null }) {
+export default function Locator3DScene({ onShelfClick = null, onLayerSelect = null }) {
     const clearSelection = useLocator3DStore((state) => state.clearSelection);
     const qualityPreference = useLocator3DStore((state) => state.qualityPreference);
     const [webglFailed, setWebglFailed] = useState(false);
@@ -1448,7 +1496,7 @@ export default function Locator3DScene({ onShelfClick = null }) {
                 style={{ touchAction: 'none' }}
             >
                 <Suspense fallback={null}>
-                    <SceneContents onContextLost={() => setWebglFailed(true)} onShelfClick={onShelfClick} quality={quality} autoQuality={qualityPreference === 'auto'} onDowngrade={setMeasuredTier} />
+                    <SceneContents onContextLost={() => setWebglFailed(true)} onShelfClick={onShelfClick} onLayerSelect={onLayerSelect} quality={quality} autoQuality={qualityPreference === 'auto'} onDowngrade={setMeasuredTier} />
                 </Suspense>
             </Canvas>
         </CanvasErrorBoundary>

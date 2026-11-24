@@ -49,6 +49,9 @@ export async function setStoreLayoutPriority(_name, context = {}) {
     return mapLayout(await command('publish', context));
 }
 export async function getLayoutHistory(context) { return command('history', context); }
+export async function getLayoutRevision(layoutId, revision) {
+    return mapLayout(await command('view_revision', { layoutId, revision }));
+}
 export async function restoreLayoutRevision(context) { return mapLayout(await command('restore', context)); }
 
 export async function assignProductLocation(location, context = {}) {

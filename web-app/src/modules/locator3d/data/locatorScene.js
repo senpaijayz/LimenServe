@@ -578,16 +578,47 @@ export function getShelfGeometry(shelf) {
     return { layerCount, binCount, width, height, depth, levels, slotWidth: width / binCount };
 }
 
-export function getShelfSlotLocalPosition(shelf, layerNumber, binNumber) {
+export function getShelfLayerCapacity(shelf, layerNumber) {
+    const layer = Math.max(1, Math.round(Number(layerNumber) || 1));
+    const configured = Number(shelf?.layerCapacities?.[layer]);
+    if (Number.isInteger(configured) && configured >= 3 && configured <= 5) return configured;
+    const bins = Math.round(Number(shelf?.binCount) || 5);
+    return Math.min(5, Math.max(3, bins));
+}
+
+export function getShelfLayerSpacing(shelf, layerNumber) {
+    const layer = Math.max(1, Math.round(Number(layerNumber) || 1));
+    const configured = Number(shelf?.layerSpacingByNumber?.[layer]);
+    if (Number.isFinite(configured) && configured >= 0.8 && configured <= 1) return configured;
+    return 1;
+}
+
+export function getShelfLayerSlotCount(shelf, layerNumber, productLocations = [], previewLocation = null) {
+    const layer = Number(layerNumber);
+    const assignedMaxBin = productLocations
+        .filter((location) => locationBelongsToShelf(location, shelf)
+            && Number(location.layerNumber || 1) === layer)
+        .reduce((max, location) => Math.max(max, Number(location.binNumber) || 0), 0);
+    const previewBin = previewLocation && locationBelongsToShelf(previewLocation, shelf)
+        && Number(previewLocation.layerNumber || 1) === layer
+        ? Number(previewLocation.binNumber) || 0
+        : 0;
+
+    return Math.max(getShelfLayerCapacity(shelf, layer), assignedMaxBin, previewBin);
+}
+
+export function getShelfSlotLocalPosition(shelf, layerNumber, binNumber, slotCountOverride = null) {
     if (!shelf) return null;
     const geometry = getShelfGeometry(shelf);
     const layer = Number(layerNumber), bin = Number(binNumber);
-    if (!Number.isInteger(layer) || layer < 1 || layer > geometry.layerCount || !Number.isInteger(bin) || bin < 1 || bin > geometry.binCount) return null;
-    return [(-geometry.width / 2) + geometry.slotWidth * (bin - 0.5), geometry.levels[layer - 1] + 0.23, shelf.type === 'parts-cabinet' ? geometry.depth / 2 + 0.1 : -geometry.depth / 3];
+    const slotCount = Math.max(1, Math.round(Number(slotCountOverride) || geometry.binCount));
+    if (!Number.isInteger(layer) || layer < 1 || layer > geometry.layerCount || !Number.isInteger(bin) || bin < 1 || bin > slotCount) return null;
+    const slotWidth = (geometry.width * getShelfLayerSpacing(shelf, layer)) / slotCount;
+    return [(-geometry.width * getShelfLayerSpacing(shelf, layer) / 2) + slotWidth * (bin - 0.5), geometry.levels[layer - 1] + 0.23, shelf.type === 'parts-cabinet' ? geometry.depth / 2 + 0.1 : -geometry.depth / 3];
 }
 
-export function getShelfSlotWorldPosition(shelf, layerNumber, binNumber) {
-    const local = getShelfSlotLocalPosition(shelf, layerNumber, binNumber);
+export function getShelfSlotWorldPosition(shelf, layerNumber, binNumber, slotCountOverride = null) {
+    const local = getShelfSlotLocalPosition(shelf, layerNumber, binNumber, slotCountOverride);
     if (!local) return null;
     const [localX, localY, localZ] = local;
     const angle = Number(shelf.rotation?.[1] || 0);

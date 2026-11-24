@@ -8,6 +8,7 @@ import {
     cloneLocatorSceneObjects,
     createLocatorSceneObject,
     formatProductLocationLabel,
+    getShelfLayerSlotCount,
     getShelfSlotWorldPosition,
     getShelfObjectByLocation,
     isShelfObject,
@@ -481,7 +482,9 @@ export const useLocator3DStore = create((set, get) => ({
         const shelf = getShelfObjectByLocation(location, sceneObjects);
         const floor = Number(location.floor || shelf?.floor || 1) === 2 ? 2 : 1;
         const shelfObjectId = shelf?.id || location.shelfObjectId || '';
-        const targetPosition = getShelfSlotWorldPosition(shelf, location.layerNumber, location.binNumber);
+        const productLocations = get().productLocations || [];
+        const slotCount = getShelfLayerSlotCount(shelf, location.layerNumber, productLocations, location);
+        const targetPosition = getShelfSlotWorldPosition(shelf, location.layerNumber, location.binNumber, slotCount);
 
         set({
             activeFloor: floor,
@@ -969,6 +972,25 @@ export const useLocator3DStore = create((set, get) => ({
         }
 
         const target = get().sceneObjects.find((object) => object.id === objectId);
+        const nextLayerCount = updates.layerCount === undefined
+            ? Math.max(1, Math.round(Number(target?.layerCount || (target?.type === 'shelf-4-layer' ? 4 : 2))))
+            : clampNumber(updates.layerCount, 1, 12);
+        const layerCapacities = updates.layerCapacities && typeof updates.layerCapacities === 'object'
+            ? Object.fromEntries(Object.entries(updates.layerCapacities).map(([layer, capacity]) => [String(layer), Number(capacity)]))
+            : null;
+        const layerSpacingByNumber = updates.layerSpacingByNumber && typeof updates.layerSpacingByNumber === 'object'
+            ? Object.fromEntries(Object.entries(updates.layerSpacingByNumber).map(([layer, spacing]) => [String(layer), Number(spacing)]))
+            : null;
+        const invalidLayerCapacity = layerCapacities && Object.entries(layerCapacities).some(([layer, capacity]) => (
+            !/^\d+$/.test(layer) || Number(layer) < 1 || Number(layer) > nextLayerCount || !Number.isInteger(capacity) || capacity < 3 || capacity > 5
+        ));
+        const invalidLayerSpacing = layerSpacingByNumber && Object.entries(layerSpacingByNumber).some(([layer, spacing]) => (
+            !/^\d+$/.test(layer) || Number(layer) < 1 || Number(layer) > nextLayerCount || !Number.isFinite(spacing) || spacing < 0.8 || spacing > 1
+        ));
+        if (invalidLayerCapacity || invalidLayerSpacing) {
+            window.alert('Layer capacity must be 3–5 parts and spacing must be 80–100%.');
+            return;
+        }
         const invalid = get().productLocations.some((location) => locationBelongsToShelf(location, target)
             && ((updates.layerCount !== undefined && Number(location.layerNumber) > Number(updates.layerCount))
                 || (updates.binCount !== undefined && Number(location.binNumber) > Number(updates.binCount))));
@@ -1012,6 +1034,12 @@ export const useLocator3DStore = create((set, get) => ({
                     ? { ...object.dimensions, height: clampDimension(Number(object.dimensions.height) + addedLayers * 0.5, object.dimensions.height) }
                     : object.dimensions,
                 layerCount,
+                layerCapacities: layerCapacities
+                    ? { ...(object.layerCapacities || {}), ...layerCapacities }
+                    : object.layerCapacities,
+                layerSpacingByNumber: layerSpacingByNumber
+                    ? { ...(object.layerSpacingByNumber || {}), ...layerSpacingByNumber }
+                    : object.layerSpacingByNumber,
                 name: safeName || `Aisle ${safeAisle} Shelf ${shelfNumber}`,
                 shelfNumber,
             };
