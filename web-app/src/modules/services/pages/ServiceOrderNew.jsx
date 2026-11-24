@@ -19,6 +19,16 @@ const steps = ['Customer & vehicle', 'Requested work', 'Schedule', 'Review'];
 const manilaToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const timeLabel = (value) => new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
 const fieldClass = 'input mt-1 w-full min-w-0';
+const phoneDigits = (value) => value.replace(/\D/g, '');
+const isPhilippineMobile = (value) => /^(?:09\d{9}|\+639\d{9}|639\d{9})$/.test(value.trim());
+const requiredFieldClass = 'text-red-500';
+const normalizePhoneInput = (value) => {
+  const raw = String(value || '');
+  const hasPlusPrefix = raw.trim().startsWith('+');
+  const digits = phoneDigits(raw);
+  const maxDigits = hasPlusPrefix || digits.startsWith('63') ? 12 : 11;
+  return `${hasPlusPrefix ? '+' : ''}${digits.slice(0, maxDigits)}`;
+};
 
 export default function ServiceOrderNew() {
   const { user } = useAuth();
@@ -47,6 +57,8 @@ function ServiceIntake({ user }) {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [showFieldErrors, setShowFieldErrors] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(!!params.get('customer'));
   const [checkingIdentity, setCheckingIdentity] = useState(false);
   const [checkingRecovery, setCheckingRecovery] = useState(true);
@@ -59,7 +71,39 @@ function ServiceIntake({ user }) {
   const creating = useRef(false);
   const canProceed = !saving && !checkingIdentity && !checkingRecovery && !recoveryError && !recoveredOrder;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const set = (key, value) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    if (!showFieldErrors) return;
+    setFieldErrors((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      const required = { customerName: 'Enter the customer name.', vehicleModel: 'Enter the vehicle model.', vehiclePlate: 'Enter the plate number.', description: 'Describe the requested service.' };
+      if (required[key] && String(value).trim()) delete next[key];
+      if (key === 'customerPhone') {
+        if (!value || isPhilippineMobile(value)) delete next[key];
+        else next[key] = 'Enter a valid Philippine mobile number, such as 09171234567 or +639171234567.';
+      }
+      if (key === 'laborEstimate' && (value === '' || (Number.isFinite(Number(value)) && Number(value) >= 0))) delete next[key];
+      return next;
+    });
+  };
+  const validateStep = (currentStep) => {
+    const nextErrors = {};
+    if (currentStep === 0) {
+      if (!form.customerName.trim()) nextErrors.customerName = 'Enter the customer name.';
+      if (!form.vehicleModel.trim()) nextErrors.vehicleModel = 'Enter the vehicle model.';
+      if (!form.vehiclePlate.trim()) nextErrors.vehiclePlate = 'Enter the plate number.';
+      if (!form.customerId && form.customerPhone.trim() && !isPhilippineMobile(form.customerPhone)) nextErrors.customerPhone = 'Enter a valid Philippine mobile number, such as 09171234567 or +639171234567.';
+    }
+    if (currentStep === 1) {
+      if (!form.description.trim()) nextErrors.description = 'Describe the requested service.';
+      if (form.laborEstimate !== '' && (!Number.isFinite(Number(form.laborEstimate)) || Number(form.laborEstimate) < 0)) nextErrors.laborEstimate = 'Enter a valid labor estimate of zero or more.';
+    }
+    if (currentStep === 2 && form.mechanicId && (!form.slotStart || !slots.some((slot) => slot.start === form.slotStart && slot.available))) nextErrors.slotStart = 'Select an available time for this mechanic, or leave scheduling for later.';
+    return nextErrors;
+  };
+  const fieldError = (name) => showFieldErrors ? fieldErrors[name] : undefined;
+  const errorId = (name) => `${name}-error`;
   const partsTotal = useMemo(() => form.parts.reduce((sum, part) => sum + Number(part.lineTotal || 0), 0), [form.parts]);
   const labor = Math.max(Number(form.laborEstimate) || 0, 0);
   const total = Math.round((labor + partsTotal) * 100) / 100;
@@ -81,7 +125,7 @@ function ServiceIntake({ user }) {
 
   const applySavedIdentity = (selection) => {
     setForm((current) => ({ ...current, ...selection, ...(current.customerId !== selection.customerId || current.vehicleId !== selection.vehicleId ? { mechanicId: '', date: '', slotStart: '', slotEnd: '' } : {}) }));
-    setPickerOpen(false); setError('');
+    setPickerOpen(false); setError(''); setFieldErrors({}); setShowFieldErrors(false);
     // A handoff is only a suggestion. Once accepted, the saved draft is the
     // source for reopening; an old link must not re-suggest a different pair.
     setParams((current) => { const next = new URLSearchParams(current); next.delete('customer'); next.delete('vehicle'); return next; }, { replace: true });
@@ -100,7 +144,7 @@ function ServiceIntake({ user }) {
     catch { setError('This browser could not replace the draft. The saved job and current draft are unchanged.'); setDiscardPrompt(false); return; }
     committed.current = false;
     setForm(fresh); setStep(0); setPickerOpen(false); setRecoveredOrder(null);
-    setCheckingRecovery(true); setRecoveryError(''); setError(''); setDiscardPrompt(false);
+    setCheckingRecovery(true); setRecoveryError(''); setError(''); setFieldErrors({}); setShowFieldErrors(false); setDiscardPrompt(false);
   };
 
   useEffect(() => {
@@ -122,9 +166,10 @@ function ServiceIntake({ user }) {
   const next = async () => {
     if (!canProceed) return;
     setError('');
-    if (step === 0 && (!form.customerName.trim() || !form.vehicleModel.trim() || !form.vehiclePlate.trim())) {
-      setError('Add the customer name, vehicle model, and plate number to continue.'); return;
-    }
+    const nextErrors = validateStep(step);
+    setShowFieldErrors(true);
+    setFieldErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
     if (step === 0 && form.customerId) {
       setCheckingIdentity(true);
       try {
@@ -135,12 +180,8 @@ function ServiceIntake({ user }) {
       } catch (err) { setError(err.message); return; }
       finally { setCheckingIdentity(false); }
     }
-    if (step === 1 && (!form.description.trim() || !Number.isFinite(Number(form.laborEstimate || 0)) || Number(form.laborEstimate || 0) < 0)) {
-      setError('Describe the requested work and enter a valid labor estimate.'); return;
-    }
-    if (step === 2 && form.mechanicId && (!form.slotStart || !slots.some((slot) => slot.start === form.slotStart && slot.available))) {
-      setError('Select an available time for this mechanic, or leave scheduling for later.'); return;
-    }
+    setShowFieldErrors(false);
+    setFieldErrors({});
     setStep((value) => Math.min(value + 1, 3));
   };
 
@@ -200,16 +241,16 @@ function ServiceIntake({ user }) {
         {form.customerId && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">Using saved customer and vehicle records. The fields below are read-only; details are checked again before this job is created.<button type="button" className="btn mt-2 border border-blue-300" onClick={() => setForm((current) => ({ ...current, customerId: '', vehicleId: '', identityVersion: '' }))}>Enter details instead</button></div>}
       </div>}
       {step === 0 && <div className="grid gap-4 sm:grid-cols-2">
-        <label className="text-sm font-semibold text-primary-700">Customer name *<input className={fieldClass} value={form.customerName} readOnly={!!form.customerId} onChange={(e) => set('customerName', e.target.value)} /></label>
-        <label className="text-sm font-semibold text-primary-700">Phone<input className={fieldClass} inputMode="tel" value={form.customerPhone} readOnly={!!form.customerId} onChange={(e) => set('customerPhone', e.target.value)} /></label>
-        <label className="text-sm font-semibold text-primary-700">Vehicle make<input className={fieldClass} value={form.vehicleMake} readOnly={!!form.customerId} onChange={(e) => set('vehicleMake', e.target.value)} /></label>
-        <label className="text-sm font-semibold text-primary-700">Vehicle model *<input className={fieldClass} value={form.vehicleModel} readOnly={!!form.customerId} onChange={(e) => set('vehicleModel', e.target.value)} /></label>
-        <label className="text-sm font-semibold text-primary-700">Year<input className={fieldClass} type="number" min="1900" max="2100" value={form.vehicleYear} readOnly={!!form.customerId} onChange={(e) => set('vehicleYear', e.target.value)} /></label>
-        <label className="text-sm font-semibold text-primary-700">Plate number *<input className={fieldClass} value={form.vehiclePlate} readOnly={!!form.customerId} onChange={(e) => set('vehiclePlate', e.target.value)} /></label>
+        <label className="text-sm font-semibold text-primary-700">Customer name <span className={requiredFieldClass} aria-hidden="true">*</span><input aria-describedby={fieldError('customerName') ? errorId('customerName') : undefined} aria-invalid={Boolean(fieldError('customerName'))} className={fieldClass} placeholder="Enter customer's full name" value={form.customerName} readOnly={!!form.customerId} onChange={(e) => set('customerName', e.target.value)} />{fieldError('customerName') && <p id={errorId('customerName')} className="mt-1 text-xs font-medium text-red-600">{fieldError('customerName')}</p>}</label>
+        <label className="text-sm font-semibold text-primary-700">Phone number<input aria-describedby={fieldError('customerPhone') ? errorId('customerPhone') : undefined} aria-invalid={Boolean(fieldError('customerPhone'))} className={fieldClass} inputMode="tel" maxLength={13} pattern="(?:09[0-9]{9}|\\+639[0-9]{9}|639[0-9]{9})" placeholder="Enter Philippine mobile number" value={form.customerPhone} readOnly={!!form.customerId} onChange={(e) => set('customerPhone', normalizePhoneInput(e.target.value))} />{fieldError('customerPhone') && <p id={errorId('customerPhone')} className="mt-1 text-xs font-medium text-red-600">{fieldError('customerPhone')}</p>}</label>
+        <label className="text-sm font-semibold text-primary-700">Vehicle make<input className={fieldClass} placeholder="e.g., Mitsubishi" value={form.vehicleMake} readOnly={!!form.customerId} onChange={(e) => set('vehicleMake', e.target.value)} /></label>
+        <label className="text-sm font-semibold text-primary-700">Vehicle model <span className={requiredFieldClass} aria-hidden="true">*</span><input aria-describedby={fieldError('vehicleModel') ? errorId('vehicleModel') : undefined} aria-invalid={Boolean(fieldError('vehicleModel'))} className={fieldClass} placeholder="e.g., Mitsubishi Mirage 2018" value={form.vehicleModel} readOnly={!!form.customerId} onChange={(e) => set('vehicleModel', e.target.value)} />{fieldError('vehicleModel') && <p id={errorId('vehicleModel')} className="mt-1 text-xs font-medium text-red-600">{fieldError('vehicleModel')}</p>}</label>
+        <label className="text-sm font-semibold text-primary-700">Year<input className={fieldClass} type="number" min="1900" max="2100" placeholder="e.g., 2018" value={form.vehicleYear} readOnly={!!form.customerId} onChange={(e) => set('vehicleYear', e.target.value)} /></label>
+        <label className="text-sm font-semibold text-primary-700">Plate number <span className={requiredFieldClass} aria-hidden="true">*</span><input aria-describedby={fieldError('vehiclePlate') ? errorId('vehiclePlate') : undefined} aria-invalid={Boolean(fieldError('vehiclePlate'))} className={fieldClass} placeholder="e.g., ABC 1234" value={form.vehiclePlate} readOnly={!!form.customerId} onChange={(e) => set('vehiclePlate', e.target.value.toUpperCase())} />{fieldError('vehiclePlate') && <p id={errorId('vehiclePlate')} className="mt-1 text-xs font-medium text-red-600">{fieldError('vehiclePlate')}</p>}</label>
       </div>}
       {step === 1 && <div className="space-y-5">
-        <label className="block text-sm font-semibold text-primary-700">Reported concern and requested work *<textarea className={`${fieldClass} min-h-28`} value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="What did the customer report?" /></label>
-        <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold text-primary-700">Estimated labor (₱)<input className={fieldClass} type="number" min="0" step="0.01" value={form.laborEstimate} onChange={(e) => set('laborEstimate', e.target.value)} /></label><label className="text-sm font-semibold text-primary-700">Priority<select className={fieldClass} value={form.priority} onChange={(e) => set('priority', e.target.value)}>{['low','normal','high','urgent'].map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div>
+        <label className="block text-sm font-semibold text-primary-700">Reported concern and requested work <span className={requiredFieldClass} aria-hidden="true">*</span><textarea aria-describedby={fieldError('description') ? errorId('description') : undefined} aria-invalid={Boolean(fieldError('description'))} className={`${fieldClass} min-h-28`} value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Describe the requested service" />{fieldError('description') && <p id={errorId('description')} className="mt-1 text-xs font-medium text-red-600">{fieldError('description')}</p>}</label>
+        <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold text-primary-700">Estimated labor (₱)<input aria-describedby={fieldError('laborEstimate') ? errorId('laborEstimate') : undefined} aria-invalid={Boolean(fieldError('laborEstimate'))} className={fieldClass} type="number" min="0" step="0.01" placeholder="e.g., 1500.00" value={form.laborEstimate} onChange={(e) => set('laborEstimate', e.target.value)} />{fieldError('laborEstimate') && <p id={errorId('laborEstimate')} className="mt-1 text-xs font-medium text-red-600">{fieldError('laborEstimate')}</p>}</label><label className="text-sm font-semibold text-primary-700">Priority<select className={fieldClass} value={form.priority} onChange={(e) => set('priority', e.target.value)}>{['low','normal','high','urgent'].map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div>
         <div className="rounded-xl border border-primary-200 p-4"><h2 className="mb-3 font-semibold text-primary-950">Estimated parts (optional)</h2><p className="mb-3 text-xs text-primary-600">Estimates do not remove inventory. Record actual parts after the repair.</p><PartSearch onAdd={(part) => set('parts', [...form.parts, { ...part, draftId: crypto.randomUUID() }])} />{form.parts.map((part) => <div key={part.draftId} className="mt-2 flex items-center justify-between gap-2 border-t border-primary-100 pt-2 text-sm"><span className="min-w-0 truncate">{part.itemSku} · {part.itemName} · {part.quantity} × {formatCurrency(part.unitPrice)}</span><button type="button" aria-label={`Remove ${part.itemName}`} onClick={() => set('parts', form.parts.filter((item) => item.draftId !== part.draftId))}><Trash2 className="h-4 w-4 text-red-600" /></button></div>)}</div>
         <p className="text-right text-sm font-bold text-primary-950">Estimated total: {formatCurrency(total)}</p>
       </div>}
