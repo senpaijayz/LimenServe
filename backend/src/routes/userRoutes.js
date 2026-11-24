@@ -176,7 +176,7 @@ function normalizeUserSaveError(error) {
   const message = String(error?.message || '');
   if (message.includes('LAST_ACTIVE_ADMIN_PROTECTED')) {
     error.statusCode = 409;
-    error.message = 'At least one active Administrator account must remain.';
+    error.message = 'You cannot change this Administrator’s role because this is the only Administrator account remaining.';
   }
   if (message.includes('ADMIN_ACCOUNT_PROTECTED')) {
     error.statusCode = 403;
@@ -267,6 +267,8 @@ router.get('/', async (_req, res, next) => {
       .filter((user) => user.app_metadata?.limen_recovery_only !== true)
       .map((user) => mapUser(user, profiles.get(user.id)))
       .sort((left, right) => String(left.email).localeCompare(String(right.email)));
+    const activeAdmins = users.filter((user) => user.role === 'admin' && user.status === 'active');
+    if (activeAdmins.length === 1) activeAdmins[0].isProtectedAdmin = true;
 
     res.json({ users });
   } catch (error) {
@@ -580,8 +582,14 @@ router.delete('/:userId', async (req, res, next) => {
     const { appRole, profileRole, matches } = getTrustedStaffRole(target, profile);
 
     if (appRole === 'admin' || profileRole === 'admin') {
-      res.status(403).json({ error: 'Administrator accounts are protected and cannot be deleted.' });
-      return;
+      if (appRole !== 'admin' || profileRole !== 'admin' || !matches) {
+        res.status(409).json({ error: 'This account’s role records do not match. Reconcile the account before changing access.' });
+        return;
+      }
+      if (await countOtherActiveAdministrators(userId) < 1) {
+        res.status(409).json({ error: 'You cannot change this Administrator’s role because this is the only Administrator account remaining.' });
+        return;
+      }
     }
 
     if (!matches) {
@@ -589,7 +597,7 @@ router.delete('/:userId', async (req, res, next) => {
       return;
     }
 
-    if (!['cashier', 'stock_clerk'].includes(appRole)) {
+    if (!['admin', 'cashier', 'stock_clerk'].includes(appRole)) {
       res.status(403).json({ error: 'Only Cashier and Clerk accounts can be removed from active staff.' });
       return;
     }
@@ -821,7 +829,7 @@ router.patch('/:userId', async (req, res, next) => {
     if (currentRole.appRole === 'admin' && role !== 'admin') {
       const otherAdmins = await countOtherActiveAdministrators(userId);
       if (otherAdmins < 1) {
-        res.status(409).json({ error: 'At least one active Administrator account must remain.' });
+        res.status(409).json({ error: 'You cannot change this Administrator’s role because this is the only Administrator account remaining.' });
         return;
       }
     }

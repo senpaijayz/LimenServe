@@ -42,7 +42,7 @@ function buildUserForm(user) {
     };
 }
 
-function UserFormModal({ isOpen, editingUser, isSaving, submitError, onClose, onSubmit }) {
+function UserFormModal({ isOpen, editingUser, isSaving, submitError, onClose, onSubmit, protectAdminRole }) {
     const [formData, setFormData] = useState(() => buildUserForm(editingUser));
 
     const guardedClose = () => {
@@ -99,7 +99,8 @@ function UserFormModal({ isOpen, editingUser, isSaving, submitError, onClose, on
 
                 <Input label="Email Address" type="email" value={formData.email} onChange={(e) => updateField('email', e.target.value)} required />
 
-                <Dropdown label="Role" options={roleOptions} value={formData.role} onChange={(value) => updateField('role', value)} />
+                {editingUser?.isProtectedAdmin && <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">This is the only active Administrator. Its role cannot be changed.</p>}
+                <Dropdown label="Role" options={roleOptions} value={formData.role} onChange={(value) => updateField('role', value)} disabled={Boolean(editingUser?.isProtectedAdmin && protectAdminRole)} />
 
                 <Input
                     label={editingUser ? 'New Password (leave blank to keep current)' : 'Password'}
@@ -415,7 +416,7 @@ const UserManagement = () => {
         {
             key: 'role',
             label: 'Role',
-            render: (role) => <RoleBadge role={role} />,
+            render: (role, row) => <div className="flex flex-wrap items-center gap-2"><RoleBadge role={role} />{row.isProtectedAdmin && <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800" title="This is the only active Administrator">Protected Admin</span>}</div>,
         },
         {
             key: 'status',
@@ -539,6 +540,7 @@ const UserManagement = () => {
                                 <p className="text-sm text-primary-500">{user.email}</p>
                                 <div className="mt-3 flex flex-wrap gap-2">
                                     <RoleBadge role={user.role} />
+                                    {user.isProtectedAdmin && <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800" title="This is the only active Administrator">Protected Admin</span>}
                                     <span className="rounded-full border border-primary-200 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-primary-500">
                                         {user.accountStatus === 'deactivated' ? 'Deactivated' : user.status === 'active' ? 'Active' : 'Inactive'}
                                     </span>
@@ -571,6 +573,7 @@ const UserManagement = () => {
                 editingUser={editingUser}
                 isSaving={isSavingUser}
                 submitError={userFormError}
+                protectAdminRole={adminCount === 1}
                 onClose={closeUserModal}
                 onSubmit={handleSubmit}
             />
