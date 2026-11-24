@@ -402,7 +402,7 @@ const ServiceOrderList = () => {
                     <div className="text-center py-16 bg-primary-50 border border-primary-200 rounded-2xl">
                         <AlertCircle className="w-16 h-16 text-primary-300 mx-auto mb-6" />
                         <h3 className="text-xl font-display font-semibold text-primary-900 mb-2 tracking-wide uppercase">No orders found</h3>
-                        <p className="mx-auto max-w-md text-primary-500 text-sm">Adjust the search/filter or create a new service order for a customer repair job. Completed jobs are stored in Archive.</p>
+                        <p className="mx-auto max-w-md text-primary-500 text-sm">No matching service orders found. Try changing your search or filters.</p>
                         <Button className="mt-6" variant="primary" leftIcon={<Plus className="w-4 h-4" />} onClick={() => navigate('/services/new')}>
                             Create Service Order
                         </Button>
