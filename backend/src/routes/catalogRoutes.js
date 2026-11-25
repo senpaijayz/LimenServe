@@ -680,7 +680,7 @@ async function getActiveRetailPricelistVersion() {
 
 async function getPricelistVersionItems(versionId, expectedCount = null) {
   const pageSize = 1000;
-  const concurrency = 6;
+  const concurrency = 2;
   const rows = [];
   const pageCount = Number.isInteger(Number(expectedCount)) && Number(expectedCount) > 0
     ? Math.ceil(Number(expectedCount) / pageSize)
@@ -715,7 +715,7 @@ async function getPricelistVersionItems(versionId, expectedCount = null) {
 async function findPricelistProducts(skus) {
   const uniqueSkus = [...new Set(skus.filter(Boolean))];
   const chunkSize = 500;
-  const concurrency = 6;
+  const concurrency = 2;
   const rows = [];
   for (let offset = 0; offset < uniqueSkus.length; offset += chunkSize * concurrency) {
     const batches = Array.from({ length: Math.min(concurrency, Math.ceil((uniqueSkus.length - offset) / chunkSize)) }, (_unused, index) => {
@@ -753,7 +753,20 @@ function mapVersionItemForDraft(item) {
   };
 }
 
-async function previewPricelistUpload({ upload, body }) {
+let pricelistPreviewInProgress = false;
+async function previewPricelistUpload(options) {
+  if (pricelistPreviewInProgress) {
+    throw Object.assign(new Error('A pricelist comparison is already running. Wait for it to finish before trying again.'), { statusCode: 409 });
+  }
+  pricelistPreviewInProgress = true;
+  try {
+    return await buildPricelistUploadPreview(options);
+  } finally {
+    pricelistPreviewInProgress = false;
+  }
+}
+
+async function buildPricelistUploadPreview({ upload, body }) {
   const selection = normalizePricelistUploadSelection(body);
   const { workbook } = await downloadPricelistUpload(upload);
   const analysis = analyzePricelistWorkbook(workbook);
@@ -3817,8 +3830,9 @@ router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req
     });
     const job = startPricelistImportJob({
       uploadId: upload.id,
+      items: importPreview._draftItems,
       argumentsList: [
-        upload.id, JSON.stringify(importPreview._draftItems), normalizedSelection.versionYear,
+        upload.id, normalizedSelection.versionYear,
         normalizedSelection.effectiveFrom, normalizedSelection.sheetName,
         `${importPreview.selectedPrice.kind}_${importPreview.selectedPrice.vatStatus}`,
         upload.file_checksum, tokenPayload.activeVersionId ?? null, req.user?.id ?? null,

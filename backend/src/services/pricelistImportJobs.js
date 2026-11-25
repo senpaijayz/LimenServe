@@ -1,8 +1,37 @@
 import pg from 'pg';
+import { setTimeout as pause } from 'node:timers/promises';
 
 const { Client } = pg;
 const jobs = new Map();
 const MAX_JOB_AGE_MS = 30 * 60 * 1000;
+const BATCH_SIZE = 500;
+const BATCH_PAUSE_MS = 400;
+
+export async function publishPricelistInBatches(client, items, args, wait = pause) {
+  await client.query('begin');
+  try {
+    await client.query("set local statement_timeout = '10min'");
+    await client.query('create temporary table limen_pricelist_batches (batch_number integer primary key, items jsonb not null) on commit drop');
+    for (let offset = 0; offset < items.length; offset += BATCH_SIZE) {
+      if (offset > 0) await wait(BATCH_PAUSE_MS);
+      await client.query('insert into pg_temp.limen_pricelist_batches values ($1, $2::jsonb)',
+        [offset / BATCH_SIZE, JSON.stringify(items.slice(offset, offset + BATCH_SIZE))]);
+    }
+    // Activate only after staging is complete. The existing function still
+    // checks the reviewed revision and takes its publication lock atomically.
+    const { rows } = await client.query(`
+      select public.import_and_activate_pricelist_upload($1, (
+        select jsonb_agg(item.value order by batch.batch_number, item.ordinality)
+        from pg_temp.limen_pricelist_batches batch
+        cross join lateral jsonb_array_elements(batch.items) with ordinality item
+      ), $2,$3,$4,$5,$6,$7,$8) as result`, args);
+    await client.query('commit');
+    return rows[0]?.result;
+  } catch (error) {
+    await client.query('rollback').catch(() => {});
+    throw error;
+  }
+}
 
 function databaseConnection() {
   const connectionString = String(process.env.SUPABASE_DB_URL || '').trim();
@@ -48,7 +77,7 @@ export function getPricelistImportJob(uploadId) {
   return job || null;
 }
 
-export function startPricelistImportJob({ uploadId, argumentsList, makeResult, onPublished, onError, createClient = (options) => new Client(options) }) {
+export function startPricelistImportJob({ uploadId, items, argumentsList, makeResult, onPublished, onError, createClient = (options) => new Client(options) }) {
   const existing = getPricelistImportJob(uploadId);
   if (existing?.state === 'running') return existing;
   if ([...jobs.entries()].some(([otherId, job]) => otherId !== uploadId && job.state === 'running')) {
@@ -66,14 +95,7 @@ export function startPricelistImportJob({ uploadId, argumentsList, makeResult, o
     try {
       client = createClient({ connectionString, ssl: { ca, rejectUnauthorized: true }, connectionTimeoutMillis: 15_000, application_name: 'limen-pricelist-import' });
       await client.connect();
-      // This is one database statement and remains atomic. It is deliberately
-      // outside the short-lived browser and Supabase REST request time limits.
-      await client.query("set statement_timeout = '10min'");
-      const response = await client.query(
-        'select public.import_and_activate_pricelist_upload($1,$2::jsonb,$3,$4,$5,$6,$7,$8,$9) as result',
-        argumentsList,
-      );
-      job.result = makeResult(response.rows[0]?.result);
+      job.result = makeResult(await publishPricelistInBatches(client, items, argumentsList));
       onPublished?.();
       job.state = 'completed';
     } catch (error) {
@@ -88,6 +110,9 @@ export function startPricelistImportJob({ uploadId, argumentsList, makeResult, o
     } finally {
       job.finishedAt = Date.now();
       await client?.end().catch(() => {});
+      setTimeout(() => {
+        if (jobs.get(uploadId) === job) jobs.delete(uploadId);
+      }, MAX_JOB_AGE_MS).unref();
     }
   })();
 

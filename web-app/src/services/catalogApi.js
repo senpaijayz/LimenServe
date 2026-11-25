@@ -925,7 +925,7 @@ export async function importRetailPriceListUpload(uploadId, selection, previewTo
     }
     if (data?.state === 'failed') throw importStatusError(data.error || 'The pricelist update failed. The active prices were not changed.');
     if (data?.state === 'running') {
-      const deadline = Date.now() + 11 * 60 * 1000;
+      const deadline = Date.now() + 15 * 60 * 1000;
       let temporaryFailures = 0;
       while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 3000));
