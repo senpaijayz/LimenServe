@@ -886,12 +886,39 @@ export async function previewRetailPriceListUpload(uploadId, selection) {
 
 export async function importRetailPriceListUpload(uploadId, selection, previewToken) {
   const importStatusError = (message) => Object.assign(new Error(message), { isPricelistImportStatus: true });
+  const path = `/catalog/prices/uploads/${encodeURIComponent(uploadId)}`;
+  const isTemporaryNetworkError = (error) => !error?.response || [502, 503, 504].includes(error.response.status);
+  const readStatus = async () => {
+    const response = await apiClient.get(`${path}/import-status`, { timeout: 15_000, params: { t: Date.now() } });
+    return response.data;
+  };
   try {
-    const { data } = await apiClient.post(`/catalog/prices/uploads/${encodeURIComponent(uploadId)}/import`, {
-      ...selection,
-      previewToken,
-      confirm: true,
-    }, { timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS });
+    let data;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await apiClient.post(`${path}/import`, {
+          ...selection, previewToken, confirm: true,
+        }, { timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS });
+        data = response.data;
+        break;
+      } catch (error) {
+        if (!isTemporaryNetworkError(error)) throw error;
+        // The request may have reached the server before its response was lost.
+        // Reconcile its state before retrying, so an interrupted connection
+        // never causes a second price activation.
+        for (let check = 0; check < 4; check++) {
+          await new Promise((resolve) => setTimeout(resolve, 2500 * (check + 1)));
+          try {
+            const status = await readStatus();
+            if (status?.state !== 'idle') { data = status; break; }
+          } catch (statusError) {
+            if (!isTemporaryNetworkError(statusError)) throw statusError;
+          }
+        }
+        if (data) break;
+        if (attempt === 2) throw importStatusError('The server is temporarily unavailable. No new update was confirmed. Check Saved Price Lists before retrying.');
+      }
+    }
     if (data?.state === 'completed' && data.result) {
       clearProductCatalogCaches();
       return data.result;
@@ -904,11 +931,7 @@ export async function importRetailPriceListUpload(uploadId, selection, previewTo
         await new Promise((resolve) => setTimeout(resolve, 3000));
         let status;
         try {
-          const response = await apiClient.get(`/catalog/prices/uploads/${encodeURIComponent(uploadId)}/import-status`, {
-            timeout: 15_000,
-            params: { t: Date.now() },
-          });
-          status = response.data;
+          status = await readStatus();
           temporaryFailures = 0;
         } catch (pollError) {
           if (++temporaryFailures < 4) continue;

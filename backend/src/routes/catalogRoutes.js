@@ -3763,6 +3763,8 @@ router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req
       pricelistPreviewCache.delete(req.body?.previewToken);
       return res.status(409).json({ error: 'The worksheet or import settings changed after preview. Review the updated preview before importing.' });
     }
+    const runningJob = getPricelistImportJob(upload.id);
+    if (runningJob?.state === 'running') return res.status(202).json({ state: 'running' });
     const currentVersion = await getActiveRetailPricelistVersion();
     if ((currentVersion?.id ?? null) !== (tokenPayload.activeVersionId ?? null)) {
       pricelistPreviewCache.delete(req.body?.previewToken);
@@ -3784,6 +3786,15 @@ router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req
       pricelistPreviewCache.delete(req.body.previewToken);
       return res.status(422).json({ error: 'No safe price records were found to update. The current active pricelist was not changed.', blockers: importPreview.blockers, errors: importPreview.errors });
     }
+    // Keep only compact result metadata while PostgreSQL processes the import.
+    // Holding the entire parsed workbook and draft in this closure needlessly
+    // raises memory use on the single-instance web service.
+    const report = {
+      counts: importPreview.counts,
+      errors: importPreview.errors,
+      priceChanges: importPreview.priceChanges,
+      priceChangesTotalCount: importPreview.priceChangesTotalCount,
+    };
     const makeResult = (data) => ({
       ...(data ?? {}),
       versionId: data?.versionId,
@@ -3792,17 +3803,17 @@ router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req
       isActive: true,
       activationPending: false,
       message: 'The new revision is active. Invalid or conflicting rows were skipped; any previous prices for those parts were preserved.',
-      receivedCount: importPreview.counts.totalRows,
-      uniqueCount: importPreview.counts.validRows,
-      updatedCount: importPreview.counts.validRows,
-      newProductsCount: importPreview.counts.newProducts,
-      changedCount: importPreview.counts.changedPrices,
-      unchangedCount: importPreview.counts.unchangedPrices,
-      removedFromListCount: importPreview.counts.removedFromList,
-      skippedCount: importPreview.counts.invalidRows,
-      errors: importPreview.errors,
-      priceChanges: importPreview.priceChanges,
-      priceChangesTotalCount: importPreview.priceChangesTotalCount,
+      receivedCount: report.counts.totalRows,
+      uniqueCount: report.counts.validRows,
+      updatedCount: report.counts.validRows,
+      newProductsCount: report.counts.newProducts,
+      changedCount: report.counts.changedPrices,
+      unchangedCount: report.counts.unchangedPrices,
+      removedFromListCount: report.counts.removedFromList,
+      skippedCount: report.counts.invalidRows,
+      errors: report.errors,
+      priceChanges: report.priceChanges,
+      priceChangesTotalCount: report.priceChangesTotalCount,
     });
     const job = startPricelistImportJob({
       uploadId: upload.id,
@@ -3819,6 +3830,9 @@ router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req
       },
       onError: annotatePriceListImportError,
     });
+    // A retry sees the running job above; it does not need a second full
+    // in-memory copy of the workbook preview during the database operation.
+    pricelistPreviewCache.deleteForUpload(upload.id);
     res.status(202).json({ state: job.state, result: job.result });
   } catch (error) {
     if (req.timedOut || res.headersSent) return;
