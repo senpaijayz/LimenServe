@@ -41,7 +41,6 @@ const UserManagement = lazy(() => import('./modules/users/pages/UserManagement')
 const CmsAdmin = lazy(() => import('./modules/cms/pages/CmsAdmin'));
 const Locator3DAdmin = lazy(() => import('./modules/locator3d/pages/Locator3DAdmin'));
 
-const PublicHome = lazy(() => import('./modules/public/pages/PublicHome'));
 const PublicCatalog = lazy(() => import('./modules/public/pages/PublicCatalog'));
 const PublicEstimate = lazy(() => import('./modules/public/pages/PublicEstimate'));
 const PublicAbout = lazy(() => import('./modules/public/pages/PublicAbout'));
@@ -104,7 +103,7 @@ function App() {
               <ToastProvider>
                 <Routes>
                   <Route element={<PublicLayout />}>
-                    <Route path="/" element={renderRoute(PublicHome, <PageLoader />)} />
+                    <Route path="/" element={renderRoute(PublicCmsPage, <PageLoader />)} />
                     <Route path="/catalog" element={renderRoute(PublicCatalog, <PageLoader />)} />
                     <Route path="/estimate" element={renderRoute(PublicEstimate, <PageLoader />)} />
                     <Route path="/service-orders" element={renderRoute(PublicServiceOrders, <PageLoader />)} />
