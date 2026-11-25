@@ -1609,11 +1609,11 @@ const PublicEstimate = () => {
                                     <div>
                                         <label htmlFor="public-estimate-customer-name" className="block text-sm font-semibold text-primary-700 mb-2">Customer Name</label>
                                         <div className="relative">
-                                            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
+                                            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-500" />
                                             <input id="public-estimate-customer-name" value={customerName} onChange={(event) => {
                                                 markSavedQuoteDirty();
                                                 setCustomerName(event.target.value);
-                                            }} placeholder="Walk-in customer" className="input pl-10 py-2.5 text-sm" />
+                                            }} placeholder="Walk-in customer" className="input pl-10 py-2.5 text-sm placeholder:text-primary-600" />
                                         </div>
                                     </div>
                                     <div>
@@ -1621,14 +1621,14 @@ const PublicEstimate = () => {
                                             Phone Number <span className="ml-1 text-[#EF4444]" aria-hidden="true">*</span>
                                         </label>
                                         <div className="relative">
-                                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
+                                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-500" />
                                             <input id="public-estimate-phone" type="tel" inputMode="numeric" autoComplete="tel" maxLength={11} required aria-describedby="public-estimate-phone-help" aria-invalid={Boolean(customerPhone.trim()) && !normalizedCustomerPhone} value={customerPhone} onChange={(event) => {
                                                 markSavedQuoteDirty();
                                                 setSaveError('');
                                                 setCustomerPhone(sanitizePhilippineMobileInput(event.target.value));
-                                            }} placeholder="09XXXXXXXXX" className="input pl-10 py-2.5 text-sm" />
+                                            }} placeholder="09XXXXXXXXX" className="input pl-10 py-2.5 text-sm placeholder:text-primary-600" />
                                         </div>
-                                        <p id="public-estimate-phone-help" className={`mt-2 text-xs ${customerPhone.trim() && !normalizedCustomerPhone ? 'text-accent-danger' : 'text-primary-500'}`}>
+                                        <p id="public-estimate-phone-help" className={`mt-2 text-xs ${customerPhone.trim() && !normalizedCustomerPhone ? 'text-accent-danger' : 'text-primary-600'}`}>
                                             {customerPhone.trim() && !normalizedCustomerPhone
                                                 ? (customerPhone.startsWith('09') ? 'Enter all 11 digits of the phone number.' : 'Philippine mobile numbers must start with 09.')
                                                 : 'Enter 11 digits starting with 09. Required to securely retrieve the saved quote.'}
