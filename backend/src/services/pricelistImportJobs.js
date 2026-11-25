@@ -29,6 +29,16 @@ function databaseConnection() {
   return connectionString;
 }
 
+function databaseCertificate() {
+  const ca = String(process.env.SUPABASE_DB_CA || '').replace(/\\n/g, '\n').trim();
+  if (!ca.includes('-----BEGIN CERTIFICATE-----') || !ca.includes('-----END CERTIFICATE-----')) {
+    const error = new Error('The Supabase database certificate is not configured. Add SUPABASE_DB_CA in Render before updating the pricelist. The current prices were not changed.');
+    error.statusCode = 503;
+    throw error;
+  }
+  return ca;
+}
+
 export function getPricelistImportJob(uploadId) {
   const job = jobs.get(uploadId);
   if (job && job.state !== 'running' && Date.now() - job.finishedAt > MAX_JOB_AGE_MS) {
@@ -47,13 +57,14 @@ export function startPricelistImportJob({ uploadId, argumentsList, makeResult, o
     throw error;
   }
   const connectionString = databaseConnection();
+  const ca = databaseCertificate();
   const job = { state: 'running', startedAt: Date.now() };
   jobs.set(uploadId, job);
 
   job.done = (async () => {
     let client;
     try {
-      client = createClient({ connectionString, ssl: { rejectUnauthorized: true }, connectionTimeoutMillis: 15_000, application_name: 'limen-pricelist-import' });
+      client = createClient({ connectionString, ssl: { ca, rejectUnauthorized: true }, connectionTimeoutMillis: 15_000, application_name: 'limen-pricelist-import' });
       await client.connect();
       // This is one database statement and remains atomic. It is deliberately
       // outside the short-lived browser and Supabase REST request time limits.
