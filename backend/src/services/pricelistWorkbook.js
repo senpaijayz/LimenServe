@@ -90,6 +90,12 @@ function readXlsx(buffer) {
   const workbookXml = entry('xl/workbook.xml');
   const relationshipXml = entry('xl/_rels/workbook.xml.rels');
   if (!workbookXml || !relationshipXml) fail('This file is missing its Excel workbook structure.');
+  const stylesXml = entry('xl/styles.xml');
+  const numberFormats = new Map([...stylesXml.matchAll(/<numFmt\b([^>]*)\/?\s*>/g)]
+    .map((match) => attributes(match[1])).map((format) => [Number(format.numFmtId), format.formatCode]));
+  const cellFormatsXml = stylesXml.match(/<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/)?.[1] || '';
+  const cellNumberFormats = [...cellFormatsXml.matchAll(/<xf\b([^>]*)\/?\s*>/g)]
+    .map((match) => Number(attributes(match[1]).numFmtId || 0));
   const relations = new Map([...relationshipXml.matchAll(/<Relationship\b([^>]*)\/?\s*>/g)]
     .map((match) => attributes(match[1])).filter((rel) => rel.TargetMode !== 'External')
     .map((rel) => [rel.Id, rel.Target.startsWith('/') ? rel.Target.slice(1) : path.posix.normalize(`xl/${rel.Target}`)]));
@@ -107,6 +113,7 @@ function readXlsx(buffer) {
       const rowNumber = Number(attributes(rowMatch[1]).r) || rows.length + 1;
       if (rows.length >= MAX_ROWS) fail(`Worksheet ${sheet.name} exceeds ${MAX_ROWS.toLocaleString()} rows.`);
       const cells = [];
+      const cellTypes = [];
       for (const matchCell of rowMatch[2].matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
         const attrs = attributes(matchCell[1]);
         const column = cellPosition(attrs.r)?.column ?? cells.length;
@@ -116,10 +123,19 @@ function readXlsx(buffer) {
         const body = matchCell[2] || '';
         const raw = body.match(/<v\b[^>]*>([\s\S]*?)<\/v>/)?.[1];
         const inline = [...body.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map((t) => xmlText(t[1])).join('');
-        const value = attrs.t === 's' ? strings[Number(raw)] ?? '' : raw === undefined ? inline : xmlText(raw);
+        const cellType = attrs.t || 'n';
+        let value = attrs.t === 's' ? strings[Number(raw)] ?? '' : raw === undefined ? inline : xmlText(raw);
+        // Excel may store a part number as a number while displaying leading
+        // zeroes through a custom 000... format. Preserve those visible digits.
+        const styleIndex = Number(attrs.s || 0);
+        const formatCode = numberFormats.get(cellNumberFormats[styleIndex]) || '';
+        if (cellType === 'n' && /^0+$/.test(formatCode) && /^\d+$/.test(String(value))) {
+          value = String(value).padStart(formatCode.length, '0');
+        }
         cells[column] = clean(value);
+        cellTypes[column] = cellType;
       }
-      rows.push({ rowNumber, cells });
+      rows.push({ rowNumber, cells, cellTypes });
     }
     const merges = [...xml.matchAll(/<mergeCell\b([^>]*)\/?\s*>/g)].map((matchMerge) => {
       const [a, b] = (attributes(matchMerge[1]).ref || '').split(':').map(cellPosition);
@@ -257,24 +273,71 @@ function priceScore(column) {
 }
 
 export function analyzePricelistWorkbook(workbook) {
-  return { sheets: workbook.sheets.map((sheet) => detectSheet(sheet)) };
+  const sheets = workbook.sheets.map((sheet) => detectSheet(sheet));
+  const ranked = sheets.map((sheet) => {
+    const selected = sheet.priceColumns?.find((column) => column.index === sheet.mapping?.price);
+    if (sheet.status !== 'ready' || selected?.priceKind !== 'srp' || selected?.priceBasis === 'per_liter') return { sheet, score: -1 };
+    return {
+      sheet,
+      score: (sheet.category === 'Customer pricelist' ? 40 : 0)
+        + (/customer|retail|srp/i.test(sheet.name) ? 20 : 0)
+        + (selected.vatStatus === 'inclusive' ? 12 : 0)
+        + (selected.period === 'new' ? 6 : 0)
+        + Math.min(sheet.rowCount, 100000) / 100000,
+    };
+  }).filter((entry) => entry.score >= 0).sort((left, right) => right.score - left.score);
+  const recommendedSheetName = ranked.length === 1 || (ranked.length > 1 && ranked[0].score > ranked[1].score)
+    ? ranked[0].sheet.name : null;
+  return { sheets, recommendedSheetName };
+}
+
+export function inferPricelistEffectiveDate(fileName, workbook) {
+  const sourceName = clean(fileName);
+  const worksheetText = (workbook?.sheets || []).flatMap((sheet) => (sheet.rows || []).slice(0, 12)
+    .map((row) => row.cells?.join(' ') || '')).join(' ');
+  const sources = [sourceName, worksheetText];
+  for (const source of sources) {
+    if (!/(effective|effectivity|valid\s+from|pricing\s+date)/i.test(source)) continue;
+    const iso = /\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/.exec(source);
+    let year, month, day;
+    if (iso) [, year, month, day] = iso;
+    if (!iso) {
+      const monthNames = 'january|february|march|april|may|june|july|august|september|october|november|december';
+      const monthFirst = new RegExp(`\\b(${monthNames})\\s+(\\d{1,2})(?:st|nd|rd|th)?[,]?\\s+(20\\d{2})\\b`, 'i').exec(source);
+      const dayFirst = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${monthNames})[,]?\\s+(20\\d{2})\\b`, 'i').exec(source);
+      const match = monthFirst || dayFirst;
+      if (match) {
+        const monthLabel = monthFirst ? match[1] : match[2];
+        year = monthFirst ? match[3] : match[4];
+        month = String('january february march april may june july august september october november december'.split(' ').indexOf(monthLabel.toLowerCase()) + 1);
+        day = monthFirst ? match[2] : match[1];
+      }
+    }
+    if (year && month && day) {
+      const candidate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const parsed = new Date(`${candidate}T00:00:00Z`);
+      if (!Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === candidate) return candidate;
+    }
+  }
+  return null;
 }
 
 export function parsePricelistNumber(value) {
   if (typeof value === 'number') return Number.isFinite(value) && value >= 0 ? value : null;
   const original = clean(value);
   if (!original) return null;
-  const text = original.replace(/^(?:PHP|₱|PESO)\s*/i, '').replace(/\s/g, '');
+  const text = original.replace(/^(?:PHP|₱|PESO)\s*/i, '').replace(/\s*(?:PHP|₱|PESO)$/i, '').replace(/\s/g, '');
   // Thousands separators must be correctly grouped; arbitrary letters and
   // accounting negatives are errors, never coerced into zero or positive prices.
-  if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$/.test(text)) return null;
+  if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(text)) return null;
   const number = Number(text.replace(/,/g, ''));
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
 
 function normalizedSku(value) {
-  const sku = clean(value).toUpperCase().replace(/[^A-Z0-9]/g, '');
-  return sku.startsWith('PA') && sku.length > 2 ? sku.slice(2) : sku;
+  // A pricelist part number is an identifier, not a barcode. Preserve leading
+  // zeroes and prefixes (including "PA") instead of collapsing distinct SKUs.
+  return clean(value).normalize('NFKC').toUpperCase();
 }
 
 export function previewPricelistWorksheet(workbook, options = {}) {
@@ -323,7 +386,8 @@ export function previewPricelistWorksheet(workbook, options = {}) {
   const errors = [];
   const items = [];
   const skuRows = new Map();
-  const counts = { totalRows: 0, validRows: 0, invalidRows: 0, duplicateRows: 0, missingPartNumbers: 0, missingPrices: 0, blankRows: 0, vatInconsistencies: 0 };
+  const seenSkuRows = new Map();
+  const counts = { totalRows: 0, validRows: 0, invalidRows: 0, duplicateRows: 0, conflictingDuplicateGroups: 0, missingPartNumbers: 0, missingPrices: 0, invalidPrices: 0, zeroPrices: 0, blankRows: 0, vatInconsistencies: 0, roundingWarnings: 0 };
   const pairColumn = detection.priceColumns.find((column) => column.index !== price.index && column.priceKind === price.priceKind && column.period === price.period && column.priceBasis === price.priceBasis && column.vatStatus !== price.vatStatus && ['exclusive', 'inclusive'].includes(column.vatStatus));
   for (const row of sheet.rows.filter((candidate) => candidate.rowNumber > detection.headerRow)) {
     if (!row.cells.some((value) => clean(value))) { counts.blankRows += 1; continue; }
@@ -331,16 +395,32 @@ export function previewPricelistWorksheet(workbook, options = {}) {
     const originalSku = clean(row.cells[mapping.sku]);
     const sku = normalizedSku(originalSku);
     const name = clean(row.cells[mapping.name]);
-    const sourcePrice = parsePricelistNumber(row.cells[mapping.price]);
+    const sourcePriceValue = String(row.cells[mapping.price] ?? '');
+    const sourcePrice = parsePricelistNumber(sourcePriceValue);
     const reasons = [];
+    const seenCount = sku ? (seenSkuRows.get(sku) || 0) : 0;
+    if (seenCount > 0) counts.duplicateRows += 1;
+    if (sku) seenSkuRows.set(sku, seenCount + 1);
     if (!sku) { counts.missingPartNumbers += 1; reasons.push('Missing part number'); }
-    if (sourcePrice === null) { counts.missingPrices += 1; reasons.push('Missing or invalid price'); }
-    const previousRow = skuRows.get(sku);
-    if (sku && previousRow) { counts.duplicateRows += 1; reasons.push(`Duplicate part number; first seen on row ${previousRow}`); }
-    if (sku && !previousRow) skuRows.set(sku, row.rowNumber);
+    if (sourcePrice === null) {
+      if (!sourcePriceValue.trim()) {
+        counts.missingPrices += 1;
+        reasons.push('Price is blank');
+      } else {
+        counts.invalidPrices += 1;
+        reasons.push('The uploaded price contains text or an unsupported number format');
+      }
+    }
+    const unconfirmedZero = sourcePrice === 0 && options.confirmZeroPrices !== true;
+    if (unconfirmedZero) {
+      counts.zeroPrices += 1;
+      reasons.push('The price is zero and needs administrator confirmation');
+    }
     if (reasons.length) {
       counts.invalidRows += 1;
-      errors.push({ rowNumber: row.rowNumber, sku: originalSku, name, reason: reasons.join('; '), suggestion: 'Correct the part number or numeric price; resolve duplicate rows in the source file and upload again.' });
+      errors.push({ rowNumber: row.rowNumber, sku: originalSku, name, sourceValue: sourcePriceValue, sourceColumn: selectedLabel,
+        reason: reasons.join('; '), issue: sourcePrice === 0 ? 'zero_confirmation' : !sourcePriceValue.trim() ? 'missing_price' : 'invalid_price',
+        suggestion: sourcePrice === 0 ? 'Confirm this is an intentional zero price, or correct the workbook value.' : !sourcePriceValue.trim() ? 'Enter a price. The current price will be preserved for an existing part.' : 'Replace the text with a numeric price. The current price will be preserved for an existing part.' });
       continue;
     }
     if (pairColumn && Number.isFinite(vatRate)) {
@@ -352,19 +432,64 @@ export function previewPricelistWorksheet(workbook, options = {}) {
         errors.push({ rowNumber: row.rowNumber, sku: originalSku, name, severity: 'warning', reason: 'VAT-inclusive and VAT-exclusive values do not reconcile at the configured rate', suggestion: 'Check the workbook prices. The explicitly selected price will be preserved; no VAT correction is automatic.' });
       }
     }
-    items.push({ sku, originalSku, name: name || null, model: clean(row.cells[mapping.model]) || null, uom: clean(row.cells[mapping.uom]) || null,
+    const storedPrice = Math.round(((price.vatStatus === 'exclusive' && Number.isFinite(vatRate)
+      ? sourcePrice * (1 + vatRate)
+      : sourcePrice) + Number.EPSILON) * 100) / 100;
+    if (sourcePrice > 0 && storedPrice === 0) {
+      counts.invalidRows += 1;
+      counts.invalidPrices += 1;
+      errors.push({ rowNumber: row.rowNumber, sku: originalSku, name, sourceValue: sourcePriceValue, sourceColumn: selectedLabel,
+        reason: 'The numeric price rounds to ₱0.00 at the database’s two-decimal precision', issue: 'below_cent_precision',
+        suggestion: 'Verify or correct this value. The existing price will be preserved until a usable price is supplied.' });
+      continue;
+    }
+    if (storedPrice !== sourcePrice) {
+      counts.roundingWarnings += 1;
+      warnings.push(`Excel row ${row.rowNumber} (${originalSku}): source value ${sourcePriceValue} will be stored as ₱${storedPrice.toFixed(2)} because prices are saved to two decimal places.`);
+    }
+    const item = { sku, originalSku, name: name || null, model: clean(row.cells[mapping.model]) || null, uom: clean(row.cells[mapping.uom]) || null,
       pcc: clean(row.cells[mapping.pcc]) || null, sourceCategory: clean(row.cells[mapping.category]) || null,
-      sourceSheet: sheet.name, sourceLineNumber: row.rowNumber, sourcePrice,
+      sourceSheet: sheet.name, sourceLineNumber: row.rowNumber, sourcePrice, sourcePriceValue,
       // Versioned retail prices are stored as numeric(12,2); preview the exact
       // value that the database will save, including explicitly selected VAT.
-      price: Math.round(((price.vatStatus === 'exclusive' && Number.isFinite(vatRate)
-        ? sourcePrice * (1 + vatRate)
-        : sourcePrice) + Number.EPSILON) * 100) / 100,
-      priceBasis: price.priceBasis });
+      price: storedPrice,
+      priceBasis: price.priceBasis };
+    const group = skuRows.get(sku) || [];
+    group.push(item);
+    skuRows.set(sku, group);
+  }
+  const duplicateGroups = [];
+  for (const [sku, group] of skuRows) {
+    if (group.length === 1) {
+      items.push(group[0]);
+      continue;
+    }
+    const signature = (item) => JSON.stringify([
+      item.price, item.name?.trim().toUpperCase() || '', item.model?.trim().toUpperCase() || '',
+      item.uom?.trim().toUpperCase() || '', item.pcc?.trim().toUpperCase() || '',
+      item.sourceCategory?.trim().toUpperCase() || '',
+    ]);
+    const signatures = new Set(group.map(signature));
+    const rows = group.map((item) => ({ rowNumber: item.sourceLineNumber, sourcePrice: item.sourcePriceValue, price: item.price, name: item.name }));
+    if (signatures.size === 1) {
+      items.push(group[0]);
+      errors.push({ severity: 'warning', rowNumber: group[1].sourceLineNumber, sku: group[0].originalSku, name: group[0].name, sourceValue: group[1].sourcePriceValue, sourceColumn: selectedLabel, relatedRows: rows.map((entry) => entry.rowNumber), reason: `Identical repeated part number; row ${group[0].sourceLineNumber} will be used once`, suggestion: 'No action needed. The repeated row will not create another product.' });
+      continue;
+    }
+    const selectedRow = Number(options.duplicateResolutions?.[sku]);
+    const chosen = group.find((item) => item.sourceLineNumber === selectedRow);
+    duplicateGroups.push({ sku, rows, selectedRow: chosen?.sourceLineNumber ?? null });
+    if (chosen) {
+      items.push(chosen);
+      errors.push({ severity: 'warning', rowNumber: chosen.sourceLineNumber, sku: chosen.originalSku, name: chosen.name, sourceValue: chosen.sourcePriceValue, sourceColumn: selectedLabel, relatedRows: rows.map((entry) => entry.rowNumber), reason: `Selected row ${chosen.sourceLineNumber}; other records for this part were skipped`, suggestion: 'Review the chosen row. The other rows will not be imported.' });
+    } else {
+      counts.conflictingDuplicateGroups += 1;
+      counts.invalidRows += group.length;
+      errors.push({ severity: 'conflict', rowNumber: group[0].sourceLineNumber, sku: group[0].originalSku, name: group[0].name, sourceValue: group.map((entry) => entry.sourcePriceValue).join(' | '), sourceColumn: selectedLabel, relatedRows: rows.map((entry) => entry.rowNumber), candidates: rows, reason: `Conflicting rows for this part number (${rows.map((entry) => entry.rowNumber).join(', ')})`, suggestion: 'Choose the correct Excel row. Until then, an existing price will be preserved.' });
+    }
   }
   counts.validRows = items.length;
-  if (counts.invalidRows) blockers.push('Correct rejected rows before importing. No partial pricelist will be activated.');
   if (!items.length) blockers.push('No valid product prices were found in the selected worksheet.');
-  return { items, errors, warnings, blockers, canImport: blockers.length === 0, counts,
+  return { items, errors, duplicateGroups, warnings, blockers, canImport: blockers.length === 0 && items.length > 0, counts,
     selection: { sheetName: sheet.name, headerRow: detection.headerRow, mapping, category: detection.category, ...price, confirmPriceType: options.confirmPriceType === true } };
 }

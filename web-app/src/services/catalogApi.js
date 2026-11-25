@@ -747,6 +747,33 @@ export async function getRetailPriceListVersions() {
   }
 }
 
+export async function updateRetailPriceListVersion(versionId, changes) {
+  try {
+    const { data } = await apiClient.patch(`/catalog/prices/versions/${encodeURIComponent(versionId)}`, changes);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to update the revision details. Its prices were not changed.');
+  }
+}
+
+export async function archiveRetailPriceListVersion(versionId) {
+  try {
+    const { data } = await apiClient.post(`/catalog/prices/versions/${encodeURIComponent(versionId)}/archive`);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to archive this revision. Its price history was not changed.');
+  }
+}
+
+export async function deleteRetailPriceListVersion(versionId) {
+  try {
+    const { data } = await apiClient.delete(`/catalog/prices/versions/${encodeURIComponent(versionId)}`, { data: { confirm: true } });
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to delete this draft. Published price history and product records are protected.');
+  }
+}
+
 export async function getProductPriceHistory(productId, signal) {
   try {
     const { data } = await apiClient.get(`/catalog/products/${encodeURIComponent(productId)}/price-history`, { signal });
@@ -797,6 +824,7 @@ export async function replaceRetailPriceList(items, effectiveFrom, options = {})
       effectiveFrom,
       versionYear: options.versionYear,
       activate: options.activate !== false,
+      confirmZeroPrices: options.confirmZeroPrices === true,
     }, {
       timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS,
     });
@@ -816,6 +844,7 @@ export async function replaceRetailPriceListFile(file, effectiveFrom, requestOpt
     if (requestOptions.versionYear) {
       formData.append('versionYear', requestOptions.versionYear);
     }
+    if (requestOptions.confirmZeroPrices === true) formData.append('confirmZeroPrices', 'true');
     formData.append('activate', requestOptions.activate === false ? 'false' : 'true');
 
     const { data } = await apiClient.post('/catalog/prices/bulk-replace-file', formData, {
@@ -865,7 +894,7 @@ export async function importRetailPriceListUpload(uploadId, selection, previewTo
     clearProductCatalogCaches();
     return data;
   } catch (error) {
-    extractApiError(error, 'The draft import did not finish. Check saved revisions before retrying. Live prices remain unchanged.');
+    extractApiError(error, 'The pricelist update did not finish. Check Saved Price Lists before retrying.');
   }
 }
 

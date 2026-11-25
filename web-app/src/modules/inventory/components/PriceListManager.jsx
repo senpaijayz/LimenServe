@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle2, Download, FileSpreadsheet, History, RefreshCcw, Upload } from 'lucide-react';
+import { Archive, CheckCircle2, Download, FileSpreadsheet, History, Pencil, RefreshCcw, Trash2, Upload } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import Input from '../../../components/ui/Input';
@@ -13,6 +13,9 @@ import {
     previewRetailPriceListUpload,
     importRetailPriceListUpload,
     getRetailPriceListOriginalDownload,
+    updateRetailPriceListVersion,
+    archiveRetailPriceListVersion,
+    deleteRetailPriceListVersion,
 } from '../../../services/catalogApi';
 
 function formatUploadCount(value) {
@@ -97,13 +100,18 @@ const PriceListManager = ({ onUpdated }) => {
     const [uploadAnalysis, setUploadAnalysis] = useState(null);
     const [selection, setSelection] = useState(null);
     const [preview, setPreview] = useState(null);
-    const [reviewConfirmed, setReviewConfirmed] = useState(false);
     const [activationTarget, setActivationTarget] = useState(null);
     const [downloadingVersionId, setDownloadingVersionId] = useState(null);
+    const [revisionTarget, setRevisionTarget] = useState(null);
+    const [revisionName, setRevisionName] = useState('');
+    const [revisionDate, setRevisionDate] = useState('');
+    const [savingRevisionField, setSavingRevisionField] = useState('');
+    const [archiveTarget, setArchiveTarget] = useState(null);
+    const [deleteTarget, setDeleteTarget] = useState(null);
 
     const selectedSheet = uploadAnalysis?.sheets?.find((sheet) => sheet.name === selection?.sheetName);
     const selectedPrice = selectedSheet?.priceColumns?.find((column) => column.index === Number(selection?.mapping?.price));
-    const invalidatePreview = () => { setPreview(null); setReviewConfirmed(false); setUploadPhase(''); };
+    const invalidatePreview = () => { setPreview(null); setUploadPhase(''); };
     const updateSelection = (patch) => {
         if (patch.mapping && Object.prototype.hasOwnProperty.call(patch.mapping, 'price')) {
             const detected = selectedSheet?.priceColumns?.find((column) => column.index === Number(patch.mapping.price));
@@ -118,15 +126,20 @@ const PriceListManager = ({ onUpdated }) => {
         setSelection((current) => ({ ...current, ...patch }));
         invalidatePreview();
     };
-    const chooseSheet = (name, analysis = uploadAnalysis) => {
+    const buildSheetSelection = (name, analysis = uploadAnalysis) => {
         const sheet = analysis?.sheets?.find((entry) => entry.name === name);
-        if (!sheet) return;
+        if (!sheet) return null;
         const price = sheet.priceColumns?.find((column) => column.index === sheet.mapping?.price);
-        setSelection({
+        return {
             sheetName: name, headerRow: sheet.headerRow || 1, mapping: { ...sheet.mapping },
             vatStatus: price?.vatStatus || 'unknown', priceKind: price?.priceKind || 'unknown',
             priceBasis: price?.priceBasis || 'unknown', confirmPriceType: false, importMode: 'overlay',
-        });
+        };
+    };
+    const chooseSheet = (name, analysis = uploadAnalysis) => {
+        const nextSelection = buildSheetSelection(name, analysis);
+        if (!nextSelection) return;
+        setSelection(nextSelection);
         invalidatePreview();
     };
 
@@ -143,7 +156,6 @@ const PriceListManager = ({ onUpdated }) => {
         setUploadAnalysis(null);
         setSelection(null);
         setPreview(null);
-        setReviewConfirmed(false);
         setActivationTarget(null);
     };
 
@@ -206,10 +218,51 @@ const PriceListManager = ({ onUpdated }) => {
         }
     };
 
+    const handleSaveRevisionField = async (field) => {
+        if (!revisionTarget || savingRevisionField) return;
+        const value = field === 'name' ? revisionName.trim() : revisionDate;
+        if (!value) { error(field === 'name' ? 'Enter a name for this revision.' : 'Choose an effective date.'); return; }
+        setSavingRevisionField(field);
+        try {
+            const changes = field === 'name'
+                ? { action: 'rename', displayName: value }
+                : { action: 'effective_date', effectiveFrom: value };
+            await updateRetailPriceListVersion(revisionTarget.id, changes);
+            success(field === 'name' ? 'Revision name updated. Prices were not changed.' : 'Effective date updated. Prices were not changed.');
+            await loadVersions();
+            setRevisionTarget(null);
+        } catch (saveError) { error(saveError.message || 'Unable to update this revision.'); }
+        finally { setSavingRevisionField(''); }
+    };
+
+    const handleArchiveRevision = async () => {
+        if (!archiveTarget || isSubmitting) return;
+        setIsSubmitting(true);
+        try {
+            await archiveRetailPriceListVersion(archiveTarget.id);
+            success('Revision archived. Its price history remains available.');
+            setArchiveTarget(null);
+            await loadVersions();
+        } catch (archiveError) { error(archiveError.message || 'Unable to archive this revision.'); }
+        finally { setIsSubmitting(false); }
+    };
+
+    const handleDeleteDraft = async () => {
+        if (!deleteTarget || isSubmitting) return;
+        setIsSubmitting(true);
+        try {
+            await deleteRetailPriceListVersion(deleteTarget.id);
+            success('Unpublished draft deleted. Product and transaction records were not changed.');
+            setDeleteTarget(null);
+            await loadVersions();
+        } catch (deleteError) { error(deleteError.message || 'Unable to delete this draft.'); }
+        finally { setIsSubmitting(false); }
+    };
+
     const handleDownloadErrors = () => {
         const rows = [
-            ['Excel row', 'Part number', 'Product description', 'Issue', 'Suggested correction', 'Severity'],
-            ...(preview?.errors ?? []).map((row) => [row.rowNumber, row.sku, row.name, row.reason, row.suggestion, row.severity || 'error']),
+            ['Excel row', 'Part number', 'Product description', 'Source column', 'Original cell value', 'Issue', 'Suggested correction', 'Severity'],
+            ...(preview?.errors ?? []).map((row) => [row.rowNumber, row.sku, row.name, row.sourceColumn, row.sourceValue, row.reason, row.suggestion, row.severity || 'error']),
         ];
         downloadCsv('limen-pricelist-validation-report.csv', rows);
     };
@@ -254,8 +307,25 @@ const PriceListManager = ({ onUpdated }) => {
             setUploadProgress(100);
             setUploadPhase('');
             setUploadAnalysis(result);
-            // Require an explicit choice when a workbook contains several sheets.
-            if (result.sheets?.length === 1) chooseSheet(result.sheets[0].name, result);
+            const suggestedDate = result.upload?.suggestedEffectiveDate || effectiveFrom;
+            const suggestedYear = suggestedDate.slice(0, 4) || versionYear;
+            setEffectiveFrom(suggestedDate);
+            setVersionYear(suggestedYear);
+            const selectedName = result.recommendedSheetName
+                || (result.sheets?.length === 1 ? result.sheets[0].name : null);
+            const nextSelection = selectedName ? buildSheetSelection(selectedName, result) : null;
+            if (nextSelection) {
+                setSelection(nextSelection);
+                const selected = result.sheets.find((sheet) => sheet.name === selectedName);
+                if (selected?.mapping?.sku >= 0 && selected?.mapping?.price >= 0) {
+                    setUploadPhase('Comparing part numbers and prices…');
+                    const nextPreview = await previewRetailPriceListUpload(result.upload.id, {
+                        ...nextSelection, effectiveFrom: suggestedDate, versionYear: suggestedYear,
+                    });
+                    setPreview(nextPreview);
+                    setUploadPhase('');
+                }
+            }
         } catch (submitError) {
             setUploadProgress(0);
             setUploadPhase(submitError.message || 'The pricelist update did not finish. Check saved lists before retrying.');
@@ -265,14 +335,13 @@ const PriceListManager = ({ onUpdated }) => {
         }
     };
 
-    const handlePreview = async () => {
-        if (!selection || !uploadAnalysis?.upload?.id) return;
+    const handlePreview = async (nextSelection = selection) => {
+        if (!nextSelection || !uploadAnalysis?.upload?.id) return;
         setIsSubmitting(true);
         setUploadProgress(0);
-        setUploadPhase('Validating the selected worksheet and comparing prices…');
-        setReviewConfirmed(false);
+        setUploadPhase('Comparing part numbers and prices…');
         try {
-            const result = await previewRetailPriceListUpload(uploadAnalysis.upload.id, { ...selection, effectiveFrom, versionYear });
+            const result = await previewRetailPriceListUpload(uploadAnalysis.upload.id, { ...nextSelection, effectiveFrom, versionYear });
             setPreview(result);
             setUploadPhase('');
         } catch (previewError) {
@@ -283,22 +352,21 @@ const PriceListManager = ({ onUpdated }) => {
 
     const handleSubmit = async (event) => {
         event.preventDefault();
-        if (!preview?.canImport || !preview.previewToken || !reviewConfirmed || isSubmitting) return;
+        if (!preview?.canImport || !preview.previewToken || isSubmitting) return;
         setIsSubmitting(true);
         setUploadProgress(0);
-        setUploadPhase('Importing and verifying the draft. Current active prices are unchanged…');
+        setUploadPhase('Saving the new revision and updating active prices…');
         try {
             const result = await importRetailPriceListUpload(uploadAnalysis.upload.id,
                 { ...selection, effectiveFrom, versionYear }, preview.previewToken);
             applyResult(result);
             setUploadPhase('');
             setPreview(null);
-            setReviewConfirmed(false);
             setSelection(null);
             setUploadAnalysis(null);
             setSelectedFile(null);
         } catch (submitError) {
-            setUploadPhase(submitError.message || 'Unable to save the draft. Check saved revisions before retrying.');
+            setUploadPhase(submitError.message || 'Unable to complete the update. Check Saved Price Lists before retrying.');
         } finally { setIsSubmitting(false); }
     };
 
@@ -336,9 +404,9 @@ const PriceListManager = ({ onUpdated }) => {
             >
                 <form onSubmit={handleSubmit} className="space-y-5">
                     <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4">
-                        <p className="text-sm font-semibold text-primary-950">Retail price list source</p>
+                        <p className="text-sm font-semibold text-primary-950">Upload, review, and update</p>
                         <p className="mt-1 text-sm text-primary-600">
-                            Save each Mitsubishi price list by year. A newer list can add or remove part numbers without deleting inventory history; only the active list changes selling prices. Stock quantities are never overwritten.
+                            LimenServe detects the customer price sheet, matches part numbers, and compares prices. Invalid rows are reported and skipped; existing prices and stock are preserved for those parts.
                         </p>
                     </div>
 
@@ -369,159 +437,76 @@ const PriceListManager = ({ onUpdated }) => {
                     </div>
 
                     <div className="rounded-2xl border border-primary-200 bg-white p-4">
-                        <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                                <History className="h-4 w-4 text-accent-blue" />
-                                <p className="text-sm font-semibold text-primary-950">Saved price lists</p>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <p className="text-sm font-semibold text-primary-950">1. Upload new pricelist</p>
+                                <p className="mt-1 text-sm text-primary-500">Choose an Excel or CSV file. Its original copy is saved privately for your records.</p>
                             </div>
-                            <Button type="button" variant="ghost" size="sm" onClick={loadVersions} isLoading={isLoadingVersions}>
-                                Refresh
-                            </Button>
-                        </div>
-                        {versions.length > 0 ? (
-                            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                {versions.map((version) => (
-                                    <div key={version.id} className="rounded-xl border border-primary-100 bg-primary-50 p-3">
-                                        <div className="flex items-start justify-between gap-2">
-                                            <div>
-                                                <p className="font-semibold text-primary-950">{version.versionYear} · revision {version.revision ?? 1}</p>
-                                                <p className="mt-1 text-xs text-primary-500">{formatUploadCount(version.rowCount)} parts · effective {version.effectiveFrom}</p>
-                                                {version.upload?.originalFilename && <p className="mt-1 break-all text-xs text-primary-500">File: {version.upload.originalFilename}</p>}
-                                                {version.upload?.worksheet && <p className="mt-1 text-xs text-primary-500">Sheet: {version.upload.worksheet} · {version.upload.pricingCategory?.replaceAll('_', ' ')}</p>}
-                                                {version.upload?.uploadedAt && <p className="mt-1 text-xs text-primary-400">Uploaded {new Date(version.upload.uploadedAt).toLocaleString('en-PH')}</p>}
-                                            </div>
-                                            <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${version.isActive ? 'bg-emerald-100 text-emerald-700' : version.status === 'draft' ? 'bg-amber-100 text-amber-700' : 'bg-primary-100 text-primary-600'}`}>
-                                                {version.isActive ? 'Active' : version.status}
-                                            </span>
-                                        </div>
-                                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                            {version.sourceFileAvailable && (
-                                                <Button type="button" variant="outline" size="sm" className="w-full"
-                                                    isLoading={downloadingVersionId === version.id}
-                                                    onClick={() => handleDownloadOriginal(version)}>
-                                                    <Download className="mr-1 h-4 w-4" /> Original file
-                                                </Button>
-                                            )}
-                                            {!version.isActive && version.status !== 'draft' && (
-                                                <Button type="button" variant="outline" size="sm" className="w-full"
-                                                    onClick={() => setActivationTarget(version)}>
-                                                    Restore revision
-                                                </Button>
-                                            )}
-                                            {!version.isActive && version.status === 'draft' && (
-                                                <Button type="button" variant="outline" size="sm" className="w-full"
-                                                    onClick={() => setActivationTarget(version)}>
-                                                    Publish draft
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="mt-2 text-sm text-primary-500">No saved versions yet. Upload the first list to create a year that can be selected later.</p>
-                        )}
-                    </div>
-
-                    <div className="rounded-2xl border border-primary-200 bg-white p-4">
-                        <div className="flex items-center justify-between gap-3">
-                            <p className="text-sm font-semibold text-primary-950">Selected pricelist file</p>
-                            {uploadAnalysis?.upload?.duplicateDetected && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Same file uploaded before</span>}
+                            {uploadAnalysis?.upload?.duplicateDetected && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">This exact file was uploaded before</span>}
                         </div>
                         {selectedFile ? (
                             <div className="mt-3 flex flex-col gap-3 rounded-xl bg-primary-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                    <p className="font-semibold text-primary-950">{selectedFile.name}</p>
-                                    <p className="mt-1 text-sm text-primary-500">{formatFileSize(selectedFile.size)}</p>
-                                </div>
-                                <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedFile(null)}>
-                                    Remove
-                                </Button>
+                                <div><p className="font-semibold text-primary-950">{selectedFile.name}</p><p className="mt-1 text-sm text-primary-500">{formatFileSize(selectedFile.size)}</p></div>
+                                <Button type="button" variant="ghost" size="sm" onClick={() => { setSelectedFile(null); setUploadAnalysis(null); setSelection(null); setPreview(null); }}>Remove</Button>
                             </div>
                         ) : (
-                            <p className="mt-2 text-sm text-primary-500">
-                                Choose an .xlsx or .csv file. The exact original is kept in private storage. Nothing changes in live prices or stock until you review, save a draft, and separately publish it.
-                            </p>
+                            <p className="mt-2 text-sm text-primary-500">Select a pricelist to detect its customer price sheet and compare it with the active prices.</p>
                         )}
-                        {selectedFile && !uploadAnalysis && <Button type="button" className="mt-4" variant="primary" isLoading={isSubmitting} onClick={handleAnalyze}>Upload original and detect worksheets</Button>}
+                        {selectedFile && !uploadAnalysis && <Button type="button" className="mt-4" variant="primary" isLoading={isSubmitting} onClick={handleAnalyze}>Upload and compare</Button>}
                     </div>
 
                     {uploadAnalysis && (
                         <div className="space-y-4 rounded-2xl border border-primary-200 bg-white p-4">
                             <div>
-                                <p className="text-sm font-semibold text-primary-950">1. Choose a worksheet and price column</p>
-                                <p className="mt-1 text-sm text-primary-500">The workbook’s sheets are separate price structures. Only one selected sheet is reviewed; they are never combined automatically.</p>
+                                <p className="text-sm font-semibold text-primary-950">2. Automatic detection</p>
+                                <p className="mt-1 text-sm text-primary-500">Part numbers, descriptions, and customer selling prices are detected automatically. Only choose a sheet if the workbook has no clear customer-price sheet.</p>
                             </div>
-                            <div className="grid gap-3 sm:grid-cols-2">
+                            {(!selection || !uploadAnalysis.recommendedSheetName) && (
                                 <div>
-                                    <label className="mb-1 block text-sm font-medium text-primary-800" htmlFor="pricelist-sheet">Worksheet</label>
-                                    <select id="pricelist-sheet" value={selection?.sheetName || ''} onChange={(event) => chooseSheet(event.target.value)} className="input w-full" disabled={isSubmitting}>
-                                        <option value="">Choose a worksheet</option>
+                                    <label className="mb-1 block text-sm font-medium text-primary-800" htmlFor="pricelist-sheet">Choose the customer pricelist sheet</label>
+                                    <select id="pricelist-sheet" value={selection?.sheetName || ''} onChange={(event) => { const next = buildSheetSelection(event.target.value); chooseSheet(event.target.value); if (next?.mapping?.sku >= 0 && next?.mapping?.price >= 0) void handlePreview(next); }} className="input w-full" disabled={isSubmitting}>
+                                        <option value="">Select a sheet</option>
                                         {uploadAnalysis.sheets?.map((sheet) => <option key={sheet.name} value={sheet.name}>{sheet.name} — {sheet.category} ({formatUploadCount(sheet.rowCount)} rows)</option>)}
                                     </select>
                                 </div>
-                                <div>
-                                    <label className="mb-1 block text-sm font-medium text-primary-800" htmlFor="pricelist-import-mode">How should it be compared?</label>
-                                    <select id="pricelist-import-mode" value={selection?.importMode || 'overlay'} onChange={(event) => updateSelection({ importMode: event.target.value })} className="input w-full" disabled={!selection || isSubmitting}>
-                                        <option value="overlay">Update selected parts; keep all other active prices</option>
-                                        <option value="replace">Replace the complete retail price list</option>
-                                    </select>
-                                </div>
-                            </div>
+                            )}
                             {selectedSheet && selection && (
                                 <>
                                     <div className="grid gap-3 rounded-xl bg-primary-50 p-3 sm:grid-cols-2 lg:grid-cols-4">
-                                        <p className="text-sm text-primary-700"><span className="font-semibold">Detected:</span> {selectedSheet.category}</p>
-                                        <p className="text-sm text-primary-700"><span className="font-semibold">Header row:</span> {selectedSheet.headerRow || 'Not detected'}</p>
-                                        <p className="text-sm text-primary-700"><span className="font-semibold">Data rows:</span> {formatUploadCount(selectedSheet.rowCount)}</p>
-                                        <p className="text-sm text-primary-700"><span className="font-semibold">Original file:</span> {formatFileSize(uploadAnalysis.upload.sizeBytes)}</p>
+                                        <p className="text-sm text-primary-700"><span className="font-semibold">Detected sheet:</span> {selectedSheet.name}</p>
+                                        <p className="text-sm text-primary-700"><span className="font-semibold">Detected price:</span> {selectedPrice?.label || 'Select the price column'}</p>
+                                        <p className="text-sm text-primary-700"><span className="font-semibold">Products:</span> {formatUploadCount(selectedSheet.rowCount)}</p>
+                                        <p className="text-sm text-primary-700"><span className="font-semibold">Effective date:</span> {effectiveFrom || 'Choose below'}</p>
                                     </div>
-                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                        {[
-                                            ['sku', 'Part number'], ['name', 'Description'], ['model', 'Model / application'],
-                                            ['uom', 'Sales unit'], ['pcc', 'PCC'], ['category', 'Category'], ['price', 'Price'],
-                                        ].map(([key, label]) => (
-                                            <div key={key}>
-                                                <label className="mb-1 block text-sm font-medium text-primary-800" htmlFor={`pricelist-map-${key}`}>{label}{['sku', 'price'].includes(key) ? ' *' : ''}</label>
-                                                <select id={`pricelist-map-${key}`} value={selection.mapping?.[key] ?? -1} onChange={(event) => updateSelection({ mapping: { ...selection.mapping, [key]: Number(event.target.value) } })} className="input w-full" disabled={isSubmitting}>
-                                                    <option value={-1}>Not mapped</option>
-                                                    {selectedSheet.columns?.map((column) => <option key={column.index} value={column.index}>{column.label}</option>)}
-                                                </select>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                        <div>
-                                            <label className="mb-1 block text-sm font-medium text-primary-800" htmlFor="pricelist-price-kind">Price type</label>
-                                            <select id="pricelist-price-kind" value={selection.priceKind} onChange={(event) => updateSelection({ priceKind: event.target.value })} className="input w-full" disabled={isSubmitting}>
-                                                <option value="unknown">Confirm manually</option><option value="srp">Customer selling price (SRP)</option><option value="dnp">Dealer net price (DNP)</option>
-                                            </select>
+                                    {(selectedSheet.status === 'mapping_required' || selection.mapping?.sku < 0 || selection.mapping?.price < 0 || selectedPrice?.priceKind !== 'srp') && (
+                                        <div className="grid gap-3 sm:grid-cols-2">
+                                            {[
+                                                ['sku', 'Part number'], ['price', 'Customer price'], ['name', 'Product description'],
+                                            ].map(([key, label]) => (
+                                                <div key={key}>
+                                                    <label className="mb-1 block text-sm font-medium text-primary-800" htmlFor={`pricelist-map-${key}`}>{label}{['sku', 'price'].includes(key) ? ' *' : ''}</label>
+                                                    <select id={`pricelist-map-${key}`} value={selection.mapping?.[key] ?? -1} onChange={(event) => updateSelection({ mapping: { ...selection.mapping, [key]: Number(event.target.value) } })} className="input w-full" disabled={isSubmitting}>
+                                                        <option value={-1}>Choose a column</option>
+                                                        {selectedSheet.columns?.map((column) => <option key={column.index} value={column.index}>{column.label}</option>)}
+                                                    </select>
+                                                </div>
+                                            ))}
                                         </div>
-                                        <div>
-                                            <label className="mb-1 block text-sm font-medium text-primary-800" htmlFor="pricelist-vat-status">VAT status</label>
-                                            <select id="pricelist-vat-status" value={selection.vatStatus} onChange={(event) => updateSelection({ vatStatus: event.target.value })} className="input w-full" disabled={isSubmitting}>
-                                                <option value="unknown">Confirm manually</option><option value="inclusive">VAT included</option><option value="exclusive">VAT excluded</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="mb-1 block text-sm font-medium text-primary-800" htmlFor="pricelist-price-basis">Price unit</label>
-                                            <select id="pricelist-price-basis" value={selection.priceBasis} onChange={(event) => updateSelection({ priceBasis: event.target.value })} className="input w-full" disabled={isSubmitting}>
-                                                <option value="per_unit">Per stocked item</option><option value="per_liter">Per liter</option>
-                                            </select>
-                                        </div>
-                                        <Input label="Price list year" type="number" min="2000" max="2200" value={versionYear} onChange={(event) => { setVersionYear(event.target.value); invalidatePreview(); }} required />
-                                        <Input label="Effective from" type="date" value={effectiveFrom} onChange={(event) => { setEffectiveFrom(event.target.value); if (!versionYear) setVersionYear(event.target.value.slice(0, 4)); invalidatePreview(); }} required />
-                                    </div>
-                                    {selection.confirmPriceType !== true && (selection.priceKind === 'unknown' || selection.vatStatus === 'unknown' || selection.vatStatus === 'exclusive') && (
-                                        <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                                            <input type="checkbox" className="mt-1" checked={false} onChange={(event) => updateSelection({ confirmPriceType: event.target.checked, priceKind: selection.priceKind === 'unknown' ? 'srp' : selection.priceKind, vatStatus: selection.vatStatus === 'unknown' ? 'inclusive' : selection.vatStatus })} />
-                                            <span>I verified the selected column is customer SRP and confirmed its VAT status. A VAT-exclusive SRP will be converted once using the system’s 12% VAT setting; a VAT-inclusive price will not be changed.</span>
-                                        </label>
                                     )}
-                                    {selection.confirmPriceType === true && <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><input type="checkbox" className="mt-1" checked onChange={() => updateSelection({ confirmPriceType: false })} /><span>Price type confirmed manually.</span></label>}
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        <Button type="button" variant="primary" isLoading={isSubmitting} disabled={isSubmitting || selection.mapping?.sku < 0 || selection.mapping?.price < 0} onClick={handlePreview}>Preview selected sheet</Button>
-                                        {selectedPrice && <p className="text-sm text-primary-600">Selected column: <span className="font-semibold">{selectedPrice.label}</span> · {selectedPrice.priceKind?.toUpperCase() || 'Price type unconfirmed'} · {selectedPrice.vatStatus || 'VAT unconfirmed'} · {selectedPrice.priceBasis === 'per_liter' ? 'per liter' : 'per item'}</p>}
+                                    {(selection.priceKind === 'unknown' || selection.vatStatus === 'unknown' || selection.vatStatus === 'exclusive' || selection.priceBasis === 'per_liter') && (
+                                        <div className="grid gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 sm:grid-cols-2">
+                                            <p className="text-sm text-amber-900 sm:col-span-2">Check the detected price details below before continuing.</p>
+                                            {selection.priceKind === 'unknown' && <div><label className="mb-1 block text-sm font-medium text-amber-950" htmlFor="pricelist-price-kind">Price type</label><select id="pricelist-price-kind" value={selection.priceKind} onChange={(event) => updateSelection({ priceKind: event.target.value })} className="input w-full"><option value="unknown">Choose type</option><option value="srp">Customer selling price (SRP)</option><option value="dnp">Dealer net price (DNP)</option></select></div>}
+                                            {selection.vatStatus === 'unknown' && <div><label className="mb-1 block text-sm font-medium text-amber-950" htmlFor="pricelist-vat-status">VAT</label><select id="pricelist-vat-status" value={selection.vatStatus} onChange={(event) => updateSelection({ vatStatus: event.target.value })} className="input w-full"><option value="unknown">Choose VAT status</option><option value="inclusive">VAT included</option><option value="exclusive">VAT excluded</option></select></div>}
+                                            {selection.vatStatus === 'exclusive' && <p className="text-sm text-amber-900 sm:col-span-2">This sheet shows VAT-exclusive prices. LimenServe will add the configured 12% VAT once during the update.</p>}
+                                            {selection.priceBasis === 'per_liter' && <p className="text-sm text-amber-900 sm:col-span-2">This sheet is priced per liter and cannot replace per-item POS prices. Choose the per-item customer price sheet instead.</p>}
+                                            {selection.priceBasis !== 'per_liter' && <label className="flex items-start gap-2 text-sm text-amber-900 sm:col-span-2"><input type="checkbox" className="mt-1" checked={selection.confirmPriceType === true} onChange={(event) => updateSelection({ confirmPriceType: event.target.checked })} /><span>I confirmed this is the correct customer price. VAT-exclusive prices are converted once using the system’s 12% VAT setting.</span></label>}
+                                        </div>
+                                    )}
+                                    <div className="flex flex-wrap items-end gap-3">
+                                        <div className="w-full sm:max-w-xs"><label className="mb-1 block text-sm font-medium text-primary-800" htmlFor="pricelist-effective-date">Effective date</label><Input id="pricelist-effective-date" type="date" value={effectiveFrom} onChange={(event) => { setEffectiveFrom(event.target.value); setVersionYear(event.target.value.slice(0, 4)); invalidatePreview(); }} required /></div>
+                                        {!preview && <Button type="button" variant="primary" isLoading={isSubmitting} disabled={isSubmitting || selection.mapping?.sku < 0 || selection.mapping?.price < 0} onClick={() => void handlePreview()}>Review price changes</Button>}
+                                        {preview && <Button type="button" variant="outline" isLoading={isSubmitting} onClick={() => void handlePreview()}>Refresh comparison</Button>}
                                     </div>
                                 </>
                             )}
@@ -531,28 +516,58 @@ const PriceListManager = ({ onUpdated }) => {
                     {preview && (
                         <div className="space-y-4 rounded-2xl border border-primary-200 bg-white p-4">
                             <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div><p className="text-sm font-semibold text-primary-950">2. Review import preview</p><p className="mt-1 text-sm text-primary-500">This creates a saved draft only. Active retail prices and stock remain unchanged.</p></div>
+                                <div><p className="text-sm font-semibold text-primary-950">3. Price change summary</p><p className="mt-1 text-sm text-primary-500">Check the comparison before updating. Invalid rows will be skipped and existing prices for those parts will be kept.</p></div>
                                 {preview.errors?.length > 0 && <Button type="button" variant="outline" size="sm" onClick={handleDownloadErrors}><Download className="mr-1 h-4 w-4" /> Download error report</Button>}
                             </div>
-                            {preview.blockers?.length > 0 && <div className="space-y-1 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900" role="alert"><p className="font-semibold">Cannot save this draft yet</p>{preview.blockers.map((blocker) => <p key={blocker}>• {blocker}</p>)}</div>}
-                            {preview.warnings?.length > 0 && <div className="max-h-32 space-y-1 overflow-auto rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{preview.warnings.map((warning) => <p key={warning}>• {warning}</p>)}</div>}
+                            {preview.blockers?.length > 0 && <div className="space-y-1 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900" role="alert"><p className="font-semibold">A selection is needed before updating</p>{preview.blockers.map((blocker) => <p key={blocker}>• {blocker}</p>)}</div>}
+                            {preview.warnings?.length > 0 && <details className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><summary className="cursor-pointer font-semibold">Price notes ({formatUploadCount(preview.warnings.length)})</summary><div className="mt-2 max-h-32 space-y-1 overflow-auto">{preview.warnings.slice(0, 100).map((warning, index) => <p key={`${index}-${warning}`}>• {warning}</p>)}</div></details>}
                             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                                 {[
-                                    ['Detected rows', preview.counts?.totalRows], ['Valid parts', preview.counts?.validRows], ['Rejected rows', preview.counts?.invalidRows], ['VAT warnings', preview.counts?.warningRows],
-                                    ['Existing products', preview.counts?.existingProducts], ['New products', preview.counts?.newProducts], ['Changed prices', preview.counts?.changedPrices], ['Unchanged prices', preview.counts?.unchangedPrices],
-                                    ['Removed from list', preview.counts?.removedFromList], ['Saved revision rows', preview.counts?.revisionRowCount],
+                                    ['Products detected', preview.counts?.totalRows], ['Matched parts', preview.counts?.existingProducts], ['Prices changed', preview.counts?.changedPrices], ['Prices unchanged', preview.counts?.unchangedPrices],
+                                    ['New part numbers', preview.counts?.newProducts], ['Missing prices', preview.counts?.missingPrices], ['Invalid prices / zero', (preview.counts?.invalidPrices || 0) + (preview.counts?.zeroPrices || 0)], ['Conflicting duplicates', preview.counts?.conflictingDuplicateGroups],
                                 ].map(([label, value]) => <div key={label} className="rounded-xl bg-primary-50 p-3"><p className="text-xs uppercase tracking-wide text-primary-500">{label}</p><p className="mt-1 text-lg font-semibold text-primary-950">{formatUploadCount(value)}</p></div>)}
                             </div>
-                            {preview.importMode === 'replace' && preview.counts?.removedFromList > 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">A replacement draft would omit {formatUploadCount(preview.counts.removedFromList)} parts in the current revision. Review this carefully; those items will not have an active price after this draft is published.</p>}
-                            {preview.errors?.length > 0 && <div className="max-h-56 overflow-auto rounded-xl border border-primary-200"><table className="min-w-full text-left text-sm"><thead className="sticky top-0 bg-primary-50 text-xs uppercase text-primary-600"><tr><th className="px-3 py-2">Excel row</th><th className="px-3 py-2">Part number</th><th className="px-3 py-2">Issue</th><th className="px-3 py-2">Suggested correction</th></tr></thead><tbody>{preview.errors.slice(0, 150).map((row, index) => <tr key={`${row.rowNumber}-${index}`} className="border-t border-primary-100"><td className="px-3 py-2">{row.rowNumber}</td><td className="px-3 py-2 font-medium">{row.sku || '—'}</td><td className="px-3 py-2">{row.reason}</td><td className="px-3 py-2">{row.suggestion}</td></tr>)}</tbody></table>{preview.errors.length > 150 && <p className="p-2 text-xs text-primary-500">Showing the first 150 issues. Download the report to view all.</p>}</div>}
-                            {preview.sample?.length > 0 && <div className="overflow-auto rounded-xl border border-primary-200"><p className="border-b border-primary-100 bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-800">Sample detected prices</p><table className="min-w-full text-left text-sm"><thead className="text-xs uppercase text-primary-500"><tr><th className="px-3 py-2">Excel row</th><th className="px-3 py-2">Part number</th><th className="px-3 py-2">Description</th><th className="px-3 py-2">Selected price</th></tr></thead><tbody>{preview.sample.map((row) => <tr key={`${row.sourceLineNumber}-${row.sku}`} className="border-t border-primary-100"><td className="px-3 py-2">{row.sourceLineNumber}</td><td className="px-3 py-2 font-semibold">{row.sku}</td><td className="px-3 py-2">{row.name || '—'}</td><td className="px-3 py-2">{formatPeso(row.price)}</td></tr>)}</tbody></table></div>}
-                            {preview.priceChanges?.length > 0 && <div className="max-h-48 overflow-auto rounded-xl border border-primary-200"><p className="sticky top-0 border-b border-primary-100 bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-800">Price comparison (showing up to 80)</p><table className="min-w-full text-left text-sm"><thead className="text-xs uppercase text-primary-500"><tr><th className="px-3 py-2">Part</th><th className="px-3 py-2">Previous</th><th className="px-3 py-2">New</th><th className="px-3 py-2">Result</th></tr></thead><tbody>{preview.priceChanges.map((row) => <tr key={row.sku} className="border-t border-primary-100"><td className="px-3 py-2">{row.sku}</td><td className="px-3 py-2">{formatPeso(row.previousPrice)}</td><td className="px-3 py-2">{formatPeso(row.newPrice)}</td><td className="px-3 py-2">{getChangeLabel(row.status)}</td></tr>)}</tbody></table></div>}
-                            <label className={`flex items-start gap-2 rounded-lg p-3 text-sm ${preview.canImport ? 'border border-primary-200 bg-primary-50 text-primary-800' : 'border border-primary-100 bg-primary-50/50 text-primary-400'}`}>
-                                <input type="checkbox" className="mt-1" checked={reviewConfirmed} onChange={(event) => setReviewConfirmed(event.target.checked)} disabled={!preview.canImport || isSubmitting} />
-                                <span>I reviewed the selected worksheet, pricing type, VAT status, rejected rows, and list changes. Save this as a draft only; it will not change live prices.</span>
-                            </label>
+                            {preview.counts?.roundingWarnings > 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{formatUploadCount(preview.counts.roundingWarnings)} price(s) have more than two decimal places. Review the source values in Price notes; the preview shows the exact cent amount that will be saved.</p>}
+                            {preview.duplicateGroups?.length > 0 && <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-sm font-semibold text-amber-950">Choose which row to use for repeated part numbers</p>{preview.duplicateGroups.map((group) => <div key={group.sku} className="grid gap-2 sm:grid-cols-[1fr_2fr] sm:items-center"><p className="text-sm text-amber-950"><span className="font-semibold">{group.sku}</span> · rows {group.rows.map((row) => row.rowNumber).join(', ')}</p><select aria-label={`Choose Excel row for ${group.sku}`} value={group.selectedRow || ''} onChange={(event) => updateSelection({ duplicateResolutions: { ...selection.duplicateResolutions, [group.sku]: Number(event.target.value) } })} className="input w-full"><option value="">Keep existing price until reviewed</option>{group.rows.map((row) => <option key={row.rowNumber} value={row.rowNumber}>Row {row.rowNumber} · {row.sourcePrice} · {row.name || 'No description'}</option>)}</select></div>)}</div>}
+                            {preview.errors?.length > 0 && <details className="rounded-xl border border-primary-200"><summary className="cursor-pointer bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-800">Rows needing attention ({formatUploadCount(preview.errors.length)})</summary><div className="max-h-56 overflow-auto"><table className="min-w-full text-left text-sm"><thead className="sticky top-0 bg-white text-xs uppercase text-primary-600"><tr><th className="px-3 py-2">Excel row</th><th className="px-3 py-2">Part number</th><th className="px-3 py-2">Source value</th><th className="px-3 py-2">What happened</th><th className="px-3 py-2">Next step</th></tr></thead><tbody>{preview.errors.slice(0, 150).map((row, index) => <tr key={`${row.rowNumber}-${index}`} className="border-t border-primary-100"><td className="px-3 py-2">{row.rowNumber ?? '—'}</td><td className="px-3 py-2 font-medium">{row.sku || '—'}</td><td className="px-3 py-2 font-mono">{row.sourceValue || '(blank)'}</td><td className="px-3 py-2">{row.reason}</td><td className="px-3 py-2">{row.suggestion}</td></tr>)}</tbody></table>{preview.errors.length > 150 && <p className="p-2 text-xs text-primary-500">Showing the first 150 issues. Download the report to view all.</p>}</div></details>}
+                            {preview.sample?.length > 0 && <details className="rounded-xl border border-primary-200"><summary className="cursor-pointer bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-800">Sample detected prices</summary><div className="overflow-auto"><table className="min-w-full text-left text-sm"><thead className="text-xs uppercase text-primary-500"><tr><th className="px-3 py-2">Excel row</th><th className="px-3 py-2">Part number</th><th className="px-3 py-2">Description</th><th className="px-3 py-2">Selected price</th></tr></thead><tbody>{preview.sample.map((row) => <tr key={`${row.sourceLineNumber}-${row.sku}`} className="border-t border-primary-100"><td className="px-3 py-2">{row.sourceLineNumber}</td><td className="px-3 py-2 font-semibold">{row.sku}</td><td className="px-3 py-2">{row.name || '—'}</td><td className="px-3 py-2">{formatPeso(row.price)}</td></tr>)}</tbody></table></div></details>}
+                            {preview.priceChanges?.length > 0 && <details className="rounded-xl border border-primary-200"><summary className="cursor-pointer bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-800">Price-by-price comparison (showing up to 80)</summary><div className="max-h-48 overflow-auto"><table className="min-w-full text-left text-sm"><thead className="sticky top-0 bg-white text-xs uppercase text-primary-500"><tr><th className="px-3 py-2">Part</th><th className="px-3 py-2">Previous</th><th className="px-3 py-2">New</th><th className="px-3 py-2">Result</th></tr></thead><tbody>{preview.priceChanges.map((row) => <tr key={row.sku} className="border-t border-primary-100"><td className="px-3 py-2">{row.sku}</td><td className="px-3 py-2">{formatPeso(row.previousPrice)}</td><td className="px-3 py-2">{formatPeso(row.newPrice)}</td><td className="px-3 py-2">{getChangeLabel(row.status)}</td></tr>)}</tbody></table></div></details>}
+                            {preview.counts?.zeroPrices > 0 && <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><input type="checkbox" className="mt-1" checked={selection?.confirmZeroPrices === true} onChange={(event) => updateSelection({ confirmZeroPrices: event.target.checked })} /><span>{formatUploadCount(preview.counts.zeroPrices)} explicit zero price(s) found. Confirm only if ₱0.00 is intended for these parts.</span></label>}
                         </div>
                     )}
+
+                    <details className="rounded-2xl border border-primary-200 bg-white p-4">
+                        <summary className="cursor-pointer text-sm font-semibold text-primary-950"><History className="mr-2 inline h-4 w-4 text-accent-blue" />Saved price lists ({formatUploadCount(versions.length)})</summary>
+                        <div className="mt-3">
+                            <div className="flex justify-end">
+                                <Button type="button" variant="ghost" size="sm" onClick={loadVersions} isLoading={isLoadingVersions}>Refresh</Button>
+                            </div>
+                            {versions.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                {versions.map((version) => <div key={version.id} className="rounded-xl border border-primary-100 bg-primary-50 p-3">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <p className="break-words font-semibold text-primary-950">{version.displayName || `Price list ${version.versionYear} · revision ${version.revision ?? 1}`}</p>
+                                            <p className="mt-1 text-xs text-primary-600">Revision {version.revision ?? 1} · {formatUploadCount(version.rowCount)} parts · effective {version.effectiveFrom}</p>
+                                            {version.upload?.originalFilename && <p className="mt-1 break-all text-xs text-primary-500">File: {version.upload.originalFilename}</p>}
+                                            {version.upload?.worksheet && <p className="mt-1 text-xs text-primary-500">Sheet: {version.upload.worksheet} · {version.upload.pricingCategory?.replaceAll('_', ' ')}</p>}
+                                            {version.upload?.uploadedAt && <p className="mt-1 text-xs text-primary-500">Uploaded {new Date(version.upload.uploadedAt).toLocaleString('en-PH')}</p>}
+                                        </div>
+                                        <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${version.isActive ? 'bg-emerald-100 text-emerald-700' : version.status === 'draft' ? 'bg-amber-100 text-amber-700' : 'bg-primary-100 text-primary-700'}`}>
+                                            {version.isActive ? 'Active' : `${version.status.charAt(0).toUpperCase()}${version.status.slice(1)}`}
+                                        </span>
+                                    </div>
+                                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                        <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => { setRevisionTarget(version); setRevisionName(version.displayName || `Price list ${version.versionYear} · revision ${version.revision ?? 1}`); setRevisionDate(version.effectiveFrom || ''); }}><Pencil className="mr-1 h-4 w-4" />Edit name / date</Button>
+                                        {version.sourceFileAvailable && <Button type="button" variant="outline" size="sm" className="w-full" isLoading={downloadingVersionId === version.id} onClick={() => handleDownloadOriginal(version)}><Download className="mr-1 h-4 w-4" />Original file</Button>}
+                                        {!version.isActive && version.status !== 'draft' && <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => setActivationTarget(version)}>Restore revision</Button>}
+                                        {!version.isActive && version.status === 'draft' && <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => setActivationTarget(version)}>Publish draft</Button>}
+                                        {!version.isActive && version.status === 'published' && <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => setArchiveTarget(version)}><Archive className="mr-1 h-4 w-4" />Archive revision</Button>}
+                                        {!version.isActive && version.status === 'draft' && <Button type="button" variant="outline" size="sm" className="w-full text-accent-danger" onClick={() => setDeleteTarget(version)}><Trash2 className="mr-1 h-4 w-4" />Delete draft</Button>}
+                                    </div>
+                                </div>)}
+                            </div> : <p className="mt-2 text-sm text-primary-600">No saved revisions yet.</p>}
+                        </div>
+                    </details>
 
                     {isSubmitting && (
                         <div className="rounded-2xl border border-accent-blue/20 bg-accent-blue/5 p-4" role="status" aria-live="polite">
@@ -566,7 +581,7 @@ const PriceListManager = ({ onUpdated }) => {
                                     style={{ width: `${uploadProgress}%` }}
                                 />
                             </div>
-                            <p className="mt-2 text-xs text-primary-500">The server is preserving the original and saving a draft. Live prices and inventory are not being changed.</p>
+                            <p className="mt-2 text-xs text-primary-500">The original file and revision history are retained. Inventory quantities and completed transactions are not changed.</p>
                         </div>
                     )}
 
@@ -582,9 +597,9 @@ const PriceListManager = ({ onUpdated }) => {
                                 <div className="flex items-start gap-3">
                                     <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
                                     <div>
-                                        <p className="font-semibold text-emerald-950">{lastResult.noOp ? 'Price list already up to date' : lastResult.isActive === false ? 'Price list draft saved' : 'Price list applied successfully'}</p>
+                                        <p className="font-semibold text-emerald-950">{lastResult.noOp ? 'Price list already up to date' : lastResult.activationPending ? 'Revision saved — activation needs attention' : lastResult.isActive === false ? 'Price list draft saved' : 'Price list updated successfully'}</p>
                                         <p className="mt-1 text-emerald-700">
-                                            {describePricelistResult(lastResult)}
+                                            {lastResult.message || describePricelistResult(lastResult)}
                                         </p>
                                     </div>
                                 </div>
@@ -671,9 +686,9 @@ const PriceListManager = ({ onUpdated }) => {
                             Close
                         </Button>
                         <Button type="submit" variant="primary" fullWidth isLoading={isSubmitting}
-                            disabled={!preview?.canImport || !reviewConfirmed || !uploadAnalysis?.upload?.id}
+                            disabled={!preview?.canImport || !uploadAnalysis?.upload?.id}
                             leftIcon={<RefreshCcw className="w-4 h-4" />}>
-                            Save as Draft (Live Prices Unchanged)
+                            Update Pricelist
                         </Button>
                     </div>
                 </form>
@@ -681,12 +696,42 @@ const PriceListManager = ({ onUpdated }) => {
 
             <Modal isOpen={Boolean(activationTarget)} onClose={() => !activatingVersionId && setActivationTarget(null)} title={activationTarget?.isActive ? 'Pricelist is already active' : activationTarget?.status === 'draft' ? 'Publish this draft?' : 'Restore this pricelist?'} size="md">
                 {activationTarget && <div className="space-y-4">
-                    <p className="text-sm text-primary-700">You are about to make <span className="font-semibold">{activationTarget.versionYear} · revision {activationTarget.revision ?? 1}</span> the active retail pricelist. POS, quotations, and the public catalog will use its prices after confirmation.</p>
+                    <p className="text-sm text-primary-700">You are about to make <span className="font-semibold">{activationTarget.displayName || `Price list ${activationTarget.versionYear} · revision ${activationTarget.revision ?? 1}`}</span> the active retail pricelist. POS, quotations, and the public catalog will use its prices after confirmation.</p>
                     <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">This switches the active price snapshot. Inventory quantities and the saved revision history are preserved. Verify the row count and worksheet before proceeding.</p>
                     <div className="flex gap-3">
                         <Button type="button" variant="secondary" fullWidth onClick={() => setActivationTarget(null)} disabled={Boolean(activatingVersionId)}>Cancel</Button>
                         <Button type="button" variant="primary" fullWidth isLoading={activatingVersionId === activationTarget.id} onClick={() => handleActivate(activationTarget)}>Confirm and activate</Button>
                     </div>
+                </div>}
+            </Modal>
+
+            <Modal isOpen={Boolean(revisionTarget)} onClose={() => !savingRevisionField && setRevisionTarget(null)} title="Edit saved revision" size="md">
+                {revisionTarget && <div className="space-y-4">
+                    <p className="text-sm text-primary-600">Change the label or effective date. These edits do not change any product price.</p>
+                    <div className="space-y-2">
+                        <Input label="Revision name" value={revisionName} maxLength={140} onChange={(event) => setRevisionName(event.target.value)} />
+                        <Button type="button" variant="outline" isLoading={savingRevisionField === 'name'} disabled={Boolean(savingRevisionField) || !revisionName.trim()} onClick={() => void handleSaveRevisionField('name')}>Save name</Button>
+                    </div>
+                    <div className="space-y-2">
+                        <Input label="Effective date" type="date" value={revisionDate} onChange={(event) => setRevisionDate(event.target.value)} />
+                        <Button type="button" variant="outline" isLoading={savingRevisionField === 'date'} disabled={Boolean(savingRevisionField) || !revisionDate} onClick={() => void handleSaveRevisionField('date')}>Save date</Button>
+                    </div>
+                    <Button type="button" variant="secondary" fullWidth onClick={() => setRevisionTarget(null)} disabled={Boolean(savingRevisionField)}>Done</Button>
+                </div>}
+            </Modal>
+
+            <Modal isOpen={Boolean(archiveTarget)} onClose={() => !isSubmitting && setArchiveTarget(null)} title="Archive this revision?" size="md">
+                {archiveTarget && <div className="space-y-4">
+                    <p className="text-sm text-primary-700">Archive <span className="font-semibold">{archiveTarget.displayName || `Price list ${archiveTarget.versionYear} · revision ${archiveTarget.revision ?? 1}`}</span>? It will remain in revision history and can still be restored later. Product prices and the original file are kept.</p>
+                    <div className="flex gap-3"><Button type="button" variant="secondary" fullWidth onClick={() => setArchiveTarget(null)} disabled={isSubmitting}>Cancel</Button><Button type="button" variant="primary" fullWidth isLoading={isSubmitting} onClick={() => void handleArchiveRevision()}>Archive revision</Button></div>
+                </div>}
+            </Modal>
+
+            <Modal isOpen={Boolean(deleteTarget)} onClose={() => !isSubmitting && setDeleteTarget(null)} title="Delete unpublished draft?" size="md">
+                {deleteTarget && <div className="space-y-4">
+                    <p className="text-sm text-primary-700">This permanently removes the never-published draft <span className="font-semibold">{deleteTarget.displayName || `Price list ${deleteTarget.versionYear} · revision ${deleteTarget.revision ?? 1}`}</span>, its draft rows, and its original upload if no other record uses that file.</p>
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">Published or active revisions cannot be deleted. Product records, active prices, inventory, sales, and quotations are not deleted.</p>
+                    <div className="flex gap-3"><Button type="button" variant="secondary" fullWidth onClick={() => setDeleteTarget(null)} disabled={isSubmitting}>Keep draft</Button><Button type="button" variant="primary" fullWidth isLoading={isSubmitting} onClick={() => void handleDeleteDraft()}>Delete draft</Button></div>
                 </div>}
             </Modal>
         </>

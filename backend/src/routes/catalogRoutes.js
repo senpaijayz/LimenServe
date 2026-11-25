@@ -18,7 +18,7 @@ import publishedPackageRoutes from './publishedPackageRoutes.js';
 import inventoryMovementExportRoutes from './inventoryMovementExportRoutes.js';
 import createSupplierOrderRouter from './supplierOrderRoutes.js';
 import { createCatalogSummaryReader } from '../services/catalogSummary.js';
-import { analyzePricelistWorkbook, previewPricelistWorksheet, readPricelistWorkbook } from '../services/pricelistWorkbook.js';
+import { analyzePricelistWorkbook, inferPricelistEffectiveDate, parsePricelistNumber, previewPricelistWorksheet, readPricelistWorkbook } from '../services/pricelistWorkbook.js';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
@@ -63,7 +63,6 @@ const PRICELIST_PREVIEW_TOKEN_TTL_MS = 15 * 60 * 1000;
 const SERVICE_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const VEHICLE_FITMENT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const PRODUCT_BARCODE_SUFFIX = '0001';
-const PRODUCT_BARCODE_VENDOR_PREFIXES = ['PA'];
 const MODEL_YEAR_LOOKAHEAD = 1;
 const GENERAL_FITMENT_TERMS = ['various', 'universal', 'general', 'accessories'];
 
@@ -115,49 +114,41 @@ let vehicleFitmentCachePromise = null;
 let archivedProductIdsPromise = null;
 
 function parsePrice(value) {
-  const normalized = typeof value === 'number'
-    ? value
-    : String(value ?? '')
-      .replace(/\u20b1|php|peso/gi, '')
-      .replace(/[,\s]/g, '')
-      .trim();
-  const numeric = Number(normalized);
-
-  if (Number.isFinite(numeric) && numeric >= 0) {
-    return Number(numeric.toFixed(2));
-  }
-
-  const currencyFallback = String(normalized).replace(/[^\d.-]/g, '');
-  const fallbackNumeric = Number(currencyFallback);
-  return Number.isFinite(fallbackNumeric) && fallbackNumeric >= 0 ? Number(fallbackNumeric.toFixed(2)) : null;
+  const numeric = parsePricelistNumber(value);
+  return numeric === null ? null : Number(numeric.toFixed(2));
 }
 
 function normalizePriceListPartNumber(value) {
-  const normalized = normalizePartNumber(value);
-  const prefixStripped = PRODUCT_BARCODE_VENDOR_PREFIXES
-    .filter((prefix) => normalized.startsWith(prefix) && normalized.length > prefix.length)
-    .map((prefix) => normalizePartNumber(normalized.slice(prefix.length)))
-    .find(Boolean);
-
-  return prefixStripped || normalized;
+  return normalizePartNumber(value);
 }
 
-function normalizePriceListItems(items = []) {
-  return items
-    .map((item) => {
+function normalizePriceListItems(items = [], { confirmZeroPrices = false } = {}) {
+  const rows = (Array.isArray(items) ? items : []).map((item, index) => {
       const originalSku = String(item?.sku || '').trim();
       return {
         sku: normalizePriceListPartNumber(originalSku),
         originalSku,
         price: parsePrice(item?.price),
+        sourceLineNumber: Number(item?.sourceLineNumber) || index + 1,
+        sourcePrice: String(item?.price ?? ''),
         name: normalizeOptionalText(item?.name || item?.description, 220),
         model: normalizeOptionalText(item?.model || item?.application, 140),
         category: normalizeOptionalText(item?.category, 140),
         sourceCategory: normalizeOptionalText(item?.sourceCategory || item?.category, 140),
       };
-    })
-    .filter((item) => item.sku && item.price !== null)
-    .map(classifyPriceListItem);
+    }).filter((item) => item.sku || item.sourcePrice.trim() || item.name);
+  const invalid = rows.filter((item) => !item.sku || item.price === null || (item.price === 0 && !confirmZeroPrices));
+  if (invalid.length) {
+    const error = new Error(invalid.map((item) => !item.sku
+      ? `Row ${item.sourceLineNumber} is missing a part number.`
+      : item.price === null
+        ? `Row ${item.sourceLineNumber} contains a blank or invalid price; no price was changed.`
+        : `Row ${item.sourceLineNumber} has a zero price; confirm it is intentional before importing.`).join(' '));
+    error.statusCode = 422;
+    error.invalidRows = invalid.map(({ sku, sourceLineNumber, sourcePrice }) => ({ sku, rowNumber: sourceLineNumber, sourceValue: sourcePrice }));
+    throw error;
+  }
+  return rows.map(classifyPriceListItem);
 }
 
 function decodeXmlEntities(value = '') {
@@ -432,7 +423,7 @@ function findPriceListHeader(rows = []) {
   return best.rowIndex >= 0 ? best : null;
 }
 
-function rowsToPriceListItems(rows = []) {
+function rowsToPriceListItems(rows = [], { confirmZeroPrices = false } = {}) {
   if (rows.length === 0) {
     return [];
   }
@@ -454,16 +445,17 @@ function rowsToPriceListItems(rows = []) {
     return [];
   }
 
-  return normalizePriceListItems(dataRows.map((row) => ({
+  return normalizePriceListItems(dataRows.map((row, index) => ({
     sku: row[skuIndex],
     price: row[priceIndex],
     name: row[nameIndex],
     model: row[modelIndex],
     category: row[categoryIndex],
-  })));
+    sourceLineNumber: detectedHeader.rowIndex + index + 2,
+  })), { confirmZeroPrices });
 }
 
-function parsePriceListUpload(file) {
+function parsePriceListUpload(file, options = {}) {
   const filename = String(file?.originalname || '').toLowerCase();
   const mimetype = String(file?.mimetype || '').toLowerCase();
 
@@ -478,7 +470,7 @@ function parsePriceListUpload(file) {
       const candidates = parseXlsxWorksheetRows(file.buffer).map((rows) => {
         const detected = findPriceListHeader(rows);
         const priceHeader = detected ? detected.header[findColumnIndex(detected.header, 'price', { allowFallback: false })] : '';
-        return { items: rowsToPriceListItems(rows), inclusive: /withvat|wvat|vatinclusive|includingvat|vatin/.test(priceHeader) && !/without/.test(priceHeader) };
+        return { items: rowsToPriceListItems(rows, options), inclusive: /withvat|wvat|vatinclusive|includingvat|vatin/.test(priceHeader) && !/without/.test(priceHeader) };
       }).filter((candidate) => candidate.items.length).sort((a, b) => b.items.length - a.items.length);
       if (!candidates.length) return [];
       const allSkus = new Set(candidates[0].items.map((item) => item.sku));
@@ -495,7 +487,7 @@ function parsePriceListUpload(file) {
       return complete[0].items;
     }
 
-    return rowsToPriceListItems(parseCsvRows(file.buffer.toString('utf8').replace(/\t/g, ',')));
+    return rowsToPriceListItems(parseCsvRows(file.buffer.toString('utf8').replace(/\t/g, ',')), options);
   } catch (parseError) {
     parseError.statusCode = parseError.statusCode || 400;
     parseError.message = parseError.message || 'The price list file could not be read. Save it as a clean .xlsx or CSV file, then upload again.';
@@ -561,6 +553,10 @@ function normalizePricelistUploadSelection(body = {}) {
     error.statusCode = 400;
     throw error;
   }
+  const duplicateResolutions = Object.fromEntries(Object.entries(body.duplicateResolutions || {})
+    .slice(0, 1000)
+    .map(([sku, rowNumber]) => [String(sku).normalize('NFKC').trim().toUpperCase(), Number(rowNumber)])
+    .filter(([sku, rowNumber]) => sku && Number.isInteger(rowNumber) && rowNumber > 0));
   return {
     sheetName,
     headerRow: parsePositiveInteger(body.headerRow, 1, 200000),
@@ -572,6 +568,8 @@ function normalizePricelistUploadSelection(body = {}) {
     priceKind: ['srp', 'dnp'].includes(body.priceKind) ? body.priceKind : 'unknown',
     priceBasis: body.priceBasis === 'per_liter' ? 'per_liter' : 'per_unit',
     confirmPriceType: body.confirmPriceType === true,
+    confirmZeroPrices: body.confirmZeroPrices === true,
+    duplicateResolutions,
   };
 }
 
@@ -756,15 +754,19 @@ async function previewPricelistUpload({ upload, body }) {
     }));
   }
   const oldBySku = new Map(oldRows.map((row) => [row.sku, row]));
-  if (selection.importMode === 'overlay' && oldBySku.size === 0) {
-    blockers.push('There is no current retail pricelist to merge into. Choose full replacement only if the selected worksheet is a complete customer SRP list.');
-  }
 
   const selectedSkus = parsed.items.map((item) => item.sku);
   const existingProducts = await findPricelistProducts(selectedSkus);
   const existingProductSkus = new Set(existingProducts.map((product) => product.sku));
   const existingProductsBySku = new Map(existingProducts.map((product) => [product.sku, product]));
   const nextBySku = selection.importMode === 'overlay' ? new Map(oldBySku) : new Map();
+  // Invalid or unresolved source rows never remove a prior price, even when
+  // the administrator selected a complete replacement worksheet.
+  for (const rejected of parsed.errors.filter((row) => row.severity !== 'warning' && row.sku)) {
+    const sku = String(rejected.sku).normalize('NFKC').trim().toUpperCase();
+    const previous = oldBySku.get(sku);
+    if (previous) nextBySku.set(sku, mapVersionItemForDraft(previous));
+  }
   const selectedChanges = parsed.items.map((item) => {
     const previous = oldBySku.get(item.sku);
     const product = existingProductsBySku.get(item.sku);
@@ -804,7 +806,7 @@ async function previewPricelistUpload({ upload, body }) {
   }));
   const warningRows = parsed.errors.filter((row) => row.severity === 'warning');
   const errors = parsed.errors.filter((row) => row.severity !== 'warning');
-  const canImport = parsed.canImport && blockers.length === 0 && draftItems.length > 0;
+  const canImport = parsed.items.length > 0 && blockers.length === 0 && draftItems.length > 0;
   const tokenPayload = {
     uploadId: upload.id,
     fileChecksum: upload.file_checksum,
@@ -834,6 +836,7 @@ async function previewPricelistUpload({ upload, body }) {
     counts: { ...parsed.counts, validRows: parsed.items.length, invalidRows: errors.length, warningRows: warningRows.length, existingProducts: parsed.items.filter((item) => existingProductSkus.has(item.sku)).length, newProducts: parsed.items.filter((item) => !existingProductSkus.has(item.sku)).length, changedPrices: selectedChanges.filter((item) => ['changed', 'new_price', 'new_part'].includes(item.status)).length, unchangedPrices: selectedChanges.filter((item) => item.status === 'unchanged').length, removedFromList: removedFromListCount, revisionRowCount: draftItems.length },
     canImport,
     blockers,
+    duplicateGroups: parsed.duplicateGroups,
     warnings: [...parsed.warnings, ...warningRows.map((row) => `Excel row ${row.rowNumber} (${row.sku || 'no part number'}): ${row.reason}`)],
     errors,
     sample: parsed.items.slice(0, 12).map((item) => ({ sourceLineNumber: item.sourceLineNumber, sku: item.sku, name: item.name, price: item.price, sourcePrice: item.sourcePrice })),
@@ -3458,7 +3461,7 @@ router.get('/prices/versions', requireRole('admin'), async (_req, res, next) => 
     const { data: versions, error: versionsError } = await supabaseAdmin
       .schema('catalog')
       .from('pricelist_versions')
-      .select('id, price_type, version_year, revision, effective_from, effective_to, status, is_active, source_filename, row_count, created_at, activated_at')
+      .select('id, price_type, version_year, revision, display_name, effective_from, effective_to, status, is_active, source_filename, row_count, created_at, activated_at')
       .eq('price_type', 'retail')
       .order('version_year', { ascending: false })
       .order('effective_from', { ascending: false });
@@ -3487,6 +3490,7 @@ router.get('/prices/versions', requireRole('admin'), async (_req, res, next) => 
         priceType: version.price_type,
         versionYear: Number(version.version_year),
         revision: Number(version.revision ?? 1),
+        displayName: version.display_name || `Price list ${version.version_year} · revision ${version.revision ?? 1}`,
         effectiveFrom: version.effective_from,
         effectiveTo: version.effective_to,
         status: version.status,
@@ -3514,6 +3518,76 @@ router.get('/prices/versions', requireRole('admin'), async (_req, res, next) => 
   } catch (error) {
     next(error);
   }
+});
+
+router.patch('/prices/versions/:versionId', requireRole('admin'), async (req, res, next) => {
+  try {
+    const versionId = String(req.params.versionId || '').trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(versionId)) {
+      return res.status(400).json({ error: 'The selected revision could not be found.' });
+    }
+    const action = req.body?.action === 'rename' ? 'rename' : req.body?.action === 'effective_date' ? 'effective_date' : null;
+    if (!action) return res.status(400).json({ error: 'Choose a revision name or effective date to update.' });
+    const effectiveFrom = String(req.body?.effectiveFrom || '').trim();
+    if (action === 'effective_date' && !/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
+      return res.status(400).json({ error: 'Choose a valid effective date.' });
+    }
+    const { data, error: manageError } = await supabaseAdmin.rpc('manage_retail_pricelist_version', {
+      p_version_id: versionId,
+      p_action: action,
+      p_display_name: action === 'rename' ? String(req.body?.displayName || '').trim() : null,
+      p_effective_from: action === 'effective_date' ? effectiveFrom : null,
+      p_actor_id: req.user?.id ?? null,
+    });
+    if (manageError) throw manageError;
+    res.set('Cache-Control', 'private, no-store').json(data ?? {});
+  } catch (error) { next(error); }
+});
+
+router.post('/prices/versions/:versionId/archive', requireRole('admin'), async (req, res, next) => {
+  try {
+    const versionId = String(req.params.versionId || '').trim();
+    const { data, error: manageError } = await supabaseAdmin.rpc('manage_retail_pricelist_version', {
+      p_version_id: versionId, p_action: 'archive', p_actor_id: req.user?.id ?? null,
+    });
+    if (manageError) throw manageError;
+    res.json(data ?? {});
+  } catch (error) { next(error); }
+});
+
+router.delete('/prices/versions/:versionId', requireRole('admin'), async (req, res, next) => {
+  try {
+    const versionId = String(req.params.versionId || '').trim();
+    if (req.body?.confirm !== true) return res.status(400).json({ error: 'Confirm that this unpublished draft and its stored original file should be deleted.' });
+    const { data: sourceUpload, error: sourceError } = await supabaseAdmin.schema('catalog').from('pricelist_uploads')
+      .select('id, storage_bucket, storage_path').eq('pricelist_version_id', versionId).maybeSingle();
+    if (sourceError) throw sourceError;
+    const { data, error: manageError } = await supabaseAdmin.rpc('manage_retail_pricelist_version', {
+      p_version_id: versionId, p_action: 'delete', p_actor_id: req.user?.id ?? null,
+    });
+    if (manageError) throw manageError;
+
+    let fileCleanup = 'not_needed';
+    if (sourceUpload?.id && sourceUpload.storage_bucket && sourceUpload.storage_path) {
+      const { data: otherReferences, error: referenceError } = await supabaseAdmin.schema('catalog').from('pricelist_uploads')
+        .select('id').eq('storage_bucket', sourceUpload.storage_bucket).eq('storage_path', sourceUpload.storage_path).neq('id', sourceUpload.id).limit(1);
+      if (referenceError) throw referenceError;
+      if ((otherReferences ?? []).length) {
+        fileCleanup = 'retained_shared_file';
+      } else {
+        const { error: storageError } = await supabaseAdmin.storage.from(sourceUpload.storage_bucket).remove([sourceUpload.storage_path]);
+        if (storageError) {
+          fileCleanup = 'pending';
+        } else {
+          const { error: metadataError } = await supabaseAdmin.schema('catalog').from('pricelist_uploads')
+            .delete().eq('id', sourceUpload.id).is('pricelist_version_id', null);
+          if (metadataError) fileCleanup = 'metadata_cleanup_pending';
+          else fileCleanup = 'removed';
+        }
+      }
+    }
+    res.set('Cache-Control', 'private, no-store').json({ ...(data ?? {}), fileCleanup });
+  } catch (error) { next(error); }
 });
 
 router.post('/prices/uploads', requireRole('admin'), handlePriceListUpload, async (req, res, next) => {
@@ -3576,8 +3650,10 @@ router.post('/prices/uploads', requireRole('admin'), handlePriceListUpload, asyn
         uploadedAt: upload.uploaded_at,
         importStatus: upload.import_status,
         duplicateDetected: Number(duplicateFileCount ?? 0) > 0,
+        suggestedEffectiveDate: inferPricelistEffectiveDate(originalFilename, workbook),
       },
       sheets: analysis.sheets,
+      recommendedSheetName: analysis.recommendedSheetName,
     });
   } catch (error) {
     if (uploadedStoragePath) {
@@ -3619,9 +3695,9 @@ router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req
 
     const refreshedPreview = await previewPricelistUpload({ upload, body: normalizedSelection });
     if (!refreshedPreview.canImport || !refreshedPreview.previewToken) {
-      return res.status(422).json({ error: 'This worksheet has validation issues and cannot be saved as a draft.', blockers: refreshedPreview.blockers, errors: refreshedPreview.errors });
+      return res.status(422).json({ error: 'No safe price records were found to update. The current active pricelist was not changed.', blockers: refreshedPreview.blockers, errors: refreshedPreview.errors });
     }
-    const { data, error: rpcError } = await supabaseAdmin.rpc('create_pricelist_version_from_upload', {
+    const { data, error: rpcError } = await supabaseAdmin.rpc('import_and_activate_pricelist_upload', {
       p_upload_id: upload.id,
       p_items: refreshedPreview._draftItems,
       p_version_year: normalizedSelection.versionYear,
@@ -3629,15 +3705,22 @@ router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req
       p_source_sheet: normalizedSelection.sheetName,
       p_pricing_category: `${refreshedPreview.selectedPrice.kind}_${refreshedPreview.selectedPrice.vatStatus}`,
       p_file_checksum: upload.file_checksum,
+      p_expected_active_version_id: tokenPayload.activeVersionId ?? null,
       p_actor_id: req.user?.id ?? null,
     });
+    if (rpcError?.code === '40001') {
+      return res.status(409).json({ error: rpcError.message || 'The active pricelist changed while this upload was being reviewed. Compare it again before updating.' });
+    }
     if (rpcError) throw rpcError;
+    invalidateProductCatalogCache();
     const result = {
       ...(data ?? {}),
       versionId: data?.versionId,
       versionYear: normalizedSelection.versionYear,
       effectiveFrom: normalizedSelection.effectiveFrom,
-      isActive: false,
+      isActive: true,
+      activationPending: false,
+      message: 'The new revision is active. Invalid or conflicting rows were skipped; any previous prices for those parts were preserved.',
       receivedCount: refreshedPreview.counts.totalRows,
       uniqueCount: refreshedPreview.counts.validRows,
       updatedCount: refreshedPreview.counts.validRows,
@@ -3645,7 +3728,8 @@ router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req
       changedCount: refreshedPreview.counts.changedPrices,
       unchangedCount: refreshedPreview.counts.unchangedPrices,
       removedFromListCount: refreshedPreview.counts.removedFromList,
-      skippedCount: 0,
+      skippedCount: refreshedPreview.counts.invalidRows,
+      errors: refreshedPreview.errors,
       priceChanges: refreshedPreview.priceChanges,
       priceChangesTotalCount: refreshedPreview.priceChangesTotalCount,
     };
@@ -3757,7 +3841,7 @@ router.post('/prices/versions/:versionId/activate', requireRole('admin'), async 
 
 router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next) => {
   try {
-    const items = normalizePriceListItems(req.body?.items);
+    const items = normalizePriceListItems(req.body?.items, { confirmZeroPrices: req.body?.confirmZeroPrices === true });
     const effectiveFrom = req.body?.effectiveFrom || new Date().toISOString().slice(0, 10);
     const result = await replaceRetailPrices(items, effectiveFrom, {
       versionYear: req.body?.versionYear,
@@ -3784,7 +3868,7 @@ router.post('/prices/bulk-replace-file', requireRole('admin'), handlePriceListUp
       return res.status(400).json({ error: 'Upload a CSV or Excel price list file.' });
     }
 
-    const items = parsePriceListUpload(req.file);
+    const items = parsePriceListUpload(req.file, { confirmZeroPrices: req.body?.confirmZeroPrices === true });
     const effectiveFrom = req.body?.effectiveFrom || new Date().toISOString().slice(0, 10);
     const result = await replaceRetailPrices(items, effectiveFrom, {
       versionYear: req.body?.versionYear,
