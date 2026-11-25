@@ -21,6 +21,7 @@ import Input from '../../../components/ui/Input';
 import Card from '../../../components/ui/Card';
 import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import { formatCurrency } from '../../../utils/formatters';
+import { normalizePhilippinePhoneNumber, sanitizePhilippineMobileInput } from '../../../utils/phone';
 import { useToast } from '../../../components/ui/Toast';
 import useProductCatalog from '../../../hooks/useProductCatalog';
 import useServiceCatalog from '../../../hooks/useServiceCatalog';
@@ -602,6 +603,20 @@ const QuoteBuilder = () => {
             showError('Add at least one part or service before saving.');
             return;
         }
+        if (customerName.trim().length > 50) {
+            showError('Customer name must be 50 characters or fewer.');
+            return;
+        }
+        const normalizedPhone = customerPhone.trim() ? normalizePhilippinePhoneNumber(customerPhone) : null;
+        if (customerPhone.trim() && !normalizedPhone) {
+            showError('Enter a valid Philippine mobile number, such as 09171234567 or +639171234567.');
+            return;
+        }
+        if (normalizedPhone && normalizedPhone !== customerPhone) setCustomerPhone(normalizedPhone);
+        if (changeNote.length > 200) {
+            showError('Revision note must be 200 characters or fewer.');
+            return;
+        }
 
         quoteSaveBusy.current = true;
         quoteLoadRequest.current += 1;
@@ -611,7 +626,7 @@ const QuoteBuilder = () => {
             const submittedVersion = quoteMutationVersion.current;
             const payload = buildEstimatePayload({
                 customerName,
-                customerPhone,
+                customerPhone: normalizedPhone || '',
                 notes,
                 selectedParts,
                 selectedServices,
@@ -881,16 +896,21 @@ const QuoteBuilder = () => {
                                     )}
                                     <Input
                                         label="Customer Name"
-                                        placeholder="Enter customer name"
+                                        placeholder="Enter customer name (up to 50 characters)"
                                         value={customerName}
-                                        onChange={(e) => { markQuoteDirty(); setCustomerName(e.target.value); }}
+                                        maxLength={50}
+                                        onChange={(e) => { markQuoteDirty(); setCustomerName(e.target.value.slice(0, 50)); }}
                                         leftIcon={<User className="w-4 h-4" />}
                                     />
                                     <Input
                                         label="Phone Number"
                                         placeholder="09XX XXX XXXX"
                                         value={customerPhone}
-                                        onChange={(e) => { markQuoteDirty(); setCustomerPhone(e.target.value); }}
+                                        inputMode="tel"
+                                        maxLength={16}
+                                        onChange={(e) => { markQuoteDirty(); setCustomerPhone(sanitizePhilippineMobileInput(e.target.value)); }}
+                                        onBlur={() => { const normalized = normalizePhilippinePhoneNumber(customerPhone); if (normalized) setCustomerPhone(normalized); }}
+                                        helperText="Use 11 digits starting with 09. +63 or 63 numbers are accepted and saved as 09."
                                         leftIcon={<Phone className="w-4 h-4" />}
                                     />
                                 </div>
@@ -900,7 +920,9 @@ const QuoteBuilder = () => {
                                         label="Revision Note"
                                         placeholder="What changed in this quote?"
                                         value={changeNote}
-                                        onChange={(e) => { markQuoteDirty(); setChangeNote(e.target.value); }}
+                                        maxLength={200}
+                                        onChange={(e) => { markQuoteDirty(); setChangeNote(e.target.value.slice(0, 200)); }}
+                                        helperText={`${changeNote.length}/200 characters. Keep revision notes brief and specific.`}
                                         leftIcon={<FileClock className="w-4 h-4" />}
                                     />
                                 </div>

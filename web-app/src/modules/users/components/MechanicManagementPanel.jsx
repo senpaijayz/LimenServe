@@ -6,6 +6,7 @@ import Modal from '../../../components/ui/Modal';
 import Input from '../../../components/ui/Input';
 import { useToast } from '../../../components/ui/Toast';
 import { deleteMechanic, upsertMechanic } from '../../../services/mechanicsApi';
+import { normalizePhilippinePhoneNumber, sanitizePhilippineMobileInput } from '../../../utils/phone';
 
 const availabilityOptions = [
     { value: 'available', label: 'Available' },
@@ -50,7 +51,7 @@ function formatStatus(value) {
 }
 
 function isValidContactNumber(value) {
-    return !value || /^(?:\+?63|0)?[0-9\s().-]{7,18}$/.test(value.trim());
+    return !value || Boolean(normalizePhilippinePhoneNumber(value));
 }
 
 function readFileAsDataUrl(file) {
@@ -134,7 +135,7 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
             availability_status: mechanic.availability_status || 'available',
             shift_type: mechanic.shift_type || mechanic.schedule_type || 'full_day',
             available_date: mechanic.available_date || '',
-            contact_number: mechanic.contact_number || mechanic.contactNumber || '',
+            contact_number: sanitizePhilippineMobileInput(mechanic.contact_number || mechanic.contactNumber || ''),
             photo_url: mechanic.photo_url || mechanic.photoUrl || '',
             photoDataUrl: '',
             bio: mechanic.bio || '',
@@ -182,9 +183,20 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
 
         setFormError('');
 
-        if (!isValidContactNumber(form.contact_number)) {
-            setFormError('Enter a valid contact number, for example 0917 123 4567.');
+        const fullName = String(form.full_name || '').trim();
+        if (!fullName || fullName.length > 50) {
+            setFormError('Enter a mechanic name between 1 and 50 characters.');
             return;
+        }
+
+        if (!isValidContactNumber(form.contact_number)) {
+            setFormError('Enter an 11-digit Philippine mobile number, such as 09171234567 or +639171234567.');
+            return;
+        }
+
+        const normalizedContact = form.contact_number ? normalizePhilippinePhoneNumber(form.contact_number) : '';
+        if (normalizedContact !== form.contact_number) {
+            setForm((current) => ({ ...current, full_name: fullName, contact_number: normalizedContact }));
         }
 
         setIsSaving(true);
@@ -199,6 +211,9 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
         try {
             const savedMechanic = await upsertMechanic({
                 ...form,
+                full_name: fullName,
+                fullName,
+                contact_number: normalizedContact,
                 specialization,
                 shift_label: getShiftLabel(form.shift_type),
                 location_name: 'Limen',
@@ -325,7 +340,7 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
                         </div>
                     )}
 
-                    <Input label="Full Name" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required />
+                    <Input label="Full Name" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value.slice(0, 50) })} maxLength={50} autoComplete="name" placeholder="Enter mechanic's full name" required />
                     <label className="block text-sm font-medium text-primary-700">
                         Specialization <span className="text-red-600">*</span>
                         <select value={form.specialization} onChange={(e) => setForm({ ...form, specialization: e.target.value })} className="input mt-2 py-2.5 text-sm" required>
@@ -340,10 +355,13 @@ const MechanicManagementPanel = ({ mechanics = [], onReload, onNotify, onSaved, 
                     <Input
                         label="Contact Number"
                         value={form.contact_number}
-                        onChange={(e) => setForm({ ...form, contact_number: e.target.value })}
+                        onChange={(e) => setForm({ ...form, contact_number: sanitizePhilippineMobileInput(e.target.value) })}
+                        onBlur={() => { const normalized = normalizePhilippinePhoneNumber(form.contact_number); if (normalized) setForm((current) => ({ ...current, contact_number: normalized })); }}
                         leftIcon={<Phone className="h-4 w-4" />}
-                        placeholder="0917 123 4567"
-                        helperText="Shown publicly so customers can contact the mechanic/shop."
+                        inputMode="tel"
+                        maxLength={16}
+                        placeholder="09XXXXXXXXX"
+                        helperText="Enter 11 digits starting with 09. +63 numbers are saved in local 09 format. Shown publicly on the About page."
                     />
                     <label className="block text-sm font-medium text-primary-700">
                         Shift / Schedule

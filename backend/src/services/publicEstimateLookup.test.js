@@ -144,7 +144,8 @@ test('normalizes quote numbers and validates local Philippine mobile numbers bef
 
   assert.equal(normalizePublicEstimateNumber(' est-20260801000000000 '), 'EST-20260801000000000');
   assert.equal(normalizePhilippinePhoneNumber('0917 000 0001'), '09170000001');
-  assert.equal(normalizePhilippinePhoneNumber('+63 917 000 0001'), null);
+  assert.equal(normalizePhilippinePhoneNumber('+63 917 000 0001'), '09170000001');
+  assert.equal(normalizePhilippinePhoneNumber('639170000001'), '09170000001');
   assert.equal(normalizePhilippinePhoneNumber('19170000001'), null);
   assert.equal(normalizePhilippinePhoneNumber('0917000001'), null);
   assert.deepEqual(rpcCall, {

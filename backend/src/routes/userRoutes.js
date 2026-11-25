@@ -57,7 +57,7 @@ function normalizeStaffRole(role) {
   return ALLOWED_ROLES.has(normalized) ? normalized : null;
 }
 
-function mapUser(authUser, profile = null) {
+function mapUser(authUser, profile = null, lockout = null) {
   const name = getUserNameFields(authUser, profile);
   const bannedUntil = authUser?.banned_until ? new Date(authUser.banned_until) : null;
   const isBanned = Boolean(bannedUntil && bannedUntil.getTime() > Date.now());
@@ -81,6 +81,8 @@ function mapUser(authUser, profile = null) {
     lastLogin: authUser.last_sign_in_at || null,
     createdAt: authUser.created_at || profile?.created_at || null,
     updatedAt: authUser.updated_at || profile?.updated_at || null,
+    loginLocked: Boolean(lockout?.locked_at),
+    failedLoginAttempts: Number(lockout?.failed_attempts) || 0,
   };
 }
 
@@ -247,22 +249,73 @@ router.use(async (req, res, next) => {
 
 router.get('/', async (_req, res, next) => {
   try {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 });
+    const [{ data, error }, { data: lockoutData, error: lockoutError }] = await Promise.all([
+      supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 }),
+      supabaseAdmin.rpc('limen_list_account_login_lockouts'),
+    ]);
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
+    if (lockoutError) throw lockoutError;
 
     const authUsers = data?.users ?? [];
     const profiles = await loadProfilesForUsers(authUsers);
+    const lockouts = new Map((Array.isArray(lockoutData) ? lockoutData : []).map((row) => [row.account_id, row]));
     const users = (data?.users ?? [])
       .filter((user) => user.app_metadata?.limen_recovery_only !== true)
-      .map((user) => mapUser(user, profiles.get(user.id)))
+      .map((user) => mapUser(user, profiles.get(user.id), lockouts.get(user.id)))
       .sort((left, right) => String(left.email).localeCompare(String(right.email)));
     const activeAdmins = users.filter((user) => user.role === 'admin' && user.status === 'active');
     if (activeAdmins.length === 1) activeAdmins[0].isProtectedAdmin = true;
 
     res.json({ users });
+  } catch (error) {
+    next(normalizeUserSaveError(error));
+  }
+});
+
+router.post('/:userId/unlock-login', async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    if (!UUID_PATTERN.test(userId)) {
+      res.status(400).json({ error: 'Choose a valid staff account.' });
+      return;
+    }
+
+    const actor = await assertAdministrator(req, res);
+    if (!actor) return;
+
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (error || !data?.user) {
+      res.status(404).json({ error: 'This staff account could not be found.' });
+      return;
+    }
+
+    const target = data.user;
+    const profile = await fetchProfileByUserId(userId).catch(() => null);
+    const role = getTrustedStaffRole(target, profile);
+    if (
+      !role.matches
+      || !ALLOWED_ROLES.has(role.appRole)
+      || target.app_metadata?.account_status === 'deactivated'
+      || isCurrentlyBanned(target)
+    ) {
+      res.status(409).json({ error: 'Only active staff accounts can be unlocked. Restore or reconcile this account first.' });
+      return;
+    }
+
+    const { data: unlocked, error: unlockError } = await supabaseAdmin.rpc('limen_unlock_account_login', {
+      p_account_id: userId,
+      p_actor_user_id: req.user.id,
+      p_method: 'administrator',
+    });
+    if (unlockError) throw unlockError;
+    if (unlocked !== true) {
+      res.status(409).json({ error: 'This account is not locked right now.' });
+      return;
+    }
+
+    clearAuthUserCache();
+    res.json({ unlocked: true, userId });
   } catch (error) {
     next(normalizeUserSaveError(error));
   }

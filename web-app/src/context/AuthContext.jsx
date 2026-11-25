@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AuthContext from './auth-context';
 import { ROLES } from '../utils/constants';
 import { ensureSessionLoaded, supabase } from '../services/supabase';
-import { getCurrentUserProfile } from '../services/authApi';
+import { getCurrentUserProfile, loginWithPassword } from '../services/authApi';
 
 const PROFILE_TIMEOUT_MS = 8000;
 
@@ -187,16 +187,26 @@ export function AuthProvider({ children }) {
         setProfileWarning(null);
 
         try {
-            const { data, error: signInError } = await supabase.auth.signInWithPassword({
+            const response = await loginWithPassword({
                 email,
                 password,
             });
 
-            if (signInError) {
-                throw signInError;
+            const accessToken = response?.session?.access_token;
+            const refreshToken = response?.session?.refresh_token;
+            if (!accessToken || !refreshToken) {
+                throw new Error('Sign-in could not be completed. Please try again shortly.');
             }
 
-            const session = data?.session ?? await ensureSessionLoaded();
+            const { data, error: sessionError } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+            });
+            if (sessionError || !data?.session) {
+                throw sessionError || new Error('Sign-in could not be completed. Please try again shortly.');
+            }
+
+            const session = data.session;
             applySession(session, { force: true });
 
             return { success: true, user: session?.user ? mapSupabaseUser(session.user, null) : null };

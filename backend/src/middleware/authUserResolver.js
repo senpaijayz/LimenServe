@@ -89,6 +89,19 @@ export function createAuthUserResolver({
     const isDeactivated = data.user.app_metadata?.account_status === 'deactivated';
     const resolvedRole = isBanned || isDeactivated ? 'customer' : profile?.role || 'customer';
 
+    if (!isBanned && !isDeactivated && ['admin', 'cashier', 'stock_clerk'].includes(resolvedRole)) {
+      const { data: lockoutData, error: lockoutError } = await supabaseAdmin.rpc('limen_get_account_login_lockout', {
+        p_account_id: data.user.id,
+      });
+      if (lockoutError) {
+        console.warn('Failed to confirm account login lockout status:', lockoutError.message);
+        return null;
+      }
+
+      const lockout = Array.isArray(lockoutData) ? lockoutData[0] ?? null : lockoutData;
+      if (lockout?.locked_at) return null;
+    }
+
     return {
       id: data.user.id,
       email: data.user.email,

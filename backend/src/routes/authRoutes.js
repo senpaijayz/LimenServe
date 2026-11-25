@@ -10,6 +10,7 @@ import {
   getRecoveryOrigin,
   sendSecurityEmail,
 } from '../services/recoveryDelivery.js';
+import { signInWithAccountLockout } from '../services/loginLockout.js';
 
 const router = Router();
 const RECOVERY_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -98,6 +99,7 @@ function sendRouteError(res, error, fallbackMessage) {
   setNoStore(res);
   res.status(Number.isInteger(statusCode) ? statusCode : 503).json({
     error: Number.isInteger(statusCode) ? error.message : fallbackMessage,
+    ...(error?.code ? { code: error.code } : {}),
   });
 }
 
@@ -116,6 +118,77 @@ async function getSecurityStatus(accountId) {
   if (error) throw error;
   return firstRow(data);
 }
+
+async function getLoginLockout(accountId) {
+  const { data, error } = await supabaseAdmin.rpc('limen_get_account_login_lockout', {
+    p_account_id: accountId,
+  });
+  if (error) throw new AuthRouteError(503, 'Account security is temporarily unavailable. Please try again shortly.');
+  return firstRow(data);
+}
+
+async function recordLoginFailure(accountId) {
+  const { data, error } = await supabaseAdmin.rpc('limen_record_account_login_failure', {
+    p_account_id: accountId,
+  });
+  if (error) throw new AuthRouteError(503, 'Account security is temporarily unavailable. Please try again shortly.');
+  return firstRow(data);
+}
+
+async function recordLoginSuccess(accountId) {
+  const { data, error } = await supabaseAdmin.rpc('limen_record_account_login_success', {
+    p_account_id: accountId,
+  });
+  if (error) throw new AuthRouteError(503, 'Account security is temporarily unavailable. Please try again shortly.');
+  return data === true;
+}
+
+async function unlockLogin(accountId, actorUserId, method) {
+  const { data, error } = await supabaseAdmin.rpc('limen_unlock_account_login', {
+    p_account_id: accountId,
+    p_actor_user_id: actorUserId,
+    p_method: method,
+  });
+  if (error) throw new AuthRouteError(503, 'Account access could not be restored. Please try again shortly.');
+  return data === true;
+}
+
+router.post('/login', async (req, res) => {
+  setNoStore(res);
+  const email = normalizeEmail(req.body?.email);
+  const password = req.body?.password;
+  if (!RECOVERY_EMAIL_PATTERN.test(email) || email.length > 254 || typeof password !== 'string' || !password || password.length > 1024) {
+    res.status(400).json({ error: 'Enter a valid email address and password.' });
+    return;
+  }
+
+  try {
+    await consumeSharedRateLimit('auth.login.ip', req.ip, 60, 60);
+    const account = await lookupAccount(email);
+    const client = createEphemeralAuthClient();
+    const signIn = await signInWithAccountLockout({
+      account,
+      email,
+      password,
+      getLockout: getLoginLockout,
+      recordFailure: recordLoginFailure,
+      recordSuccess: recordLoginSuccess,
+      signIn: (credentials) => client.auth.signInWithPassword(credentials),
+      signOut: () => client.auth.signOut({ scope: 'local' }),
+      clearAuthCache: clearAuthUserCache,
+    });
+
+    res.json({ session: signIn.session });
+  } catch (error) {
+    if (Number.isInteger(error?.statusCode)) {
+      sendRouteError(res, error, 'Sign-in is temporarily unavailable. Please try again shortly.');
+      return;
+    }
+
+    req.log?.warn?.('auth.login.unavailable', { requestId: req.requestId });
+    res.status(503).json({ error: 'Sign-in is temporarily unavailable. Please try again shortly.' });
+  }
+});
 
 router.get('/me', requireAuth, async (req, res) => {
   res.json({
@@ -270,6 +343,7 @@ router.post('/recovery/code/reset', async (req, res) => {
       res.status(503).json({ error: 'The password could not be changed. Request a new code and try again.' });
       return;
     }
+    const accountUnlocked = await unlockLogin(recovery.account_id, null, 'verified_recovery_email');
     const revokeClient = createEphemeralAuthClient();
     const { data: signIn, error: signInError } = await revokeClient.auth.signInWithPassword({
       email: recovery.login_email,
@@ -283,9 +357,12 @@ router.post('/recovery/code/reset', async (req, res) => {
     clearAuthUserCache();
     res.json({
       passwordUpdated: true,
+      accountUnlocked,
       loginEmail: recovery.login_email,
       refreshSessionsRevoked,
-      message: 'Password changed. Sign in with admin@limen.com and your new password.',
+      message: accountUnlocked
+        ? 'Administrator password changed and sign-in unlocked. Sign in with admin@limen.com and your new password.'
+        : 'Administrator password changed. Sign in with admin@limen.com and your new password.',
     });
   } catch (error) {
     if (Number.isInteger(error?.statusCode)) {
@@ -459,6 +536,14 @@ router.post('/recovery/reset', async (req, res) => {
       return;
     }
 
+    const recoveryAccount = await lookupAccount(target.user.email);
+    const unlockAdministrator = Boolean(
+      recoveryAccount?.account_id === accountId
+      && recoveryAccount.auth_role === 'admin'
+      && recoveryAccount.profile_role === 'admin'
+      && isEligibleActiveAccount(recoveryAccount),
+    );
+
     // Change the password only. The immutable ID, login email, roles, and all
     // existing Auth metadata remain untouched.
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(accountId, { password });
@@ -467,6 +552,10 @@ router.post('/recovery/reset', async (req, res) => {
       res.status(400).json({ error: 'The password could not be updated. Request a new reset link and try again.' });
       return;
     }
+
+    const accountUnlocked = unlockAdministrator
+      ? await unlockLogin(accountId, null, 'verified_recovery_email')
+      : false;
 
     let refreshSessionsRevoked = false;
     const ephemeralClient = createEphemeralAuthClient();
@@ -482,8 +571,11 @@ router.post('/recovery/reset', async (req, res) => {
     clearAuthUserCache();
     res.json({
       passwordUpdated: true,
+      accountUnlocked,
       refreshSessionsRevoked,
-      message: 'Your password has been changed. Sign in with your existing login email and new password.',
+      message: accountUnlocked
+        ? 'Administrator password changed and sign-in unlocked. Sign in with the existing login email and new password.'
+        : 'Your password has been changed. Sign in with your existing login email and new password.',
     });
   } catch (error) {
     if (Number.isInteger(error?.statusCode)) {

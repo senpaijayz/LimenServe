@@ -3,6 +3,7 @@ import { requireRole } from '../middleware/auth.js';
 import { clearPublicResponseCache } from '../middleware/cache.js';
 import { callRpc } from '../services/supabaseRpc.js';
 import { supabaseAdmin } from '../config/supabase.js';
+import { normalizePhilippinePhoneNumber } from '../services/publicEstimateLookup.js';
 
 const router = Router();
 const PHOTO_BUCKET = 'mechanic-photos';
@@ -70,7 +71,21 @@ function normalizeMechanic(row = {}) {
 }
 
 function normalizeMechanicPayload(payload = {}) {
-  const contactNumber = payload.contact_number ?? payload.contactNumber ?? '';
+  const rawName = payload.full_name ?? payload.fullName ?? '';
+  const fullName = typeof rawName === 'string' ? rawName.trim() : '';
+  if (!fullName || fullName.length > 50) {
+    const error = new Error('Enter a mechanic name between 1 and 50 characters.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const rawContact = String(payload.contact_number ?? payload.contactNumber ?? '').trim();
+  const contactNumber = rawContact ? normalizePhilippinePhoneNumber(rawContact) : '';
+  if (rawContact && !contactNumber) {
+    const error = new Error('Enter an 11-digit Philippine mobile number, such as 09171234567 or +639171234567.');
+    error.statusCode = 400;
+    throw error;
+  }
   const profilePayload = JSON.stringify({
     contact_number: contactNumber,
     shift_type: payload.shift_type ?? payload.schedule_type ?? null,
@@ -79,6 +94,8 @@ function normalizeMechanicPayload(payload = {}) {
 
   return {
     ...payload,
+    full_name: fullName,
+    fullName,
     contact_number: contactNumber,
     contactNumber,
     locationName: profilePayload,

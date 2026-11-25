@@ -16,13 +16,14 @@ vi.mock('../modules/services/components/ServiceOrderModals', () => ({ PartSearch
 vi.mock('../components/ui/Modal', () => ({ default: ({ children }) => <div>{children}</div> }));
 
 import ServiceOrderNew from '../modules/services/pages/ServiceOrderNew';
-import { createServiceOrder } from '../services/serviceOrdersApi';
+import { createServiceOrder, getServiceScheduleSlots } from '../services/serviceOrdersApi';
+import { listMechanics } from '../services/mechanicsApi';
 
-function renderForm() {
+function renderForm(role = 'cashier') {
     localStorage.clear();
     return render(
         <MemoryRouter initialEntries={['/services/new']}>
-            <AuthContext.Provider value={{ user: { id: 'staff-1', role: 'cashier' } }}>
+            <AuthContext.Provider value={{ user: { id: 'staff-1', role } }}>
                 <ToastProvider><ServiceOrderNew /></ToastProvider>
             </AuthContext.Provider>
         </MemoryRouter>,
@@ -76,5 +77,27 @@ describe('Service order intake validation', () => {
         await waitFor(() => expect(createServiceOrder).toHaveBeenCalledWith(expect.objectContaining({
             customerName: 'Juan Dela Cruz', customerPhone: '+639171234567', vehiclePlate: 'ABC 1234', description: 'Brake inspection and cleaning',
         })));
+    });
+
+    it('shows a red field-level message when an assigned appointment has no selected time', async () => {
+        listMechanics.mockResolvedValueOnce([{ id: 'mechanic-1', full_name: 'Test Mechanic', specialization: 'General' }]);
+        getServiceScheduleSlots.mockResolvedValueOnce({ slots: [{ start: '2026-11-27T01:00:00.000Z', end: '2026-11-27T02:00:00.000Z', available: true }] });
+        renderForm('admin');
+        await waitFor(() => expect(screen.queryByText('Checking this draft for an already-created job…')).toBeNull());
+        fireEvent.change(screen.getByLabelText(/Customer name/), { target: { value: 'Juan Dela Cruz' } });
+        fireEvent.change(screen.getByLabelText(/Vehicle model/), { target: { value: 'Mitsubishi Mirage 2018' } });
+        fireEvent.change(screen.getByLabelText(/Plate number/), { target: { value: 'ABC 1234' } });
+        fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+        await waitFor(() => expect(screen.getByLabelText(/Reported concern/)).toBeTruthy());
+        fireEvent.change(screen.getByLabelText(/Reported concern/), { target: { value: 'Brake inspection' } });
+        fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+        await waitFor(() => expect(screen.getByText('Optional appointment')).toBeTruthy());
+        await waitFor(() => expect(screen.getByRole('option', { name: /Test Mechanic/ })).toBeTruthy());
+        fireEvent.change(screen.getByLabelText('Mechanic'), { target: { value: 'mechanic-1' } });
+        fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-11-27' } });
+        await waitFor(() => expect(screen.getByText(/Choose an available time to schedule this appointment/)).toBeTruthy());
+        fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+        expect(screen.getByRole('alert').textContent).toMatch(/Select a mechanic, date, and available time/);
+        expect(screen.getByRole('alert').className).toContain('text-red-700');
     });
 });

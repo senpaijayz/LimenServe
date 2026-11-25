@@ -45,6 +45,15 @@ export async function restoreUser(userId) {
   }
 }
 
+export async function unlockUserLogin(userId) {
+  try {
+    const { data } = await apiClient.post(`/users/${userId}/unlock-login`);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to unlock this account.');
+  }
+}
+
 export async function getUserRecoveryEmail(userId) {
   try {
     const { data } = await apiClient.get(`/users/${userId}/recovery-email`);

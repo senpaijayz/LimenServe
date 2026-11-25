@@ -1,5 +1,14 @@
 import apiClient, { extractApiError } from './apiClient';
 
+export async function loginWithPassword({ email, password }) {
+  try {
+    const { data } = await apiClient.post('/auth/login', { email, password });
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to sign in. Please try again shortly.');
+  }
+}
+
 export async function getCurrentUserProfile(options = {}) {
   const { timeoutMs = 3000 } = options;
 

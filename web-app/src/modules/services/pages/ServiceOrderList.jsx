@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Clock, AlertCircle, RefreshCw, Wrench, Archive, ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
+import { Plus, Search, Clock, AlertCircle, RefreshCw, Wrench, Archive, Pause, ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import ServiceStageBadge from '../components/ServiceStageBadge';
@@ -79,6 +79,7 @@ const ServiceOrderList = () => {
         all: summary.active ?? 0,
         pending: summary.pending ?? 0,
         inProgress: summary.inProgress ?? 0,
+        paused: summary.paused ?? 0,
         archived: summary.completed ?? 0,
         overdue: summary.overdue ?? 0,
         awaitingAssignment: summary.awaitingAssignment ?? 0,
@@ -146,6 +147,7 @@ const ServiceOrderList = () => {
                     </div>
                 )}
                 {overdue && (order.scheduledEnd || order.scheduled_end || order.assignment?.scheduledEnd) && <p className="mt-2 text-xs font-medium text-red-700">Scheduled completion has passed.</p>}
+                {order.workStage === 'paused' && <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950"><strong className="block text-xs uppercase tracking-wide">Paused · reason</strong><span className="mt-1 block whitespace-pre-wrap break-words">{order.pauseReason || 'No pause reason was recorded.'}</span></div>}
             </div>
         </div>
         );
@@ -171,6 +173,7 @@ const ServiceOrderList = () => {
         { id: 'awaiting-assignment', label: 'Awaiting Assignment', value: statusCounts.awaitingAssignment, helper: 'Needs a mechanic', icon: <Wrench className="h-5 w-5" /> },
         { id: 'pending', label: 'Pending', value: statusCounts.pending, helper: 'Needs workshop review', icon: <Clock className="h-5 w-5" /> },
         { id: 'in-progress', label: 'In Progress', value: statusCounts.inProgress, helper: 'Currently being handled', icon: <AlertCircle className="h-5 w-5" /> },
+        { id: 'paused', label: 'Paused', value: statusCounts.paused, helper: 'Work paused with a recorded reason', icon: <Pause className="h-5 w-5" /> },
         { id: 'overdue', label: 'Overdue', value: statusCounts.overdue, helper: 'Unfinished after scheduled end', icon: <Clock className="h-5 w-5 text-red-700" /> },
         { id: 'awaiting-payment', label: 'Awaiting Payment', value: statusCounts.awaitingPayment, helper: 'Repairs finished, not yet paid', icon: <Archive className="h-5 w-5" /> },
         { id: 'completed', label: 'Completed', value: statusCounts.archived, helper: 'Archived jobs', icon: <Archive className="h-5 w-5" /> },
@@ -240,6 +243,19 @@ const ServiceOrderList = () => {
             label: 'In Progress',
             badge: statusCounts.inProgress,
             icon: <AlertCircle className="w-4 h-4" />,
+            content: (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+                    {visibleMobileOrders.map((order) => (
+                        <OrderCard key={order.id} order={order} />
+                    ))}
+                </div>
+            ),
+        },
+        {
+            id: 'paused',
+            label: 'Paused',
+            badge: statusCounts.paused,
+            icon: <Pause className="w-4 h-4 text-amber-700" />,
             content: (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
                     {visibleMobileOrders.map((order) => (
@@ -361,7 +377,7 @@ const ServiceOrderList = () => {
                 </div>
 
                 <div className="mb-4 flex flex-wrap gap-2 sm:hidden">
-                    {['all', 'pending', 'in_progress', 'overdue', 'archive'].map((status) => (
+                    {['all', 'pending', 'in_progress', 'paused', 'overdue', 'archive'].map((status) => (
                         <button
                             key={status}
                             type="button"

@@ -136,12 +136,26 @@ async function enrichOrdersWithAssignmentsUsingMetadata(orders, metadataById) {
     : { data: [], error: null };
   if (workError) throw workError;
   const workById = new Map((workStates || []).map((row) => [row.service_order_id, row.stage]));
+  const pausedIds = [...workById.entries()].filter(([, stage]) => stage === 'paused').map(([id]) => id);
+  const pauseReasons = new Map();
+  if (pausedIds.length) {
+    const pauseResults = await Promise.all(pausedIds.map((id) => supabaseAdmin.schema('operations')
+      .from('service_work_events').select('note,occurred_at')
+      .eq('service_order_id', id).eq('event_type', 'pause')
+      .order('occurred_at', { ascending: false }).limit(1).maybeSingle()));
+    pauseResults.forEach((result, index) => {
+      if (result.error) throw result.error;
+      if (result.data?.note) pauseReasons.set(pausedIds[index], result.data);
+    });
+  }
   return orders.map((order) => {
     const assignment = assignments.get(order?.id) ?? null;
     const orderMetadata = metadataById.get(order?.id) ?? {};
     return {
       ...order,
       workStage: workById.get(order.id) || null,
+      pauseReason: pauseReasons.get(order.id)?.note || null,
+      pauseAt: pauseReasons.get(order.id)?.occurred_at || null,
       priority: orderMetadata.priority ?? order.priority ?? 'normal',
       paymentStatus: orderMetadata.payment_status ?? order.paymentStatus ?? order.payment_status ?? 'unpaid',
       paymentMethod: orderMetadata.payment_method ?? order.paymentMethod ?? order.payment_method ?? null,
@@ -472,7 +486,7 @@ router.get('/queue', async (req, res, next) => {
     const priority = String(req.query.priority || 'all');
     const sort = String(req.query.sort || 'newest');
     const date = String(req.query.date || '').trim();
-    if (!['active', 'pending', 'in_progress', 'overdue', 'completed', 'cancelled', 'all'].includes(stage)
+    if (!['active', 'pending', 'in_progress', 'overdue', 'completed', 'cancelled', 'paused', 'all'].includes(stage)
       || !['all', 'low', 'normal', 'high', 'urgent'].includes(priority)
       || !['newest', 'oldest', 'due', 'urgency'].includes(sort)) {
       res.status(400).json({ error: 'Choose valid queue filters.' });
@@ -482,23 +496,51 @@ router.get('/queue', async (req, res, next) => {
       res.status(400).json({ error: 'Choose a valid service order date.' });
       return;
     }
-    const queue = await callRpc(date ? 'limen_service_order_queue_by_date' : 'limen_service_order_queue', {
+    const queueParams = {
       p_search: String(req.query.search || '').trim().slice(0, 120),
-      p_stage: stage,
       p_mechanic_id: String(req.query.mechanicId || '').trim() || null,
       p_priority: priority,
       p_sort: sort,
       p_page: Number(req.query.page || 1),
       p_page_size: Number(req.query.pageSize || 18),
       ...(date ? { p_date: date } : {}),
-    });
+    };
+    const queue = stage === 'paused'
+      ? await callRpc('limen_service_order_paused_queue', queueParams)
+      : await callRpc(date ? 'limen_service_order_queue_by_date' : 'limen_service_order_queue', {
+        ...queueParams,
+        p_stage: stage,
+      });
     const { count: awaitingPayment, error: paymentCountError } = date ? { count: queue?.summary?.awaitingPayment ?? 0, error: null } : await supabaseAdmin
       .schema('operations').from('service_work_state')
       .select('service_order_id', { count: 'exact', head: true })
       .eq('stage', 'work_completed');
     if (paymentCountError) throw paymentCountError;
+    let pausedCount = queue?.summary?.paused ?? null;
+    if (stage !== 'paused') {
+      try {
+        const pausedSummary = await callRpc('limen_service_order_paused_queue', {
+          ...queueParams,
+          p_page: 1,
+          p_page_size: 1,
+        });
+        pausedCount = pausedSummary?.summary?.paused ?? pausedCount;
+      } catch {
+        // Keep the existing queue usable while the additive paused-queue
+        // migration is awaiting deployment; the dedicated Paused tab itself
+        // requires that migration to be available.
+        const pausedCountResult = await supabaseAdmin.schema('operations').from('service_work_state')
+          .select('service_order_id', { count: 'exact', head: true }).eq('stage', 'paused');
+        if (pausedCountResult.error) throw pausedCountResult.error;
+        pausedCount = pausedCountResult.count ?? 0;
+      }
+    }
     res.json({ ...queue,
-      summary: { ...(queue?.summary || {}), awaitingPayment: awaitingPayment || 0 },
+      summary: {
+        ...(queue?.summary || {}),
+        awaitingPayment: awaitingPayment || 0,
+        paused: pausedCount ?? 0,
+      },
       orders: await enrichOrdersWithAssignments(queue?.orders || []),
     });
   } catch (error) {

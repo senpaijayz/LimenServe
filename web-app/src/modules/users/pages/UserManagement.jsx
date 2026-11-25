@@ -12,7 +12,7 @@ import { listMechanics } from '../../../services/mechanicsApi';
 import MechanicManagementPanel from '../components/MechanicManagementPanel';
 import RecoveryEmailModal from '../components/RecoveryEmailModal';
 import { removeMechanicRow, upsertMechanicRow } from '../utils/mechanicVisibilityModel';
-import { createUser, deactivateUser, listUsers, permanentlyDeleteUser, restoreUser, updateUser } from '../../../services/usersApi';
+import { createUser, deactivateUser, listUsers, permanentlyDeleteUser, restoreUser, unlockUserLogin, updateUser } from '../../../services/usersApi';
 
 const roleOptions = [
     { value: 'admin', label: 'Administrator' },
@@ -139,6 +139,7 @@ const UserManagement = () => {
     const [deactivationTarget, setDeactivationTarget] = useState(null);
     const [restoreTarget, setRestoreTarget] = useState(null);
     const [isChangingAccountStatus, setIsChangingAccountStatus] = useState(false);
+    const [unlockingUserId, setUnlockingUserId] = useState('');
     const [recoveryTarget, setRecoveryTarget] = useState(null);
     const [permanentDeleteTarget, setPermanentDeleteTarget] = useState(null);
     const [permanentDeleteConfirmation, setPermanentDeleteConfirmation] = useState('');
@@ -300,6 +301,26 @@ const UserManagement = () => {
         }
     };
 
+    const handleUnlockLogin = async (user) => {
+        if (!user || unlockingUserId) return;
+        setUnlockingUserId(user.id);
+        try {
+            const result = await unlockUserLogin(user.id);
+            if (!result?.unlocked || result.userId !== user.id) {
+                throw new Error('The server did not confirm that sign-in was unlocked.');
+            }
+            setUsers((current) => current.map((row) => row.id === user.id
+                ? { ...row, loginLocked: false, failedLoginAttempts: 0 }
+                : row));
+            success('Sign-in unlocked. The user can try again.');
+            void loadUsers();
+        } catch (error) {
+            showError(error.message || 'Unable to unlock this account.');
+        } finally {
+            setUnlockingUserId('');
+        }
+    };
+
     const openPermanentDelete = (user) => {
         setPermanentDeleteConfirmation('');
         setPermanentDeleteError('');
@@ -377,6 +398,18 @@ const UserManagement = () => {
                     <Mail className="h-4 w-4" aria-hidden="true" />
                     <span>Recovery email</span>
                 </button>
+                {user.loginLocked && (
+                    <button
+                        type="button"
+                        onClick={() => handleUnlockLogin(user)}
+                        disabled={Boolean(unlockingUserId)}
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 text-sm font-semibold text-amber-900 transition hover:border-amber-400 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-wait disabled:opacity-60"
+                        aria-label={`Unlock sign-in for ${user.fullName || user.email}`}
+                    >
+                        <LockKeyhole className="h-4 w-4" aria-hidden="true" />
+                        <span>{unlockingUserId === user.id ? 'Unlocking…' : 'Unlock sign-in'}</span>
+                    </button>
+                )}
                 {user.role === 'admin' ? (
                     <span className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary-50 px-3 text-sm font-medium text-primary-500" title="Administrator accounts cannot be deactivated">
                         <LockKeyhole className="h-4 w-4" aria-hidden="true" />
@@ -421,11 +454,14 @@ const UserManagement = () => {
         {
             key: 'status',
             label: 'Status',
-            render: (status) => (
-                <span className={`inline-flex items-center gap-1 text-sm ${status === 'active' ? 'text-accent-success' : 'text-primary-500'}`}>
-                    <span className={`w-2 h-2 rounded-full ${status === 'active' ? 'bg-accent-success' : 'bg-primary-500'}`} />
-                    {status === 'active' ? 'Active' : 'Inactive'}
-                </span>
+            render: (status, row) => (
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex items-center gap-1 text-sm ${status === 'active' ? 'text-accent-success' : 'text-primary-500'}`}>
+                        <span className={`w-2 h-2 rounded-full ${status === 'active' ? 'bg-accent-success' : 'bg-primary-500'}`} />
+                        {status === 'active' ? 'Active' : 'Inactive'}
+                    </span>
+                    {row.loginLocked && <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900">Sign-in locked</span>}
+                </div>
             ),
         },
         {
@@ -544,6 +580,7 @@ const UserManagement = () => {
                                     <span className="rounded-full border border-primary-200 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-primary-500">
                                         {user.accountStatus === 'deactivated' ? 'Deactivated' : user.status === 'active' ? 'Active' : 'Inactive'}
                                     </span>
+                                    {user.loginLocked && <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900">Sign-in locked</span>}
                                 </div>
                               </div>
                             </div>

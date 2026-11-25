@@ -1,5 +1,5 @@
 const ESTIMATE_NUMBER_PATTERN = /^(?:EST-[A-Z0-9]+(?:-[A-Z0-9]+)*|Q-\d{9,27})$/;
-const PHONE_INPUT_PATTERN = /^[\d().\-\s]+$/;
+const PHONE_INPUT_PATTERN = /^\+?[\d().\-\s]+$/;
 
 export const PUBLIC_ESTIMATE_INPUT_REQUIRED_MESSAGE = 'Quote number and phone number are required.';
 export const PUBLIC_ESTIMATE_INPUT_INVALID_MESSAGE = 'Enter a valid quote number and an 11-digit Philippine mobile number starting with 09.';
@@ -46,7 +46,9 @@ export function normalizePhilippinePhoneNumber(value) {
   }
 
   const digits = input.replace(/\D/g, '');
-  return /^09\d{9}$/.test(digits) ? digits : null;
+  if (/^09\d{9}$/.test(digits)) return digits;
+  if (/^639\d{9}$/.test(digits)) return `0${digits.slice(2)}`;
+  return null;
 }
 
 export function parsePublicEstimateLookupInput(body) {

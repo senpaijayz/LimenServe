@@ -19,6 +19,22 @@ router.get("/", async (req, res, next) => {
         .trim()
         .slice(0, 120),
       page = Number(req.query.page || 1);
+    if (req.query.directory === "true") {
+      const pageSize = Number(req.query.pageSize || 10);
+      const sort = String(req.query.sort || "newest");
+      if ((q.length > 0 && q.length < 2) || !validPage(page)
+        || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 50
+        || !["newest", "oldest"].includes(sort)) {
+        return res.status(400).json({ error: "Choose a valid customer search, page size, and date order." });
+      }
+      return res.json(await callRpc("limen_customer_directory", {
+        p_search: q,
+        p_page: page,
+        p_page_size: pageSize,
+        p_sort: sort,
+        p_quotes: req.user.role === "admin",
+      }));
+    }
     if (q.length < 2 || !validPage(page))
       return res
         .status(400)

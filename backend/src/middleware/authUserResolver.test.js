@@ -8,9 +8,10 @@ function jwtWithExpiry(expiresAtMs) {
   return `header.${payload}.signature`;
 }
 
-function createFakeClients({ user, profile, getUserDelayMs = 0, getUserError = null } = {}) {
+function createFakeClients({ user, profile, getUserDelayMs = 0, getUserError = null, lockout = null, lockoutError = null } = {}) {
   let getUserCalls = 0;
   let profileCalls = 0;
+  let lockoutCalls = 0;
 
   const resolvedUser = user ?? {
     id: 'user-1',
@@ -38,7 +39,14 @@ function createFakeClients({ user, profile, getUserDelayMs = 0, getUserError = n
       },
     },
     supabaseAdmin: {
-      async rpc() {
+      async rpc(functionName) {
+        if (functionName === 'limen_get_account_login_lockout') {
+          lockoutCalls += 1;
+          return { data: lockout, error: lockoutError };
+        }
+        if (functionName !== 'get_user_profile_by_user_id') {
+          throw new Error(`Unexpected test RPC: ${functionName}`);
+        }
         profileCalls += 1;
         return {
           data: profile === undefined ? { full_name: 'Database Admin', role: 'admin' } : profile,
@@ -47,7 +55,7 @@ function createFakeClients({ user, profile, getUserDelayMs = 0, getUserError = n
       },
     },
     get counts() {
-      return { getUserCalls, profileCalls };
+      return { getUserCalls, profileCalls, lockoutCalls };
     },
   };
 }
@@ -66,6 +74,7 @@ test('deduplicates concurrent token validation and profile lookups', async () =>
 
   assert.equal(clients.counts.getUserCalls, 1);
   assert.equal(clients.counts.profileCalls, 1);
+  assert.equal(clients.counts.lockoutCalls, 1);
   assert.deepEqual(users.map((user) => user?.role), ['admin', 'admin', 'admin']);
 });
 
@@ -85,6 +94,7 @@ test('reuses resolved users inside the cache ttl', async () => {
 
   assert.equal(clients.counts.getUserCalls, 1);
   assert.equal(clients.counts.profileCalls, 1);
+  assert.equal(clients.counts.lockoutCalls, 1);
   assert.equal(first?.id, 'user-1');
   assert.equal(second?.fullName, 'Database Admin');
 });
@@ -107,6 +117,7 @@ test('does not cache invalid tokens', async () => {
   assert.equal(second, null);
   assert.equal(clients.counts.getUserCalls, 2);
   assert.equal(clients.counts.profileCalls, 0);
+  assert.equal(clients.counts.lockoutCalls, 0);
 });
 
 test('keeps customer users as customers instead of promoting them to stock clerk', async () => {
@@ -127,6 +138,7 @@ test('keeps customer users as customers instead of promoting them to stock clerk
   const user = await resolveUser(jwtWithExpiry(Date.now() + 60_000));
 
   assert.equal(user?.role, 'customer');
+  assert.equal(clients.counts.lockoutCalls, 0);
 });
 
 test('uses the safe customer role for unknown metadata roles', async () => {
@@ -147,6 +159,7 @@ test('uses the safe customer role for unknown metadata roles', async () => {
   const user = await resolveUser(jwtWithExpiry(Date.now() + 60_000));
 
   assert.equal(user?.role, 'customer');
+  assert.equal(clients.counts.lockoutCalls, 0);
 });
 
 test('does not promote a user from token metadata when the profile is unavailable', async () => {
@@ -167,4 +180,32 @@ test('does not promote a user from token metadata when the profile is unavailabl
   const user = await resolveUser(jwtWithExpiry(Date.now() + 60_000));
 
   assert.equal(user?.role, 'customer');
+  assert.equal(clients.counts.lockoutCalls, 0);
+});
+
+test('does not resolve a staff API user while their account is locked', async () => {
+  const clients = createFakeClients({
+    lockout: { failed_attempts: 5, locked_at: '2026-11-26T00:00:00Z' },
+  });
+  const { resolveUser } = createAuthUserResolver({
+    supabaseAuth: clients.supabaseAuth,
+    supabaseAdmin: clients.supabaseAdmin,
+  });
+
+  const user = await resolveUser(jwtWithExpiry(Date.now() + 60_000));
+
+  assert.equal(user, null);
+  assert.equal(clients.counts.lockoutCalls, 1);
+});
+
+test('fails closed when an internal account lockout cannot be confirmed', async () => {
+  const clients = createFakeClients({ lockoutError: new Error('database unavailable') });
+  const { resolveUser } = createAuthUserResolver({
+    supabaseAuth: clients.supabaseAuth,
+    supabaseAdmin: clients.supabaseAdmin,
+  });
+
+  const user = await resolveUser(jwtWithExpiry(Date.now() + 60_000));
+
+  assert.equal(user, null);
 });

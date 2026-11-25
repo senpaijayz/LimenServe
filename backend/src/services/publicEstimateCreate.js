@@ -209,7 +209,7 @@ function normalizeCustomer(customer, { internal = false, requireRecoveryPhone = 
 
   const name = boundedText(value.name, {
     fieldName: 'customer.name',
-    maxLength: 120,
+    maxLength: 50,
   }) || 'Walk-in Customer';
   const phone = normalizePhilippinePhoneNumber(value.phone);
   if (!phone && (!internal || requireRecoveryPhone || (value.phone != null && value.phone !== ''))) {
