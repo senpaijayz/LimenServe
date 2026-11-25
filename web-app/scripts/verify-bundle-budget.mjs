@@ -29,7 +29,7 @@ const FORBIDDEN_INITIAL_CHUNKS = [
 ];
 
 const ROUTE_BUDGETS = [
-  { name: 'public home', entry: 'src/modules/public/pages/PublicCmsPage.jsx', maxKiB: 250 },
+  { name: 'public home', entry: 'src/modules/public/pages/PublicHome.jsx', maxKiB: 250 },
   { name: 'public catalog', entry: 'src/modules/public/pages/PublicCatalog.jsx', maxKiB: 330 },
   { name: 'public estimate', entry: 'src/modules/public/pages/PublicEstimate.jsx', maxKiB: 340 },
   { name: 'dashboard', entry: 'src/modules/dashboard/pages/AdminDashboard.jsx', maxKiB: 270 },

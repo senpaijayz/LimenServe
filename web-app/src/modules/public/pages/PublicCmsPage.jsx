@@ -7,8 +7,7 @@ import DynamicPageRenderer from '../components/DynamicPageRenderer';
 const reservedPublicSlugs = new Set(['catalog', 'estimate', 'service-orders', 'about', 'login']);
 
 export default function PublicCmsPage() {
-  // The site root and /home should show the same published CMS homepage.
-  const { slug = 'home' } = useParams();
+  const { slug = '' } = useParams();
   const [page, setPage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
