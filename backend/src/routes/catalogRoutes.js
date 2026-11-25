@@ -3,6 +3,7 @@ import multer from 'multer';
 import zlib from 'node:zlib';
 import path from 'node:path';
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { requireRole } from '../middleware/auth.js';
@@ -3768,20 +3769,23 @@ router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req
     const tokenPayload = verifyPricelistPreviewToken(req.body?.previewToken);
     if (!tokenPayload || tokenPayload.uploadId !== upload.id || tokenPayload.fileChecksum !== upload.file_checksum) {
       pricelistPreviewCache.delete(req.body?.previewToken);
-      return res.status(409).json({ error: 'This preview has expired or changed. Review the pricelist again before importing.' });
+      return res.status(409).json({ code: 'PRICELIST_PREVIEW_STALE', error: 'This preview has expired or changed. Review the pricelist again before importing.' });
     }
 
-    const normalizedSelection = normalizePricelistUploadSelection(req.body ?? {});
-    if (JSON.stringify(tokenPayload.selection) !== JSON.stringify(normalizedSelection)) {
+    // Apply precisely the settings signed by the preview. Older clients still
+    // send a settings object; reject actual changes, not JSON key ordering.
+    const normalizedSelection = tokenPayload.selection;
+    if (Object.hasOwn(req.body, 'sheetName')
+      && !isDeepStrictEqual(normalizedSelection, normalizePricelistUploadSelection(req.body))) {
       pricelistPreviewCache.delete(req.body?.previewToken);
-      return res.status(409).json({ error: 'The worksheet or import settings changed after preview. Review the updated preview before importing.' });
+      return res.status(409).json({ code: 'PRICELIST_PREVIEW_STALE', error: 'The worksheet or import settings changed after preview. Review the updated preview before importing.' });
     }
     const runningJob = getPricelistImportJob(upload.id);
     if (runningJob?.state === 'running') return res.status(202).json({ state: 'running' });
     const currentVersion = await getActiveRetailPricelistVersion();
     if ((currentVersion?.id ?? null) !== (tokenPayload.activeVersionId ?? null)) {
       pricelistPreviewCache.delete(req.body?.previewToken);
-      return res.status(409).json({ error: 'The active pricelist changed after preview. Refresh the preview before importing.' });
+      return res.status(409).json({ code: 'PRICELIST_PREVIEW_STALE', error: 'The active pricelist changed after preview. Refresh the preview before importing.' });
     }
 
     let importPreview = pricelistPreviewCache.get({ uploadId: upload.id, previewToken: req.body.previewToken });

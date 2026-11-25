@@ -113,6 +113,7 @@ const PriceListManager = ({ onUpdated }) => {
     const selectedPrice = selectedSheet?.priceColumns?.find((column) => column.index === Number(selection?.mapping?.price));
     const invalidatePreview = () => { setPreview(null); setUploadPhase(''); };
     const updateSelection = (patch) => {
+        if (isSubmitting) return;
         if (patch.mapping && Object.prototype.hasOwnProperty.call(patch.mapping, 'price')) {
             const detected = selectedSheet?.priceColumns?.find((column) => column.index === Number(patch.mapping.price));
             patch = {
@@ -337,7 +338,7 @@ const PriceListManager = ({ onUpdated }) => {
     };
 
     const handlePreview = async (nextSelection = selection) => {
-        if (!nextSelection || !uploadAnalysis?.upload?.id) return;
+        if (isSubmitting || !nextSelection || !uploadAnalysis?.upload?.id) return;
         setIsSubmitting(true);
         setUploadProgress(null);
         setUploadPhase('Comparing part numbers and prices…');
@@ -358,8 +359,7 @@ const PriceListManager = ({ onUpdated }) => {
         setUploadProgress(null);
         setUploadPhase('Saving the new revision and updating active prices…');
         try {
-            const result = await importRetailPriceListUpload(uploadAnalysis.upload.id,
-                { ...selection, effectiveFrom, versionYear }, preview.previewToken);
+            const result = await importRetailPriceListUpload(uploadAnalysis.upload.id, preview.previewToken);
             applyResult(result);
             setUploadPhase('');
             setPreview(null);
@@ -367,6 +367,7 @@ const PriceListManager = ({ onUpdated }) => {
             setUploadAnalysis(null);
             setSelectedFile(null);
         } catch (submitError) {
+            if (submitError.code === 'PRICELIST_PREVIEW_STALE') setPreview(null);
             setUploadPhase(submitError.message || 'Unable to complete the update. Check Saved Price Lists before retrying.');
         } finally { setIsSubmitting(false); }
     };
@@ -457,7 +458,7 @@ const PriceListManager = ({ onUpdated }) => {
                     </div>
 
                     {uploadAnalysis && (
-                        <div className="space-y-4 rounded-2xl border border-primary-200 bg-white p-4">
+                        <fieldset disabled={isSubmitting} className="min-w-0 space-y-4 rounded-2xl border border-primary-200 bg-white p-4">
                             <div>
                                 <p className="text-sm font-semibold text-primary-950">2. Automatic detection</p>
                                 <p className="mt-1 text-sm text-primary-500">Part numbers, descriptions, and customer selling prices are detected automatically. Only choose a sheet if the workbook has no clear customer-price sheet.</p>
@@ -511,11 +512,11 @@ const PriceListManager = ({ onUpdated }) => {
                                     </div>
                                 </>
                             )}
-                        </div>
+                        </fieldset>
                     )}
 
                     {preview && (
-                        <div className="space-y-4 rounded-2xl border border-primary-200 bg-white p-4">
+                        <fieldset disabled={isSubmitting} className="min-w-0 space-y-4 rounded-2xl border border-primary-200 bg-white p-4">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                                 <div><p className="text-sm font-semibold text-primary-950">3. Price change summary</p><p className="mt-1 text-sm text-primary-500">Check the comparison before updating. Invalid rows will be skipped and existing prices for those parts will be kept.</p></div>
                                 {preview.errors?.length > 0 && <Button type="button" variant="outline" size="sm" onClick={handleDownloadErrors}><Download className="mr-1 h-4 w-4" /> Download error report</Button>}
@@ -534,7 +535,7 @@ const PriceListManager = ({ onUpdated }) => {
                             {preview.sample?.length > 0 && <details className="rounded-xl border border-primary-200"><summary className="cursor-pointer bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-800">Sample detected prices</summary><div className="overflow-auto"><table className="min-w-full text-left text-sm"><thead className="text-xs uppercase text-primary-500"><tr><th className="px-3 py-2">Excel row</th><th className="px-3 py-2">Part number</th><th className="px-3 py-2">Description</th><th className="px-3 py-2">Selected price</th></tr></thead><tbody>{preview.sample.map((row) => <tr key={`${row.sourceLineNumber}-${row.sku}`} className="border-t border-primary-100"><td className="px-3 py-2">{row.sourceLineNumber}</td><td className="px-3 py-2 font-semibold">{row.sku}</td><td className="px-3 py-2">{row.name || '—'}</td><td className="px-3 py-2">{formatPeso(row.price)}</td></tr>)}</tbody></table></div></details>}
                             {preview.priceChanges?.length > 0 && <details className="rounded-xl border border-primary-200"><summary className="cursor-pointer bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-800">Price-by-price comparison (showing up to 80)</summary><div className="max-h-48 overflow-auto"><table className="min-w-full text-left text-sm"><thead className="sticky top-0 bg-white text-xs uppercase text-primary-500"><tr><th className="px-3 py-2">Part</th><th className="px-3 py-2">Previous</th><th className="px-3 py-2">New</th><th className="px-3 py-2">Result</th></tr></thead><tbody>{preview.priceChanges.map((row) => <tr key={row.sku} className="border-t border-primary-100"><td className="px-3 py-2">{row.sku}</td><td className="px-3 py-2">{formatPeso(row.previousPrice)}</td><td className="px-3 py-2">{formatPeso(row.newPrice)}</td><td className="px-3 py-2">{getChangeLabel(row.status)}</td></tr>)}</tbody></table></div></details>}
                             {preview.counts?.zeroPrices > 0 && <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><input type="checkbox" className="mt-1" checked={selection?.confirmZeroPrices === true} onChange={(event) => updateSelection({ confirmZeroPrices: event.target.checked })} /><span>{formatUploadCount(preview.counts.zeroPrices)} explicit zero price(s) found. Confirm only if ₱0.00 is intended for these parts.</span></label>}
-                        </div>
+                        </fieldset>
                     )}
 
                     <details className="rounded-2xl border border-primary-200 bg-white p-4">

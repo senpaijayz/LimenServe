@@ -884,7 +884,7 @@ export async function previewRetailPriceListUpload(uploadId, selection) {
   }
 }
 
-export async function importRetailPriceListUpload(uploadId, selection, previewToken) {
+export async function importRetailPriceListUpload(uploadId, previewToken) {
   const importStatusError = (message) => Object.assign(new Error(message), { isPricelistImportStatus: true });
   const path = `/catalog/prices/uploads/${encodeURIComponent(uploadId)}`;
   const isTemporaryNetworkError = (error) => !error?.response || [502, 503, 504].includes(error.response.status);
@@ -897,7 +897,7 @@ export async function importRetailPriceListUpload(uploadId, selection, previewTo
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const response = await apiClient.post(`${path}/import`, {
-          ...selection, previewToken, confirm: true,
+          previewToken, confirm: true,
         }, { timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS });
         data = response.data;
         break;
@@ -950,6 +950,9 @@ export async function importRetailPriceListUpload(uploadId, selection, previewTo
     return data;
   } catch (error) {
     if (error?.isPricelistImportStatus) throw error;
+    if (error?.response?.data?.code === 'PRICELIST_PREVIEW_STALE') {
+      throw Object.assign(new Error(error.response.data.error), { code: 'PRICELIST_PREVIEW_STALE' });
+    }
     extractApiError(error, 'The pricelist update did not finish. Check Saved Price Lists before retrying.');
   }
 }
