@@ -1674,24 +1674,6 @@ const PublicEstimate = () => {
                                                 onChange={(event) => setPartSearch(event.target.value)}
                                                 className="input pl-10 py-2.5 text-sm"
                                             />
-                                            {partSearch.trim() && partNumberSuggestions.length > 0 && (
-                                                <div className="absolute z-20 mt-2 max-h-48 w-full overflow-y-auto rounded-xl border border-primary-200 bg-white py-1 shadow-lg">
-                                                    {partNumberSuggestions.map((product) => (
-                                                        <button
-                                                            key={product.catalogEntryId || product.id}
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setPartSearch(getProductPartNumber(product));
-                                                                setFocusedProduct(product);
-                                                            }}
-                                                            className="flex w-full flex-col px-3 py-2 text-left transition hover:bg-primary-50"
-                                                        >
-                                                            <span className="truncate text-sm font-semibold text-primary-950">{product.name}</span>
-                                                            <span className="font-mono text-xs text-primary-500">{getProductPartNumber(product) || 'No part number'} · {product.model || 'Universal fitment'}</span>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
                                         </div>
                                         <div className="relative min-w-[220px] sm:w-56 sm:shrink-0">
                                             <ArrowUpDown className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
@@ -1759,6 +1741,25 @@ const PublicEstimate = () => {
                                         );
                                     })}
                                 </div>
+
+                                {partSearch.trim() && partNumberSuggestions.length > 0 && (
+                                    <div aria-label="Part search suggestions" className="mt-3 max-h-48 w-full overflow-y-auto rounded-xl border border-primary-200 bg-white py-1 shadow-sm">
+                                        {partNumberSuggestions.map((product) => (
+                                            <button
+                                                key={product.catalogEntryId || product.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setPartSearch(getProductPartNumber(product));
+                                                    setFocusedProduct(product);
+                                                }}
+                                                className="flex w-full flex-col px-3 py-2 text-left transition hover:bg-primary-50"
+                                            >
+                                                <span className="truncate text-sm font-semibold text-primary-950">{product.name}</span>
+                                                <span className="font-mono text-xs text-primary-500">{getProductPartNumber(product) || 'No part number'} · {product.model || 'Universal fitment'}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
 
                                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                                     <button
