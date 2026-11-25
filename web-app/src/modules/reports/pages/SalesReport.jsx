@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { BarChart, Bar, CartesianGrid, Tooltip, XAxis, YAxis } from 'recharts';
 import MeasuredChart from '../../../components/ui/MeasuredChart';
-import { AlertTriangle, CalendarRange, Download, FilePlus2, Filter, Receipt, RefreshCw, TrendingUp } from 'lucide-react';
+import { AlertTriangle, CalendarRange, Download, FilePlus2, Filter, Printer, Receipt, RefreshCw, TrendingUp } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card, { KPICard } from '../../../components/ui/Card';
 import Modal from '../../../components/ui/Modal';
@@ -25,10 +25,6 @@ import SaleReturnModal from '../../pos/components/SaleReturnModal.jsx';
 function toReportNumber(value, fallback = 0) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function buildReportStamp(date = new Date()) {
-    return date.toISOString().slice(0, 10);
 }
 
 function toBusinessDate(date = new Date()) {
@@ -83,11 +79,12 @@ function escapeHtml(value) {
         .replace(/'/g, '&#039;');
 }
 
-function renderReportTable(headers, rows, emptyMessage = 'No records') {
+function renderReportTable(headers, rows, emptyMessage = 'No records', widths = []) {
     const safeRows = rows.length > 0 ? rows : [[emptyMessage, ...Array(Math.max(headers.length - 1, 0)).fill('')]];
 
     return `
         <table>
+            ${widths.length ? `<colgroup>${widths.map((width) => `<col style="width:${width}%" />`).join('')}</colgroup>` : ''}
             <thead>
                 <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>
             </thead>
@@ -150,7 +147,14 @@ function buildPrintableSalesReport({
     <meta charset="utf-8" />
     <title>LimenServe Sales Report ${escapeHtml(filters.startDate)} to ${escapeHtml(filters.endDate)}</title>
     <style>
-        @page { size: A4; margin: 14mm; }
+        @page {
+            size: A4 landscape;
+            margin: 15mm 10mm 15mm;
+            @top-left { content: "LimenServe | Limen Auto Supply and Services"; color: #64748b; font: 8px "Segoe UI", Arial, sans-serif; }
+            @top-right { content: "Sales Analytics Report"; color: #64748b; font: 8px "Segoe UI", Arial, sans-serif; }
+            @bottom-left { content: "LimenServe | Sales Analytics Report"; color: #64748b; font: 8px "Segoe UI", Arial, sans-serif; }
+            @bottom-right { content: "Page " counter(page) " of " counter(pages); color: #64748b; font: 8px "Segoe UI", Arial, sans-serif; }
+        }
         * { box-sizing: border-box; }
         body {
             margin: 0;
@@ -245,19 +249,28 @@ function buildPrintableSalesReport({
         }
         section {
             margin-top: 14px;
-            break-inside: avoid;
+            break-inside: auto;
+            page-break-inside: auto;
         }
         h2 {
             margin: 0 0 7px;
             color: #0f172a;
             font-size: 13px;
+            break-after: avoid;
+            page-break-after: avoid;
         }
         table {
             width: 100%;
             border-collapse: collapse;
             table-layout: fixed;
             border: 1px solid #cbd5e1;
+            break-inside: auto;
+            page-break-inside: auto;
         }
+        thead { display: table-header-group; }
+        tfoot { display: table-footer-group; }
+        tr { break-inside: avoid; page-break-inside: avoid; }
+        .report-header, .filter-grid, .kpi-grid, .signatures { break-inside: avoid; page-break-inside: avoid; }
         th {
             background: #eaf0f8;
             color: #334155;
@@ -313,16 +326,19 @@ function buildPrintableSalesReport({
             background: #ffffff;
             color: #172554;
         }
+        .report-note { margin: 8px 0; color: #475569; font-size: 9px; }
         @media print {
             .print-actions { display: none; }
+            html, body { width: 100%; min-height: 0; margin: 0; padding: 0; overflow: visible; }
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .report-shell { max-width: none; }
         }
     </style>
 </head>
 <body>
     <div class="print-actions">
         <button class="secondary" onclick="window.close()">Close</button>
-        <button onclick="window.print()">Print / Save PDF</button>
+        <button onclick="window.print()">Print Report</button>
     </div>
     <main class="report-shell">
         <header class="report-header">
@@ -349,26 +365,26 @@ function buildPrintableSalesReport({
             <div class="kpi-card"><div class="label">Top Part in a Month</div><div class="value">${escapeHtml(peakLeader ? formatReportProductName(peakLeader) : 'No recorded sales')}</div></div>
             <div class="kpi-card"><div class="label">Parts Sold</div><div class="value">${escapeHtml(formatNumber(productUnits))}</div></div>
         </div>
-        <p>These part figures come from completed sales that list each part. The parts amount does not include labor or discounts and tax applied to the whole sale. Sales entered as one total are kept separately and do not change these part totals.</p>
+        <p class="report-note">These part figures come from completed sales that list each part. The parts amount does not include labor or discounts and tax applied to the whole sale. Sales entered as one total are kept separately and do not change these part totals.</p>
 
         <section>
             <h2>Top-Selling Items</h2>
-            ${renderReportTable(['Part Number (Product Name)', 'Category', 'Units', 'Revenue'], topItemRows)}
+            ${renderReportTable(['Part Number (Product Name)', 'Category', 'Units', 'Revenue'], topItemRows, 'No recorded sales', [44, 26, 12, 18])}
         </section>
 
         <section>
             <h2>Parts Sales Over Time</h2>
-            ${renderReportTable(['Period', 'Units', 'Revenue'], trendRows)}
+            ${renderReportTable(['Period', 'Units', 'Revenue'], trendRows, 'No recorded sales', [56, 18, 26])}
         </section>
 
         <section>
             <h2>Best Month for Each Part</h2>
-            ${renderReportTable(['Part Number (Product Name)', 'Peak Month', 'Peak Units', 'Peak Revenue'], peakRows)}
+            ${renderReportTable(['Part Number (Product Name)', 'Peak Month', 'Peak Units', 'Peak Revenue'], peakRows, 'No recorded sales', [42, 24, 15, 19])}
         </section>
 
         <section>
             <h2>Sales History</h2>
-            ${renderReportTable(['Receipt', 'Date / Time', 'Customer', 'Cashier', 'Source', 'Items', 'Payment', 'Status', 'Original Reference', 'Total'], ledgerRows)}
+            ${renderReportTable(['Receipt', 'Date / Time', 'Customer', 'Cashier', 'Source', 'Items', 'Payment', 'Status', 'Original Reference', 'Total'], ledgerRows, 'No sales recorded', [9, 12, 12, 10, 8, 5, 9, 7, 17, 11])}
         </section>
 
         <div class="signatures">
@@ -411,7 +427,8 @@ const SalesReport = () => {
     const [aggregateUnavailable, setAggregateUnavailable] = useState(false);
     const [isHistoricalAggregateEditorOpen, setIsHistoricalAggregateEditorOpen] = useState(false);
     const [editingHistoricalAggregate, setEditingHistoricalAggregate] = useState(null);
-    const [isExporting, setIsExporting] = useState(false);
+    const [exportAction, setExportAction] = useState('');
+    const exportLockRef = useRef(false);
     const [historySort, setHistorySort] = useState({ key: 'date', dir: 'desc' });
     const [categoryOptions, setCategoryOptions] = useState([{ value: '', label: 'All categories' }]);
     const activeSaleRequestRef = useRef(null);
@@ -639,39 +656,32 @@ const SalesReport = () => {
         }
     };
 
-    const handleExport = useCallback(async () => {
-        setIsExporting(true);
-        setError('');
+    const collectReportData = useCallback(async () => {
+        const exportedSales = [];
+        let page = 1;
+        let hasMore = true;
 
-        try {
-            const reportWindow = window.open('', '_blank');
-            if (!reportWindow) {
-                throw new Error('Please allow pop-ups to print or save the PDF report.');
-            }
+        while (hasMore && page <= 100) {
+            const { sales, pagination } = await listPosSales({
+                startDate: filters.startDate,
+                endDate: filters.endDate,
+                search: historySearch || null,
+                limit: 100,
+                page,
+            });
+            exportedSales.push(...(sales ?? []).filter((sale) => !isDemoSale(sale)));
+            hasMore = Boolean(pagination?.hasMore);
+            page += 1;
+        }
+        if (hasMore) throw new Error('The report contains more than 10,000 sales. Choose a shorter date range.');
 
-            reportWindow.document.write('<p style="font-family:Arial,sans-serif;padding:24px;">Preparing LimenServe report...</p>');
-            const exportedSales = [];
-            let page = 1;
-            let hasMore = true;
-
-            while (hasMore && page <= 100) {
-                const { sales, pagination } = await listPosSales({
-                    startDate: filters.startDate,
-                    endDate: filters.endDate,
-                    search: historySearch || null,
-                    limit: 100,
-                    page,
-                });
-
-                exportedSales.push(...(sales ?? []).filter((sale) => !isDemoSale(sale)));
-                hasMore = Boolean(pagination?.hasMore);
-                page += 1;
-            }
-            if (hasMore) throw new Error('The ledger exceeds 10,000 records. Select a smaller date range before printing.');
-
-            const generatedAt = new Date();
-            const generatedBy = user?.fullName || user?.email || 'LimenServe user';
-            const reportHtml = buildPrintableSalesReport({
+        const generatedAt = new Date();
+        const generatedBy = user?.fullName || user?.email || 'LimenServe user';
+        return {
+            generatedAt,
+            generatedBy,
+            exportedSales,
+            reportProps: {
                 filters,
                 generatedAt,
                 generatedBy,
@@ -682,29 +692,144 @@ const SalesReport = () => {
                 exportedSales,
                 trendRevenue,
                 productUnits: itemTrend.reduce((sum, row) => sum + toReportNumber(row.quantity), 0),
-            });
+            },
+        };
+    }, [filters, historySearch, itemTrend, peakPeriods, topSellingItems, trendRevenue, user?.email, user?.fullName]);
 
-            reportWindow.document.open();
-            reportWindow.document.write(reportHtml);
-            reportWindow.document.close();
-            reportWindow.document.title = `limenserve-sales-report-${filters.startDate}-to-${filters.endDate}-${buildReportStamp(generatedAt)}`;
-            reportWindow.focus();
-            window.setTimeout(() => reportWindow.print(), 400);
+    const handleDownloadPdf = useCallback(async () => {
+        if (exportLockRef.current) return;
+        exportLockRef.current = true;
+        setExportAction('download');
+        setError('');
+        try {
+            const { generatedAt, generatedBy, exportedSales } = await collectReportData();
+            const { downloadReportPdf } = await import('../utils/reportPdf.js');
+            const suffix = filters.startDate === filters.endDate
+                ? filters.startDate
+                : `${filters.startDate}_to_${filters.endDate}`;
+            const peakRows = peakPeriods.map((item) => [
+                formatReportProductName(item),
+                item.peak_month ? new Date(item.peak_month).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' }) : '',
+                formatNumber(toReportNumber(item.peak_quantity)),
+                formatCurrency(toReportNumber(item.peak_revenue)),
+            ]);
+            const ledgerRows = exportedSales.map((sale) => [
+                sale.transaction_number || '',
+                formatDateTime(getSaleTimestamp(sale)),
+                sale.customer_name || '',
+                sale.cashier_name || '',
+                getSaleSourceLabel(sale),
+                formatNumber(toReportNumber(sale.item_count)),
+                PAYMENT_LABELS[sale.payment_method] || sale.payment_method || '',
+                sale.status || '',
+                sale.originalReference || sale.original_reference || '',
+                formatCurrency(toReportNumber(sale.total_amount)),
+            ]);
+
+            downloadReportPdf({
+                title: 'Sales Analytics Report',
+                dateRange: `${filters.startDate} to ${filters.endDate}`,
+                generatedAt: formatDateTime(generatedAt),
+                generatedBy,
+                filename: `Sales_Report_${suffix}`,
+                filters: [
+                    { label: 'Category', value: filters.category || 'All' },
+                    { label: 'Search', value: historySearch || 'All' },
+                ],
+                summaryCards: [
+                    { label: 'Best Selling Part', value: topSellingItems[0] ? formatReportProductName(topSellingItems[0]) : 'No recorded sales' },
+                    { label: 'Parts Sales Amount', value: formatCurrency(trendRevenue) },
+                    { label: 'Top Part in a Month', value: peakPeriods[0] ? formatReportProductName(peakPeriods[0]) : 'No recorded sales' },
+                    { label: 'Parts Sold', value: formatNumber(itemTrend.reduce((sum, row) => sum + toReportNumber(row.quantity), 0)) },
+                ],
+                summaryColumns: 4,
+                introText: 'These part figures come from completed sales that list each part. The parts amount does not include labor or discounts and tax applied to the whole sale. Sales entered as one total are kept separately and do not change these part totals.',
+                sections: [
+                    {
+                        title: 'Top-Selling Items',
+                        columns: [{ label: 'Part Number (Product Name)', width: 44 }, { label: 'Category', width: 26 }, { label: 'Units', width: 12, align: 'right' }, { label: 'Revenue', width: 18, align: 'right' }],
+                        rows: topSellingItems.map((item) => [formatReportProductName(item), item.category || '', formatNumber(toReportNumber(item.quantity)), formatCurrency(toReportNumber(item.revenue))]),
+                        emptyMessage: 'No recorded sales',
+                    },
+                    {
+                        title: 'Parts Sales Over Time',
+                        columns: [{ label: 'Period', width: 56 }, { label: 'Units', width: 18, align: 'right' }, { label: 'Revenue', width: 26, align: 'right' }],
+                        rows: itemTrend.map((item) => [item.label || item.period_start || '', formatNumber(toReportNumber(item.quantity ?? item.units)), formatCurrency(toReportNumber(item.revenue))]),
+                        emptyMessage: 'No recorded sales',
+                    },
+                    {
+                        title: 'Best Month for Each Part',
+                        columns: [{ label: 'Part Number (Product Name)', width: 42 }, { label: 'Peak Month', width: 24 }, { label: 'Peak Units', width: 15, align: 'right' }, { label: 'Peak Revenue', width: 19, align: 'right' }],
+                        rows: peakRows,
+                        emptyMessage: 'No recorded sales',
+                    },
+                    {
+                        title: 'Sales History',
+                        columns: [
+                            { label: 'Receipt', width: 9 }, { label: 'Date / Time', width: 12 }, { label: 'Customer', width: 12 },
+                            { label: 'Cashier', width: 10 }, { label: 'Source', width: 8 }, { label: 'Items', width: 5, align: 'right' },
+                            { label: 'Payment', width: 9 }, { label: 'Status', width: 7 }, { label: 'Original Reference', width: 17 }, { label: 'Total', width: 11, align: 'right' },
+                        ],
+                        rows: ledgerRows,
+                        emptyMessage: 'No sales recorded',
+                    },
+                ],
+                signatureLabels: ['Prepared By', 'Checked By'],
+                reportId: 'LimenServe Sales Analytics',
+            });
         } catch (exportError) {
-            setError(exportError.message || 'Unable to export the report.');
+            setError(exportError.message || 'Unable to download the PDF report. Please try again.');
         } finally {
-            setIsExporting(false);
+            exportLockRef.current = false;
+            setExportAction('');
         }
-    }, [
-        filters,
-        historySearch,
-        itemTrend,
-        peakPeriods,
-        topSellingItems,
-        trendRevenue,
-        user?.email,
-        user?.fullName,
-    ]);
+    }, [collectReportData, filters, historySearch, itemTrend, peakPeriods, topSellingItems, trendRevenue]);
+
+    const handlePrint = useCallback(() => {
+        if (exportLockRef.current) return;
+        const reportWindow = window.open('', '_blank');
+        if (!reportWindow) {
+            setError('Please allow pop-ups to print the report.');
+            return;
+        }
+
+        exportLockRef.current = true;
+        setExportAction('print');
+        setError('');
+        reportWindow.document.write('<p style="font-family:Arial,sans-serif;padding:24px;">Preparing the LimenServe sales report for printing...</p>');
+        let printScheduled = false;
+        void (async () => {
+            try {
+                const { reportProps } = await collectReportData();
+                reportWindow.document.open();
+                reportWindow.document.write(buildPrintableSalesReport(reportProps));
+                reportWindow.document.close();
+                reportWindow.document.title = `Sales_Report_${filters.startDate}_to_${filters.endDate}`;
+                reportWindow.focus();
+                window.setTimeout(() => {
+                    try {
+                        if (!reportWindow.closed) reportWindow.print();
+                    } catch (printError) {
+                        setError(printError.message || 'Unable to open the print dialog. Please try again.');
+                    } finally {
+                        exportLockRef.current = false;
+                        setExportAction('');
+                    }
+                }, 350);
+                printScheduled = true;
+            } catch (exportError) {
+                reportWindow.close();
+                setError(exportError.message || 'Unable to open the print report. Please try again.');
+            } finally {
+                if (!printScheduled) {
+                    exportLockRef.current = false;
+                    setExportAction('');
+                }
+            }
+        })();
+    }, [collectReportData, filters.endDate, filters.startDate]);
+
+    const isExporting = Boolean(exportAction);
 
     return (
         <div className="space-y-6">
@@ -741,13 +866,22 @@ const SalesReport = () => {
                     )}
                     <Button variant="secondary" leftIcon={<RefreshCw className="w-4 h-4" />} isLoading={refreshing} onClick={handleRefresh}>Refresh Analytics</Button>
                     <Button
-                        variant="outline"
+                        variant="secondary"
                         leftIcon={<Download className="w-4 h-4" />}
-                        isLoading={isExporting}
-                        onClick={handleExport}
-                        disabled={loading || Boolean(error)}
+                        isLoading={exportAction === 'download'}
+                        onClick={handleDownloadPdf}
+                        disabled={loading || Boolean(error) || isExporting}
                     >
-                        Print PDF
+                        {exportAction === 'download' ? 'Generating PDF…' : 'Download PDF'}
+                    </Button>
+                    <Button
+                        variant="primary"
+                        leftIcon={<Printer className="w-4 h-4" />}
+                        isLoading={exportAction === 'print'}
+                        onClick={handlePrint}
+                        disabled={loading || Boolean(error) || isExporting}
+                    >
+                        {exportAction === 'print' ? 'Preparing Print…' : 'Print Report'}
                     </Button>
                 </div>
             </div>

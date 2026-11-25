@@ -85,10 +85,11 @@ function escapeHtml(value) {
         .replace(/'/g, '&#039;');
 }
 
-function renderReportTable(headers, rows, emptyMessage = 'No records') {
+function renderReportTable(headers, rows, emptyMessage = 'No records', widths = []) {
     const safeRows = rows.length > 0 ? rows : [[emptyMessage, ...Array(Math.max(headers.length - 1, 0)).fill('')]];
     return `
         <table>
+            ${widths.length ? `<colgroup>${widths.map((width) => `<col style="width:${width}%" />`).join('')}</colgroup>` : ''}
             <thead>
                 <tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr>
             </thead>
@@ -151,7 +152,14 @@ function buildPrintableInventoryReport({
     <meta charset="utf-8" />
     <title>LimenServe Inventory Audit Report — ${escapeHtml(dateRangeLabel)}</title>
     <style>
-        @page { size: A4 landscape; margin: 10mm; }
+        @page {
+            size: A4 landscape;
+            margin: 15mm 10mm 15mm;
+            @top-left { content: "LimenServe | Limen Auto Supply and Services"; color: #64748b; font: 8px "Segoe UI", Arial, sans-serif; }
+            @top-right { content: "Inventory Audit Report"; color: #64748b; font: 8px "Segoe UI", Arial, sans-serif; }
+            @bottom-left { content: "LimenServe | Inventory Audit Report"; color: #64748b; font: 8px "Segoe UI", Arial, sans-serif; }
+            @bottom-right { content: "Page " counter(page) " of " counter(pages); color: #64748b; font: 8px "Segoe UI", Arial, sans-serif; }
+        }
         * { box-sizing: border-box; }
         body {
             margin: 0;
@@ -241,12 +249,15 @@ function buildPrintableInventoryReport({
         .value.red { color: #dc2626; }
         section {
             margin-top: 14px;
-            break-inside: avoid;
+            break-inside: auto;
+            page-break-inside: auto;
         }
         h2 {
             margin: 0 0 4px;
             color: #0f172a;
             font-size: 13px;
+            break-after: avoid;
+            page-break-after: avoid;
         }
         .section-sub {
             color: #64748b;
@@ -258,7 +269,13 @@ function buildPrintableInventoryReport({
             border-collapse: collapse;
             table-layout: fixed;
             border: 1px solid #cbd5e1;
+            break-inside: auto;
+            page-break-inside: auto;
         }
+        thead { display: table-header-group; }
+        tfoot { display: table-footer-group; }
+        tr { break-inside: avoid; page-break-inside: avoid; }
+        .report-header, .kpi-grid, .signatures { break-inside: avoid; page-break-inside: avoid; }
         th {
             background: #eaf0f8;
             color: #334155;
@@ -282,6 +299,7 @@ function buildPrintableInventoryReport({
             grid-template-columns: repeat(3, 1fr);
             gap: 40px;
             margin-top: 28px;
+            break-inside: avoid;
             page-break-inside: avoid;
         }
         .signature-line {
@@ -324,14 +342,16 @@ function buildPrintableInventoryReport({
         }
         @media print {
             .print-actions { display: none; }
+            html, body { width: 100%; min-height: 0; margin: 0; padding: 0; overflow: visible; }
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .report-shell { max-width: none; }
         }
     </style>
 </head>
 <body>
     <div class="print-actions">
         <button class="secondary" onclick="window.close()">Close</button>
-        <button onclick="window.print()">Print / Save PDF</button>
+        <button onclick="window.print()">Print Report</button>
     </div>
     <main class="report-shell">
         <header class="report-header">
@@ -360,20 +380,20 @@ function buildPrintableInventoryReport({
         <section>
             <h2>Stock Changes</h2>
             <div class="section-sub">${escapeHtml(formatNumber(movements.length))} records · ${escapeHtml(formatNumber(uniqueProducts))} products · ${escapeHtml(formatNumber(movedQty))} units moved</div>
-            ${renderReportTable(['#', 'Part Number (Product Name)', 'Action', 'Qty', 'Reference', 'Performed By', 'Date', 'Notes'], movementRows, 'No stock changes found for these dates.')}
+            ${renderReportTable(['#', 'Part Number (Product Name)', 'Action', 'Qty', 'Reference', 'Performed By', 'Date', 'Notes'], movementRows, 'No stock changes found for these dates.', [5, 25, 12, 8, 13, 12, 12, 13])}
         </section>
 
         <section>
             <h2>Parts Added from Invoices</h2>
             <div class="section-sub">Parts added from supplier invoices are listed here. Other stock additions are in the movement list above.</div>
-            ${renderReportTable(['#', 'Part Number (Product Name)', 'Qty', 'Invoice Details', 'Performed By', 'Date'], partsInvoiceRows, 'No parts were added from invoices during these dates.')}
+            ${renderReportTable(['#', 'Part Number (Product Name)', 'Qty', 'Invoice Details', 'Performed By', 'Date'], partsInvoiceRows, 'No parts were added from invoices during these dates.', [5, 28, 8, 25, 16, 18])}
         </section>
 
         ${archivedProducts.length > 0 ? `
         <section>
             <h2>Archived Products</h2>
             <div class="section-sub">${escapeHtml(String(archivedProducts.length))} products hidden from the current product list</div>
-            ${renderReportTable(['Part Number (Product Name)', 'Category', 'Qty', 'Price', 'Archived'], archivedRows)}
+            ${renderReportTable(['Part Number (Product Name)', 'Category', 'Qty', 'Price', 'Archived'], archivedRows, 'No archived products', [34, 22, 10, 16, 18])}
         </section>
         ` : ''}
 
@@ -407,8 +427,9 @@ export default function InventoryReport() {
             category: '',
         };
     });
-    const [isExporting, setIsExporting] = useState(false);
+    const [exportAction, setExportAction] = useState('');
     const reportRequestRef = useRef(0);
+    const exportLockRef = useRef(false);
 
     const filteredMovements = useMemo(
         () => movements.filter((m) => isWithinDateFilters(m.businessDate || m.createdAt, filters.startDate, filters.endDate) && matchesCategoryFilter(m, filters.category)),
@@ -445,41 +466,140 @@ export default function InventoryReport() {
 
     useEffect(() => { void loadReportData(); }, [loadReportData]);
 
-    const handlePrint = useCallback(() => {
-        setIsExporting(true);
+    const handleDownloadPdf = useCallback(async () => {
+        if (exportLockRef.current) return;
+        exportLockRef.current = true;
+        setExportAction('download');
         setError('');
-
         try {
-            const reportWindow = window.open('', '_blank');
-            if (!reportWindow) {
-                throw new Error('Please allow pop-ups to print or save the PDF report.');
-            }
-
-            reportWindow.document.write('<p style="font-family:Arial,sans-serif;padding:24px;">Preparing LimenServe inventory report...</p>');
-
+            const { downloadReportPdf } = await import('../utils/reportPdf.js');
             const generatedAt = new Date();
             const generatedBy = user?.fullName || user?.email || 'LimenServe user';
-            const reportHtml = buildPrintableInventoryReport({
+            const stockInQty = filteredMovements.filter((m) => m.movementType === 'stock_in').reduce((sum, m) => sum + Number(m.quantity ?? 0), 0);
+            const stockOutQty = filteredMovements.filter((m) => ['stock_out', 'sale', 'service_usage'].includes(m.movementType)).reduce((sum, m) => sum + Number(m.quantity ?? 0), 0);
+            const movedQty = filteredMovements.reduce((sum, m) => sum + Number(m.quantity ?? 0), 0);
+            const uniqueProducts = new Set(filteredMovements.map((m) => m.productId).filter(Boolean)).size;
+            const movementRows = filteredMovements.map((m, index) => [
+                String(index + 1), formatReportProductName(m), getMovementActionLabel(m), formatNumber(m.quantity),
+                getReferenceLabel(m.referenceType) || '-', m.performedBy || 'System', formatDateTime(m.createdAt), m.notes || '-',
+            ]);
+            const invoiceRows = partsInvoiceMovements.map((m, index) => [
+                String(index + 1), formatReportProductName(m), formatNumber(m.quantity), m.notes || '-', m.performedBy || 'System', formatDateTime(m.createdAt),
+            ]);
+            const archivedRows = archivedProducts.map((product) => [
+                formatReportProductName(product), product.category || '-', formatNumber(product.stock ?? 0), formatCurrency(product.price ?? 0), formatDateTime(product.archivedAt),
+            ]);
+
+            downloadReportPdf({
+                title: 'Inventory Audit Report',
+                dateRange: dateRangeLabel,
+                generatedAt: formatDateTime(generatedAt),
+                generatedBy,
+                filename: `Inventory_Audit_Report_${filters.startDate || 'All'}_to_${filters.endDate || 'Today'}`,
+                filters: [{ label: 'Category', value: filters.category || 'All' }],
+                summaryCards: [
+                    { label: 'Active Products', value: formatNumber(summary?.totalProducts ?? 0) },
+                    { label: 'Parts with Stock', value: formatNumber(summary?.inStockProducts ?? 0) },
+                    { label: 'Active Prices', value: formatNumber(summary?.currentPrices ?? 0) },
+                    { label: 'Stock Changes', value: formatNumber(filteredMovements.length) },
+                    { label: 'Total Stock In', value: `+${formatNumber(stockInQty)}`, tone: 'green' },
+                    { label: 'Total Stock Out', value: formatNumber(stockOutQty), tone: 'red' },
+                ],
+                summaryColumns: 3,
+                sections: [
+                    {
+                        title: 'Stock Changes',
+                        subtitle: `${formatNumber(filteredMovements.length)} records | ${formatNumber(uniqueProducts)} products | ${formatNumber(movedQty)} units moved`,
+                        columns: [
+                            { label: '#', width: 5 }, { label: 'Part Number (Product Name)', width: 26 }, { label: 'Action', width: 12 },
+                            { label: 'Qty', width: 8, align: 'right' }, { label: 'Reference', width: 13 }, { label: 'Performed By', width: 12 },
+                            { label: 'Date', width: 12 }, { label: 'Notes', width: 22 },
+                        ],
+                        rows: movementRows,
+                        emptyMessage: 'No stock changes found for these dates.',
+                    },
+                    {
+                        title: 'Parts Added from Invoices',
+                        subtitle: 'Parts added from supplier invoices are listed here. Other stock additions are in the stock changes above.',
+                        columns: [
+                            { label: '#', width: 5 }, { label: 'Part Number (Product Name)', width: 28 }, { label: 'Qty', width: 8, align: 'right' },
+                            { label: 'Invoice Details', width: 25 }, { label: 'Performed By', width: 16 }, { label: 'Date', width: 18 },
+                        ],
+                        rows: invoiceRows,
+                        emptyMessage: 'No parts were added from invoices during these dates.',
+                    },
+                    ...(archivedProducts.length ? [{
+                        title: 'Archived Products',
+                        subtitle: `${archivedProducts.length} products hidden from the current product list`,
+                        columns: [
+                            { label: 'Part Number (Product Name)', width: 34 }, { label: 'Category', width: 22 }, { label: 'Qty', width: 10, align: 'right' },
+                            { label: 'Price', width: 16, align: 'right' }, { label: 'Archived', width: 18 },
+                        ],
+                        rows: archivedRows,
+                    }] : []),
+                ],
+                signatureLabels: ['Prepared By', 'Checked By', 'Approved By'],
+                verificationNote: 'Compare this report with the parts on your shelves to check that the stock numbers are correct.',
+                reportId: 'LimenServe Inventory Audit',
+            });
+        } catch (exportError) {
+            setError(exportError.message || 'Unable to download the PDF report. Please try again.');
+        } finally {
+            exportLockRef.current = false;
+            setExportAction('');
+        }
+    }, [archivedProducts, dateRangeLabel, filters.category, filters.endDate, filters.startDate, filteredMovements, partsInvoiceMovements, summary, user?.email, user?.fullName]);
+
+    const handlePrint = useCallback(() => {
+        if (exportLockRef.current) return;
+        const reportWindow = window.open('', '_blank');
+        if (!reportWindow) {
+            setError('Please allow pop-ups to print the report.');
+            return;
+        }
+        exportLockRef.current = true;
+        setExportAction('print');
+        setError('');
+        reportWindow.document.write('<p style="font-family:Arial,sans-serif;padding:24px;">Preparing the LimenServe inventory report for printing...</p>');
+        let printScheduled = false;
+        try {
+            const generatedAt = new Date();
+            const generatedBy = user?.fullName || user?.email || 'LimenServe user';
+            reportWindow.document.open();
+            reportWindow.document.write(buildPrintableInventoryReport({
                 summary,
                 movements: filteredMovements,
                 archivedProducts,
                 dateRangeLabel,
                 generatedAt,
                 generatedBy,
-            });
-
-            reportWindow.document.open();
-            reportWindow.document.write(reportHtml);
+            }));
             reportWindow.document.close();
-            reportWindow.document.title = `limenserve-inventory-report-${dateRangeLabel.replace(/\s+/g, '-').toLowerCase()}-${generatedAt.toISOString().slice(0, 10)}`;
+            reportWindow.document.title = `Inventory_Audit_Report_${filters.startDate || 'All'}_to_${filters.endDate || 'Today'}`;
             reportWindow.focus();
-            window.setTimeout(() => reportWindow.print(), 400);
+            window.setTimeout(() => {
+                try {
+                    if (!reportWindow.closed) reportWindow.print();
+                } catch (printError) {
+                    setError(printError.message || 'Unable to open the print dialog. Please try again.');
+                } finally {
+                    exportLockRef.current = false;
+                    setExportAction('');
+                }
+            }, 350);
+            printScheduled = true;
         } catch (exportError) {
-            setError(exportError.message || 'Unable to export the report.');
+            reportWindow.close();
+            setError(exportError.message || 'Unable to open the print report. Please try again.');
         } finally {
-            setIsExporting(false);
+            if (!printScheduled) {
+                exportLockRef.current = false;
+                setExportAction('');
+            }
         }
-    }, [summary, filteredMovements, archivedProducts, dateRangeLabel, user?.fullName, user?.email]);
+    }, [archivedProducts, dateRangeLabel, filteredMovements, filters.endDate, filters.startDate, summary, user?.email, user?.fullName]);
+
+    const isExporting = Boolean(exportAction);
 
     return (
         <div className="space-y-6">
@@ -489,13 +609,14 @@ export default function InventoryReport() {
                     <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-blue">Inventory Reports</p>
                     <h2 className="mt-2 text-2xl font-display font-bold text-primary-950">Inventory Summary & Audit</h2>
                     <p className="mt-1 max-w-3xl text-sm text-primary-500">
-                        Check the parts you have now, see when stock changed, and review archived products. You can print this report.
+                        Check the parts you have now, see when stock changed, and review archived products. Download a PDF or open the print dialog.
                     </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                     <Button variant="secondary" leftIcon={<RefreshCw className="h-4 w-4" />} isLoading={loading} onClick={loadReportData}>Refresh</Button>
                     <Button variant="secondary" leftIcon={<Download className="h-4 w-4" />} onClick={() => exportMovementsCsv(filteredMovements)} disabled={filteredMovements.length === 0}>Export CSV</Button>
-                    <Button variant="primary" leftIcon={<Printer className="h-4 w-4" />} isLoading={isExporting} disabled={loading || Boolean(error)} onClick={handlePrint}>Print Report</Button>
+                    <Button variant="secondary" leftIcon={<Download className="h-4 w-4" />} isLoading={exportAction === 'download'} disabled={loading || Boolean(error) || isExporting} onClick={handleDownloadPdf}>{exportAction === 'download' ? 'Generating PDF…' : 'Download PDF'}</Button>
+                    <Button variant="primary" leftIcon={<Printer className="h-4 w-4" />} isLoading={exportAction === 'print'} disabled={loading || Boolean(error) || isExporting} onClick={handlePrint}>{exportAction === 'print' ? 'Preparing Print…' : 'Print Report'}</Button>
                 </div>
             </div>
 
