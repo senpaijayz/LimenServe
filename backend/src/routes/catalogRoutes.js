@@ -20,6 +20,7 @@ import createSupplierOrderRouter from './supplierOrderRoutes.js';
 import { createCatalogSummaryReader } from '../services/catalogSummary.js';
 import { analyzePricelistWorkbook, inferPricelistEffectiveDate, parsePricelistNumber, previewPricelistWorksheet, readPricelistWorkbook } from '../services/pricelistWorkbook.js';
 import { createPricelistPreviewCache } from '../services/pricelistPreviewCache.js';
+import { getPricelistImportJob, startPricelistImportJob } from '../services/pricelistImportJobs.js';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
@@ -3722,6 +3723,20 @@ router.post('/prices/uploads/:uploadId/preview', requireRole('admin'), async (re
   } catch (error) { next(error); }
 });
 
+router.get('/prices/uploads/:uploadId/import-status', requireRole('admin'), async (req, res, next) => {
+  try {
+    const upload = await getPricelistUpload(req.params.uploadId);
+    const job = getPricelistImportJob(upload.id);
+    if (job?.state === 'completed') return res.json({ state: 'completed', result: job.result });
+    if (upload.pricelist_version_id) {
+      const result = await getPreviouslyImportedPricelistResult(upload);
+      return res.json({ state: 'completed', result });
+    }
+    if (job?.state === 'failed') return res.json({ state: 'failed', error: job.message });
+    res.json({ state: job?.state || 'idle' });
+  } catch (error) { next(error); }
+});
+
 router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req, res, next) => {
   try {
     if (req.body?.confirm !== true) {
@@ -3765,41 +3780,7 @@ router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req
       pricelistPreviewCache.delete(req.body.previewToken);
       return res.status(422).json({ error: 'No safe price records were found to update. The current active pricelist was not changed.', blockers: importPreview.blockers, errors: importPreview.errors });
     }
-    const { data, error: rpcError } = await supabaseAdmin.rpc('import_and_activate_pricelist_upload', {
-      p_upload_id: upload.id,
-      p_items: importPreview._draftItems,
-      p_version_year: normalizedSelection.versionYear,
-      p_effective_from: normalizedSelection.effectiveFrom,
-      p_source_sheet: normalizedSelection.sheetName,
-      p_pricing_category: `${importPreview.selectedPrice.kind}_${importPreview.selectedPrice.vatStatus}`,
-      p_file_checksum: upload.file_checksum,
-      p_expected_active_version_id: tokenPayload.activeVersionId ?? null,
-      p_actor_id: req.user?.id ?? null,
-    });
-    if (rpcError?.code === '40001') {
-      const latestUpload = await getPricelistUpload(upload.id);
-      if (latestUpload.pricelist_version_id) {
-        pricelistPreviewCache.deleteForUpload(upload.id);
-        const previousResult = await getPreviouslyImportedPricelistResult(latestUpload);
-        if (previousResult) return res.status(200).json(previousResult);
-      }
-      pricelistPreviewCache.delete(req.body.previewToken);
-      return res.status(409).json({ error: rpcError.message || 'The active pricelist changed while this upload was being reviewed. Compare it again before updating.' });
-    }
-    if (rpcError) {
-      if (rpcError.code === '22023') {
-        const latestUpload = await getPricelistUpload(upload.id);
-        if (latestUpload.pricelist_version_id) {
-          pricelistPreviewCache.deleteForUpload(upload.id);
-          const previousResult = await getPreviouslyImportedPricelistResult(latestUpload);
-          if (previousResult) return res.status(200).json(previousResult);
-        }
-      }
-      throw rpcError;
-    }
-    pricelistPreviewCache.deleteForUpload(upload.id);
-    invalidateProductCatalogCache();
-    const result = {
+    const makeResult = (data) => ({
       ...(data ?? {}),
       versionId: data?.versionId,
       versionYear: normalizedSelection.versionYear,
@@ -3818,8 +3799,23 @@ router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req
       errors: importPreview.errors,
       priceChanges: importPreview.priceChanges,
       priceChangesTotalCount: importPreview.priceChangesTotalCount,
-    };
-    res.status(201).json(result);
+    });
+    const job = startPricelistImportJob({
+      uploadId: upload.id,
+      argumentsList: [
+        upload.id, JSON.stringify(importPreview._draftItems), normalizedSelection.versionYear,
+        normalizedSelection.effectiveFrom, normalizedSelection.sheetName,
+        `${importPreview.selectedPrice.kind}_${importPreview.selectedPrice.vatStatus}`,
+        upload.file_checksum, tokenPayload.activeVersionId ?? null, req.user?.id ?? null,
+      ],
+      makeResult,
+      onPublished: () => {
+        pricelistPreviewCache.deleteForUpload(upload.id);
+        invalidateProductCatalogCache();
+      },
+      onError: annotatePriceListImportError,
+    });
+    res.status(202).json({ state: job.state, result: job.result });
   } catch (error) {
     if (req.timedOut || res.headersSent) return;
     annotatePriceListImportError(error);

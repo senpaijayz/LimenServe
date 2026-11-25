@@ -885,15 +885,48 @@ export async function previewRetailPriceListUpload(uploadId, selection) {
 }
 
 export async function importRetailPriceListUpload(uploadId, selection, previewToken) {
+  const importStatusError = (message) => Object.assign(new Error(message), { isPricelistImportStatus: true });
   try {
     const { data } = await apiClient.post(`/catalog/prices/uploads/${encodeURIComponent(uploadId)}/import`, {
       ...selection,
       previewToken,
       confirm: true,
     }, { timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS });
+    if (data?.state === 'completed' && data.result) {
+      clearProductCatalogCaches();
+      return data.result;
+    }
+    if (data?.state === 'failed') throw importStatusError(data.error || 'The pricelist update failed. The active prices were not changed.');
+    if (data?.state === 'running') {
+      const deadline = Date.now() + 11 * 60 * 1000;
+      let temporaryFailures = 0;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        let status;
+        try {
+          const response = await apiClient.get(`/catalog/prices/uploads/${encodeURIComponent(uploadId)}/import-status`, {
+            timeout: 15_000,
+            params: { t: Date.now() },
+          });
+          status = response.data;
+          temporaryFailures = 0;
+        } catch (pollError) {
+          if (++temporaryFailures < 4) continue;
+          throw pollError;
+        }
+        if (status?.state === 'completed' && status.result) {
+          clearProductCatalogCaches();
+          return status.result;
+        }
+        if (status?.state === 'failed') throw importStatusError(status.error || 'The pricelist update failed. The active prices were not changed.');
+        if (status?.state === 'idle') throw importStatusError('The import was interrupted before it finished. Check Saved Price Lists, then review the workbook again before retrying.');
+      }
+      throw importStatusError('The import is still processing. Check Saved Price Lists before starting another update.');
+    }
     clearProductCatalogCaches();
     return data;
   } catch (error) {
+    if (error?.isPricelistImportStatus) throw error;
     extractApiError(error, 'The pricelist update did not finish. Check Saved Price Lists before retrying.');
   }
 }
