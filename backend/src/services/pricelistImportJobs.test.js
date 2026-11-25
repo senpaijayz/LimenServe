@@ -1,6 +1,40 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getPricelistImportJob, publishPricelistInBatches, startPricelistImportJob } from './pricelistImportJobs.js';
+import { getPricelistImportJob, publishPricelistInBatches, startPricelistImportJob, startPricelistRestoreJob } from './pricelistImportJobs.js';
+
+test('restore uses the audited SQL path and shares the import concurrency guard', async (t) => {
+  const config = {
+    SUPABASE_DB_URL: 'postgresql://test:secret@localhost:5432/postgres',
+    SUPABASE_URL: 'https://localhost.supabase.co',
+    SUPABASE_DB_CA: '-----BEGIN CERTIFICATE-----\\ntest\\n-----END CERTIFICATE-----',
+  };
+  const previous = Object.fromEntries(Object.keys(config).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, config);
+  t.after(() => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+  const calls = [];
+  const options = { versionId: 'revision', actorId: 'staff', createClient: () => ({
+    connect: async () => {},
+    query: async (sql, values) => {
+      calls.push([sql, values]);
+      return { rows: [{ result: { versionId: 'revision' } }] };
+    },
+    end: async () => {},
+  }) };
+  const first = startPricelistRestoreJob(options);
+  assert.equal(startPricelistRestoreJob(options), first);
+  assert.throws(() => startPricelistImportJob({ uploadId: 'other' }), { statusCode: 409 });
+  await first.done;
+  assert.equal(first.state, 'completed');
+  assert.equal(calls[0][0], "set statement_timeout = '10min'");
+  assert.match(calls[1][0], /activate_pricelist_version_audited/);
+  assert.deepEqual(calls[1][1], ['revision', 'staff']);
+  assert.equal(first.result.versionId, 'revision');
+});
 
 test('staging yields between batches and commits only after activation', async () => {
   const steps = [];

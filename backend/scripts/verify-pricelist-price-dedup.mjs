@@ -2,7 +2,11 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { analyzePricelistWorkbook, inferPricelistEffectiveDate, previewPricelistWorksheet, readPricelistWorkbook } from '../src/services/pricelistWorkbook.js';
+import { publishPricelistInBatches } from '../src/services/pricelistImportJobs.js';
+import { disambiguateSourceLocations } from '../src/services/pricelistSourceLocations.js';
 if (!process.env.PGLITE_MODULE) throw new Error('Set PGLITE_MODULE to the PGlite module path.');
 const { PGlite } = await import(pathToFileURL(resolve(process.env.PGLITE_MODULE)).href);
 const db = new PGlite();
@@ -101,4 +105,57 @@ try {
     console.log(`PASS: actual workbook import, duplicate handling, repeat upload and activation (${items.length} rows; ${uniqueParts} unique parts).`);
   }
   console.log('PASS: unchanged imports/activation, same-date no-op, yearly snapshots, changed prices, new products, draft activation, omitted parts, stock preservation, and restricted function grants.');
+  const sampleFiles = process.argv.slice(2);
+  if (sampleFiles.length) {
+    await db.exec(`
+      create schema storage;
+      create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
+    `);
+    for (const migration of [
+      '20261125100000_pricelist_source_storage_and_safe_drafts.sql',
+      '20261125112051_pricelist_revision_management_and_safe_uploads.sql',
+      '20261125115013_pricelist_atomic_upload_activation.sql',
+      '20261126104500_incremental_pricelist_projection_refresh.sql',
+      '20261126110000_allow_long_atomic_pricelist_import.sql',
+    ]) await db.exec(await read(migration));
+    let previous = (await scalar("select id from catalog.pricelist_versions where is_active and price_type='retail'")).id;
+    const snapshots = [];
+    const merged = new Map();
+    for (const filename of sampleFiles) {
+      const file = await readFile(filename);
+      const name = basename(filename);
+      const workbook = readPricelistWorkbook({ buffer: file, originalname: name });
+      const analysis = analyzePricelistWorkbook(workbook);
+      const sheet = analysis.sheets.find((candidate) => candidate.name === analysis.recommendedSheetName);
+      assert.ok(sheet, 'A retail worksheet must be detected');
+      const price = sheet.priceColumns.find(({ index }) => index === sheet.mapping.price);
+      const selection = { sheetName: sheet.name, headerRow: sheet.headerRow, mapping: sheet.mapping,
+        priceKind: price.priceKind, vatStatus: price.vatStatus, priceBasis: price.priceBasis, vatRate: 0.12 };
+      const parsed = previewPricelistWorksheet(workbook, selection);
+      assert.equal(parsed.canImport, true);
+      for (const item of parsed.items) merged.set(item.sku, item);
+      const { items } = disambiguateSourceLocations([...merged.values()], new Set(parsed.items.map(({ sku }) => sku)));
+      const effectiveDate = inferPricelistEffectiveDate(name, workbook);
+      assert.match(effectiveDate, /^\d{4}-\d{2}-\d{2}$/);
+      const checksum = createHash('sha256').update(file).digest('hex');
+      const record = await scalar(`insert into catalog.pricelist_uploads
+        (original_filename, storage_path, file_extension, file_size_bytes, file_checksum, import_status)
+        values ($1,$2,'xlsx',$3,$2,'previewed') returning id`, [name, checksum, file.length]);
+      const result = await publishPricelistInBatches(db, items,
+        [record.id, Number(effectiveDate.slice(0, 4)), effectiveDate, sheet.name, 'srp_inclusive', checksum, previous, null],
+        async () => {});
+      previous = result.versionId;
+      snapshots.push({ id: previous, count: items.length });
+      assert.equal((await scalar('select row_count from catalog.pricelist_versions where id=$1 and is_active', [previous])).row_count, items.length);
+      assert.equal((await scalar('select count(*)::int as count from catalog.pricelist_import_staging')).count, items.length);
+      console.log(`PASS: ${name}: ${parsed.items.length} eligible rows; ${items.length} parts in the published overlay.`);
+      await db.exec('analyze catalog.products; analyze catalog.product_prices; analyze catalog.inventory_balances; analyze catalog.pricelist_version_items; analyze catalog.pricelist_import_staging');
+    }
+    for (const saved of snapshots) {
+      const restored = await scalar('select public.activate_pricelist_version_audited($1,null) as result', [saved.id]);
+      assert.equal(restored.result.versionId, saved.id);
+      assert.equal((await scalar('select count(*)::int as count from catalog.pricelist_import_staging')).count, saved.count);
+    }
+    console.log('PASS: restored all sample revisions via the same database function used by background activation.');
+  }
 } finally { await db.close(); }

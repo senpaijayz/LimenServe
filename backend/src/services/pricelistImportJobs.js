@@ -77,10 +77,34 @@ export function getPricelistImportJob(uploadId) {
   return job || null;
 }
 
-export function startPricelistImportJob({ uploadId, items, argumentsList, makeResult, onPublished, onError, createClient = (options) => new Client(options) }) {
-  const existing = getPricelistImportJob(uploadId);
+export function startPricelistImportJob(options) {
+  const { uploadId, items, argumentsList, ...callbacks } = options;
+  return startPricelistJob({
+    key: uploadId,
+    run: (client) => publishPricelistInBatches(client, items, argumentsList),
+    ...callbacks,
+  });
+}
+
+export function startPricelistRestoreJob({ versionId, actorId, ...callbacks }) {
+  return startPricelistJob({
+    key: `restore:${versionId}`,
+    ...callbacks,
+    async run(client) {
+      await client.query("set statement_timeout = '10min'");
+      const { rows } = await client.query(
+        'select public.activate_pricelist_version_audited($1::uuid,$2::uuid) as result',
+        [versionId, actorId],
+      );
+      return rows[0]?.result;
+    },
+  });
+}
+
+function startPricelistJob({ key, run, makeResult = (result) => result, onPublished, onError, createClient = (options) => new Client(options) }) {
+  const existing = getPricelistImportJob(key);
   if (existing?.state === 'running') return existing;
-  if ([...jobs.entries()].some(([otherId, job]) => otherId !== uploadId && job.state === 'running')) {
+  if ([...jobs.values()].some((job) => job.state === 'running')) {
     const error = new Error('Another pricelist update is processing. Wait for it to finish before starting a new one.');
     error.statusCode = 409;
     throw error;
@@ -88,14 +112,14 @@ export function startPricelistImportJob({ uploadId, items, argumentsList, makeRe
   const connectionString = databaseConnection();
   const ca = databaseCertificate();
   const job = { state: 'running', startedAt: Date.now() };
-  jobs.set(uploadId, job);
+  jobs.set(key, job);
 
   job.done = (async () => {
     let client;
     try {
       client = createClient({ connectionString, ssl: { ca, rejectUnauthorized: true }, connectionTimeoutMillis: 15_000, application_name: 'limen-pricelist-import' });
       await client.connect();
-      job.result = makeResult(await publishPricelistInBatches(client, items, argumentsList));
+      job.result = makeResult(await run(client));
       onPublished?.();
       job.state = 'completed';
     } catch (error) {
@@ -111,7 +135,7 @@ export function startPricelistImportJob({ uploadId, items, argumentsList, makeRe
       job.finishedAt = Date.now();
       await client?.end().catch(() => {});
       setTimeout(() => {
-        if (jobs.get(uploadId) === job) jobs.delete(uploadId);
+        if (jobs.get(key) === job) jobs.delete(key);
       }, MAX_JOB_AGE_MS).unref();
     }
   })();

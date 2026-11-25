@@ -292,12 +292,16 @@ export function analyzePricelistWorkbook(workbook) {
 }
 
 export function inferPricelistEffectiveDate(fileName, workbook) {
-  const sourceName = clean(fileName);
+  const sourceName = clean(fileName).replaceAll('_', ' ');
   const worksheetText = (workbook?.sheets || []).flatMap((sheet) => (sheet.rows || []).slice(0, 12)
     .map((row) => row.cells?.join(' ') || '')).join(' ');
-  const sources = [sourceName, worksheetText];
+  const explicitlyDated = [sourceName, worksheetText]
+    .filter((source) => /(?:effective|effectivity|valid\s+from|pricing\s+date)/i.test(source));
+  // Some vendor files put the effective date in a price-list filename
+  // without saying "effective". Prefer an explicit date when one is present.
+  const sources = /\bprice\s*list\b/i.test(sourceName)
+    ? [...explicitlyDated, sourceName] : explicitlyDated;
   for (const source of sources) {
-    if (!/(effective|effectivity|valid\s+from|pricing\s+date)/i.test(source)) continue;
     const iso = /\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/.exec(source);
     let year, month, day;
     if (iso) [, year, month, day] = iso;

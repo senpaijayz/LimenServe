@@ -101,6 +101,8 @@ const PriceListManager = ({ onUpdated }) => {
     const [selection, setSelection] = useState(null);
     const [preview, setPreview] = useState(null);
     const [activationTarget, setActivationTarget] = useState(null);
+    const [showArchivedRevisions, setShowArchivedRevisions] = useState(true);
+    const visibleVersions = showArchivedRevisions ? versions : versions.filter((version) => version.status !== 'archived');
     const [downloadingVersionId, setDownloadingVersionId] = useState(null);
     const [revisionTarget, setRevisionTarget] = useState(null);
     const [revisionName, setRevisionName] = useState('');
@@ -201,7 +203,7 @@ const PriceListManager = ({ onUpdated }) => {
     };
 
     const handleActivate = async (version) => {
-        if (!version?.id || version.isActive) {
+        if (!version?.id || version.isActive || activatingVersionId || isSubmitting) {
             return;
         }
 
@@ -542,10 +544,15 @@ const PriceListManager = ({ onUpdated }) => {
                         <summary className="cursor-pointer text-sm font-semibold text-primary-950"><History className="mr-2 inline h-4 w-4 text-accent-blue" />Saved price lists ({formatUploadCount(versions.length)})</summary>
                         <div className="mt-3">
                             <div className="flex justify-end">
+                                {versions.some((version) => version.status === 'archived') && (
+                                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowArchivedRevisions((show) => !show)}>
+                                        {showArchivedRevisions ? 'Hide archived' : 'Show archived'}
+                                    </Button>
+                                )}
                                 <Button type="button" variant="ghost" size="sm" onClick={loadVersions} isLoading={isLoadingVersions}>Refresh</Button>
                             </div>
-                            {versions.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                {versions.map((version) => <div key={version.id} className="rounded-xl border border-primary-100 bg-primary-50 p-3">
+                            {visibleVersions.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                {visibleVersions.map((version) => <div key={version.id} className="rounded-xl border border-primary-100 bg-primary-50 p-3">
                                     <div className="flex items-start justify-between gap-2">
                                         <div className="min-w-0">
                                             <p className="break-words font-semibold text-primary-950">{version.displayName || `Price list ${version.versionYear} · revision ${version.revision ?? 1}`}</p>
@@ -567,7 +574,7 @@ const PriceListManager = ({ onUpdated }) => {
                                         {!version.isActive && version.status === 'draft' && <Button type="button" variant="outline" size="sm" className="w-full text-accent-danger" onClick={() => setDeleteTarget(version)}><Trash2 className="mr-1 h-4 w-4" />Delete draft</Button>}
                                     </div>
                                 </div>)}
-                            </div> : <p className="mt-2 text-sm text-primary-600">No saved revisions yet.</p>}
+                            </div> : <p className="mt-2 text-sm text-primary-600">No revisions to show.</p>}
                         </div>
                     </details>
 
@@ -706,9 +713,14 @@ const PriceListManager = ({ onUpdated }) => {
                 {activationTarget && <div className="space-y-4">
                     <p className="text-sm text-primary-700">You are about to make <span className="font-semibold">{activationTarget.displayName || `Price list ${activationTarget.versionYear} · revision ${activationTarget.revision ?? 1}`}</span> the active retail pricelist. POS, quotations, and the public catalog will use its prices after confirmation.</p>
                     <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">This switches the active price snapshot. Inventory quantities and the saved revision history are preserved. Verify the row count and worksheet before proceeding.</p>
+                    {activatingVersionId && (
+                        <p className="text-sm text-primary-700" role="status" aria-live="polite">
+                            Activating in the background. This can take a few minutes. Please do not submit again.
+                        </p>
+                    )}
                     <div className="flex gap-3">
                         <Button type="button" variant="secondary" fullWidth onClick={() => setActivationTarget(null)} disabled={Boolean(activatingVersionId)}>Cancel</Button>
-                        <Button type="button" variant="primary" fullWidth isLoading={activatingVersionId === activationTarget.id} onClick={() => handleActivate(activationTarget)}>Confirm and activate</Button>
+                        <Button type="button" variant="primary" fullWidth isLoading={activatingVersionId === activationTarget.id} onClick={() => handleActivate(activationTarget)}>{activatingVersionId ? 'Activating…' : 'Confirm and activate'}</Button>
                     </div>
                 </div>}
             </Modal>

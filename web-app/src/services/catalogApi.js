@@ -808,11 +808,37 @@ export async function getRetailPriceListVersionItems(versionId, params = {}) {
 }
 
 export async function activateRetailPriceListVersion(versionId) {
+  const path = `/catalog/prices/versions/${encodeURIComponent(versionId)}`;
+  const temporary = (error) => !error?.response || [502, 503, 504].includes(error.response.status);
+  const activationError = (message) => Object.assign(new Error(message), { isActivationStatus: true });
   try {
-    const { data } = await apiClient.post(`/catalog/prices/versions/${encodeURIComponent(versionId)}/activate`);
-    clearProductCatalogCaches();
-    return data;
+    let status;
+    try {
+      ({ data: status } = await apiClient.post(`${path}/activate`, { background: true }));
+    } catch (error) {
+      if (!temporary(error)) throw error;
+    }
+    const startedAt = Date.now();
+    while (true) {
+      if (status?.state === 'completed' || (status?.versionId && !status.state)) {
+        clearProductCatalogCaches();
+        return status.result ?? status;
+      }
+      if (status?.state === 'failed') throw activationError(status.error || 'The revision could not be activated.');
+      if (Date.now() - startedAt >= 12 * 60 * 1000
+        || (status?.state === 'idle' && Date.now() - startedAt >= 30_000)) {
+        throw activationError('Activation could not be confirmed. Check the active revision in Saved price lists before retrying.');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      try {
+        ({ data: status } = await apiClient.get(`${path}/activation-status`, { timeout: 15_000 }));
+      } catch (error) {
+        if (!temporary(error)) throw error;
+        status = null;
+      }
+    }
   } catch (error) {
+    if (error?.isActivationStatus) throw error;
     extractApiError(error, 'Failed to activate the selected price list.');
   }
 }

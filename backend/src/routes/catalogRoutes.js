@@ -21,7 +21,7 @@ import createSupplierOrderRouter from './supplierOrderRoutes.js';
 import { createCatalogSummaryReader } from '../services/catalogSummary.js';
 import { analyzePricelistWorkbook, inferPricelistEffectiveDate, parsePricelistNumber, previewPricelistWorksheet, readPricelistWorkbook } from '../services/pricelistWorkbook.js';
 import { createPricelistPreviewCache } from '../services/pricelistPreviewCache.js';
-import { getPricelistImportJob, startPricelistImportJob } from '../services/pricelistImportJobs.js';
+import { getPricelistImportJob, startPricelistImportJob, startPricelistRestoreJob } from '../services/pricelistImportJobs.js';
 import { disambiguateSourceLocations } from '../services/pricelistSourceLocations.js';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
@@ -3931,31 +3931,41 @@ router.get('/prices/versions/:versionId/items', requireRole('admin'), async (req
   }
 });
 
+const validRestoreRevisionId = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+
+router.get('/prices/versions/:versionId/activation-status', requireRole('admin'), async (req, res, next) => {
+  try {
+    const versionId = req.params.versionId.toLowerCase();
+    if (!validRestoreRevisionId(versionId)) return res.status(400).json({ error: 'Select a valid saved revision.' });
+    res.set('Cache-Control', 'private, no-store');
+    const job = getPricelistImportJob(`restore:${versionId}`);
+    if (job?.state === 'running') return res.json({ state: 'running' });
+    const active = await getActiveRetailPricelistVersion();
+    if (active?.id === versionId) return res.json({ state: 'completed', result: job?.result ?? { versionId, isActive: true } });
+    if (job?.state === 'failed') return res.json({ state: 'failed', error: job.message });
+    return res.json({ state: 'idle' });
+  } catch (error) { next(error); }
+});
+
 router.post('/prices/versions/:versionId/activate', requireRole('admin'), async (req, res, next) => {
   try {
-    const versionId = String(req.params.versionId || '').trim();
-    const { data, error } = await supabaseAdmin.rpc('activate_pricelist_version_audited', {
-      p_version_id: versionId,
-      p_actor_id: req.user?.id ?? null,
+    if (req.body?.background !== true) return res.status(409).json({ error: 'Refresh Inventory to use background pricelist activation.' });
+    const versionId = req.params.versionId.toLowerCase();
+    if (!validRestoreRevisionId(versionId)) return res.status(400).json({ error: 'Select a valid saved revision.' });
+    const active = await getActiveRetailPricelistVersion();
+    if (active?.id === versionId) return res.json({ state: 'completed', result: { versionId, isActive: true } });
+    const job = startPricelistRestoreJob({
+      versionId,
+      actorId: req.user?.id ?? null,
+      makeResult: (data) => ({ ...data, versionId }),
+      onPublished: invalidateProductCatalogCache,
+      onError(error) {
+        annotatePriceListImportError(error);
+        if (['22023', '23514'].includes(error.code)) error.publicMessage = error.message;
+      },
     });
-
-    if (error) {
-      const message = String(error.message || '').toLowerCase();
-      if (message.includes('function') && message.includes('does not exist')) {
-        error.statusCode = 503;
-        error.publicMessage = 'Apply the versioned price list migration before activating a saved list.';
-      }
-      throw error;
-    }
-
-    invalidateProductCatalogCache();
-    res.json({
-      ...(data ?? {}),
-      versionId: data?.versionId ?? versionId,
-    });
-  } catch (error) {
-    next(error);
-  }
+    return res.status(202).json({ state: job.state });
+  } catch (error) { next(error); }
 });
 
 router.post('/prices/bulk-replace', requireRole('admin'), async (req, res, next) => {

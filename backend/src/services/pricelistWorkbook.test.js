@@ -160,6 +160,9 @@ test('recommends the customer SRP worksheet and detects an effective date in the
   const { inferPricelistEffectiveDate } = await import('./pricelistWorkbook.js');
   assert.equal(inferPricelistEffectiveDate('New Pricelist Effective October 1 2025.xlsx', workbook), '2025-10-01');
   assert.equal(inferPricelistEffectiveDate('effective 2025-10-01.csv', workbook), '2025-10-01');
+  assert.equal(inferPricelistEffectiveDate('Dealer Pricelist_February 1, 2024 (1).xlsx'), '2024-02-01');
+  assert.equal(inferPricelistEffectiveDate('Price List_October 1, 2026_For Customer.xlsx'), '2026-10-01');
+  assert.equal(inferPricelistEffectiveDate('Inventory_October 1, 2026.xlsx'), null);
 });
 
 test('reads a CSV with quoted delimiters and accepts formatted money safely', () => {
