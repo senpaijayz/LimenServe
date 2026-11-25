@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import multer from 'multer';
 import zlib from 'node:zlib';
+import path from 'node:path';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { supabaseAdmin } from '../config/supabase.js';
+import { env } from '../config/env.js';
 import { requireRole } from '../middleware/auth.js';
 import { clearPublicResponseCache } from '../middleware/cache.js';
 import { callRpc } from '../services/supabaseRpc.js';
@@ -15,6 +18,7 @@ import publishedPackageRoutes from './publishedPackageRoutes.js';
 import inventoryMovementExportRoutes from './inventoryMovementExportRoutes.js';
 import createSupplierOrderRouter from './supplierOrderRoutes.js';
 import { createCatalogSummaryReader } from '../services/catalogSummary.js';
+import { analyzePricelistWorkbook, previewPricelistWorksheet, readPricelistWorkbook } from '../services/pricelistWorkbook.js';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
@@ -53,6 +57,9 @@ const VEHICLE_PRICELIST_CANDIDATE_LIMIT = 8000;
 const PRICE_LIST_DB_BATCH_SIZE = 1000;
 const PRICE_LIST_LOOKUP_BATCH_SIZE = 250;
 const PRICE_LIST_CHANGE_PREVIEW_LIMIT = 500;
+const PRICELIST_FILE_BUCKET = 'pricelist-files';
+const PRICELIST_FILE_MAX_BYTES = 20 * 1024 * 1024;
+const PRICELIST_PREVIEW_TOKEN_TTL_MS = 15 * 60 * 1000;
 const SERVICE_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const VEHICLE_FITMENT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const PRODUCT_BARCODE_SUFFIX = '0001';
@@ -517,6 +524,324 @@ function parsePositiveInteger(value, fallback, max = Number.MAX_SAFE_INTEGER) {
   }
 
   return Math.min(parsed, max);
+}
+
+function safeOriginalFilename(value) {
+  const filename = String(value || '').split(/[\\/]/).pop()?.trim() || 'pricelist.xlsx';
+  return filename.replace(/[\r\n\0]/g, '').slice(0, 240) || 'pricelist.xlsx';
+}
+
+function normalizePricelistUploadSelection(body = {}) {
+  const keys = ['sku', 'name', 'model', 'uom', 'pcc', 'category', 'price'];
+  const mapping = Object.fromEntries(keys.map((key) => {
+    const raw = body.mapping?.[key];
+    return [key, raw === null || raw === undefined || raw === '' ? -1 : Number(raw)];
+  }));
+  const effectiveFrom = String(body.effectiveFrom || '').trim();
+  const versionYear = parsePriceListVersionYear(body.versionYear, effectiveFrom);
+  const importMode = body.importMode === 'replace' ? 'replace' : 'overlay';
+  const effectiveDate = /^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) ? new Date(`${effectiveFrom}T00:00:00Z`) : null;
+  if (!effectiveDate || Number.isNaN(effectiveDate.getTime())
+    || effectiveDate.toISOString().slice(0, 10) !== effectiveFrom
+    || !versionYear) {
+    const error = new Error('Choose a valid effective date and four-digit pricelist year.');
+    error.statusCode = 400;
+    throw error;
+  }
+  for (const [key, value] of Object.entries(mapping)) {
+    if (!Number.isInteger(value) || value < -1 || value >= 256) {
+      const error = new Error(`Choose a valid ${key} column mapping.`);
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+  const sheetName = String(body.sheetName || '').trim();
+  if (!sheetName || sheetName.length > 128) {
+    const error = new Error('Choose a valid worksheet from the uploaded workbook.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return {
+    sheetName,
+    headerRow: parsePositiveInteger(body.headerRow, 1, 200000),
+    mapping,
+    effectiveFrom,
+    versionYear,
+    importMode,
+    vatStatus: ['inclusive', 'exclusive'].includes(body.vatStatus) ? body.vatStatus : 'unknown',
+    priceKind: ['srp', 'dnp'].includes(body.priceKind) ? body.priceKind : 'unknown',
+    priceBasis: body.priceBasis === 'per_liter' ? 'per_liter' : 'per_unit',
+    confirmPriceType: body.confirmPriceType === true,
+  };
+}
+
+function createPricelistPreviewToken(payload) {
+  const encoded = Buffer.from(JSON.stringify({ ...payload, expiresAt: Date.now() + PRICELIST_PREVIEW_TOKEN_TTL_MS })).toString('base64url');
+  const signature = createHmac('sha256', env.supabaseServiceRoleKey).update(encoded).digest('base64url');
+  return `${encoded}.${signature}`;
+}
+
+function verifyPricelistPreviewToken(token) {
+  const [encoded, signature, extra] = String(token || '').split('.');
+  if (!encoded || !signature || extra) return null;
+  const expected = createHmac('sha256', env.supabaseServiceRoleKey).update(encoded).digest();
+  let supplied;
+  try { supplied = Buffer.from(signature, 'base64url'); } catch (_error) { return null; }
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+    return payload.expiresAt > Date.now() ? payload : null;
+  } catch (_error) { return null; }
+}
+
+async function getPricelistUpload(uploadId) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(uploadId || ''))) {
+    const error = new Error('The uploaded pricelist could not be found.');
+    error.statusCode = 404;
+    throw error;
+  }
+  const { data, error } = await supabaseAdmin.schema('catalog').from('pricelist_uploads')
+    .select('*').eq('id', uploadId).maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    const missing = new Error('The uploaded pricelist could not be found. Upload the file again.');
+    missing.statusCode = 404;
+    throw missing;
+  }
+  return data;
+}
+
+async function downloadPricelistUpload(upload) {
+  const { data, error } = await supabaseAdmin.storage.from(upload.storage_bucket || PRICELIST_FILE_BUCKET)
+    .download(upload.storage_path);
+  if (error || !data) {
+    const missing = new Error('The original pricelist file is unavailable in private storage.');
+    missing.statusCode = 410;
+    missing.cause = error;
+    throw missing;
+  }
+  const buffer = Buffer.from(await data.arrayBuffer());
+  const checksum = createHash('sha256').update(buffer).digest('hex');
+  if (checksum !== upload.file_checksum) {
+    const mismatch = new Error('The stored pricelist file did not pass its checksum check. No import was made.');
+    mismatch.statusCode = 409;
+    throw mismatch;
+  }
+  return { buffer, workbook: readPricelistWorkbook({ buffer, originalname: upload.original_filename }) };
+}
+
+async function getActiveRetailPricelistVersion() {
+  const { data, error } = await supabaseAdmin.schema('catalog').from('pricelist_versions')
+    .select('id, version_year, revision, effective_from, status, is_active, row_count, activated_at')
+    .eq('price_type', 'retail').eq('is_active', true).maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}
+
+async function getPricelistVersionItems(versionId, expectedCount = null) {
+  const pageSize = 1000;
+  const concurrency = 6;
+  const rows = [];
+  const pageCount = Number.isInteger(Number(expectedCount)) && Number(expectedCount) > 0
+    ? Math.ceil(Number(expectedCount) / pageSize)
+    : null;
+
+  if (pageCount) {
+    for (let page = 0; page < pageCount; page += concurrency) {
+      const pages = Array.from({ length: Math.min(concurrency, pageCount - page) }, (_unused, index) => page + index);
+      const results = await Promise.all(pages.map((currentPage) => supabaseAdmin.schema('catalog').from('pricelist_version_items')
+        .select('product_id, source_sheet, source_line_number, sku, name, model_name, uom, pcc, price, status, category, source_category, classification_version, classification_confidence, classification_strategy, classification_rule_key, classification_tokens')
+        .eq('pricelist_version_id', versionId).order('sku', { ascending: true })
+        .range(currentPage * pageSize, ((currentPage + 1) * pageSize) - 1)));
+      for (const { data, error } of results) {
+        if (error) throw error;
+        rows.push(...(data ?? []));
+      }
+    }
+    return rows;
+  }
+
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabaseAdmin.schema('catalog').from('pricelist_version_items')
+      .select('product_id, source_sheet, source_line_number, sku, name, model_name, uom, pcc, price, status, category, source_category, classification_version, classification_confidence, classification_strategy, classification_rule_key, classification_tokens')
+      .eq('pricelist_version_id', versionId).order('sku', { ascending: true }).range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data ?? []));
+    if ((data ?? []).length < pageSize) break;
+  }
+  return rows;
+}
+
+async function findPricelistProducts(skus) {
+  const uniqueSkus = [...new Set(skus.filter(Boolean))];
+  const chunkSize = 500;
+  const concurrency = 6;
+  const rows = [];
+  for (let offset = 0; offset < uniqueSkus.length; offset += chunkSize * concurrency) {
+    const batches = Array.from({ length: Math.min(concurrency, Math.ceil((uniqueSkus.length - offset) / chunkSize)) }, (_unused, index) => {
+      const start = offset + (index * chunkSize);
+      return uniqueSkus.slice(start, start + chunkSize);
+    });
+    const results = await Promise.all(batches.map((batch) => supabaseAdmin.schema('catalog').from('products')
+      .select('id, sku, name, model_name, category, source_category, uom')
+      .in('sku', batch)));
+    for (const { data, error } of results) {
+      if (error) throw error;
+      rows.push(...(data ?? []));
+    }
+  }
+  return rows;
+}
+
+function mapVersionItemForDraft(item) {
+  return {
+    sku: item.sku,
+    name: item.name,
+    model: item.model_name,
+    uom: item.uom,
+    pcc: item.pcc,
+    price: Number(item.price),
+    sourceSheet: item.source_sheet,
+    sourceLineNumber: item.source_line_number,
+    category: item.category,
+    sourceCategory: item.source_category,
+    classificationVersion: item.classification_version,
+    classificationConfidence: item.classification_confidence,
+    classificationStrategy: item.classification_strategy,
+    classificationRuleKey: item.classification_rule_key,
+    classificationTokens: item.classification_tokens,
+  };
+}
+
+async function previewPricelistUpload({ upload, body }) {
+  const selection = normalizePricelistUploadSelection(body);
+  const { workbook } = await downloadPricelistUpload(upload);
+  const analysis = analyzePricelistWorkbook(workbook);
+  const sheetSummary = analysis.sheets.find((sheet) => sheet.name === selection.sheetName);
+  if (!sheetSummary) {
+    const error = new Error('The selected worksheet is not part of the saved workbook.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const parsed = previewPricelistWorksheet(workbook, {
+    ...selection,
+    vatRate: 0.12,
+  });
+  const blockers = [...parsed.blockers];
+  if (parsed.selection.priceBasis === 'per_liter') {
+    blockers.push('Per-liter oil prices are not the standard POS selling price per stocked item. They are kept out of the retail pricelist until the catalog supports per-liter pricing explicitly.');
+  }
+  if (parsed.selection.priceKind !== 'srp') {
+    blockers.push('Only customer SRP selling prices can be imported into the active retail pricelist. DNP and unconfirmed price columns cannot be activated.');
+  }
+
+  const activeVersion = await getActiveRetailPricelistVersion();
+  let oldRows = activeVersion?.id ? await getPricelistVersionItems(activeVersion.id, activeVersion.row_count) : [];
+  if (!activeVersion) {
+    const existing = await getCachedProductCatalog();
+    oldRows = (existing ?? []).filter((item) => Number(item.price) > 0).map((item) => ({
+      product_id: item.id,
+      source_sheet: null,
+      source_line_number: 1,
+      sku: item.sku,
+      name: item.name,
+      model_name: item.model,
+      uom: item.uom || 'PC',
+      pcc: null,
+      price: Number(item.price),
+      status: item.status,
+      category: item.category,
+      source_category: item.sourceCategory,
+    }));
+  }
+  const oldBySku = new Map(oldRows.map((row) => [row.sku, row]));
+  if (selection.importMode === 'overlay' && oldBySku.size === 0) {
+    blockers.push('There is no current retail pricelist to merge into. Choose full replacement only if the selected worksheet is a complete customer SRP list.');
+  }
+
+  const selectedSkus = parsed.items.map((item) => item.sku);
+  const existingProducts = await findPricelistProducts(selectedSkus);
+  const existingProductSkus = new Set(existingProducts.map((product) => product.sku));
+  const existingProductsBySku = new Map(existingProducts.map((product) => [product.sku, product]));
+  const nextBySku = selection.importMode === 'overlay' ? new Map(oldBySku) : new Map();
+  const selectedChanges = parsed.items.map((item) => {
+    const previous = oldBySku.get(item.sku);
+    const product = existingProductsBySku.get(item.sku);
+    const classified = classifyPriceListItem({ ...item, category: item.category || product?.category, sourceCategory: item.sourceCategory || product?.source_category });
+    const merged = {
+      ...(previous ? mapVersionItemForDraft(previous) : {}),
+      ...classified,
+      name: item.name || previous?.name || product?.name || item.sku,
+      model: item.model || previous?.model_name || product?.model_name || null,
+      uom: item.uom || previous?.uom || product?.uom || 'PC',
+      category: classified.category || previous?.category || product?.category || null,
+      sourceCategory: item.sourceCategory || previous?.source_category || product?.source_category || null,
+      sourceSheet: item.sourceSheet,
+      sourceLineNumber: item.sourceLineNumber,
+      pcc: item.pcc || previous?.pcc || null,
+      price: item.price,
+    };
+    nextBySku.set(item.sku, merged);
+    const previousPrice = previous ? Number(previous.price) : null;
+    const newPrice = Number(item.price);
+    return {
+      sku: item.sku,
+      name: merged.name,
+      previousPrice,
+      newPrice,
+      difference: previousPrice === null ? null : Number((newPrice - previousPrice).toFixed(2)),
+      status: !existingProductSkus.has(item.sku) ? 'new_part' : previousPrice === null ? 'new_price' : previousPrice === newPrice ? 'unchanged' : 'changed',
+    };
+  });
+  const removedFromListCount = selection.importMode === 'replace'
+    ? [...oldBySku.keys()].filter((sku) => !nextBySku.has(sku)).length
+    : 0;
+  const draftItems = [...nextBySku.values()].map((item) => classifyPriceListItem({
+    ...item,
+    model: item.model ?? item.model_name,
+    sourceCategory: item.sourceCategory ?? item.source_category ?? item.category,
+  }));
+  const warningRows = parsed.errors.filter((row) => row.severity === 'warning');
+  const errors = parsed.errors.filter((row) => row.severity !== 'warning');
+  const canImport = parsed.canImport && blockers.length === 0 && draftItems.length > 0;
+  const tokenPayload = {
+    uploadId: upload.id,
+    fileChecksum: upload.file_checksum,
+    selection,
+    activeVersionId: activeVersion?.id ?? null,
+  };
+  const { error: updateError } = await supabaseAdmin.schema('catalog').from('pricelist_uploads').update({
+    effective_date: selection.effectiveFrom,
+    pricelist_year: selection.versionYear,
+    selected_worksheet: selection.sheetName,
+    pricing_category: parsed.selection.priceBasis === 'per_liter' ? `${parsed.selection.priceKind}_per_liter` : `${parsed.selection.priceKind}_${parsed.selection.vatStatus}`,
+    import_status: 'previewed',
+    rejected_record_count: parsed.counts.invalidRows,
+    updated_at: new Date().toISOString(),
+  }).eq('id', upload.id);
+  if (updateError) throw updateError;
+
+  return {
+    filename: upload.original_filename,
+    fileSizeBytes: Number(upload.file_size_bytes),
+    effectiveFrom: selection.effectiveFrom,
+    versionYear: selection.versionYear,
+    worksheet: { name: sheetSummary.name, category: sheetSummary.category, rowCount: sheetSummary.rowCount, headerRow: parsed.selection.headerRow },
+    selectedPrice: { label: parsed.selection.label, kind: parsed.selection.priceKind, vatStatus: parsed.selection.vatStatus, basis: parsed.selection.priceBasis, period: parsed.selection.period },
+    importMode: selection.importMode,
+    activeVersion: activeVersion ? { id: activeVersion.id, versionYear: activeVersion.version_year, revision: activeVersion.revision, effectiveFrom: activeVersion.effective_from } : null,
+    counts: { ...parsed.counts, validRows: parsed.items.length, invalidRows: errors.length, warningRows: warningRows.length, existingProducts: parsed.items.filter((item) => existingProductSkus.has(item.sku)).length, newProducts: parsed.items.filter((item) => !existingProductSkus.has(item.sku)).length, changedPrices: selectedChanges.filter((item) => ['changed', 'new_price', 'new_part'].includes(item.status)).length, unchangedPrices: selectedChanges.filter((item) => item.status === 'unchanged').length, removedFromList: removedFromListCount, revisionRowCount: draftItems.length },
+    canImport,
+    blockers,
+    warnings: [...parsed.warnings, ...warningRows.map((row) => `Excel row ${row.rowNumber} (${row.sku || 'no part number'}): ${row.reason}`)],
+    errors,
+    sample: parsed.items.slice(0, 12).map((item) => ({ sourceLineNumber: item.sourceLineNumber, sku: item.sku, name: item.name, price: item.price, sourcePrice: item.sourcePrice })),
+    priceChanges: selectedChanges.slice(0, 80),
+    priceChangesTotalCount: selectedChanges.length,
+    previewToken: createPricelistPreviewToken(tokenPayload),
+    _draftItems: draftItems,
+  };
 }
 
 
@@ -3146,6 +3471,16 @@ router.get('/prices/versions', requireRole('admin'), async (_req, res, next) => 
       throw versionsError;
     }
 
+    const versionIds = (versions ?? []).map((version) => version.id);
+    let uploadsByVersion = new Map();
+    if (versionIds.length > 0) {
+      const { data: uploads, error: uploadsError } = await supabaseAdmin.schema('catalog').from('pricelist_uploads')
+        .select('pricelist_version_id, original_filename, storage_bucket, file_size_bytes, selected_worksheet, pricing_category, import_status, imported_record_count, updated_record_count, new_product_count, rejected_record_count, uploaded_at, uploaded_by')
+        .in('pricelist_version_id', versionIds);
+      if (uploadsError && !isPrivateSchemaAccessError(uploadsError)) throw uploadsError;
+      uploadsByVersion = new Map((uploads ?? []).map((upload) => [upload.pricelist_version_id, upload]));
+    }
+
     res.json({
       versions: (versions ?? []).map((version) => ({
         id: version.id,
@@ -3160,11 +3495,179 @@ router.get('/prices/versions', requireRole('admin'), async (_req, res, next) => 
         rowCount: Number(version.row_count ?? 0),
         createdAt: version.created_at,
         activatedAt: version.activated_at,
+        sourceFileAvailable: Boolean(uploadsByVersion.get(version.id)?.storage_bucket),
+        upload: uploadsByVersion.get(version.id) ? {
+          originalFilename: uploadsByVersion.get(version.id).original_filename,
+          fileSizeBytes: Number(uploadsByVersion.get(version.id).file_size_bytes ?? 0),
+          worksheet: uploadsByVersion.get(version.id).selected_worksheet,
+          pricingCategory: uploadsByVersion.get(version.id).pricing_category,
+          importStatus: uploadsByVersion.get(version.id).import_status,
+          importedRecordCount: Number(uploadsByVersion.get(version.id).imported_record_count ?? 0),
+          updatedRecordCount: Number(uploadsByVersion.get(version.id).updated_record_count ?? 0),
+          newProductCount: Number(uploadsByVersion.get(version.id).new_product_count ?? 0),
+          rejectedRecordCount: Number(uploadsByVersion.get(version.id).rejected_record_count ?? 0),
+          uploadedAt: uploadsByVersion.get(version.id).uploaded_at,
+          uploadedBy: uploadsByVersion.get(version.id).uploaded_by,
+        } : null,
       })),
     });
   } catch (error) {
     next(error);
   }
+});
+
+router.post('/prices/uploads', requireRole('admin'), handlePriceListUpload, async (req, res, next) => {
+  let uploadedStoragePath = null;
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Choose a valid .xlsx or .csv pricelist.' });
+    }
+    const originalFilename = safeOriginalFilename(req.file.originalname);
+    const extension = path.extname(originalFilename).slice(1).toLowerCase();
+    if (!['xlsx', 'csv'].includes(extension)) {
+      return res.status(400).json({ error: 'Only .xlsx and .csv files are supported. Save older .xls workbooks as .xlsx first.' });
+    }
+    if (!req.file.buffer?.length || req.file.buffer.length > PRICELIST_FILE_MAX_BYTES) {
+      return res.status(400).json({ error: 'Upload a non-empty pricelist up to 20 MB.' });
+    }
+
+    const workbook = readPricelistWorkbook({ buffer: req.file.buffer, originalname: originalFilename });
+    const analysis = analyzePricelistWorkbook(workbook);
+    const checksum = createHash('sha256').update(req.file.buffer).digest('hex');
+    const uploadId = randomUUID();
+    const storagePath = `${new Date().getUTCFullYear()}/${uploadId}/${originalFilename.replace(/[^\p{L}\p{N}._() -]/gu, '_')}`;
+    const contentType = extension === 'xlsx'
+      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      : 'text/csv';
+
+    const { count: duplicateFileCount, error: duplicateLookupError } = await supabaseAdmin.schema('catalog').from('pricelist_uploads')
+      .select('id', { count: 'exact', head: true }).eq('file_checksum', checksum);
+    if (duplicateLookupError) throw duplicateLookupError;
+
+    const { error: storageError } = await supabaseAdmin.storage.from(PRICELIST_FILE_BUCKET).upload(storagePath, req.file.buffer, {
+      contentType,
+      upsert: false,
+      cacheControl: 'private, max-age=0',
+    });
+    if (storageError) throw storageError;
+    uploadedStoragePath = storagePath;
+
+    const { data: upload, error: metadataError } = await supabaseAdmin.schema('catalog').from('pricelist_uploads').insert({
+      id: uploadId,
+      original_filename: originalFilename,
+      storage_bucket: PRICELIST_FILE_BUCKET,
+      storage_path: storagePath,
+      file_extension: extension,
+      file_size_bytes: req.file.buffer.length,
+      file_checksum: checksum,
+      uploaded_by: req.user?.id ?? null,
+      import_status: 'analyzed',
+    }).select('id, original_filename, file_extension, file_size_bytes, file_checksum, uploaded_at, import_status').single();
+    if (metadataError) throw metadataError;
+    uploadedStoragePath = null;
+
+    res.status(201).json({
+      upload: {
+        id: upload.id,
+        originalFilename: upload.original_filename,
+        extension: upload.file_extension,
+        sizeBytes: Number(upload.file_size_bytes),
+        checksum: upload.file_checksum,
+        uploadedAt: upload.uploaded_at,
+        importStatus: upload.import_status,
+        duplicateDetected: Number(duplicateFileCount ?? 0) > 0,
+      },
+      sheets: analysis.sheets,
+    });
+  } catch (error) {
+    if (uploadedStoragePath) {
+      try { await supabaseAdmin.storage.from(PRICELIST_FILE_BUCKET).remove([uploadedStoragePath]); } catch (_cleanupError) { /* leave an unreferenced object for later audit */ }
+    }
+    if (req.timedOut || res.headersSent) return;
+    next(error);
+  }
+});
+
+router.post('/prices/uploads/:uploadId/preview', requireRole('admin'), async (req, res, next) => {
+  try {
+    const upload = await getPricelistUpload(req.params.uploadId);
+    const result = await previewPricelistUpload({ upload, body: req.body ?? {} });
+    const { _draftItems: _discardDraftItems, ...publicResult } = result;
+    res.json(publicResult);
+  } catch (error) { next(error); }
+});
+
+router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req, res, next) => {
+  try {
+    if (req.body?.confirm !== true) {
+      return res.status(400).json({ error: 'Review the preview and confirm before saving a draft.' });
+    }
+    const upload = await getPricelistUpload(req.params.uploadId);
+    const tokenPayload = verifyPricelistPreviewToken(req.body?.previewToken);
+    if (!tokenPayload || tokenPayload.uploadId !== upload.id || tokenPayload.fileChecksum !== upload.file_checksum) {
+      return res.status(409).json({ error: 'This preview has expired or changed. Review the pricelist again before importing.' });
+    }
+
+    const normalizedSelection = normalizePricelistUploadSelection(req.body ?? {});
+    if (JSON.stringify(tokenPayload.selection) !== JSON.stringify(normalizedSelection)) {
+      return res.status(409).json({ error: 'The worksheet or import settings changed after preview. Review the updated preview before importing.' });
+    }
+    const currentVersion = await getActiveRetailPricelistVersion();
+    if ((currentVersion?.id ?? null) !== (tokenPayload.activeVersionId ?? null)) {
+      return res.status(409).json({ error: 'The active pricelist changed after preview. Refresh the preview before importing.' });
+    }
+
+    const refreshedPreview = await previewPricelistUpload({ upload, body: normalizedSelection });
+    if (!refreshedPreview.canImport || !refreshedPreview.previewToken) {
+      return res.status(422).json({ error: 'This worksheet has validation issues and cannot be saved as a draft.', blockers: refreshedPreview.blockers, errors: refreshedPreview.errors });
+    }
+    const { data, error: rpcError } = await supabaseAdmin.rpc('create_pricelist_version_from_upload', {
+      p_upload_id: upload.id,
+      p_items: refreshedPreview._draftItems,
+      p_version_year: normalizedSelection.versionYear,
+      p_effective_from: normalizedSelection.effectiveFrom,
+      p_source_sheet: normalizedSelection.sheetName,
+      p_pricing_category: `${refreshedPreview.selectedPrice.kind}_${refreshedPreview.selectedPrice.vatStatus}`,
+      p_file_checksum: upload.file_checksum,
+      p_actor_id: req.user?.id ?? null,
+    });
+    if (rpcError) throw rpcError;
+    const result = {
+      ...(data ?? {}),
+      versionId: data?.versionId,
+      versionYear: normalizedSelection.versionYear,
+      effectiveFrom: normalizedSelection.effectiveFrom,
+      isActive: false,
+      receivedCount: refreshedPreview.counts.totalRows,
+      uniqueCount: refreshedPreview.counts.validRows,
+      updatedCount: refreshedPreview.counts.validRows,
+      newProductsCount: refreshedPreview.counts.newProducts,
+      changedCount: refreshedPreview.counts.changedPrices,
+      unchangedCount: refreshedPreview.counts.unchangedPrices,
+      removedFromListCount: refreshedPreview.counts.removedFromList,
+      skippedCount: 0,
+      priceChanges: refreshedPreview.priceChanges,
+      priceChangesTotalCount: refreshedPreview.priceChangesTotalCount,
+    };
+    res.status(201).json(result);
+  } catch (error) {
+    if (req.timedOut || res.headersSent) return;
+    next(error);
+  }
+});
+
+router.get('/prices/versions/:versionId/download', requireRole('admin'), async (req, res, next) => {
+  try {
+    const { data: upload, error } = await supabaseAdmin.schema('catalog').from('pricelist_uploads')
+      .select('original_filename, storage_bucket, storage_path')
+      .eq('pricelist_version_id', req.params.versionId).maybeSingle();
+    if (error) throw error;
+    if (!upload) return res.status(404).json({ error: 'No original workbook is linked to this saved revision.' });
+    const { data: signed, error: signedError } = await supabaseAdmin.storage.from(upload.storage_bucket)
+      .createSignedUrl(upload.storage_path, 120, { download: upload.original_filename });
+    if (signedError) throw signedError;
+    res.set('Cache-Control', 'private, no-store').json({ url: signed.signedUrl, filename: upload.original_filename, expiresInSeconds: 120 });
+  } catch (error) { next(error); }
 });
 
 router.get('/prices/versions/:versionId/items', requireRole('admin'), async (req, res, next) => {
@@ -3228,7 +3731,7 @@ router.get('/prices/versions/:versionId/items', requireRole('admin'), async (req
 router.post('/prices/versions/:versionId/activate', requireRole('admin'), async (req, res, next) => {
   try {
     const versionId = String(req.params.versionId || '').trim();
-    const { data, error } = await supabaseAdmin.rpc('activate_retail_pricelist_version', {
+    const { data, error } = await supabaseAdmin.rpc('activate_pricelist_version_audited', {
       p_version_id: versionId,
       p_actor_id: req.user?.id ?? null,
     });

@@ -830,6 +830,54 @@ export async function replaceRetailPriceListFile(file, effectiveFrom, requestOpt
   }
 }
 
+export async function uploadRetailPriceList(file, onUploadProgress) {
+  try {
+    const formData = new FormData();
+    formData.append('priceList', file);
+    const { data } = await apiClient.post('/catalog/prices/uploads', formData, {
+      timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS,
+      onUploadProgress,
+    });
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to preserve and analyze this workbook. No live prices were changed.');
+  }
+}
+
+export async function previewRetailPriceListUpload(uploadId, selection) {
+  try {
+    const { data } = await apiClient.post(`/catalog/prices/uploads/${encodeURIComponent(uploadId)}/preview`, selection, {
+      timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS,
+    });
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to preview this worksheet. Check its column mapping.');
+  }
+}
+
+export async function importRetailPriceListUpload(uploadId, selection, previewToken) {
+  try {
+    const { data } = await apiClient.post(`/catalog/prices/uploads/${encodeURIComponent(uploadId)}/import`, {
+      ...selection,
+      previewToken,
+      confirm: true,
+    }, { timeout: PRICE_LIST_UPLOAD_TIMEOUT_MS });
+    clearProductCatalogCaches();
+    return data;
+  } catch (error) {
+    extractApiError(error, 'The draft import did not finish. Check saved revisions before retrying. Live prices remain unchanged.');
+  }
+}
+
+export async function getRetailPriceListOriginalDownload(versionId) {
+  try {
+    const { data } = await apiClient.get(`/catalog/prices/versions/${encodeURIComponent(versionId)}/download`);
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to download the original workbook for this revision.');
+  }
+}
+
 export async function getAnalyticsRefreshRuns(limitCount = 10) {
   try {
     const { data } = await apiClient.get('/analytics/refresh-runs', {
