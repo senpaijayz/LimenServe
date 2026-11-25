@@ -1607,17 +1607,19 @@ const PublicEstimate = () => {
                             <div className="surface p-6 md:p-7">
                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                     <div>
-                                        <label className="block text-sm font-semibold text-primary-700 mb-2">Customer Name</label>
+                                        <label htmlFor="public-estimate-customer-name" className="block text-sm font-semibold text-primary-700 mb-2">Customer Name</label>
                                         <div className="relative">
                                             <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
-                                            <input value={customerName} onChange={(event) => {
+                                            <input id="public-estimate-customer-name" value={customerName} onChange={(event) => {
                                                 markSavedQuoteDirty();
                                                 setCustomerName(event.target.value);
                                             }} placeholder="Walk-in customer" className="input pl-10 py-2.5 text-sm" />
                                         </div>
                                     </div>
                                     <div>
-                                        <label htmlFor="public-estimate-phone" className="block text-sm font-semibold text-primary-700 mb-2">Phone Number</label>
+                                        <label htmlFor="public-estimate-phone" className="block text-sm font-semibold text-primary-700 mb-2">
+                                            Phone Number <span className="ml-1 text-[#EF4444]" aria-hidden="true">*</span>
+                                        </label>
                                         <div className="relative">
                                             <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
                                             <input id="public-estimate-phone" type="tel" inputMode="numeric" autoComplete="tel" maxLength={11} required aria-describedby="public-estimate-phone-help" aria-invalid={Boolean(customerPhone.trim()) && !normalizedCustomerPhone} value={customerPhone} onChange={(event) => {
