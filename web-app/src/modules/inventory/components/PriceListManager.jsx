@@ -318,6 +318,7 @@ const PriceListManager = ({ onUpdated }) => {
                 setSelection(nextSelection);
                 const selected = result.sheets.find((sheet) => sheet.name === selectedName);
                 if (selected?.mapping?.sku >= 0 && selected?.mapping?.price >= 0) {
+                    setUploadProgress(null);
                     setUploadPhase('Comparing part numbers and prices…');
                     const nextPreview = await previewRetailPriceListUpload(result.upload.id, {
                         ...nextSelection, effectiveFrom: suggestedDate, versionYear: suggestedYear,
@@ -338,7 +339,7 @@ const PriceListManager = ({ onUpdated }) => {
     const handlePreview = async (nextSelection = selection) => {
         if (!nextSelection || !uploadAnalysis?.upload?.id) return;
         setIsSubmitting(true);
-        setUploadProgress(0);
+        setUploadProgress(null);
         setUploadPhase('Comparing part numbers and prices…');
         try {
             const result = await previewRetailPriceListUpload(uploadAnalysis.upload.id, { ...nextSelection, effectiveFrom, versionYear });
@@ -354,7 +355,7 @@ const PriceListManager = ({ onUpdated }) => {
         event.preventDefault();
         if (!preview?.canImport || !preview.previewToken || isSubmitting) return;
         setIsSubmitting(true);
-        setUploadProgress(0);
+        setUploadProgress(null);
         setUploadPhase('Saving the new revision and updating active prices…');
         try {
             const result = await importRetailPriceListUpload(uploadAnalysis.upload.id,
@@ -569,19 +570,25 @@ const PriceListManager = ({ onUpdated }) => {
                         </div>
                     </details>
 
-                    {isSubmitting && (
+                    {isSubmitting && uploadPhase && (
                         <div className="rounded-2xl border border-accent-blue/20 bg-accent-blue/5 p-4" role="status" aria-live="polite">
                             <div className="flex items-center justify-between gap-3 text-sm">
                                 <p className="font-semibold text-primary-950">{uploadPhase || 'Working…'}</p>
-                                <span className="font-mono text-xs font-semibold text-accent-blue">{uploadProgress}%</span>
+                                <span className="font-mono text-xs font-semibold text-accent-blue">
+                                    {typeof uploadProgress === 'number' ? `${uploadProgress}%` : 'Processing'}
+                                </span>
                             </div>
                             <div className="mt-3 h-2 overflow-hidden rounded-full bg-primary-100">
-                                <div
-                                    className="h-full rounded-full bg-accent-blue transition-[width] duration-300 ease-out"
-                                    style={{ width: `${uploadProgress}%` }}
-                                />
+                                {typeof uploadProgress === 'number' ? (
+                                    <div
+                                        className="h-full rounded-full bg-accent-blue transition-[width] duration-300 ease-out"
+                                        style={{ width: `${uploadProgress}%` }}
+                                    />
+                                ) : (
+                                    <div className="h-full w-2/5 rounded-full bg-accent-blue/80 animate-pulse" />
+                                )}
                             </div>
-                            <p className="mt-2 text-xs text-primary-500">The original file and revision history are retained. Inventory quantities and completed transactions are not changed.</p>
+                            <p className="mt-2 text-xs text-primary-500">Keep this window open while the large price list is processed. The original file and revision history are retained; inventory quantities and completed transactions are not changed.</p>
                         </div>
                     )}
 
@@ -597,7 +604,7 @@ const PriceListManager = ({ onUpdated }) => {
                                 <div className="flex items-start gap-3">
                                     <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
                                     <div>
-                                        <p className="font-semibold text-emerald-950">{lastResult.noOp ? 'Price list already up to date' : lastResult.activationPending ? 'Revision saved — activation needs attention' : lastResult.isActive === false ? 'Price list draft saved' : 'Price list updated successfully'}</p>
+                                        <p className="font-semibold text-emerald-950">{lastResult.alreadyImported ? 'Workbook already saved' : lastResult.noOp ? 'Price list already up to date' : lastResult.activationPending ? 'Revision saved — activation needs attention' : lastResult.isActive === false ? 'Price list draft saved' : 'Price list updated successfully'}</p>
                                         <p className="mt-1 text-emerald-700">
                                             {lastResult.message || describePricelistResult(lastResult)}
                                         </p>

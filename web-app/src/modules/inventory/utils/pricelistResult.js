@@ -1,5 +1,6 @@
 export function describePricelistResult(result) {
   const count = (value) => Number(value ?? 0).toLocaleString('en-PH');
+  if (result.alreadyImported) return result.message || 'This workbook has already been saved. No duplicate revision was created.';
   if (result.isActive === false) {
     return `Draft saved. ${count(result.newProductsCount)} new products added; selling prices have not been applied.`;
   }

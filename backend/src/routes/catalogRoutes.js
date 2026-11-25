@@ -19,6 +19,7 @@ import inventoryMovementExportRoutes from './inventoryMovementExportRoutes.js';
 import createSupplierOrderRouter from './supplierOrderRoutes.js';
 import { createCatalogSummaryReader } from '../services/catalogSummary.js';
 import { analyzePricelistWorkbook, inferPricelistEffectiveDate, parsePricelistNumber, previewPricelistWorksheet, readPricelistWorkbook } from '../services/pricelistWorkbook.js';
+import { createPricelistPreviewCache } from '../services/pricelistPreviewCache.js';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
@@ -60,6 +61,7 @@ const PRICE_LIST_CHANGE_PREVIEW_LIMIT = 500;
 const PRICELIST_FILE_BUCKET = 'pricelist-files';
 const PRICELIST_FILE_MAX_BYTES = 20 * 1024 * 1024;
 const PRICELIST_PREVIEW_TOKEN_TTL_MS = 15 * 60 * 1000;
+const pricelistPreviewCache = createPricelistPreviewCache({ maxBytes: 24 * 1024 * 1024, maxEntries: 1 });
 const SERVICE_CATALOG_CACHE_TTL_MS = 30 * 60 * 1000;
 const VEHICLE_FITMENT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const PRODUCT_BARCODE_SUFFIX = '0001';
@@ -607,6 +609,44 @@ async function getPricelistUpload(uploadId) {
     throw missing;
   }
   return data;
+}
+
+async function getPreviouslyImportedPricelistResult(upload) {
+  if (!upload?.pricelist_version_id) return null;
+  const { data: version, error } = await supabaseAdmin.schema('catalog').from('pricelist_versions')
+    .select('id, version_year, revision, effective_from, status, is_active, row_count')
+    .eq('id', upload.pricelist_version_id).maybeSingle();
+  if (error) throw error;
+  if (!version) {
+    const missing = new Error('This workbook is linked to a saved revision that could not be found. Check Saved Price Lists before retrying.');
+    missing.statusCode = 409;
+    throw missing;
+  }
+
+  return {
+    versionId: version.id,
+    revision: Number(version.revision ?? 1),
+    versionYear: Number(version.version_year),
+    effectiveFrom: version.effective_from,
+    status: version.status,
+    isActive: version.is_active === true,
+    activationPending: false,
+    alreadyImported: true,
+    noOp: true,
+    versionSaved: false,
+    itemCount: Number(version.row_count ?? upload.imported_record_count ?? 0),
+    receivedCount: Number(upload.imported_record_count ?? 0),
+    uniqueCount: Number(upload.imported_record_count ?? 0),
+    updatedCount: 0,
+    newProductsCount: 0,
+    changedCount: 0,
+    unchangedCount: 0,
+    removedFromListCount: 0,
+    skippedCount: Number(upload.rejected_record_count ?? 0),
+    priceChanges: [],
+    priceChangesTotalCount: 0,
+    message: `This workbook is already saved as revision ${Number(version.revision ?? 1)} for ${Number(version.version_year)}. No duplicate revision was created.`,
+  };
 }
 
 async function downloadPricelistUpload(upload) {
@@ -3668,6 +3708,15 @@ router.post('/prices/uploads/:uploadId/preview', requireRole('admin'), async (re
   try {
     const upload = await getPricelistUpload(req.params.uploadId);
     const result = await previewPricelistUpload({ upload, body: req.body ?? {} });
+    const tokenPayload = verifyPricelistPreviewToken(result.previewToken);
+    if (tokenPayload) {
+      pricelistPreviewCache.set({
+        uploadId: upload.id,
+        previewToken: result.previewToken,
+        preview: result,
+        expiresAt: tokenPayload.expiresAt,
+      });
+    }
     const { _draftItems: _discardDraftItems, ...publicResult } = result;
     res.json(publicResult);
   } catch (error) { next(error); }
@@ -3679,39 +3728,76 @@ router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req
       return res.status(400).json({ error: 'Review the preview and confirm before saving a draft.' });
     }
     const upload = await getPricelistUpload(req.params.uploadId);
+    if (upload.pricelist_version_id) {
+      pricelistPreviewCache.deleteForUpload(upload.id);
+      const previousResult = await getPreviouslyImportedPricelistResult(upload);
+      if (previousResult) return res.status(200).json(previousResult);
+    }
     const tokenPayload = verifyPricelistPreviewToken(req.body?.previewToken);
     if (!tokenPayload || tokenPayload.uploadId !== upload.id || tokenPayload.fileChecksum !== upload.file_checksum) {
+      pricelistPreviewCache.delete(req.body?.previewToken);
       return res.status(409).json({ error: 'This preview has expired or changed. Review the pricelist again before importing.' });
     }
 
     const normalizedSelection = normalizePricelistUploadSelection(req.body ?? {});
     if (JSON.stringify(tokenPayload.selection) !== JSON.stringify(normalizedSelection)) {
+      pricelistPreviewCache.delete(req.body?.previewToken);
       return res.status(409).json({ error: 'The worksheet or import settings changed after preview. Review the updated preview before importing.' });
     }
     const currentVersion = await getActiveRetailPricelistVersion();
     if ((currentVersion?.id ?? null) !== (tokenPayload.activeVersionId ?? null)) {
+      pricelistPreviewCache.delete(req.body?.previewToken);
       return res.status(409).json({ error: 'The active pricelist changed after preview. Refresh the preview before importing.' });
     }
 
-    const refreshedPreview = await previewPricelistUpload({ upload, body: normalizedSelection });
-    if (!refreshedPreview.canImport || !refreshedPreview.previewToken) {
-      return res.status(422).json({ error: 'No safe price records were found to update. The current active pricelist was not changed.', blockers: refreshedPreview.blockers, errors: refreshedPreview.errors });
+    let importPreview = pricelistPreviewCache.get({ uploadId: upload.id, previewToken: req.body.previewToken });
+    if (!importPreview) {
+      importPreview = await previewPricelistUpload({ upload, body: normalizedSelection });
+      importPreview.previewToken = req.body.previewToken;
+      pricelistPreviewCache.set({
+        uploadId: upload.id,
+        previewToken: req.body.previewToken,
+        preview: importPreview,
+        expiresAt: tokenPayload.expiresAt,
+      });
+    }
+    if (!importPreview.canImport || !Array.isArray(importPreview._draftItems) || importPreview._draftItems.length === 0) {
+      pricelistPreviewCache.delete(req.body.previewToken);
+      return res.status(422).json({ error: 'No safe price records were found to update. The current active pricelist was not changed.', blockers: importPreview.blockers, errors: importPreview.errors });
     }
     const { data, error: rpcError } = await supabaseAdmin.rpc('import_and_activate_pricelist_upload', {
       p_upload_id: upload.id,
-      p_items: refreshedPreview._draftItems,
+      p_items: importPreview._draftItems,
       p_version_year: normalizedSelection.versionYear,
       p_effective_from: normalizedSelection.effectiveFrom,
       p_source_sheet: normalizedSelection.sheetName,
-      p_pricing_category: `${refreshedPreview.selectedPrice.kind}_${refreshedPreview.selectedPrice.vatStatus}`,
+      p_pricing_category: `${importPreview.selectedPrice.kind}_${importPreview.selectedPrice.vatStatus}`,
       p_file_checksum: upload.file_checksum,
       p_expected_active_version_id: tokenPayload.activeVersionId ?? null,
       p_actor_id: req.user?.id ?? null,
     });
     if (rpcError?.code === '40001') {
+      const latestUpload = await getPricelistUpload(upload.id);
+      if (latestUpload.pricelist_version_id) {
+        pricelistPreviewCache.deleteForUpload(upload.id);
+        const previousResult = await getPreviouslyImportedPricelistResult(latestUpload);
+        if (previousResult) return res.status(200).json(previousResult);
+      }
+      pricelistPreviewCache.delete(req.body.previewToken);
       return res.status(409).json({ error: rpcError.message || 'The active pricelist changed while this upload was being reviewed. Compare it again before updating.' });
     }
-    if (rpcError) throw rpcError;
+    if (rpcError) {
+      if (rpcError.code === '22023') {
+        const latestUpload = await getPricelistUpload(upload.id);
+        if (latestUpload.pricelist_version_id) {
+          pricelistPreviewCache.deleteForUpload(upload.id);
+          const previousResult = await getPreviouslyImportedPricelistResult(latestUpload);
+          if (previousResult) return res.status(200).json(previousResult);
+        }
+      }
+      throw rpcError;
+    }
+    pricelistPreviewCache.deleteForUpload(upload.id);
     invalidateProductCatalogCache();
     const result = {
       ...(data ?? {}),
@@ -3721,21 +3807,22 @@ router.post('/prices/uploads/:uploadId/import', requireRole('admin'), async (req
       isActive: true,
       activationPending: false,
       message: 'The new revision is active. Invalid or conflicting rows were skipped; any previous prices for those parts were preserved.',
-      receivedCount: refreshedPreview.counts.totalRows,
-      uniqueCount: refreshedPreview.counts.validRows,
-      updatedCount: refreshedPreview.counts.validRows,
-      newProductsCount: refreshedPreview.counts.newProducts,
-      changedCount: refreshedPreview.counts.changedPrices,
-      unchangedCount: refreshedPreview.counts.unchangedPrices,
-      removedFromListCount: refreshedPreview.counts.removedFromList,
-      skippedCount: refreshedPreview.counts.invalidRows,
-      errors: refreshedPreview.errors,
-      priceChanges: refreshedPreview.priceChanges,
-      priceChangesTotalCount: refreshedPreview.priceChangesTotalCount,
+      receivedCount: importPreview.counts.totalRows,
+      uniqueCount: importPreview.counts.validRows,
+      updatedCount: importPreview.counts.validRows,
+      newProductsCount: importPreview.counts.newProducts,
+      changedCount: importPreview.counts.changedPrices,
+      unchangedCount: importPreview.counts.unchangedPrices,
+      removedFromListCount: importPreview.counts.removedFromList,
+      skippedCount: importPreview.counts.invalidRows,
+      errors: importPreview.errors,
+      priceChanges: importPreview.priceChanges,
+      priceChangesTotalCount: importPreview.priceChangesTotalCount,
     };
     res.status(201).json(result);
   } catch (error) {
     if (req.timedOut || res.headersSent) return;
+    annotatePriceListImportError(error);
     next(error);
   }
 });
