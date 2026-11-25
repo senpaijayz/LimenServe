@@ -148,6 +148,7 @@ const POSTerminalWorkspace = ({owner}) => {
         products,
         pagination,
         loading,
+        isFetching,
         error,
     } = useProductCatalog({
         page: currentPage,
@@ -229,6 +230,7 @@ const POSTerminalWorkspace = ({owner}) => {
         && (paymentMethod==='cash'?hasEnoughCash&&Number.isFinite(paymentReceived)&&paymentReceived<=1000000000&&paymentVerified:isNonCash(paymentMethod)?paymentVerified&&matchesFullPayment(paidAmount,totals.total,paymentReference):(paymentMethod==='to_follow' && Math.round(totals.total*100)>0 && customerName.trim() && paymentNote.trim() && releaseConfirmed));
     const canGoPrev = (pagination.page ?? currentPage) > 1;
     const canGoNext = (pagination.page ?? currentPage) < (pagination.totalPages ?? 1);
+    const catalogLoading = loading || isFetching || (!error && (pagination.page ?? currentPage) !== currentPage);
     const rangeStart = pagination.totalCount === 0 ? 0 : (((pagination.page ?? currentPage) - 1) * (pagination.pageSize ?? PAGE_SIZE)) + 1;
     const rangeEnd = pagination.totalCount === 0 ? 0 : Math.min((pagination.page ?? currentPage) * (pagination.pageSize ?? PAGE_SIZE), pagination.totalCount ?? 0);
 
@@ -372,8 +374,14 @@ const POSTerminalWorkspace = ({owner}) => {
                 <PosCatalogToolbar search={searchQuery} onSearch={setSearchQuery} sort={sortBy} onSort={value=>{setSortBy(value);setCurrentPage(1);}} stock={stockFilter} onStock={value=>{setStockFilter(value);setCurrentPage(1);}} onScan={()=>setShowCameraScanner(true)} onService={()=>setShowServiceModal(true)} />
 
                 {/* Responsive product display */}
-                {loading ? (
-                    <div className="flex-1 flex items-center justify-center text-primary-400">Loading catalog...</div>
+                {catalogLoading ? (
+                    <div role="status" aria-live="polite" className="flex min-h-[320px] flex-1 items-center justify-center rounded-2xl border border-primary-200 bg-white px-6 py-10 text-center shadow-sm">
+                        <div className="flex flex-col items-center">
+                            <span aria-hidden="true" className="h-10 w-10 animate-spin rounded-full border-4 border-blue-100 border-t-blue-700" />
+                            <p className="mt-4 text-base font-semibold text-primary-950">Loading page {currentPage}…</p>
+                            <p className="mt-1 text-sm text-primary-600">Updating the parts list. Please wait.</p>
+                        </div>
+                    </div>
                 ) : error ? (
                     <div className="flex-1 rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-800">
                         <div className="flex items-start gap-3">
@@ -387,40 +395,44 @@ const POSTerminalWorkspace = ({owner}) => {
                 ) : (
                     <div className="flex flex-1 flex-col">
                         <PosProductBrowser products={visibleProducts} onSelect={handleProductClick} onBarcode={setLargeBarcodeProduct} onPriceHistory={setPriceHistoryProduct} />
-                        <div className="mt-4 rounded-xl border border-primary-200 bg-white px-4 py-3 shadow-sm">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                <p className="text-sm text-primary-600">
-                                    Showing <span className="font-semibold text-primary-950">{rangeStart}-{rangeEnd}</span> of <span className="font-semibold text-primary-950">{pagination.totalCount ?? 0}</span> products
-                                </p>
-                                <div className="flex w-full items-center justify-between gap-2 sm:w-auto">
-                                    <Button
-                                        variant="secondary"
-                                        onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
-                                        disabled={!canGoPrev}
-                                        leftIcon={<ChevronLeft className="h-4 w-4" />}
-                                        aria-label="Previous product page"
-                                        className="h-11 w-11 px-0 sm:w-auto sm:px-3"
-                                    >
-                                        <span className="hidden sm:inline">Previous</span>
-                                    </Button>
-                                    <span className="min-w-0 whitespace-nowrap text-center text-xs font-semibold tabular-nums text-primary-700">
-                                        {pagination.page ?? currentPage} / {pagination.totalPages ?? 1}
-                                    </span>
-                                    <Button
-                                        variant="secondary"
-                                        onClick={() => setCurrentPage((page) => Math.min(page + 1, pagination.totalPages ?? page))}
-                                        disabled={!canGoNext}
-                                        rightIcon={<ChevronRight className="h-4 w-4" />}
-                                        aria-label="Next product page"
-                                        className="h-11 w-11 px-0 sm:w-auto sm:px-3"
-                                    >
-                                        <span className="hidden sm:inline">Next</span>
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 )}
+                <div className="mt-4 rounded-xl border border-primary-200 bg-white px-4 py-3 shadow-sm">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm text-primary-600">
+                            {catalogLoading ? (
+                                <>Loading page <span className="font-semibold text-primary-950">{currentPage}</span> of {pagination.totalPages ?? 1}…</>
+                            ) : (
+                                <>Showing <span className="font-semibold text-primary-950">{rangeStart}-{rangeEnd}</span> of <span className="font-semibold text-primary-950">{pagination.totalCount ?? 0}</span> products</>
+                            )}
+                        </p>
+                        <div className="flex w-full items-center justify-between gap-2 sm:w-auto">
+                            <Button
+                                variant="secondary"
+                                onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+                                disabled={catalogLoading || !canGoPrev}
+                                leftIcon={<ChevronLeft className="h-4 w-4" />}
+                                aria-label="Previous product page"
+                                className="h-11 w-11 px-0 sm:w-auto sm:px-3"
+                            >
+                                <span className="hidden sm:inline">Previous</span>
+                            </Button>
+                            <span className="min-w-0 whitespace-nowrap text-center text-xs font-semibold tabular-nums text-primary-700">
+                                {catalogLoading ? currentPage : pagination.page ?? currentPage} / {pagination.totalPages ?? 1}
+                            </span>
+                            <Button
+                                variant="secondary"
+                                onClick={() => setCurrentPage((page) => Math.min(page + 1, pagination.totalPages ?? page))}
+                                disabled={catalogLoading || !canGoNext}
+                                rightIcon={<ChevronRight className="h-4 w-4" />}
+                                aria-label="Next product page"
+                                className="h-11 w-11 px-0 sm:w-auto sm:px-3"
+                            >
+                                <span className="hidden sm:inline">Next</span>
+                            </Button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <Modal isOpen={Boolean(priceHistoryProduct)} onClose={() => setPriceHistoryProduct(null)} title={priceHistoryProduct ? `${priceHistoryProduct.name} · ${priceHistoryProduct.sku}` : 'Price history'} size="xl">

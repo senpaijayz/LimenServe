@@ -1,10 +1,12 @@
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import POSTerminal from '../modules/pos/pages/POSTerminal';
 import { CartProvider } from '../context/CartContext';
 import { STORAGE_KEYS } from '../utils/constants';
-const api = vi.hoisted(() => ({ error:vi.fn(),success:vi.fn(),prices:vi.fn(),sale:vi.fn(),products:[] }));
-vi.mock('../hooks/useProductCatalog', () => ({ default:() => ({products:api.products,pagination:{page:1,totalPages:1,totalCount:1,pageSize:14},loading:false}) }));
+const api = vi.hoisted(() => ({ error:vi.fn(),success:vi.fn(),prices:vi.fn(),sale:vi.fn(),products:[],totalPages:1,fetchingPages:new Set() }));
+vi.mock('../hooks/useProductCatalog', () => ({ default:({page=1}={}) => ({products:api.products,pagination:{page:api.responsePage ?? page,totalPages:api.totalPages,totalCount:api.totalPages*14,pageSize:14},loading:false,isFetching:api.fetchingPages.has(page)}) }));
+vi.mock('../context/useAuth', () => ({ useAuth:() => ({user:{id:'staff-test',role:'cashier'}}) }));
 vi.mock('../hooks/useBarcodeScanner', () => ({default:vi.fn()}));
 vi.mock('../store/useDataStore', () => ({default:() => ({findProduct:vi.fn()})}));
 vi.mock('../components/ui/Toast', () => ({useToast:() => ({error:api.error,success:api.success})}));
@@ -17,9 +19,24 @@ vi.mock('../components/ui/AddServiceModal', () => ({default:() => null}));
 vi.mock('../modules/inventory/components/ProductPriceHistory', () => ({default:() => null}));
 vi.mock('../modules/pos/components/SaleReceiptPreview.jsx', () => ({default:() => null}));
 const part = {id:'p',name:'Thermostat',sku:'PART',price:100,stock:0,availableStock:0};
-const mount = () => render(<CartProvider><POSTerminal /></CartProvider>);
-beforeEach(() => {vi.clearAllMocks();window.localStorage.clear();api.products=[part];api.prices.mockResolvedValue([{productId:'p',price:100,available:true,availableStock:0}]);});
+const mount = () => render(<MemoryRouter><CartProvider><POSTerminal /></CartProvider></MemoryRouter>);
+beforeEach(() => {vi.clearAllMocks();window.localStorage.clear();api.products=[part];api.totalPages=1;api.responsePage=undefined;api.fetchingPages=new Set();api.prices.mockResolvedValue([{productId:'p',price:100,available:true,availableStock:0}]);});
 afterEach(cleanup);
+it('always shows the compact product layout without a size selector', () => {
+ mount();
+ expect(screen.queryByRole('combobox',{name:'Product display size'})).toBeNull();
+ expect(screen.getByRole('region',{name:'Product browsing'}).querySelector('.pos-products-grid.pos-products-compact')).toBeTruthy();
+});
+it('hides the previous page and centers a loader while moving to the next page', () => {
+ api.totalPages=3;api.fetchingPages=new Set([2]);mount();
+ fireEvent.click(screen.getByRole('button',{name:'Next product page'}));
+ const catalog = screen.getByRole('region',{name:'Parts and services'});
+ expect(within(catalog).getByText('Updating the parts list. Please wait.')).toBeTruthy();
+ expect(catalog.textContent).toContain('Loading page 2 of 3…');
+ expect(screen.queryByRole('button',{name:/Thermostat.*PART/})).toBeNull();
+ expect(screen.getByRole('button',{name:'Previous product page'}).disabled).toBe(true);
+ expect(screen.getByRole('button',{name:'Next product page'}).disabled).toBe(true);
+});
 it('warns immediately and does not add a zero-stock product', () => {
  mount();fireEvent.click(screen.getByRole('button',{name:/Thermostat.*PART/}));
  expect(api.error).toHaveBeenCalledWith(expect.stringContaining('out of stock'));
