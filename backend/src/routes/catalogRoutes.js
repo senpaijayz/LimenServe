@@ -21,6 +21,7 @@ import { createCatalogSummaryReader } from '../services/catalogSummary.js';
 import { analyzePricelistWorkbook, inferPricelistEffectiveDate, parsePricelistNumber, previewPricelistWorksheet, readPricelistWorkbook } from '../services/pricelistWorkbook.js';
 import { createPricelistPreviewCache } from '../services/pricelistPreviewCache.js';
 import { getPricelistImportJob, startPricelistImportJob } from '../services/pricelistImportJobs.js';
+import { disambiguateSourceLocations } from '../services/pricelistSourceLocations.js';
 
 const { CLASSIFIER_VERSION, classifyInventoryItem } = inventoryClassifier;
 
@@ -840,11 +841,13 @@ async function previewPricelistUpload({ upload, body }) {
   const removedFromListCount = selection.importMode === 'replace'
     ? [...oldBySku.keys()].filter((sku) => !nextBySku.has(sku)).length
     : 0;
-  const draftItems = [...nextBySku.values()].map((item) => classifyPriceListItem({
+  const classifiedDraftItems = [...nextBySku.values()].map((item) => classifyPriceListItem({
     ...item,
     model: item.model ?? item.model_name,
     sourceCategory: item.sourceCategory ?? item.source_category ?? item.category,
   }));
+  const { items: draftItems, adjusted: adjustedSourceLocations } = disambiguateSourceLocations(
+    classifiedDraftItems, new Set(selectedSkus));
   const warningRows = parsed.errors.filter((row) => row.severity === 'warning');
   const errors = parsed.errors.filter((row) => row.severity !== 'warning');
   const canImport = parsed.items.length > 0 && blockers.length === 0 && draftItems.length > 0;
@@ -878,7 +881,8 @@ async function previewPricelistUpload({ upload, body }) {
     canImport,
     blockers,
     duplicateGroups: parsed.duplicateGroups,
-    warnings: [...parsed.warnings, ...warningRows.map((row) => `Excel row ${row.rowNumber} (${row.sku || 'no part number'}): ${row.reason}`)],
+    warnings: [...parsed.warnings, ...warningRows.map((row) => `Excel row ${row.rowNumber} (${row.sku || 'no part number'}): ${row.reason}`),
+      ...(adjustedSourceLocations ? [`${adjustedSourceLocations} retained part(s) shared a sheet row with the new workbook. Internal row references were made unique; no parts or prices were removed.`] : [])],
     errors,
     sample: parsed.items.slice(0, 12).map((item) => ({ sourceLineNumber: item.sourceLineNumber, sku: item.sku, name: item.name, price: item.price, sourcePrice: item.sourcePrice })),
     priceChanges: selectedChanges.slice(0, 80),
