@@ -116,6 +116,7 @@ function App() {
                 <Route path="/login" element={renderRoute(LoginPage, <PageLoader />)} />
                 <Route path="/forgot-password" element={renderRoute(ForgotPasswordPage, <PageLoader />)} />
                 <Route path="/reset-password-code" element={renderRoute(ResetPasswordCodePage, <PageLoader />)} />
+                <Route path="/administrator-recovery" element={renderRoute(ResetPasswordCodePage, <PageLoader />)} />
                 <Route path="/reset-password" element={renderRoute(ResetPasswordPage, <PageLoader />)} />
                 <Route path="/verify-recovery-email" element={renderRoute(RecoveryEmailVerificationPage, <PageLoader />)} />
 

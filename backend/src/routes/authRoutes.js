@@ -18,6 +18,7 @@ const RECOVERY_TOKEN_PATTERN = /^[a-f0-9]{64}$/i;
 const RECOVERY_CODE_PATTERN = /^\d{6,8}$/;
 const DUMMY_ADMIN_EMAIL = 'admin@limen.com';
 const GENERIC_RECOVERY_RESPONSE = 'If a recovery method is available for this account, password reset instructions will be sent.';
+const GENERIC_ADMIN_CODE_RESPONSE = 'If a verified administrator recovery email is available, a code will be sent to that inbox. Check your spam folder too.';
 
 class AuthRouteError extends Error {
   constructor(statusCode, message, retryAfterSeconds = null) {
@@ -235,7 +236,7 @@ router.get('/security', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/recovery/request', async (req, res) => {
+router.post('/recovery/code/request', async (req, res) => {
   setNoStore(res);
   const email = normalizeEmail(req.body?.email);
   if (!RECOVERY_EMAIL_PATTERN.test(email) || email.length > 254) {
@@ -244,8 +245,8 @@ router.post('/recovery/request', async (req, res) => {
   }
 
   try {
-    await consumeSharedRateLimit('auth.recovery.request.ip', req.ip, 3600, 10);
-    await consumeSharedRateLimit('auth.recovery.request.email', email, 3600, 4);
+    await consumeSharedRateLimit('auth.admin-recovery.request.ip', req.ip, 3600, 10);
+    await consumeSharedRateLimit('auth.admin-recovery.request.email', email, 3600, 4);
 
     const { data: adminOtpData, error: adminOtpError } = await supabaseAdmin.rpc('lookup_limen_admin_otp_recovery', { p_email: email });
     if (adminOtpError) throw adminOtpError;
@@ -256,12 +257,30 @@ router.post('/recovery/request', async (req, res) => {
         options: { shouldCreateUser: false },
       });
       if (deliveryError) req.log?.warn?.('auth.recovery.admin_otp_delivery_unavailable', { requestId: req.requestId });
-      res.status(202).json({ message: GENERIC_RECOVERY_RESPONSE });
+    }
+    res.status(202).json({ message: GENERIC_ADMIN_CODE_RESPONSE });
+  } catch (error) {
+    if (Number.isInteger(error?.statusCode)) {
+      sendRouteError(res, error, GENERIC_ADMIN_CODE_RESPONSE);
       return;
     }
+    req.log?.warn?.('auth.recovery.admin_otp_request_unavailable', { requestId: req.requestId });
+    res.status(503).json({ error: 'Recovery codes are temporarily unavailable. Try again shortly.' });
+  }
+});
 
+router.post('/recovery/request', async (req, res) => {
+  setNoStore(res);
+  const email = normalizeEmail(req.body?.email);
+  if (!RECOVERY_EMAIL_PATTERN.test(email) || email.length > 254) {
+    res.status(400).json({ error: 'Enter the email address you use to sign in.' });
+    return;
+  }
+  try {
+    await consumeSharedRateLimit('auth.recovery.request.ip', req.ip, 3600, 10);
+    await consumeSharedRateLimit('auth.recovery.request.email', email, 3600, 4);
     const account = await lookupAccount(email);
-    if (isEligibleActiveAccount(account)) {
+    if (isEligibleActiveAccount(account) && account.auth_role !== 'admin') {
       if (account.recovery_email && account.recovery_verified_at && env.recoveryEmailConfigured) {
         const token = randomBytes(32).toString('hex');
         const { error: tokenError } = await supabaseAdmin.rpc('create_limen_password_recovery_token', {

@@ -43,6 +43,15 @@ export async function resetPasswordWithRecoveryCode({ email, code, password }) {
   }
 }
 
+export async function requestAdministratorRecoveryCode(email) {
+  try {
+    const { data } = await apiClient.post('/auth/recovery/code/request', { email });
+    return data;
+  } catch (error) {
+    extractApiError(error, 'Unable to request a recovery code. Try again shortly.');
+  }
+}
+
 export async function getAccountSecurity() {
   try {
     const { data } = await apiClient.get('/auth/security');

@@ -93,7 +93,7 @@ const LoginPage = () => {
                             >
                                 <p className="text-sm text-accent-danger">{authError}</p>
                                 {recoveryEmail && (
-                                    <Link to="/forgot-password" state={{ signInEmail: recoveryEmail }}
+                                    <Link to="/administrator-recovery" state={{ signInEmail: recoveryEmail }}
                                         className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-primary-900 px-4 text-sm font-semibold text-white hover:bg-primary-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-offset-2">
                                         Recover administrator access
                                     </Link>

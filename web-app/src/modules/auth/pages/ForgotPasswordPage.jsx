@@ -65,14 +65,14 @@ const ForgotPasswordPage = () => {
                 </div>
                 <h1 className="font-display text-2xl font-bold text-primary-950">Forgot your password?</h1>
                 <p className="mt-2 text-sm leading-6 text-primary-600">
-                    Enter your sign-in email or verified recovery Gmail. For a locked Administrator account, the verified recovery code and a new password restore sign-in access.
+                    Enter your sign-in email or verified recovery email to request a password reset link.
                 </p>
 
                 {requestSent && (
                     <div role="status" className="mt-5 rounded-xl border border-accent-success/30 bg-accent-success/10 p-4 text-sm text-primary-800">
                         <div className="flex items-start gap-3">
                             <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-accent-success" aria-hidden="true" />
-                            <p>If a recovery method is available, check your inbox and spam folder for a link or code. Enter an Administrator recovery code below and choose a new password to unlock sign-in.</p>
+                            <p>If a recovery method is available, check your inbox and spam folder for a password reset link.</p>
                         </div>
                     </div>
                 )}
@@ -110,8 +110,8 @@ const ForgotPasswordPage = () => {
                         {isSubmitting ? 'Checking recovery options…' : cooldown > 0 ? `Try again in ${cooldown}s` : requestSent ? 'Send again' : 'Continue'}
                     </button>
                 </form>
-                <Link to="/reset-password-code" state={{ email: email.trim().toLowerCase() }} className="mt-5 block text-center text-sm font-semibold text-primary-800 hover:underline">
-                    Have a code? Reset your password
+                <Link to="/administrator-recovery" state={{ signInEmail: email.trim().toLowerCase() }} className="mt-5 block text-center text-sm font-semibold text-primary-800 hover:underline">
+                    Recover administrator access
                 </Link>
             </section>
         </main>
