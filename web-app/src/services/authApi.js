@@ -48,6 +48,12 @@ export async function requestAdministratorRecoveryCode(email) {
     const { data } = await apiClient.post('/auth/recovery/code/request', { email });
     return data;
   } catch (error) {
+    if (error.response?.status === 429) {
+      const seconds = Number(error.response.headers?.['retry-after']);
+      throw Object.assign(new Error('Too many recovery requests. Wait before requesting another code.'), {
+        retryAfterSeconds: Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 60,
+      });
+    }
     extractApiError(error, 'Unable to request a recovery code. Try again shortly.');
   }
 }

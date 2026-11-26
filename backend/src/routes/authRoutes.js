@@ -18,7 +18,7 @@ const RECOVERY_TOKEN_PATTERN = /^[a-f0-9]{64}$/i;
 const RECOVERY_CODE_PATTERN = /^\d{6,8}$/;
 const DUMMY_ADMIN_EMAIL = 'admin@limen.com';
 const GENERIC_RECOVERY_RESPONSE = 'If a recovery method is available for this account, password reset instructions will be sent.';
-const GENERIC_ADMIN_CODE_RESPONSE = 'If a verified administrator recovery email is available, a code will be sent to that inbox. Check your spam folder too.';
+const GENERIC_ADMIN_CODE_RESPONSE = 'If this account has a verified recovery inbox and email delivery is available, a code will arrive there. Check spam. If nothing arrives, wait before requesting another code.';
 
 class AuthRouteError extends Error {
   constructor(statusCode, message, retryAfterSeconds = null) {
@@ -256,7 +256,14 @@ router.post('/recovery/code/request', async (req, res) => {
         email: adminOtp.recovery_email,
         options: { shouldCreateUser: false },
       });
-      if (deliveryError) req.log?.warn?.('auth.recovery.admin_otp_delivery_unavailable', { requestId: req.requestId });
+      if (deliveryError) {
+        const rateLimited = deliveryError.status === 429
+          || ['over_email_send_rate_limit', 'over_request_rate_limit'].includes(deliveryError.code);
+        req.log?.warn?.('auth.recovery.admin_otp_delivery_unavailable', {
+          requestId: req.requestId,
+          reason: rateLimited ? 'provider_rate_limit' : 'provider_rejected',
+        });
+      }
     }
     res.status(202).json({ message: GENERIC_ADMIN_CODE_RESPONSE });
   } catch (error) {

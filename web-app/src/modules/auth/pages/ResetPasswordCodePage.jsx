@@ -34,6 +34,7 @@ export default function ResetPasswordCodePage() {
             setCooldown(60);
         } catch (sendError) {
             setError(sendError.message || 'The recovery code could not be requested.');
+            if (sendError.retryAfterSeconds) setCooldown(sendError.retryAfterSeconds);
         } finally {
             setSending(false);
         }
@@ -78,7 +79,7 @@ export default function ResetPasswordCodePage() {
                                 setError('');
                             }} className="min-h-11 w-full rounded-xl border border-primary-200 px-3 text-primary-950" />
                         <button type="submit" disabled={sending || busy || cooldown > 0} className="min-h-11 w-full rounded-xl bg-primary-800 px-4 font-semibold text-white hover:bg-primary-950 disabled:opacity-60">
-                            {sending ? 'Requesting code…' : cooldown > 0 ? `Send again in ${cooldown}s` : codeEmail ? 'Resend recovery code' : 'Send recovery code'}
+                            {sending ? 'Requesting code…' : cooldown > 0 ? `Send again in ${cooldown < 60 ? `${cooldown}s` : `${Math.ceil(cooldown / 60)} min`}` : codeEmail ? 'Resend recovery code' : 'Send recovery code'}
                         </button>
                     </form>
                 )}
