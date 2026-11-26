@@ -21,7 +21,7 @@ export function createAccountLockedError(role) {
     423,
     isAdministrator
       ? 'Administrator sign-in is locked after five incorrect password attempts. Use Forgot Password to verify the recovery email and reset the password to unlock it.'
-      : 'This staff account is locked after five incorrect password attempts. Ask an administrator to unlock it in User Management.',
+      : 'Sign-in is locked after five incorrect attempts. Ask an administrator to open User Management and choose Unlock sign-in for your account.',
     'ACCOUNT_LOCKED',
   );
 }
@@ -63,6 +63,12 @@ export async function signInWithAccountLockout({
       if (isLocked(updatedLockout)) {
         clearAuthCache();
         throw createAccountLockedError(account.auth_role);
+      }
+      const attempts = Number(updatedLockout?.failed_attempts);
+      if (Number.isInteger(attempts) && attempts > 0 && attempts < MAX_FAILED_LOGIN_ATTEMPTS) {
+        const remaining = MAX_FAILED_LOGIN_ATTEMPTS - attempts;
+        const warning = remaining === 1 ? '1 attempt left' : `${remaining} attempts left`;
+        throw createLoginError(401, `Invalid email or password. ${warning} before sign-in is locked.`, 'INVALID_CREDENTIALS');
       }
     }
 

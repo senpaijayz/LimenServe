@@ -82,6 +82,7 @@ const LoginPage = () => {
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                         {authError && (
                             <MotionDiv
+                                role="alert"
                                 initial={{ opacity: 0, y: -10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 className="p-4 rounded-lg bg-accent-danger/20 border border-accent-danger/30"
@@ -131,7 +132,7 @@ const LoginPage = () => {
                         </p>
                         <div className="rounded-xl border border-primary-100 bg-primary-50 px-4 py-3 text-xs text-primary-500">
                             <p className="text-center">
-                                If you no longer have access to your email, ask an administrator for help.
+                                Locked staff account? Ask an administrator to select Unlock sign-in in User Management.
                             </p>
                         </div>
                     </div>

@@ -59,7 +59,11 @@ test('locks a staff account on the fifth incorrect password and blocks later att
   };
 
   for (let attempt = 1; attempt < MAX_FAILED_LOGIN_ATTEMPTS; attempt += 1) {
-    await assert.rejects(signInWithAccountLockout(options), (error) => error.statusCode === 401);
+    const remaining = MAX_FAILED_LOGIN_ATTEMPTS - attempt;
+    await assert.rejects(signInWithAccountLockout(options), (error) => (
+      error.statusCode === 401
+      && error.message.includes(remaining === 1 ? '1 attempt left' : `${remaining} attempts left`)
+    ));
   }
 
   await assert.rejects(signInWithAccountLockout(options), (error) => (
@@ -72,6 +76,8 @@ test('locks a staff account on the fifth incorrect password and blocks later att
   assert.equal(store.failedAttempts, MAX_FAILED_LOGIN_ATTEMPTS);
   assert.equal(signInCalls, MAX_FAILED_LOGIN_ATTEMPTS);
   assert.equal(cacheClears, 1);
+  store.unlock();
+  await assert.rejects(signInWithAccountLockout(options), /4 attempts left/);
 });
 
 test('successful sign-in resets failures and a subsequent wrong password starts a new count', async () => {
