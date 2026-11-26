@@ -211,7 +211,7 @@ router.get('/security', requireAuth, async (req, res) => {
     }
 
     let otpRecovery = null;
-    if (security.is_protected_admin) {
+    if (security.profile_role === 'admin') {
       const { data: otpData, error: otpError } = await supabaseAdmin.rpc('get_limen_admin_otp_recovery', { p_account_id: req.user.id });
       if (otpError) throw otpError;
       otpRecovery = firstRow(otpData);
@@ -226,7 +226,8 @@ router.get('/security', requireAuth, async (req, res) => {
         recoveryVerifiedAt: otpRecovery?.verified_at || security.verified_at,
         pendingRecoveryEmail: otpRecovery?.pending_email || security.pending_email,
         pendingExpiresAt: otpRecovery?.pending_expires_at || security.pending_expires_at,
-        recoveryEmailDeliveryReady: Boolean(security.is_protected_admin || env.recoveryEmailConfigured),
+        adminRecoveryCode: security.profile_role === 'admin',
+        recoveryEmailDeliveryReady: Boolean(security.profile_role === 'admin' || env.recoveryEmailConfigured),
       },
     });
   } catch {
@@ -337,6 +338,13 @@ router.post('/recovery/code/reset', async (req, res) => {
     }
     await client.auth.signOut({ scope: 'local' });
 
+    const { data: currentBinding, error: bindingError } = await supabaseAdmin.rpc('lookup_limen_admin_otp_recovery', { p_email: email });
+    if (bindingError) throw bindingError;
+    const current = firstRow(currentBinding);
+    if (current?.account_id !== recovery.account_id || current.identity_id !== recovery.identity_id) {
+      return res.status(400).json({ error: 'Recovery access changed. Request a new code.' });
+    }
+
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(recovery.account_id, { password });
     if (updateError) {
       req.log?.warn?.('auth.recovery.admin_code_password_update_rejected', { requestId: req.requestId });
@@ -361,8 +369,8 @@ router.post('/recovery/code/reset', async (req, res) => {
       loginEmail: recovery.login_email,
       refreshSessionsRevoked,
       message: accountUnlocked
-        ? 'Administrator password changed and sign-in unlocked. Sign in with admin@limen.com and your new password.'
-        : 'Administrator password changed. Sign in with admin@limen.com and your new password.',
+        ? 'Administrator password changed and sign-in unlocked. Use your existing sign-in email and new password.'
+        : 'Administrator password changed. Use your existing sign-in email and new password.',
     });
   } catch (error) {
     if (Number.isInteger(error?.statusCode)) {
@@ -376,6 +384,7 @@ router.post('/recovery/code/reset', async (req, res) => {
 
 router.post('/recovery-email/challenge', requireAuth, async (req, res) => {
   setNoStore(res);
+  if (req.user.role === 'admin') return res.status(409).json({ error: 'Use the recovery email code setup in Account Security.' });
   const email = normalizeEmail(req.body?.email);
   const currentPassword = String(req.body?.currentPassword || '');
 

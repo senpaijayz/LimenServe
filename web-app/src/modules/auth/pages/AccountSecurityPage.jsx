@@ -3,6 +3,7 @@ import { CheckCircle2, Eye, EyeOff, KeyRound, LockKeyhole, Mail, ShieldCheck } f
 import { useAuth } from '../../../context/useAuth';
 import { beginRecoveryEmailVerification, getAccountSecurity } from '../../../services/authApi';
 import { supabase } from '../../../services/supabase';
+import RecoveryEmailModal from '../../users/components/RecoveryEmailModal';
 
 const PASSWORD_RULES = [
     { label: '12 characters or more', test: (value) => value.length >= 12 },
@@ -61,6 +62,7 @@ function SecurityNotice({ notice }) {
 
 export default function AccountSecurityPage() {
     const { user } = useAuth();
+    const [showAdminRecovery, setShowAdminRecovery] = useState(false);
     const [security, setSecurity] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmittingRecovery, setIsSubmittingRecovery] = useState(false);
@@ -250,10 +252,14 @@ export default function AccountSecurityPage() {
                     </p>
                 )}
 
-                {security?.protectedAdmin ? (
-                    <p className="mt-5 rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm text-primary-700">
-                        To add or change the administrator’s recovery Gmail, open User Management and select Recovery email for your account. Enter the code sent to that inbox to finish setup.
-                    </p>
+                {security?.adminRecoveryCode || security?.protectedAdmin ? (
+                    <div className="mt-5 rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm text-primary-700">
+                        <p>Supabase sends a verification code to the recovery inbox. Your sign-in email stays the same.</p>
+                        <button type="button" onClick={() => setShowAdminRecovery(true)}
+                            className="mt-3 min-h-11 rounded-xl bg-primary-800 px-4 font-semibold text-white hover:bg-primary-950">
+                            {security.recoveryEmail ? 'Manage recovery email' : 'Add recovery email'}
+                        </button>
+                    </div>
                 ) : (
                 <>
                 <SecurityNotice notice={recoveryNotice} />
@@ -352,6 +358,10 @@ export default function AccountSecurityPage() {
                     </button>
                 </form>
             </section>
+            {showAdminRecovery && user?.id && <RecoveryEmailModal user={user} onClose={() => {
+                setShowAdminRecovery(false);
+                void loadSecurity();
+            }} />}
         </div>
     );
 }

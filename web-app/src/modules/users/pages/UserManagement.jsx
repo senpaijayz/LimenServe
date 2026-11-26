@@ -8,6 +8,7 @@ import Dropdown from '../../../components/ui/Dropdown';
 import { RoleBadge } from '../../../components/ui/Badge';
 import Table from '../../../components/ui/Table';
 import { useToast } from '../../../components/ui/Toast';
+import { useAuth } from '../../../context/useAuth';
 import { listMechanics } from '../../../services/mechanicsApi';
 import MechanicManagementPanel from '../components/MechanicManagementPanel';
 import RecoveryEmailModal from '../components/RecoveryEmailModal';
@@ -44,6 +45,7 @@ function buildUserForm(user) {
 
 function UserFormModal({ isOpen, editingUser, isSaving, submitError, onClose, onSubmit, protectAdminRole }) {
     const [formData, setFormData] = useState(() => buildUserForm(editingUser));
+    const demotingAdmin = editingUser?.role === 'admin' && formData.role !== 'admin';
 
     const guardedClose = () => {
         if (!isSaving) {
@@ -67,6 +69,7 @@ function UserFormModal({ isOpen, editingUser, isSaving, submitError, onClose, on
             email: formData.email,
             role: formData.role,
             password: formData.password,
+            ...(demotingAdmin ? { currentPassword: formData.currentPassword } : {}),
         };
         onSubmit(payload);
     };
@@ -101,6 +104,11 @@ function UserFormModal({ isOpen, editingUser, isSaving, submitError, onClose, on
 
                 {editingUser?.isProtectedAdmin && <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">This is the only active Administrator. Its role cannot be changed.</p>}
                 <Dropdown label="Role" options={roleOptions} value={formData.role} onChange={(value) => updateField('role', value)} disabled={Boolean(editingUser?.isProtectedAdmin && protectAdminRole)} />
+                {demotingAdmin && (
+                    <Input label="Confirm your administrator password" type="password" autoComplete="current-password" required
+                        value={formData.currentPassword ?? ''} onChange={(event) => updateField('currentPassword', event.target.value)}
+                        helperText="Changing this role removes the account’s verified and pending administrator recovery emails." />
+                )}
 
                 <Input
                     label={editingUser ? 'New Password (leave blank to keep current)' : 'Password'}
@@ -125,6 +133,7 @@ function UserFormModal({ isOpen, editingUser, isSaving, submitError, onClose, on
 }
 
 const UserManagement = () => {
+    const { user: signedInUser } = useAuth();
     const { success, error: showError } = useToast();
     const [searchQuery, setSearchQuery] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
@@ -389,7 +398,7 @@ const UserManagement = () => {
                     <Edit2 className="h-4 w-4" aria-hidden="true" />
                     <span>Edit</span>
                 </button>
-                <button
+                {user.role === 'admin' && user.id === signedInUser?.id && <button
                     type="button"
                     onClick={() => setRecoveryTarget(user)}
                     className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-primary-200 px-3 text-sm font-semibold text-primary-700 transition hover:border-primary-300 hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue"
@@ -397,7 +406,7 @@ const UserManagement = () => {
                 >
                     <Mail className="h-4 w-4" aria-hidden="true" />
                     <span>Recovery email</span>
-                </button>
+                </button>}
                 {user.loginLocked && (
                     <button
                         type="button"

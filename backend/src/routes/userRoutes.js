@@ -1,14 +1,9 @@
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { Router } from 'express';
 import { env } from '../config/env.js';
 import { supabaseAdmin, supabaseAuth } from '../config/supabase.js';
 import { clearAuthUserCache, requireRole } from '../middleware/auth.js';
-import {
-  createEphemeralAuthClient,
-  createRecoveryUrl,
-  escapeHtml,
-  sendSecurityEmail,
-} from '../services/recoveryDelivery.js';
+import { createEphemeralAuthClient } from '../services/recoveryDelivery.js';
 import { getUserNameFields } from '../utils/userName.js';
 
 const router = Router();
@@ -325,6 +320,7 @@ router.get('/:userId/recovery-email', async (req, res, next) => {
   noStore(res);
   try {
     const { userId } = req.params;
+    if (userId !== req.user.id) return res.status(403).json({ error: 'Administrators can only manage their own recovery email.' });
     if (!UUID_PATTERN.test(userId)) {
       res.status(400).json({ error: 'Choose a valid staff account.' });
       return;
@@ -341,7 +337,7 @@ router.get('/:userId/recovery-email', async (req, res, next) => {
     }
 
     let otpRecovery = null;
-    if (security.is_protected_admin) {
+    if (security.profile_role === 'admin') {
       const { data: otpData, error: otpError } = await supabaseAdmin.rpc('get_limen_admin_otp_recovery', {
         p_account_id: userId,
       });
@@ -356,8 +352,8 @@ router.get('/:userId/recovery-email', async (req, res, next) => {
         verifiedAt: otpRecovery?.verified_at || security.verified_at,
         pendingEmail: otpRecovery?.pending_email || security.pending_email,
         pendingExpiresAt: otpRecovery?.pending_expires_at || security.pending_expires_at,
-        deliveryMode: security.is_protected_admin ? 'supabase_code' : 'resend_link',
-        deliveryReady: Boolean(security.is_protected_admin || env.recoveryEmailConfigured),
+        deliveryMode: 'supabase_code',
+        deliveryReady: security.profile_role === 'admin',
       },
     });
   } catch (error) {
@@ -369,6 +365,7 @@ router.post('/:userId/recovery-email', async (req, res, next) => {
   noStore(res);
   try {
     const { userId } = req.params;
+    if (userId !== req.user.id) return res.status(403).json({ error: 'Administrators can only manage their own recovery email.' });
     const email = String(req.body?.email || '').trim().toLowerCase();
     const currentPassword = String(req.body?.currentPassword || '');
     if (!UUID_PATTERN.test(userId) || !RECOVERY_EMAIL_PATTERN.test(email) || email.length > 254 || !currentPassword) {
@@ -406,15 +403,7 @@ router.post('/:userId/recovery-email', async (req, res, next) => {
       return;
     }
 
-    const { data: targetSecurityData, error: targetSecurityError } = await supabaseAdmin.rpc('get_limen_account_security', {
-      p_account_id: userId,
-    });
-    if (targetSecurityError) throw targetSecurityError;
-    const isProtectedAdmin = Boolean(firstRow(targetSecurityData)?.is_protected_admin);
-    if (!isProtectedAdmin && !env.recoveryEmailConfigured) {
-      res.status(503).json({ error: 'Recovery email delivery is not set up for this staff account yet.' });
-      return;
-    }
+    if (role.appRole !== 'admin') return res.status(403).json({ error: 'Only an active administrator can set up email-code recovery.' });
 
     const authClient = createEphemeralAuthClient();
     const { data: verified, error: passwordError } = await authClient.auth.signInWithPassword({
@@ -426,76 +415,41 @@ router.post('/:userId/recovery-email', async (req, res, next) => {
       return;
     }
 
-    if (isProtectedAdmin) {
-      let { data: recoveryIdentityId, error: identityLookupError } = await supabaseAdmin.rpc('find_limen_recovery_identity', {
-        p_email: email,
-      });
-      if (identityLookupError) throw identityLookupError;
-      if (!recoveryIdentityId) {
-        const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
-          email,
-          email_confirm: true,
-          app_metadata: { role: 'customer', limen_recovery_only: true },
-          user_metadata: { full_name: 'Recovery mailbox' },
-        });
-        if (createError || !created?.user) {
-          res.status(409).json({ error: 'This address is already used by another account or could not be prepared for recovery.' });
-          return;
-        }
-        recoveryIdentityId = created.user.id;
-      }
-
-      const { error: beginOtpError } = await supabaseAdmin.rpc('begin_limen_admin_otp_recovery', {
-        p_account_id: userId,
-        p_identity_id: recoveryIdentityId,
-        p_email: email,
-      });
-      if (beginOtpError) throw beginOtpError;
-
-      const { error: sendOtpError } = await supabaseAuth.auth.signInWithOtp({
+    let { data: recoveryIdentityId, error: identityLookupError } = await supabaseAdmin.rpc('find_limen_recovery_identity', {
+      p_email: email,
+    });
+    if (identityLookupError) throw identityLookupError;
+    if (!recoveryIdentityId) {
+      const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email,
-        options: { shouldCreateUser: false },
+        email_confirm: true,
+        app_metadata: { role: 'customer', limen_recovery_only: true },
+        user_metadata: { full_name: 'Recovery mailbox' },
       });
-      if (sendOtpError) {
-        res.status(503).json({ error: 'Supabase could not send the code. Its built-in sender only emails organization members and has a small hourly limit. Try later.' });
+      if (createError || !created?.user) {
+        res.status(409).json({ error: 'This address is already used by another account or could not be prepared for recovery.' });
         return;
       }
-      res.status(202).json({ message: 'Check your Gmail for the code. Enter it here to activate this recovery address.' });
-      return;
+      recoveryIdentityId = created.user.id;
     }
 
-    const token = randomBytes(32).toString('hex');
-    const { error: beginError } = await supabaseAdmin.rpc('begin_limen_recovery_email_verification', {
+    const { error: beginOtpError } = await supabaseAdmin.rpc('begin_limen_admin_otp_recovery', {
       p_account_id: userId,
+      p_identity_id: recoveryIdentityId,
       p_email: email,
-      p_token_digest: createHash('sha256').update(token).digest('hex'),
     });
-    if (beginError) {
-      const message = String(beginError.message || '');
-      if (beginError.code === '23505' || message.includes('RECOVERY_EMAIL_IN_USE')) {
-        res.status(409).json({ error: 'This email is already used by another account.' });
-      } else if (message.includes('already verified')) {
-        res.status(409).json({ error: 'This recovery email is already verified.' });
-      } else {
-        res.status(409).json({ error: 'The recovery email could not be changed for this account.' });
-      }
-      return;
-    }
+    if (beginOtpError?.code === '23505') return res.status(409).json({ error: 'This recovery email is already in use. Choose a different inbox.' });
+    if (beginOtpError) throw beginOtpError;
 
-    const verificationUrl = createRecoveryUrl('/verify-recovery-email', token);
-    const text = `An administrator added this address as a recovery email for a LimenServe account. Confirm it within 15 minutes:\n\n${verificationUrl}\n\nIf you did not expect this, ignore the message. The current recovery email stays active until you confirm.`;
-    const html = `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033"><h2>Confirm your recovery email</h2><p>An administrator added this address as a recovery email for a LimenServe account. Confirm it within 15 minutes.</p><p><a href="${escapeHtml(verificationUrl)}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700">Verify email</a></p><p>If you did not expect this, ignore the message. The current recovery email stays active until you confirm.</p></div>`;
-    const sent = await sendSecurityEmail({
-      to: email,
-      subject: 'Verify your LimenServe recovery email',
-      text,
-      html,
+    const { error: sendOtpError } = await supabaseAuth.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
     });
-    if (!sent) {
-      res.status(503).json({ error: 'The verification email could not be sent. The current recovery email is unchanged. Try again shortly.' });
+    if (sendOtpError) {
+      res.status(503).json({ error: 'Supabase could not send the code. Its built-in sender only emails organization members and has a small hourly limit. Try later.' });
       return;
     }
-    res.status(202).json({ message: 'Verification sent. This recovery email will become active after the recipient confirms it.' });
+    res.status(202).json({ message: 'Check your recovery inbox for the code. Enter it here to verify this address.' });
   } catch (error) {
     next(normalizeUserSaveError(error));
   }
@@ -505,6 +459,7 @@ router.post('/:userId/recovery-email/code/verify', async (req, res, next) => {
   noStore(res);
   try {
     const { userId } = req.params;
+    if (userId !== req.user.id) return res.status(403).json({ error: 'Administrators can only verify their own recovery email.' });
     const code = String(req.body?.code || '').trim();
     if (!UUID_PATTERN.test(userId) || !/^\d{6,8}$/.test(code)) {
       res.status(400).json({ error: 'Enter the code from your recovery email.' });
@@ -550,7 +505,7 @@ router.post('/:userId/recovery-email/code/verify', async (req, res, next) => {
       res.status(400).json({ error: 'The code could not be matched to this recovery address. Send a new code.' });
       return;
     }
-    res.json({ verified: true, message: 'Recovery email verified. The administrator still signs in with admin@limen.com.' });
+    res.json({ verified: true, message: 'Recovery email verified. Keep using your existing sign-in email.' });
   } catch (error) {
     next(normalizeUserSaveError(error));
   }
@@ -876,6 +831,21 @@ router.patch('/:userId', async (req, res, next) => {
     }
 
     if (currentRole.appRole === 'admin' && role !== 'admin') {
+      const currentPassword = req.body?.currentPassword;
+      if (typeof currentPassword !== 'string' || !currentPassword || currentPassword.length > 1024) {
+        return res.status(400).json({ error: 'Confirm your administrator password to remove this account’s recovery email and change its role.' });
+      }
+      const limit = await limitRecoverySetup('users.admin-demotion.password', req.user.id, 5);
+      if (!limit.allowed) {
+        res.setHeader('Retry-After', String(limit.retryAfter));
+        return res.status(429).json({ error: 'Too many password confirmations. Please wait before trying again.' });
+      }
+      const client = createEphemeralAuthClient();
+      const { data: proof, error: proofError } = await client.auth.signInWithPassword({ email: actor.email, password: currentPassword });
+      if (proofError || proof?.user?.id !== req.user.id) {
+        return res.status(401).json({ error: 'Your administrator password could not be confirmed. No changes were made.' });
+      }
+      await client.auth.signOut({ scope: 'local' });
       const otherAdmins = await countOtherActiveAdministrators(userId);
       if (otherAdmins < 1) {
         res.status(409).json({ error: 'You cannot change this Administrator’s role because this is the only Administrator account remaining.' });
