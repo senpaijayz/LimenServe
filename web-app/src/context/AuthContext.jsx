@@ -213,7 +213,7 @@ export function AuthProvider({ children }) {
         } catch (loginError) {
             const message = loginError.message || 'Invalid email or password.';
             setError(message);
-            return { success: false, error: message };
+            return { success: false, error: message, code: loginError.code };
         } finally {
             setIsLoadingAuth(false);
         }

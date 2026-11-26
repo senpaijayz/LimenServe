@@ -19,6 +19,7 @@ const LoginPage = () => {
     const navigate = useNavigate();
     const { login, error: authError, isAuthenticated, isLoadingAuth, user } = useAuth();
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [recoveryEmail, setRecoveryEmail] = useState('');
 
     const {
         register,
@@ -39,12 +40,15 @@ const LoginPage = () => {
     }, [isAuthenticated, isLoadingAuth, navigate, user?.role]);
 
     const onSubmit = async (data) => {
+        setRecoveryEmail('');
         setIsSubmitting(true);
         const result = await login(data.email, data.password);
         setIsSubmitting(false);
 
         if (result.success) {
             navigate(getDefaultAuthenticatedPath(result.user?.role), { replace: true });
+        } else if (result.code === 'ADMIN_RECOVERY_REQUIRED') {
+            setRecoveryEmail(data.email.trim().toLowerCase());
         }
     };
 
@@ -88,6 +92,12 @@ const LoginPage = () => {
                                 className="p-4 rounded-lg bg-accent-danger/20 border border-accent-danger/30"
                             >
                                 <p className="text-sm text-accent-danger">{authError}</p>
+                                {recoveryEmail && (
+                                    <Link to="/forgot-password" state={{ signInEmail: recoveryEmail }}
+                                        className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-primary-900 px-4 text-sm font-semibold text-white hover:bg-primary-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-offset-2">
+                                        Recover administrator access
+                                    </Link>
+                                )}
                             </MotionDiv>
                         )}
 
@@ -97,7 +107,7 @@ const LoginPage = () => {
                             placeholder="Enter your email"
                             leftIcon={<Mail className="w-4 h-4" />}
                             error={errors.email?.message}
-                            {...register('email')}
+                            {...register('email', { onChange: () => setRecoveryEmail('') })}
                         />
 
                         <Input

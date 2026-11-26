@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, CheckCircle2, KeyRound, Mail } from 'lucide-react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { requestPasswordRecovery } from '../../../services/authApi';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
 const ForgotPasswordPage = () => {
-    const [email, setEmail] = useState('');
+    const { state } = useLocation();
+    const [email, setEmail] = useState(() => typeof state?.signInEmail === 'string' ? state.signInEmail : '');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [cooldown, setCooldown] = useState(0);
     const [requestSent, setRequestSent] = useState(false);

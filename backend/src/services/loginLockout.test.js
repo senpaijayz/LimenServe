@@ -132,7 +132,7 @@ test('verified recovery can unlock the administrator while the lockout guard blo
   };
 
   await assert.rejects(signInWithAccountLockout(options), (error) => (
-    error.statusCode === 423 && error.message.includes('recovery email')
+    error.statusCode === 423 && error.code === 'ADMIN_RECOVERY_REQUIRED' && error.message.includes('recovery email')
   ));
   assert.equal(signInCalls, 0);
 

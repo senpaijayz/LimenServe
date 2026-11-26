@@ -5,6 +5,9 @@ export async function loginWithPassword({ email, password }) {
     const { data } = await apiClient.post('/auth/login', { email, password });
     return data;
   } catch (error) {
+    if (error.response?.status === 423 && error.response.data?.code === 'ADMIN_RECOVERY_REQUIRED') {
+      throw Object.assign(new Error(error.response.data.error), { code: 'ADMIN_RECOVERY_REQUIRED' });
+    }
     extractApiError(error, 'Unable to sign in. Please try again shortly.');
   }
 }
