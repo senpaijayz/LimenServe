@@ -34,9 +34,9 @@ export async function requestPasswordRecovery(email) {
   }
 }
 
-export async function resetPasswordWithRecoveryCode({ email, code, password }) {
+export async function unlockAdministratorWithRecoveryCode({ email, code }) {
   try {
-    const { data } = await apiClient.post('/auth/recovery/code/reset', { email, code, password });
+    const { data } = await apiClient.post('/auth/recovery/code/unlock', { email, code });
     return data;
   } catch (error) {
     extractApiError(error, 'The code could not be verified. Request a new one and try again.');

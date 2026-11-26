@@ -320,17 +320,12 @@ router.post('/recovery/request', async (req, res) => {
   }
 });
 
-router.post('/recovery/code/reset', async (req, res) => {
+router.post('/recovery/code/unlock', async (req, res) => {
   setNoStore(res);
   const email = normalizeEmail(req.body?.email);
   const code = String(req.body?.code || '').trim();
-  const password = req.body?.password;
   if (!RECOVERY_EMAIL_PATTERN.test(email) || email.length > 254 || !RECOVERY_CODE_PATTERN.test(code)) {
     res.status(400).json({ error: 'Enter your account or recovery email and the code sent to your inbox.' });
-    return;
-  }
-  if (!validateStrongPassword(password)) {
-    res.status(400).json({ error: 'Choose a password with at least 12 characters, including uppercase and lowercase letters, a number, and a symbol.' });
     return;
   }
 
@@ -364,40 +359,21 @@ router.post('/recovery/code/reset', async (req, res) => {
       return res.status(400).json({ error: 'Recovery access changed. Request a new code.' });
     }
 
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(recovery.account_id, { password });
-    if (updateError) {
-      req.log?.warn?.('auth.recovery.admin_code_password_update_rejected', { requestId: req.requestId });
-      res.status(503).json({ error: 'The password could not be changed. Request a new code and try again.' });
-      return;
-    }
     const accountUnlocked = await unlockLogin(recovery.account_id, null, 'verified_recovery_email');
-    const revokeClient = createEphemeralAuthClient();
-    const { data: signIn, error: signInError } = await revokeClient.auth.signInWithPassword({
-      email: recovery.login_email,
-      password,
-    });
-    let refreshSessionsRevoked = false;
-    if (!signInError && signIn?.session) {
-      const { error: signOutError } = await revokeClient.auth.signOut({ scope: 'global' });
-      refreshSessionsRevoked = !signOutError;
-    }
     clearAuthUserCache();
     res.json({
-      passwordUpdated: true,
       accountUnlocked,
-      loginEmail: recovery.login_email,
-      refreshSessionsRevoked,
       message: accountUnlocked
-        ? 'Administrator password changed and sign-in unlocked. Use your existing sign-in email and new password.'
-        : 'Administrator password changed. Use your existing sign-in email and new password.',
+        ? 'Sign-in unlocked. Sign in with your usual email and password.'
+        : 'Sign-in was already unlocked. Use your usual email and password.',
     });
   } catch (error) {
     if (Number.isInteger(error?.statusCode)) {
-      sendRouteError(res, error, 'Password recovery is temporarily unavailable.');
+      sendRouteError(res, error, 'Account unlock is temporarily unavailable.');
       return;
     }
-    req.log?.warn?.('auth.recovery.admin_code_reset_unavailable', { requestId: req.requestId });
-    res.status(503).json({ error: 'Password recovery is temporarily unavailable. Try again shortly.' });
+    req.log?.warn?.('auth.recovery.admin_code_unlock_unavailable', { requestId: req.requestId });
+    res.status(503).json({ error: 'Account unlock is temporarily unavailable. Request a new code and try again.' });
   }
 });
 

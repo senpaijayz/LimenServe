@@ -20,7 +20,7 @@ export function createAccountLockedError(role) {
   return createLoginError(
     423,
     isAdministrator
-      ? 'Administrator sign-in is locked after five incorrect password attempts. Select Recover administrator access, then use the code sent to your verified recovery email to set a new password and unlock sign-in.'
+      ? 'Administrator sign-in is locked after five incorrect password attempts. Select Recover administrator access and use the code sent to your verified recovery email. Your password will not change.'
       : 'Sign-in is locked after five incorrect attempts. Ask an administrator to open User Management and choose Unlock sign-in for your account.',
     isAdministrator ? 'ADMIN_RECOVERY_REQUIRED' : 'ACCOUNT_LOCKED',
   );
