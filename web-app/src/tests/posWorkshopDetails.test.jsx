@@ -31,10 +31,24 @@ it('shows parts and labor but withholds work and billing until missing customer 
   for (const [label, value] of [['Customer name','Test Customer'],['Vehicle make','Mitsubishi'],['Vehicle model','Mirage'],['Plate number','ABC 1234']]) {
     fireEvent.change(screen.getByLabelText(new RegExp(label)), { target: { value } });
   }
-  fireEvent.click(screen.getByRole('button', { name: 'Save intake details' }));
+  const save = screen.getByRole('button', { name: 'Save intake details' });
+  const phone = screen.getByRole('textbox', { name: 'Phone Number' });
+  expect(phone.required).toBe(true);
+  expect(phone.maxLength).toBe(9);
+  fireEvent.click(save);
+  expect(finishPosWorkshopIntake).not.toHaveBeenCalled();
+  fireEvent.paste(phone, { clipboardData: { getData: () => '0917 123 4567' } });
+  expect(phone.value).toBe('171234567');
+  const year = Number(new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', year: 'numeric' }).format(new Date()));
+  const modelYear = screen.getByRole('combobox', { name: 'Vehicle year' });
+  expect([...modelYear.options].slice(1).map((option) => Number(option.value)))
+    .toEqual(Array.from({ length: year - 1900 + 1 }, (_, index) => year - index));
+  fireEvent.change(modelYear, { target: { value: String(year) } });
+  fireEvent.click(save);
   await waitFor(() => expect(screen.getByText('Workshop work controls')).toBeTruthy());
   expect(finishPosWorkshopIntake).toHaveBeenCalledWith('job-1', {
-    customerName: 'Test Customer', vehicleMake: 'Mitsubishi', vehicleModel: 'Mirage', vehiclePlate: 'ABC 1234',
+    customerName: 'Test Customer', customerPhone: '09171234567',
+    vehicleMake: 'Mitsubishi', vehicleModel: 'Mirage', vehiclePlate: 'ABC 1234', vehicleYear: String(year),
   });
   expect(screen.getByText('Install pads')).toBeTruthy();
 });

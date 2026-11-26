@@ -816,6 +816,15 @@ router.post('/:orderId/pos-intake-details', async (req, res, next) => {
       || (body.vehicleYear && !/^\d{4}$/.test(String(body.vehicleYear)))) {
       return res.status(400).json({ error: 'Enter valid intake details or select a saved customer and vehicle.' });
     }
+    if (!body.customerId) {
+      if (typeof body.customerPhone !== 'string' || !/^09\d{9}$/.test(body.customerPhone)) {
+        return res.status(400).json({ error: 'Enter an 11-digit phone number starting with 09.' });
+      }
+      const currentYear = Number(new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', year: 'numeric' }).format(new Date()));
+      if (body.vehicleYear && (Number(body.vehicleYear) < 1900 || Number(body.vehicleYear) > currentYear)) {
+        return res.status(400).json({ error: `Select a vehicle year from 1900 through ${currentYear}.` });
+      }
+    }
     const order = await callRpc('limen_finish_pos_workshop_intake', {
       p_order_id: req.params.orderId, p_actor: req.user.id, p_payload: body,
     });
