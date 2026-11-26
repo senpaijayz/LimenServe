@@ -81,6 +81,26 @@ export async function createServiceOrder(payload) {
   }
 }
 
+export async function sendPosWorkshopOrder(payload) {
+  try {
+    return (await apiClient.post('/service-orders/pos-intake', payload)).data.order;
+  } catch (error) {
+    try { extractApiError(error, 'Unable to send the cart to the workshop.'); }
+    catch (friendly) {
+      friendly.definitive = [400, 403, 409].includes(error?.response?.status);
+      throw friendly;
+    }
+  }
+}
+
+export async function finishPosWorkshopIntake(orderId, payload) {
+  try {
+    return (await apiClient.post(`/service-orders/${encodeURIComponent(orderId)}/pos-intake-details`, payload)).data.order;
+  } catch (error) {
+    extractApiError(error, 'Unable to save the missing workshop details.');
+  }
+}
+
 export async function getServiceIntakeResult(requestId) {
   try {
     return (await apiClient.get(`/service-orders/intake-requests/${encodeURIComponent(requestId)}`)).data;

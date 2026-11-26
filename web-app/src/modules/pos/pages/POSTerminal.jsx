@@ -22,6 +22,7 @@ import SavedPosCustomer from '../components/SavedPosCustomer';
 import {isNonCash,matchesFullPayment} from '../utils/paymentMethods';
 import PaymentOptions from '../components/PaymentOptions';
 import usePosPosting from '../hooks/usePosPosting';
+import usePosWorkshopIntake, { isWorkshopLabor } from '../hooks/usePosWorkshopIntake';
 import PosRequestRecovery from '../components/PosRequestRecovery';
 import UnpaidPosOrders from '../components/UnpaidPosOrders';
 import SaleReceiptPreview from '../components/SaleReceiptPreview.jsx';
@@ -139,7 +140,12 @@ const POSTerminalWorkspace = ({owner}) => {
             setSelectedCustomer(current=>op.payload.customerId?(current?.id===op.payload.customerId?current:{id:op.payload.customerId,name:op.payload.customerName}):null);
         }
     });
-    const cartLocked=posting.busy || Boolean(posting.pending);
+    const workshop = usePosWorkshopIntake(owner, clearSavedCart, (id) => {
+        success('Service order saved. Complete the customer and vehicle details.');
+        navigate(`/services/${encodeURIComponent(id)}`);
+    });
+    const hasWorkshopLabor = items.some(isWorkshopLabor);
+    const cartLocked=posting.busy || Boolean(posting.pending) || workshop.busy || Boolean(workshop.pending);
     const addItem=(...args)=>!cartLocked && addCartItem(...args);
     const removeItem=(...args)=>!cartLocked && removeCartItem(...args);
     const updateQuantity=(...args)=>!cartLocked && updateCartQuantity(...args);
@@ -215,15 +221,10 @@ const POSTerminalWorkspace = ({owner}) => {
         return { found: Boolean(product) };
     };
 
-    const handleAddService = (serviceItem) => {
-        if (cartLocked) return false;
-        addItem(serviceItem, 1);
-        success(`Added ${serviceItem.name} to the sale cart.`);
-    };
-
-    const handleAddServiceToOrder = (serviceItem) => {
-        if (cartLocked || checkingStock || showPaymentModal) return false;
-        navigate('/services/new', { state: { posService: { owner, id: serviceItem.id, name: serviceItem.name, price: serviceItem.price } } });
+    const handleAddService = async (serviceItem) => {
+        if (workshop.pending && !posting.pending) return workshop.retry();
+        if (cartLocked || checkingStock || showPaymentModal || paymentLockRef.current) return false;
+        return workshop.send(items, serviceItem);
     };
 
     // Calculate change
@@ -232,7 +233,7 @@ const POSTerminalWorkspace = ({owner}) => {
     const amountShort = Math.max(0, totals.total - paymentReceived);
     const hasEnoughCash = Math.round((paymentReceived+Number.EPSILON)*100) >= Math.round((totals.total+Number.EPSILON)*100);
     const cashTenderOptions = useMemo(() => buildCashTenderOptions(totals.total), [totals.total]);
-    const canCompletePayment = items.length > 0 && !processingPayment && !posting.pending && !posting.busy
+    const canCompletePayment = items.length > 0 && !hasWorkshopLabor && !cartLocked && !processingPayment
         && (paymentMethod==='cash'?hasEnoughCash&&Number.isFinite(paymentReceived)&&paymentReceived<=1000000000&&paymentVerified:isNonCash(paymentMethod)?paymentVerified&&matchesFullPayment(paidAmount,totals.total,paymentReference):(paymentMethod==='to_follow' && Math.round(totals.total*100)>0 && customerName.trim() && paymentNote.trim() && releaseConfirmed));
     const canGoPrev = (pagination.page ?? currentPage) > 1;
     const canGoNext = (pagination.page ?? currentPage) < (pagination.totalPages ?? 1);
@@ -241,7 +242,11 @@ const POSTerminalWorkspace = ({owner}) => {
     const rangeEnd = pagination.totalCount === 0 ? 0 : Math.min((pagination.page ?? currentPage) * (pagination.pageSize ?? PAGE_SIZE), pagination.totalCount ?? 0);
 
     const openPaymentModal = async () => {
-        if (checkingStock || posting.pending || posting.busy) return;
+        if (checkingStock || cartLocked || hasWorkshopLabor) return;
+        if (!workshop.canCheckOut(items)) {
+            showScanError('This cart changed in another tab or has an unfinished service order request. Reload POS before checkout.');
+            return;
+        }
         setCheckingStock(true);
         try {
             const productIds = [...new Set(items.filter((item) => item.lineType !== 'service' && item.sku !== 'SERVICE').map((item) => item.productId || item.id))];
@@ -280,6 +285,10 @@ const POSTerminalWorkspace = ({owner}) => {
     // Handle payment
     const handlePayment = async () => {
         if (paymentLockRef.current) return;
+        if (hasWorkshopLabor || !workshop.canCheckOut(items)) {
+            setPaymentError('Payment is blocked because this cart is for the workshop or was changed in another tab. Close checkout and reload POS.');
+            return;
+        }
         if (!canCompletePayment) {
             if (items.length === 0) {
                 setPaymentError('Add at least one item before completing the sale.');
@@ -345,8 +354,14 @@ const POSTerminalWorkspace = ({owner}) => {
                 })),
             };
 
-            setShowPaymentModal(false);
-            await posting.submit('checkout',payload);
+            await workshop.withCartLock(async () => {
+                if (!workshop.canCheckOut(items)) {
+                    setPaymentError('The cart changed while checking stock. No payment was posted. Reload POS before continuing.');
+                    return;
+                }
+                setShowPaymentModal(false);
+                await posting.submit('checkout',payload);
+            });
         } catch (error) {
             setPaymentError(error.message || 'Failed to save the sale.');
         } finally {
@@ -377,7 +392,13 @@ const POSTerminalWorkspace = ({owner}) => {
                 </details>}
                 <div className="mb-3 shrink-0"><UnpaidPosOrders refreshKey={unpaidRefresh} onPay={payload=>posting.submit('settlement',payload)} /></div>
                 {posting.error && !posting.pending && <p role="alert" className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{posting.error}</p>}
-                <PosCatalogToolbar search={searchQuery} onSearch={setSearchQuery} sort={sortBy} onSort={value=>{setSortBy(value);setCurrentPage(1);}} stock={stockFilter} onStock={value=>{setStockFilter(value);setCurrentPage(1);}} onScan={()=>setShowCameraScanner(true)} onService={()=>setShowServiceModal(true)} />
+                <PosCatalogToolbar search={searchQuery} onSearch={setSearchQuery} sort={sortBy} onSort={value=>{setSortBy(value);setCurrentPage(1);}} stock={stockFilter} onStock={value=>{setStockFilter(value);setCurrentPage(1);}} onScan={()=>setShowCameraScanner(true)} onService={()=>{if(!cartLocked && !checkingStock)setShowServiceModal(true);}} />
+                {(workshop.pending || workshop.error || hasWorkshopLabor) && !showServiceModal && <div className="my-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                    <p>{workshop.error || (workshop.pending ? 'Confirm the saved workshop request before proceeding. Do not take payment or release these items.' : 'This cart contains labor. Send the parts and labor to a service order instead of taking payment here.')}</p>
+                    {(workshop.pending || hasWorkshopLabor) && <Button className="mt-2" isLoading={workshop.busy} isDisabled={Boolean(posting.pending) || Boolean(workshop.pending?.blocked)} onClick={() => workshop.pending ? workshop.retry() : workshop.send(items)}>
+                        {workshop.pending ? 'Retry the same workshop request' : 'Send cart to workshop'}
+                    </Button>}
+                </div>}
 
                 {/* Responsive product display */}
                 {catalogLoading ? (
@@ -484,13 +505,13 @@ const POSTerminalWorkspace = ({owner}) => {
                     <PosCartLines items={items} onQuantity={updateQuantity} onRemove={removeItem} locked={cartLocked} />
                 </div>
 
-                <PosSaleSummary totals={totals} discount={discountPercent} onDiscount={setDiscountPercent} onPayment={openPaymentModal} disabled={items.length===0 || checkingStock || cartLocked} locked={cartLocked} checking={checkingStock} />
+                <PosSaleSummary totals={totals} discount={discountPercent} onDiscount={setDiscountPercent} onPayment={openPaymentModal} disabled={items.length===0 || checkingStock || cartLocked || hasWorkshopLabor} locked={cartLocked} checking={checkingStock} />
             </div>
 
             <nav aria-label="POS controls" className="fixed inset-x-3 bottom-3 z-30 grid grid-cols-[1fr_2fr] gap-2 rounded-2xl border border-primary-300 bg-white p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-lg lg:hidden print:hidden">
                 <button type="button" aria-controls="pos-products-pane" aria-pressed={!mobileCartOpen} onClick={()=>showMobilePane(false)} className={`min-h-14 rounded-xl border px-3 py-2 text-sm font-bold ${!mobileCartOpen?'border-blue-800 bg-blue-800 text-white':'border-primary-300 bg-white text-primary-950'}`}>Parts</button>
                 {mobileCartOpen
-                    ? <button type="button" disabled={items.length===0 || checkingStock || cartLocked} onClick={openPaymentModal} className="min-h-14 rounded-xl border border-blue-800 bg-blue-800 px-3 py-2 text-white disabled:cursor-not-allowed disabled:border-primary-300 disabled:bg-primary-100 disabled:text-primary-700"><span className="block text-xs font-semibold">{checkingStock?'Checking stock…':'Review payment'}</span><span className="block break-all text-sm font-bold tabular-nums">{formatCurrency(totals.total)}</span></button>
+                    ? <button type="button" disabled={items.length===0 || checkingStock || cartLocked || hasWorkshopLabor} onClick={openPaymentModal} className="min-h-14 rounded-xl border border-blue-800 bg-blue-800 px-3 py-2 text-white disabled:cursor-not-allowed disabled:border-primary-300 disabled:bg-primary-100 disabled:text-primary-700"><span className="block text-xs font-semibold">{checkingStock?'Checking stock…':'Review payment'}</span><span className="block break-all text-sm font-bold tabular-nums">{formatCurrency(totals.total)}</span></button>
                     : <button type="button" aria-controls="pos-current-sale-pane" onClick={()=>showMobilePane(true)} className="min-h-14 rounded-xl border border-primary-300 bg-white px-3 py-2 text-primary-950"><span className="block text-xs font-semibold">Current sale · {totals.itemCount}</span><span className="block break-all text-sm font-bold tabular-nums">{formatCurrency(totals.total)}</span></button>}
             </nav>
             </>}
@@ -711,7 +732,9 @@ const POSTerminalWorkspace = ({owner}) => {
                 isOpen={showServiceModal}
                 onClose={() => setShowServiceModal(false)}
                 onAddService={handleAddService}
-                onAddToServiceOrder={handleAddServiceToOrder}
+                busy={workshop.busy}
+                problem={workshop.error}
+                partCount={items.filter((item) => !isWorkshopLabor(item)).length}
             />
         </div>
     );

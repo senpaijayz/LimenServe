@@ -110,11 +110,15 @@ async function loadLatestAssignments(orderIds = []) {
 
 async function enrichOrdersWithAssignments(orders = []) {
   const orderIds = [...new Set(orders.map((order) => order?.id).filter(Boolean))];
-  const { data: metadata, error: metadataError } = orderIds.length
+  let { data: metadata, error: metadataError } = orderIds.length
     ? await supabaseAdmin.schema('operations').from('service_orders')
-      .select('id, priority, payment_status, payment_method')
+      .select('id, priority, payment_status, payment_method, pos_intake_pending')
       .in('id', orderIds)
     : { data: [], error: null };
+  if (metadataError?.code === '42703') {
+    ({ data: metadata, error: metadataError } = await supabaseAdmin.schema('operations').from('service_orders')
+      .select('id, priority, payment_status, payment_method').in('id', orderIds));
+  }
   if (metadataError?.code === '42703') {
     const { data: legacyRows, error: legacyError } = orderIds.length
       ? await supabaseAdmin.schema('operations').from('service_orders').select('id').in('id', orderIds)
@@ -153,6 +157,7 @@ async function enrichOrdersWithAssignmentsUsingMetadata(orders, metadataById) {
     const orderMetadata = metadataById.get(order?.id) ?? {};
     return {
       ...order,
+      posIntakePending: orderMetadata.pos_intake_pending === true,
       workStage: workById.get(order.id) || null,
       pauseReason: pauseReasons.get(order.id)?.note || null,
       pauseAt: pauseReasons.get(order.id)?.occurred_at || null,
@@ -265,7 +270,11 @@ function normalizeServiceOrderError(error) {
   }
 
   if (error?.code === '42501') error.statusCode = 403;
-  if (error?.code === 'P0002') error.statusCode = 404;
+  if (['P0002', 'PT404'].includes(error?.code)) error.statusCode = 404;
+  if (error?.code === '23514' && message.includes('service_orders_pos_intake_gate')) {
+    error.statusCode = 409;
+    error.message = 'Complete the customer and vehicle details before starting or scheduling the job.';
+  }
   if (error?.code === '22023') error.statusCode = 400;
   if (error?.code === 'PT409') error.statusCode = 409;
   if (error?.code === '23P01') error.statusCode = 409;
@@ -421,6 +430,9 @@ async function completeServiceOrder(orderId, operatorId, paymentDetails = {}) {
     const error = new Error('Service order not found.');
     error.statusCode = 404;
     throw error;
+  }
+  if (currentOrder.posIntakePending) {
+    throw Object.assign(new Error('Complete the customer and vehicle details before billing or releasing this order.'), { statusCode: 409 });
   }
 
   const posted = await callRpc('limen_finalize_service_order', {
@@ -775,6 +787,40 @@ router.delete('/:orderId/assignment', requireRole('admin'), async (req, res, nex
   } catch (error) {
     next(normalizeAssignmentError(error));
   }
+});
+
+const intakeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+router.post('/pos-intake', async (req, res, next) => {
+  try {
+    const { intakeRequestId, items } = req.body ?? {};
+    if (!intakeUuid.test(String(intakeRequestId || '')) || !Array.isArray(items) || !items.length || items.length > 50
+      || items.some((item) => !item || !Number.isInteger(item.quantity) || !Number.isFinite(item.unitPrice)
+        || (item.lineType === 'product' ? !intakeUuid.test(String(item.productId || ''))
+          : item.lineType !== 'service' || typeof item.itemName !== 'string' || item.itemName.length > 250))) {
+      return res.status(400).json({ error: 'Send valid parts and labor with a workshop request reference.' });
+    }
+    const order = await callRpc('limen_create_pos_workshop_order', {
+      p_payload: { items }, p_actor: req.user.id, p_request_id: intakeRequestId,
+    });
+    res.status(201).json({ order });
+  } catch (error) { next(normalizeServiceOrderError(error)); }
+});
+
+router.post('/:orderId/pos-intake-details', async (req, res, next) => {
+  try {
+    const body = req.body ?? {};
+    if (!intakeUuid.test(req.params.orderId)
+      || ((body.customerId || body.vehicleId) && (!intakeUuid.test(String(body.customerId || ''))
+        || !intakeUuid.test(String(body.vehicleId || '')) || !/^[a-f0-9]{32}$/.test(String(body.identityVersion || ''))))
+      || (body.vehicleYear && !/^\d{4}$/.test(String(body.vehicleYear)))) {
+      return res.status(400).json({ error: 'Enter valid intake details or select a saved customer and vehicle.' });
+    }
+    const order = await callRpc('limen_finish_pos_workshop_intake', {
+      p_order_id: req.params.orderId, p_actor: req.user.id, p_payload: body,
+    });
+    res.json({ order });
+  } catch (error) { next(normalizeServiceOrderError(error)); }
 });
 
 router.post('/', async (req, res, next) => {

@@ -106,7 +106,7 @@ const ServiceOrderList = () => {
                 <div className="flex items-start justify-between mb-4">
                     <div>
                         <p className="font-mono text-xs tracking-widest text-primary-500 mb-1">{order.orderNumber || order.id}</p>
-                        <h3 className="font-display font-semibold text-lg text-primary-950 group-hover:text-red-600 transition-colors">{order.customerName}</h3>
+                        <h3 className="font-display font-semibold text-lg text-primary-950 group-hover:text-red-600 transition-colors">{order.posIntakePending ? 'POS workshop intake' : order.customerName}</h3>
                     </div>
                     <div className="flex flex-col items-end gap-2"><ServiceStageBadge order={order} /><PriorityBadge priority={order.priority} />{overdue && <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-800">Overdue</span>}</div>
                 </div>

@@ -320,6 +320,11 @@ router.post('/sales',requireRole('admin','cashier'),async(req,res,next)=>{
     const payload={...buildSalePayload(req.body),...(Object.hasOwn(req.body,'customerId')?{customerId:req.body.customerId}:{})};
     validateSalePayload(payload);
     validatePosCheckout(payload,req.body.requestId);
+    if (payload.items.some((item) => item.lineType === 'service')) {
+      const existing = await callRpc('recover_pos_order', {p_actor:req.user.id,p_request:posRequestId(req.body.requestId)});
+      if (existing) return res.status(201).json(await withPosDetail(existing));
+      return res.status(409).json({error:'Labor and its parts must go to a service order. Refresh POS, then send the cart to the workshop.'});
+    }
     const result=await callRpc('checkout_pos_order',{payload,p_actor:req.user.id,p_request:posRequestId(req.body.requestId)});
     res.status(201).json(await withPosDetail(result));
   }catch(error){next(normalizePosError(error));}

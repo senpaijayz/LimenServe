@@ -11,6 +11,7 @@ export function getServiceOperationalStage(order, work) {
   const stage = work?.state?.stage ?? order?.workStage;
   const result = (label, nextAction, tone = 'blue') => ({ label, nextAction, tone });
   if (order?.status === 'cancelled' || stage === 'cancelled') return result('Cancelled', 'Review job history', 'slate');
+  if (order?.posIntakePending) return result('POS intake · details needed', 'Complete the customer and vehicle details before starting work', 'amber');
   if (order?.status === 'completed' || stage === 'released') {
     if (payment !== 'paid') return result('Completed · payment needs review', 'Check the payment record; do not assume this job was paid.', 'amber');
     return result('Completed / released', 'View the posted receipt and job history', 'green');

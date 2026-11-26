@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import POSTerminal from '../modules/pos/pages/POSTerminal';
 import { CartProvider } from '../context/CartContext';
 import { STORAGE_KEYS } from '../utils/constants';
-const api = vi.hoisted(() => ({ error:vi.fn(),success:vi.fn(),prices:vi.fn(),sale:vi.fn(),products:[],totalPages:1,fetchingPages:new Set() }));
+const api = vi.hoisted(() => ({ error:vi.fn(),success:vi.fn(),prices:vi.fn(),sale:vi.fn(),workshop:vi.fn(),recover:vi.fn(),products:[],totalPages:1,fetchingPages:new Set() }));
 vi.mock('../hooks/useProductCatalog', () => ({ default:({page=1}={}) => ({products:api.products,pagination:{page:api.responsePage ?? page,totalPages:api.totalPages,totalCount:api.totalPages*14,pageSize:14},loading:false,isFetching:api.fetchingPages.has(page)}) }));
 vi.mock('../context/useAuth', () => ({ useAuth:() => ({user:{id:'staff-test',role:'cashier'}}) }));
 vi.mock('../hooks/useBarcodeScanner', () => ({default:vi.fn()}));
@@ -12,6 +12,7 @@ vi.mock('../store/useDataStore', () => ({default:() => ({findProduct:vi.fn()})})
 vi.mock('../components/ui/Toast', () => ({useToast:() => ({error:api.error,success:api.success})}));
 vi.mock('../services/catalogApi', () => ({getCurrentRetailPrices:api.prices}));
 vi.mock('../services/posApi', () => ({createPosSale:api.sale}));
+vi.mock('../services/serviceOrdersApi', () => ({sendPosWorkshopOrder:api.workshop,getServiceIntakeResult:api.recover}));
 vi.mock('../components/ui/BarcodeDisplay', () => ({default:() => null}));
 vi.mock('../components/ui/LargeBarcodeModal', () => ({default:() => null}));
 vi.mock('../components/ui/CameraScannerModal', () => ({default:() => null}));
@@ -19,23 +20,44 @@ vi.mock('../modules/inventory/components/ProductPriceHistory', () => ({default:(
 vi.mock('../modules/pos/components/SaleReceiptPreview.jsx', () => ({default:() => null}));
 const part = {id:'p',name:'Thermostat',sku:'PART',price:100,stock:0,availableStock:0};
 function CurrentLocation() {
- const { pathname, state } = useLocation();
- return <output aria-label="Test route">{pathname} {state?.posService?.name}</output>;
+ const { pathname } = useLocation();
+ return <output aria-label="Test route">{pathname}</output>;
 }
 const mount = () => render(<MemoryRouter><CartProvider><POSTerminal /><CurrentLocation /></CartProvider></MemoryRouter>);
 beforeEach(() => {vi.clearAllMocks();window.localStorage.clear();api.products=[part];api.totalPages=1;api.responsePage=undefined;api.fetchingPages=new Set();api.prices.mockResolvedValue([{productId:'p',price:100,available:true,availableStock:0}]);});
 afterEach(cleanup);
-it.each([
- ['Add to service order', '/services/new Brake cleaning', false],
- ['Add to sale', '/', true],
-])('routes custom labor correctly when choosing %s', (action, path, goesToCart) => {
- mount();
+const openWorkshop = () => {
  fireEvent.click(screen.getByRole('button', { name: 'Add service' }));
  fireEvent.change(screen.getByPlaceholderText('e.g., Change Oil Labor, Installation'), { target: { value: 'Brake cleaning' } });
  fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '420.25' } });
- fireEvent.click(screen.getByRole('button', { name: action }));
- expect(screen.getByLabelText('Test route').textContent.trim()).toBe(path);
- expect(Boolean(screen.queryByRole('list', { name: 'Items in current sale' }))).toBe(goesToCart);
+};
+it('creates one workshop order with the cart parts and labor, clearing the cart without payment', async () => {
+ api.products=[{...part,stock:2,availableStock:2}];
+ api.workshop.mockResolvedValueOnce({id:'job-1'});
+ mount();
+ fireEvent.click(screen.getByRole('button',{name:/PART.*Thermostat/}));
+ openWorkshop();
+ fireEvent.click(screen.getByRole('button', { name: 'Create service order' }));
+ await waitFor(() => expect(screen.getByLabelText('Test route').textContent.trim()).toBe('/services/job-1'));
+ expect(api.workshop).toHaveBeenCalledWith({intakeRequestId:expect.any(String),items:[
+  {lineType:'product',productId:'p',quantity:1,unitPrice:100},
+  {lineType:'service',itemName:'Brake cleaning',quantity:1,unitPrice:420.25},
+ ]});
+ expect(screen.queryByRole('list', { name: 'Items in current sale' })).toBeNull();
+ expect(api.sale).not.toHaveBeenCalled();
+});
+it('locks POS checkout after an uncertain handoff and retries with exactly the same request', async () => {
+ api.workshop.mockRejectedValueOnce(new Error('Connection lost')).mockResolvedValueOnce({id:'job-2'});
+ api.recover.mockResolvedValueOnce({orderId:null});
+ mount();
+ openWorkshop();
+ fireEvent.click(screen.getByRole('button', { name: 'Create service order' }));
+ await waitFor(() => expect(screen.getByText('Connection lost')).toBeTruthy());
+ fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+ expect(screen.getByRole('button', { name: 'Review payment' }).disabled).toBe(true);
+ fireEvent.click(screen.getByRole('button', { name: 'Retry the same workshop request' }));
+ await waitFor(() => expect(screen.getByLabelText('Test route').textContent.trim()).toBe('/services/job-2'));
+ expect(api.workshop.mock.calls[1][0]).toEqual(api.workshop.mock.calls[0][0]);
  expect(api.sale).not.toHaveBeenCalled();
 });
 it('always shows the compact product layout without a size selector', () => {
