@@ -15,7 +15,7 @@ import CameraScannerModal from '../../../components/ui/CameraScannerModal';
 import LargeBarcodeModal from '../../../components/ui/LargeBarcodeModal';
 import AddServiceModal from '../../../components/ui/AddServiceModal';
 import { useAuth } from '../../../context/useAuth';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import QuotePosCheckout from '../components/QuotePosCheckout';
 import ManualNonCashFields from '../components/ManualNonCashFields';
 import SavedPosCustomer from '../components/SavedPosCustomer';
@@ -83,6 +83,7 @@ function formatCatalogProduct(product) {
  * Point of Sale interface for processing transactions
  */
 const POSTerminalWorkspace = ({owner}) => {
+    const navigate = useNavigate();
     const [searchParams,setSearchParams]=useSearchParams();
     const sourceEstimate=searchParams.get('estimateId');
     const {
@@ -215,9 +216,14 @@ const POSTerminalWorkspace = ({owner}) => {
     };
 
     const handleAddService = (serviceItem) => {
-        if (cartLocked) return;
+        if (cartLocked) return false;
         addItem(serviceItem, 1);
-        success(`Added service: ${serviceItem.name}`);
+        success(`Added ${serviceItem.name} to the sale cart.`);
+    };
+
+    const handleAddServiceToOrder = (serviceItem) => {
+        if (cartLocked || checkingStock || showPaymentModal) return false;
+        navigate('/services/new', { state: { posService: { owner, id: serviceItem.id, name: serviceItem.name, price: serviceItem.price } } });
     };
 
     // Calculate change
@@ -705,6 +711,7 @@ const POSTerminalWorkspace = ({owner}) => {
                 isOpen={showServiceModal}
                 onClose={() => setShowServiceModal(false)}
                 onAddService={handleAddService}
+                onAddToServiceOrder={handleAddServiceToOrder}
             />
         </div>
     );

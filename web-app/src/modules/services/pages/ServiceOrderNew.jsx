@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { createServiceOrder, getServiceScheduleSlots, getServiceIntakeResult } from '../../../services/serviceOrdersApi';
 import { getServiceIntakeContext } from '../../../services/customerHistoryApi';
 import SavedCustomerIntake from '../components/SavedCustomerIntake';
@@ -14,7 +14,7 @@ import { PartSearch } from '../components/ServiceOrderModals';
 import Modal from '../../../components/ui/Modal';
 
 const DRAFT_KEY_PREFIX = 'limen-service-intake-draft-v2';
-const initial = { customerId: '', vehicleId: '', identityVersion: '', customerName: '', customerPhone: '', vehicleMake: 'Mitsubishi', vehicleModel: '', vehicleYear: '', vehiclePlate: '', description: '', laborEstimate: '', priority: 'normal', mechanicId: '', date: '', duration: 60, slotStart: '', slotEnd: '', parts: [] };
+const initial = { customerId: '', vehicleId: '', identityVersion: '', customerName: '', customerPhone: '', vehicleMake: 'Mitsubishi', vehicleModel: '', vehicleYear: '', vehiclePlate: '', description: '', laborEstimate: '', priority: 'normal', mechanicId: '', date: '', duration: 60, slotStart: '', slotEnd: '', parts: [], posLabor: [] };
 const steps = ['Customer & vehicle', 'Requested work', 'Schedule', 'Review'];
 const manilaToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const timeLabel = (value) => new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
@@ -37,6 +37,8 @@ export default function ServiceOrderNew() {
 
 function ServiceIntake({ user }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const posService = location.state?.posService;
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   const draftKey = `${DRAFT_KEY_PREFIX}:${user?.id || 'unavailable'}`;
@@ -46,6 +48,7 @@ function ServiceIntake({ user }) {
       const loaded = { ...initial, ...JSON.parse(localStorage.getItem(draftKey) || '{}') };
       for (const [key, value] of Object.entries(initial)) if (typeof value === 'string') loaded[key] = String(loaded[key] ?? value);
       if (!Array.isArray(loaded.parts)) loaded.parts = [];
+      if (!Array.isArray(loaded.posLabor)) loaded.posLabor = [];
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(loaded.intakeRequestId || '')) loaded.intakeRequestId = crypto.randomUUID();
       return loaded;
     }
@@ -70,6 +73,10 @@ function ServiceIntake({ user }) {
   const mounted = useRef(true);
   const creating = useRef(false);
   const canProceed = !saving && !checkingIdentity && !checkingRecovery && !recoveryError && !recoveredOrder;
+  const pendingPosService = user?.id && posService?.owner === user.id
+    && typeof posService.id === 'string' && typeof posService.name === 'string' && posService.name.trim()
+    && Number.isFinite(posService.price) && posService.price >= 0.01 && posService.price <= 100000000
+    && !form.posLabor.some((item) => item.draftId === posService.id) ? posService : null;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const set = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -110,7 +117,8 @@ function ServiceIntake({ user }) {
   const errorId = (name) => `${name}-error`;
   const partsTotal = useMemo(() => form.parts.reduce((sum, part) => sum + Number(part.lineTotal || 0), 0), [form.parts]);
   const labor = Math.max(Number(form.laborEstimate) || 0, 0);
-  const total = Math.round((labor + partsTotal) * 100) / 100;
+  const posLaborTotal = form.posLabor.reduce((sum, item) => sum + Math.round(item.unitPrice * 100), 0) / 100;
+  const total = Math.round((labor + partsTotal + posLaborTotal) * 100) / 100;
 
   useEffect(() => {
     const timer = window.setTimeout(() => { if (committed.current) return; try { localStorage.setItem(draftKey, JSON.stringify(form)); } catch { /* Saving is checked again before any creation request. */ } }, 250);
@@ -132,7 +140,7 @@ function ServiceIntake({ user }) {
     setPickerOpen(false); setError(''); setFieldErrors({}); setShowFieldErrors(false);
     // A handoff is only a suggestion. Once accepted, the saved draft is the
     // source for reopening; an old link must not re-suggest a different pair.
-    setParams((current) => { const next = new URLSearchParams(current); next.delete('customer'); next.delete('vehicle'); return next; }, { replace: true });
+    setParams((current) => { const next = new URLSearchParams(current); next.delete('customer'); next.delete('vehicle'); return next; }, { replace: true, state: location.state });
   };
   const openCreatedJob = (orderId, clearMatchingDraft = true) => {
     if (!mounted.current) return;
@@ -141,6 +149,26 @@ function ServiceIntake({ user }) {
       if (clearMatchingDraft && localStorage.getItem(draftKey) === JSON.stringify(form)) localStorage.removeItem(draftKey);
     } catch { /* Preserve an unverified/newer draft; its reference recovers the same job. */ }
     navigate(`/services/${orderId}`);
+  };
+  const clearPosHandoff = () => {
+    const state = { ...location.state };
+    delete state.posService;
+    navigate({ pathname: location.pathname, search: location.search }, { replace: true, state });
+  };
+  const addPosLabor = () => {
+    if (!canProceed || !pendingPosService) return;
+    const name = pendingPosService.name.trim().slice(0, 250);
+    const price = pendingPosService.price;
+    const updated = {
+      ...form,
+      description: form.description.trim() ? form.description : name,
+      posLabor: [...form.posLabor, { draftId: pendingPosService.id, lineType: 'service', itemSku: 'LABOR', displayName: name, itemName: name, quantity: 1, unitPrice: price, lineTotal: price }],
+    };
+    try { localStorage.setItem(draftKey, JSON.stringify(updated)); }
+    catch { setError('Could not save this service to the browser draft. No order has been created.'); return; }
+    setForm(updated);
+    setError('');
+    clearPosHandoff();
   };
   const startFreshIntake = () => {
     const fresh = { ...initial, intakeRequestId: crypto.randomUUID() };
@@ -168,7 +196,7 @@ function ServiceIntake({ user }) {
   }, [form.date, form.duration, form.mechanicId]);
 
   const next = async () => {
-    if (!canProceed) return;
+    if (!canProceed || pendingPosService) return;
     setError('');
     const nextErrors = validateStep(step);
     setShowFieldErrors(true);
@@ -190,7 +218,7 @@ function ServiceIntake({ user }) {
   };
 
   const create = async () => {
-    if (creating.current || !canProceed) return;
+    if (creating.current || !canProceed || pendingPosService) return;
     creating.current = true;
     setSaving(true); setError('');
     try {
@@ -205,6 +233,7 @@ function ServiceIntake({ user }) {
         description: form.description.trim(), estimatedCost: total, priority: form.priority, status: 'pending',
         items: [
           ...form.parts,
+          ...form.posLabor.map(({ lineType, itemSku, displayName, itemName, quantity, unitPrice, lineTotal }) => ({ lineType, itemSku, displayName, itemName, quantity, unitPrice, lineTotal })),
           ...(labor > 0 ? [{ lineType: 'service', displayName: form.description.trim().slice(0, 120), itemName: form.description.trim().slice(0, 120), itemSku: 'LABOR', quantity: 1, unitPrice: labor, lineTotal: labor }] : []),
         ],
       };
@@ -235,6 +264,15 @@ function ServiceIntake({ user }) {
       {recoveryError && <div role="alert" className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">{recoveryError}<button type="button" className="btn mt-2 border border-amber-500" disabled={checkingRecovery} onClick={() => setRecoveryReload((value) => value + 1)}>Check submission again</button></div>}
       {recoveredOrder && <div role="status" className="mb-4 rounded-xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-950">This draft reference already has a saved job. Opening it keeps this browser draft, including any later changes.<div className="mt-2 flex flex-wrap gap-2"><button type="button" className="btn border border-blue-800 bg-blue-800 text-white" onClick={() => openCreatedJob(recoveredOrder, false)}>Open created job</button><button type="button" className="btn border border-blue-300" onClick={() => setDiscardPrompt(true)}>Start a fresh intake</button></div></div>}
       {error && <p role="alert" className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+      {pendingPosService && <section aria-label="Service from POS" className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+        <h2 className="font-semibold">Service from POS</h2>
+        <p className="mt-1 break-words">{pendingPosService.name} · {formatCurrency(pendingPosService.price)}</p>
+        <p className="mt-1">Add this labor estimate to the draft below. Check the customer and vehicle before creating the order. No sale or payment is posted.</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" className="btn bg-blue-700 text-white" disabled={!canProceed} onClick={addPosLabor}>Add to this draft</button>
+          <button type="button" className="btn border border-blue-200" onClick={clearPosHandoff}>Continue without this service</button>
+        </div>
+      </section>}
       <fieldset disabled={!canProceed} className="min-w-0">
       {step === 0 && <div className="mb-5 space-y-3">
         {params.get('customer') && form.customerName && <p className="text-sm text-primary-700">Your existing intake draft is unchanged. Use selection below only if you want to replace its customer and vehicle details.</p>}
@@ -254,7 +292,8 @@ function ServiceIntake({ user }) {
       </div>}
       {step === 1 && <div className="space-y-5">
         <label className="block text-sm font-semibold text-primary-700">Reported concern and requested work <span className={requiredFieldClass} aria-hidden="true">*</span><textarea aria-describedby={fieldError('description') ? errorId('description') : undefined} aria-invalid={Boolean(fieldError('description'))} className={`${fieldClass} min-h-28`} value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Describe the requested service" />{fieldError('description') && <p id={errorId('description')} className="mt-1 text-xs font-medium text-red-600">{fieldError('description')}</p>}</label>
-        <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold text-primary-700">Estimated labor (₱)<input aria-describedby={fieldError('laborEstimate') ? errorId('laborEstimate') : undefined} aria-invalid={Boolean(fieldError('laborEstimate'))} className={fieldClass} type="number" min="0" step="0.01" placeholder="e.g., 1500.00" value={form.laborEstimate} onChange={(e) => set('laborEstimate', e.target.value)} />{fieldError('laborEstimate') && <p id={errorId('laborEstimate')} className="mt-1 text-xs font-medium text-red-600">{fieldError('laborEstimate')}</p>}</label><label className="text-sm font-semibold text-primary-700">Priority<select className={fieldClass} value={form.priority} onChange={(e) => set('priority', e.target.value)}>{['low','normal','high','urgent'].map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div>
+        <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold text-primary-700">{form.posLabor.length ? 'Additional estimated labor (₱)' : 'Estimated labor (₱)'}<input aria-describedby={fieldError('laborEstimate') ? errorId('laborEstimate') : undefined} aria-invalid={Boolean(fieldError('laborEstimate'))} className={fieldClass} type="number" min="0" step="0.01" placeholder="e.g., 1500.00" value={form.laborEstimate} onChange={(e) => set('laborEstimate', e.target.value)} />{fieldError('laborEstimate') && <p id={errorId('laborEstimate')} className="mt-1 text-xs font-medium text-red-600">{fieldError('laborEstimate')}</p>}</label><label className="text-sm font-semibold text-primary-700">Priority<select className={fieldClass} value={form.priority} onChange={(e) => set('priority', e.target.value)}>{['low','normal','high','urgent'].map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div>
+        <PosLaborEstimate items={form.posLabor} onRemove={(id) => set('posLabor', form.posLabor.filter((item) => item.draftId !== id))} />
         <div className="rounded-xl border border-primary-200 p-4"><h2 className="mb-3 font-semibold text-primary-950">Estimated parts (optional)</h2><p className="mb-3 text-xs text-primary-600">Estimates do not remove inventory. Record actual parts after the repair.</p><PartSearch onAdd={(part) => set('parts', [...form.parts, { ...part, draftId: crypto.randomUUID() }])} />{form.parts.map((part) => <div key={part.draftId} className="mt-2 flex items-center justify-between gap-2 border-t border-primary-100 pt-2 text-sm"><span className="min-w-0 truncate">{part.itemSku} · {part.itemName} · {part.quantity} × {formatCurrency(part.unitPrice)}</span><button type="button" aria-label={`Remove ${part.itemName}`} onClick={() => set('parts', form.parts.filter((item) => item.draftId !== part.draftId))}><Trash2 className="h-4 w-4 text-red-600" /></button></div>)}</div>
         <p className="text-right text-sm font-bold text-primary-950">Estimated total: {formatCurrency(total)}</p>
       </div>}
@@ -270,10 +309,25 @@ function ServiceIntake({ user }) {
         {scheduleError && <p id={errorId('slotStart')} role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{scheduleError}</p>}
         {form.mechanicId && form.date && !loadingSlots && !slots.some((slot) => slot.available) && <p className="text-sm text-primary-700">No available schedule remains for this day. Choose another date.</p>}
       </> : <p className="rounded-lg bg-primary-50 p-3 text-sm text-primary-700">An administrator can assign the mechanic after this order is created.</p>}</div>}
-      {step === 3 && <div className="space-y-4 text-sm"><h2 className="text-lg font-semibold text-primary-950">Review before creating</h2><div className="grid gap-3 sm:grid-cols-2"><p><span className="text-primary-500">Customer</span><br /><strong>{form.customerName}</strong> · {form.customerPhone || 'No phone'}</p><p><span className="text-primary-500">Vehicle</span><br /><strong>{[form.vehicleYear,form.vehicleMake,form.vehicleModel,form.vehiclePlate].filter(Boolean).join(' ')}</strong></p><p className="sm:col-span-2"><span className="text-primary-500">Requested work</span><br />{form.description}</p><p><span className="text-primary-500">Priority</span><br /><strong className="capitalize">{form.priority}</strong></p><p><span className="text-primary-500">Appointment</span><br /><strong>{form.slotStart ? `${form.date}, ${timeLabel(form.slotStart)}–${timeLabel(form.slotEnd)}` : 'Assign later'}</strong></p></div>{form.parts.length > 0 && <div className="rounded-xl border border-primary-200 p-4"><h3 className="font-semibold text-primary-950">Estimated parts</h3>{form.parts.map((part) => <p key={part.draftId} className="mt-2 text-primary-700"><strong>{part.itemSku}</strong> ({part.itemName}) · {part.quantity} × {formatCurrency(part.unitPrice)}</p>)}</div>}{labor > 0 && <p className="text-primary-700">Estimated labor: <strong>{formatCurrency(labor)}</strong></p>}<div className="rounded-xl bg-primary-950 p-4 text-white"><span>Estimated only — no stock is deducted</span><strong className="float-right">{formatCurrency(total)}</strong></div></div>}
+      {step === 3 && <div className="space-y-4 text-sm"><h2 className="text-lg font-semibold text-primary-950">Review before creating</h2><div className="grid gap-3 sm:grid-cols-2"><p><span className="text-primary-500">Customer</span><br /><strong>{form.customerName}</strong> · {form.customerPhone || 'No phone'}</p><p><span className="text-primary-500">Vehicle</span><br /><strong>{[form.vehicleYear,form.vehicleMake,form.vehicleModel,form.vehiclePlate].filter(Boolean).join(' ')}</strong></p><p className="sm:col-span-2"><span className="text-primary-500">Requested work</span><br />{form.description}</p><p><span className="text-primary-500">Priority</span><br /><strong className="capitalize">{form.priority}</strong></p><p><span className="text-primary-500">Appointment</span><br /><strong>{form.slotStart ? `${form.date}, ${timeLabel(form.slotStart)}–${timeLabel(form.slotEnd)}` : 'Assign later'}</strong></p></div>{form.parts.length > 0 && <div className="rounded-xl border border-primary-200 p-4"><h3 className="font-semibold text-primary-950">Estimated parts</h3>{form.parts.map((part) => <p key={part.draftId} className="mt-2 text-primary-700"><strong>{part.itemSku}</strong> ({part.itemName}) · {part.quantity} × {formatCurrency(part.unitPrice)}</p>)}</div>}<PosLaborEstimate items={form.posLabor} />{labor > 0 && <p className="text-primary-700">{form.posLabor.length ? 'Additional estimated labor' : 'Estimated labor'}: <strong>{formatCurrency(labor)}</strong></p>}<div className="rounded-xl bg-primary-950 p-4 text-white"><span>Estimated only — no stock is deducted</span><strong className="float-right">{formatCurrency(total)}</strong></div></div>}
       </fieldset>
     </main>
-    <div className="sticky bottom-2 flex justify-between gap-3 rounded-xl border border-primary-200 bg-white/95 p-3 shadow-lg backdrop-blur"><button type="button" className="btn" disabled={saving || checkingIdentity} onClick={() => step ? setStep(step - 1) : navigate('/services')}><ArrowLeft className="h-4 w-4" /> Back</button>{step < 3 ? <button type="button" className="btn bg-blue-700 text-white" disabled={!canProceed} onClick={next}>Continue <ArrowRight className="h-4 w-4" /></button> : <button type="button" className="btn bg-blue-700 text-white" disabled={!canProceed} onClick={create}><Plus className="h-4 w-4" /> {saving ? 'Creating…' : 'Create service order'}</button>}</div>
+    <div className="sticky bottom-2 flex justify-between gap-3 rounded-xl border border-primary-200 bg-white/95 p-3 shadow-lg backdrop-blur"><button type="button" className="btn" disabled={saving || checkingIdentity} onClick={() => step ? setStep(step - 1) : navigate('/services')}><ArrowLeft className="h-4 w-4" /> Back</button>{step < 3 ? <button type="button" className="btn bg-blue-700 text-white" disabled={!canProceed || Boolean(pendingPosService)} onClick={next}>Continue <ArrowRight className="h-4 w-4" /></button> : <button type="button" className="btn bg-blue-700 text-white" disabled={!canProceed || Boolean(pendingPosService)} onClick={create}><Plus className="h-4 w-4" /> {saving ? 'Creating…' : 'Create service order'}</button>}</div>
     <Modal isOpen={discardPrompt} onClose={() => setDiscardPrompt(false)} title="Start a fresh intake?" size="sm"><p className="text-sm text-primary-800">The saved service order stays in the system. This clears the browser draft, including any later changes that are not in that job. Copy any unsaved work before continuing.</p><div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" className="btn border border-primary-300" onClick={() => setDiscardPrompt(false)}>Keep draft</button><button type="button" className="btn border border-red-700 bg-red-700 text-white" onClick={startFreshIntake}>Discard draft and start fresh</button></div></Modal>
   </div>;
+}
+
+function PosLaborEstimate({ items, onRemove }) {
+  if (!items.length) return null;
+  return <section className="rounded-xl border border-primary-200 p-4 text-sm" aria-label="Estimated services from POS">
+    <h3 className="font-semibold text-primary-950">Estimated services from POS</h3>
+    <ul className="mt-2 divide-y divide-primary-100">
+      {items.map((item) => <li key={item.draftId} className="flex flex-wrap items-center justify-between gap-2 py-2 text-primary-700">
+        <span className="min-w-0 break-words">{item.itemName}</span>
+        <span className="flex items-center gap-2 font-semibold">{formatCurrency(item.lineTotal)}
+          {onRemove && <button type="button" className="inline-flex min-h-11 min-w-11 items-center justify-center" aria-label={`Remove ${item.itemName}`} onClick={() => onRemove(item.draftId)}><Trash2 className="h-4 w-4 text-red-600" /></button>}
+        </span>
+      </li>)}
+    </ul>
+  </section>;
 }

@@ -2,6 +2,12 @@
 
 This directory contains the database implementation for the LimenServe transactional backend, warehouse, data-mining rules, and forecasting pipeline.
 
+## Administrator recovery email
+
+LimenServe requests an email OTP from Supabase Auth for administrator recovery and recovery inbox verification. Both use Supabase's **Magic Link** template, not **Reset Password**. The local template is [magic-link-code.html](templates/magic-link-code.html). For the hosted project, open **Authentication → Email Templates → Magic Link**, set the subject to `Your LimenServe code`, paste the HTML into **Source**, and save. Keep `{{ .Token }}` and omit `{{ .ConfirmationURL }}` so the message contains a code without a sign-in link. The local file does not change the hosted template automatically; do not push the entire local Auth configuration to change just this template.
+
+To verify, request a fresh message from **Recover administrator access** for a test administrator with a verified recovery inbox. Inspect the newest message for a numeric code and no sign-in link, then enter the code in LimenServe. Successful recovery unlocks sign-in without changing the existing password. The built-in sender has delivery restrictions and a project-wide quota; an accepted request is not proof that the inbox received an email.
+
 > **Baseline warning (2026-08-10):** the local migration ledger is not yet a reproducible clean-database bootstrap. Eleven version groups collapse multiple files in the Supabase CLI ledger, production and staging contain different histories, and `generated/setup_full.sql` stops at the early migration set. `config.toml` and CI now preserve this known baseline without claiming it is replayable. Do not run that generated file or `supabase db reset` against a linked environment.
 
 ## Files

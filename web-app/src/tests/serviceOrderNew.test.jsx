@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import AuthContext from '../context/auth-context';
@@ -19,10 +19,11 @@ import ServiceOrderNew from '../modules/services/pages/ServiceOrderNew';
 import { createServiceOrder, getServiceScheduleSlots } from '../services/serviceOrdersApi';
 import { listMechanics } from '../services/mechanicsApi';
 
-function renderForm(role = 'cashier') {
+function renderForm(role = 'cashier', { state, draft } = {}) {
     localStorage.clear();
+    if (draft) localStorage.setItem('limen-service-intake-draft-v2:staff-1', JSON.stringify(draft));
     return render(
-        <MemoryRouter initialEntries={['/services/new']}>
+        <MemoryRouter initialEntries={[{ pathname: '/services/new', state }]}>
             <AuthContext.Provider value={{ user: { id: 'staff-1', role } }}>
                 <ToastProvider><ServiceOrderNew /></ToastProvider>
             </AuthContext.Provider>
@@ -31,6 +32,36 @@ function renderForm(role = 'cashier') {
 }
 
 describe('Service order intake validation', () => {
+    it('adds POS labor to existing requested work before review and submits it as an estimate line', async () => {
+        createServiceOrder.mockClear();
+        createServiceOrder.mockResolvedValueOnce({ id: 'service-pos' });
+        renderForm('cashier', {
+            state: { posService: { owner: 'staff-1', id: 'SRV-test', name: 'Brake cleaning', price: 420.25 } },
+            draft: { customerName: 'Juan Dela Cruz', vehicleModel: 'Mirage', vehiclePlate: 'ABC 1234', description: 'Inspect front brakes', laborEstimate: '100' },
+        });
+        const draftButton = screen.getByRole('button', { name: 'Add to this draft' });
+        expect(screen.getByRole('button', { name: 'Continue' }).disabled).toBe(true);
+        await waitFor(() => expect(draftButton.disabled).toBe(false));
+        fireEvent.click(draftButton);
+        expect(JSON.parse(localStorage.getItem('limen-service-intake-draft-v2:staff-1')).posLabor).toHaveLength(1);
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        expect(screen.getByLabelText(/Reported concern/).value).toBe('Inspect front brakes');
+        expect(within(screen.getByRole('region', { name: 'Estimated services from POS' })).getByText('Brake cleaning')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        expect(screen.getByText('Review before creating')).toBeTruthy();
+        expect(within(screen.getByRole('region', { name: 'Estimated services from POS' })).getByText(/420\.25/)).toBeTruthy();
+        expect(createServiceOrder).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Create service order' }));
+        await waitFor(() => expect(createServiceOrder).toHaveBeenCalledWith(expect.objectContaining({
+            estimatedCost: 520.25,
+            items: [
+                expect.objectContaining({ lineType: 'service', itemName: 'Brake cleaning', quantity: 1, unitPrice: 420.25, lineTotal: 420.25 }),
+                expect.objectContaining({ lineType: 'service', unitPrice: 100 }),
+            ],
+        })));
+    });
+
     it('shows separate required-field errors only after Continue is selected', async () => {
         renderForm();
         await waitFor(() => expect(screen.queryByText('Checking this draft for an already-created job…')).toBeNull());

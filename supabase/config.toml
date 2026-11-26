@@ -90,6 +90,10 @@ max_frequency = "1s"
 otp_length = 6
 otp_expiry = 3600
 
+[auth.email.template.magic_link]
+subject = "Your LimenServe code"
+content_path = "./supabase/templates/magic-link-code.html"
+
 [auth.sms]
 enable_signup = false
 enable_confirmations = false
