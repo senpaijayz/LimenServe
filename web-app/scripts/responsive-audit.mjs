@@ -8,6 +8,8 @@ import process from 'node:process';
 const DEFAULT_VIEWPORT_WIDTHS = [320, 360, 375, 390, 430, 768, 844, 1024, 1440];
 const MOBILE_NAV_MAX_WIDTH = 1279;
 const DEFAULT_PUBLIC_ROUTES = ['/', '/catalog', '/estimate', '/service-orders', '/about'];
+const THEME_AUTH_ROUTES = ['/login', '/forgot-password', '/administrator-recovery', '/reset-password-code', '/reset-password', '/verify-recovery-email'];
+const auditTheme = process.argv.includes('--theme');
 const DEFAULT_STAFF_ROUTES = ['/dashboard', '/inventory', '/inventory/receive', '/inventory/logs', '/pos', '/quotation', '/services', '/services/schedule', '/reports', '/users', '/cms', '/locator-3d'];
 const STAFF_NAV_MAX_WIDTH = 1023;
 const VIEWPORT_HEIGHT = 900;
@@ -144,7 +146,7 @@ function getViewportWidths() {
 
 function getRoutes() {
   const configured = process.env.RESPONSIVE_TEST_ROUTES?.split(',').map((value) => value.trim()).filter(Boolean);
-  return configured?.length ? configured : DEFAULT_PUBLIC_ROUTES;
+  return configured?.length ? configured : auditTheme ? [...DEFAULT_PUBLIC_ROUTES, ...THEME_AUTH_ROUTES] : DEFAULT_PUBLIC_ROUTES;
 }
 
 function getStaffAudit() {
@@ -271,13 +273,13 @@ async function evaluateValue(pageClient, expression) {
   return result.value;
 }
 
-async function waitForValue(pageClient, expression, timeoutMs) {
+async function waitForValue(pageClient, expression, timeoutMs, failure = 'Timed out waiting for the signed-in workspace.') {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await evaluateValue(pageClient, expression)) return;
     await delay(150);
   }
-  throw new Error('Timed out waiting for the signed-in workspace.');
+  throw new Error(failure);
 }
 
 async function signInForStaffAudit(pageClient, baseUrl, timeoutMs, { email, password }) {
@@ -383,15 +385,19 @@ async function exerciseStaffMenu(pageClient) {
     return Boolean(toggle);
   })()`);
   await delay(ANIMATION_SETTLE_MS);
-  const visible = await evaluateValue(pageClient, `(() => {
-    const sidebar = document.querySelector('aside.sidebar');
-    const rect = sidebar?.getBoundingClientRect();
-    return Boolean(sidebar?.classList.contains('sidebar-open') && rect && rect.right > 0 && rect.left < innerWidth);
+  const { visible, themeHidden } = await evaluateValue(pageClient, `(() => {
+    const dialog = document.getElementById('mobile-workspace-navigation');
+    const theme = document.querySelector('.theme-toggle');
+    const rect = dialog?.getBoundingClientRect();
+    return {
+      visible: Boolean(dialog?.getAttribute('aria-modal') === 'true' && rect?.width && rect.bottom > 0 && rect.top < innerHeight),
+      themeHidden: Boolean(theme && getComputedStyle(theme).visibility === 'hidden'),
+    };
   })()`);
-  await evaluateValue(pageClient, `document.querySelector('button[aria-label="Close navigation menu"]')?.click()`);
+  await evaluateValue(pageClient, `document.querySelector('#mobile-workspace-navigation button[aria-label="Close modal"]')?.click()`);
   await delay(ANIMATION_SETTLE_MS);
-  const closed = await evaluateValue(pageClient, `!document.querySelector('aside.sidebar')?.classList.contains('sidebar-open')`);
-  return { opened, visible, closed };
+  const closed = await evaluateValue(pageClient, `!document.getElementById('mobile-workspace-navigation') && document.querySelector('button[aria-controls="mobile-workspace-navigation"]')?.getAttribute('aria-expanded') === 'false'`);
+  return { opened, visible, closed, themeHidden };
 }
 
 async function exerciseMobileMenu(pageClient) {
@@ -496,6 +502,88 @@ function validateMobileMenu(width, state) {
   return failures.map((failure) => `/ at ${width}px: ${failure}`);
 }
 
+async function auditColorTheme(pageClient, timeoutMs, route) {
+  await waitForValue(pageClient, 'Boolean(document.querySelector(".theme-toggle"))', timeoutMs, 'The theme toggle did not mount.');
+  const snapshot = () => evaluateValue(pageClient, String.raw`(() => {
+    const root = document.documentElement;
+    const button = document.querySelector(".theme-toggle");
+    const rect = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    const dark = root.dataset.theme === "dark";
+    const lum = (value) => {
+      const channels = (value.match(/[0-9.]+/g) || []).slice(0, 3).map(x => {
+        const n = Number(x) / 255;
+        return n <= 0.04045 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    };
+    const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    const buttonStyle = getComputedStyle(button);
+    const canvasStyle = getComputedStyle(document.body);
+    const intersects = (a, b) => a.left < b.right && a.right > b.left &&
+      a.top < b.bottom && a.bottom > b.top;
+    const dockOverlap = [...document.querySelectorAll("[data-theme-dock]")].some(node => {
+      const dock = node.getBoundingClientRect();
+      return dock.width && dock.height && getComputedStyle(node).visibility !== "hidden" && intersects(rect, dock);
+    });
+    const panels = [...document.querySelectorAll(".theme-marketing-hero, .theme-featured-section, .theme-featured-stage, .theme-featured-photo, .theme-editor-header")];
+    const panelFailures = panels.flatMap(panel => {
+      const style = getComputedStyle(panel);
+      // Ignore translucent decorative glows; check the opaque gradient stops
+      // as well as the base color that appears if the gradient is unavailable.
+      const stops = [style.backgroundColor, ...(style.backgroundImage.match(/rgba?\([^)]+\)/g) || [])];
+      const solidStops = stops.filter(stop => stop.startsWith("rgb("));
+      const heading = panel.querySelector("h1, h2");
+      return !solidStops.length || style.backgroundImage === "none" ||
+        solidStops.some(stop => dark ? lum(stop) >= 0.15 : lum(stop) <= 0.70) ||
+        (heading && solidStops.some(stop => ratio(lum(getComputedStyle(heading).color), lum(stop)) < 4.5))
+        ? ["background or heading contrast: " + panel.classList.item(0)] : [];
+    });
+    return { theme: root.dataset.theme, saved: localStorage.getItem("limen-color-theme"),
+      scheme: getComputedStyle(root).colorScheme, label: button.getAttribute("aria-label"),
+      surface: getComputedStyle(root).getPropertyValue("--surface-card").trim(),
+      canvasColor: canvasStyle.backgroundColor,
+      canvasContrast: ratio(lum(canvasStyle.color), lum(canvasStyle.backgroundColor)),
+      toggleContrast: ratio(lum(buttonStyle.color), lum(buttonStyle.backgroundColor)),
+      visible: button.contains(hit) && rect.width >= 44 && rect.height >= 44 && !dockOverlap,
+      printHidden: getComputedStyle(button).display === "none",
+      hasHomePanels: [".theme-marketing-hero", ".theme-featured-section", ".theme-featured-stage", ".theme-featured-photo"].every(selector => document.querySelector(selector)),
+      hasEditorPanel: Boolean(document.querySelector(".theme-editor-header")),
+      panelFailures,
+      dark };
+  })()`);
+  const problems = [];
+  const start = await snapshot();
+  if (!start.visible || start.theme !== start.saved || !start.surface || !start.label.endsWith(start.dark ? 'Light Mode' : 'Dark Mode')) {
+    problems.push('initial theme or floating toggle is invalid');
+  }
+  // Use a real click at the rendered button's center, so an overlapping control
+  // or stacking problem fails the test instead of being bypassed by JS .click().
+  const { x, y } = await evaluateValue(pageClient, `(() => {
+    const r = document.querySelector(".theme-toggle").getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  })()`);
+  await pageClient.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+  await pageClient.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+  await delay(210);
+  const changed = await snapshot();
+  if (start.dark === changed.dark || !changed.visible || changed.theme !== changed.saved ||
+    changed.canvasColor === start.canvasColor || (changed.scheme === 'dark') !== changed.dark) {
+    problems.push('click did not switch and persist the rendered theme');
+  }
+  if ([start, changed].some(state => !(state.canvasContrast >= 4.5 && state.toggleContrast >= 3))) {
+    problems.push('canvas text or toggle icon did not meet the contrast target');
+  }
+  if ((route === '/' && !changed.hasHomePanels) || (route === '/cms' && !changed.hasEditorPanel)) {
+    problems.push('expected themed panels did not render');
+  }
+  problems.push(...[start, changed].flatMap(state => state.panelFailures.map(message => `${state.theme}: ${message}`)));
+  await pageClient.send('Emulation.setEmulatedMedia', { media: 'print' });
+  if (!(await snapshot()).printHidden) problems.push('theme control appears in print');
+  await pageClient.send('Emulation.setEmulatedMedia', { media: '' });
+  return problems;
+}
+
 async function removeProfileDirectory(profileDirectory) {
   const tempRoot = path.resolve(os.tmpdir());
   const resolvedProfile = path.resolve(profileDirectory);
@@ -531,6 +619,7 @@ async function run() {
     if (!staffAudit) {
       console.log('Staff routes skipped; set the two RESPONSIVE_TEST_STAFF_* variables to audit signed-in pages.');
     }
+    let expectedTheme = 'light';
 
     // Public pages redirect signed-in staff, so finish them before logging in.
     for (const routeGroup of [publicRoutes, staffRoutes]) {
@@ -559,12 +648,21 @@ async function run() {
           if (isStaff) await waitForStaffPage(pageClient, timeoutMs);
           await delay(ANIMATION_SETTLE_MS);
           const state = await readResponsiveState(pageClient, isStaff);
-          const routeFailures = validateResponsiveState(route, width, state, isStaff);
+          const authPage = !isStaff && THEME_AUTH_ROUTES.includes(route);
+          const routeFailures = authPage ? [] : validateResponsiveState(route, width, state, isStaff);
+          if (auditTheme) {
+            const seen = await evaluateValue(pageClient, 'document.documentElement.dataset.theme');
+            if (seen !== expectedTheme) routeFailures.push(`${route} at ${width}px: saved theme not restored on navigation or reload`);
+            const problems = await auditColorTheme(pageClient, timeoutMs, route);
+            routeFailures.push(...problems.map(problem => `${route} at ${width}px: ${problem}`));
+            expectedTheme = expectedTheme === 'light' ? 'dark' : 'light';
+          }
           if (isStaff && state.pathname !== new URL(route, baseUrl).pathname) routeFailures.push(`${route} at ${width}px: redirected to ${state.pathname}`);
           if (isStaff && state.accessDenied) routeFailures.push(`${route} at ${width}px: test account cannot access this page`);
           if (isStaff && width <= STAFF_NAV_MAX_WIDTH && route === staffAudit.routes[0] && !routeFailures.length) {
             const menu = await exerciseStaffMenu(pageClient);
             if (!menu.opened || !menu.visible || !menu.closed) routeFailures.push(`${route} at ${width}px: staff navigation menu did not open and close`);
+            if (auditTheme && menu.visible && !menu.themeHidden) routeFailures.push(`${route} at ${width}px: theme control remained active over the navigation dialog`);
           }
           if (!isStaff && route === '/' && width <= MOBILE_NAV_MAX_WIDTH) {
             const menuState = await exerciseMobileMenu(pageClient);

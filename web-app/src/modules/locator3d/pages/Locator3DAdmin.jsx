@@ -2034,7 +2034,7 @@ export default function Locator3DAdmin() {
     const readOnlyReturnLabel = currentLayout?.status === 'draft' ? 'Return to Current Draft' : 'Back to Editor';
 
     return (
-        <div className="locator-workspace min-w-0 space-y-4 bg-[#f6f8fc] p-3 text-slate-950 sm:p-5 lg:p-6">
+        <div className="locator-workspace min-w-0 space-y-4 bg-primary-50 p-3 text-slate-950 sm:p-5 lg:p-6">
             <StockroomHeader
                 canEditLayout={canEditLayout && !readOnlyLayout}
                 hasUnsavedChanges={hasUnsavedChanges}

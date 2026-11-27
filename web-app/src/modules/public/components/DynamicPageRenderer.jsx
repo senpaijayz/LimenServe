@@ -26,7 +26,7 @@ function HeroSection({ section }) {
   const content = getSectionContent(section);
 
   return (
-    <section className="relative overflow-hidden border-b border-primary-200 bg-[radial-gradient(circle_at_top_left,_rgba(30,58,138,0.08),_transparent_32%),radial-gradient(circle_at_top_right,_rgba(220,38,38,0.10),_transparent_28%),linear-gradient(to_bottom,_#ffffff,_#f8fafc_42%,_#ffffff)] px-4 py-16 md:px-8 xl:px-12">
+    <section className="theme-marketing-hero relative overflow-hidden border-b border-primary-200 px-4 py-16 md:px-8 xl:px-12">
       <div className="mx-auto grid max-w-[1600px] items-center gap-10 xl:grid-cols-[1fr_0.9fr]">
         <div>
           {content.eyebrow && (

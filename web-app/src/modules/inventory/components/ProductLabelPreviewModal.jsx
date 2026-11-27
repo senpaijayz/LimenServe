@@ -102,26 +102,13 @@ const ProductLabelPreviewModal = ({
             onClose={onClose}
             title={title}
             size="xl"
-            className="border border-primary-200 bg-[#f7f6f2] text-primary-950"
+            className="border border-primary-200 bg-primary-50 text-primary-950"
         >
             <div className="space-y-5">
                 {isOpen && <ProductPriceHistory key={product.id} productId={product.id} />}
-                <div
-                    className="rounded-[28px] border border-primary-200"
-                    style={{
-                        background: 'radial-gradient(circle at top left, rgba(217, 34, 42, 0.08), transparent 26%), linear-gradient(180deg, #fbfaf7 0%, #f2efe7 100%)',
-                        padding: '24px',
-                    }}
-                >
+                <div className="theme-label-preview rounded-[28px] border border-primary-200 p-6">
                     <div className="grid gap-5 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-                        <div
-                            className="flex items-center justify-center rounded-[24px] border p-6"
-                            style={{
-                                borderColor: 'rgba(15, 23, 42, 0.1)',
-                                background: '#ffffff',
-                                boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.65)',
-                            }}
-                        >
+                        <div className="flex items-center justify-center rounded-[24px] border border-primary-200 bg-white p-6">
                             <div
                                 style={{
                                     transform: 'scale(1.08)',

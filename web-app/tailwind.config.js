@@ -1,3 +1,5 @@
+import { themeColors, themePalette } from './theme-palette.js';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -6,30 +8,7 @@ export default {
   ],
   theme: {
     extend: {
-      colors: {
-        primary: {
-          50: 'var(--primary-50, #f8fafc)',
-          100: 'var(--primary-100, #f4f5f6)',
-          200: 'var(--primary-200, #e5e6e9)',
-          300: 'var(--primary-300, #bfc1c7)',
-          400: 'var(--primary-400, #93969e)',
-          500: 'var(--primary-500, #686b74)',
-          600: 'var(--primary-600, #42454d)',
-          700: 'var(--primary-700, #2d2f36)',
-          800: 'var(--primary-800, #1c1d22)',
-          900: 'var(--primary-900, #111216)',
-          950: 'var(--primary-950, #0a0a0c)', // Deep corporate black-blue
-        },
-        accent: {
-          primary: '#1E3A8A',
-          secondary: '#0F172A',
-          blue: '#1D4ED8',
-          blueDark: '#1E3A8A',
-          danger: '#DC2626',
-          success: '#10b981',
-          warning: '#f59e0b',
-        }
-      },
+      ...themeColors,
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         display: ['Inter', 'system-ui', 'sans-serif'],
@@ -70,5 +49,5 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [themePalette],
 }

@@ -51,6 +51,7 @@ export default function MobileBottomNav() {
 
     return (
         <nav
+            data-theme-dock
             className="fixed inset-x-0 bottom-0 z-40 border-t border-primary-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden"
             aria-label="Primary mobile navigation"
         >

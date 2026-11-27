@@ -46,16 +46,16 @@ const SalesChart = ({
                         <AreaChart width={width} height={height} data={chartData} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3} />
-                                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                                    <stop offset="5%" stopColor="var(--chart-main)" stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor="var(--chart-main)" stopOpacity={0} />
                                 </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                            <XAxis dataKey="label" axisLine={false} tickLine={false} interval="preserveStartEnd" tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} />
-                            <YAxis axisLine={false} tickLine={false} width={56} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} tickFormatter={(value) => `P${Math.round(value / 1000)}k`} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
+                            <XAxis dataKey="label" axisLine={false} tickLine={false} interval="preserveStartEnd" tick={{ fill: 'var(--ink-muted)', fontSize: 11, fontWeight: 500 }} />
+                            <YAxis axisLine={false} tickLine={false} width={56} tick={{ fill: 'var(--ink-muted)', fontSize: 11, fontWeight: 500 }} tickFormatter={(value) => `P${Math.round(value / 1000)}k`} />
                             <Tooltip content={<CustomTooltip />} />
-                            <Area type="monotone" dataKey="revenue" stroke="#2563eb" strokeWidth={2} fill="url(#salesGradient)" />
-                            <Area type="monotone" dataKey="quantity" stroke="#0f766e" strokeWidth={2} fillOpacity={0} />
+                            <Area type="monotone" dataKey="revenue" stroke="var(--chart-main)" strokeWidth={2} fill="url(#salesGradient)" />
+                            <Area type="monotone" dataKey="quantity" stroke="var(--chart-secondary)" strokeWidth={2} fillOpacity={0} />
                         </AreaChart>
                     )}</MeasuredChart>
                 )}

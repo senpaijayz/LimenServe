@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { ContactShadows, Edges, Environment, Grid, Html, Line, OrbitControls, TransformControls } from '@react-three/drei';
 import { Bloom, EffectComposer } from '@react-three/postprocessing';
+import { useTheme } from '../../../context/ThemeContext';
 import {
     FLOOR_HEIGHT,
     SNAP_STEP,
@@ -1365,7 +1366,7 @@ function MeasuredQuality({ quality, enabled, onDowngrade }) {
     return null;
 }
 
-function SceneContents({ onContextLost, onShelfClick, onLayerSelect, quality, autoQuality, onDowngrade }) {
+function SceneContents({ onContextLost, onShelfClick, onLayerSelect, quality, autoQuality, onDowngrade, dark }) {
     const activeFloor = useLocator3DStore((state) => state.activeFloor);
     const floorHeight = useSceneFloorHeight();
     const isDesignMode = useLocator3DStore((state) => state.isDesignMode);
@@ -1386,7 +1387,7 @@ function SceneContents({ onContextLost, onShelfClick, onLayerSelect, quality, au
             <RenderScheduler />
             <MeasuredQuality quality={quality} enabled={autoQuality} onDowngrade={onDowngrade} />
             <WebGLContextLossHandler onContextLost={onContextLost} />
-            <color args={['#edf2f7']} attach="background" />
+            <color args={[dark ? '#151b26' : '#edf2f7']} attach="background" />
             <ambientLight intensity={0.7} />
             <hemisphereLight args={['#f8fafc', '#94a3b8', 0.8]} />
             <directionalLight castShadow={quality.shadows} intensity={1.45} position={[7, 11, 6]} shadow-mapSize={[quality.shadowMapSize, quality.shadowMapSize]} />
@@ -1396,14 +1397,14 @@ function SceneContents({ onContextLost, onShelfClick, onLayerSelect, quality, au
             <pointLight color="#22c55e" intensity={locatedProduct ? 0.42 : 0.16} position={[-6, activeFloor === 2 ? floorHeight + 3 : 3, 5.2]} />
             {showGrid && (
                 <Grid
-                    cellColor="#cbd5e1"
+                    cellColor={dark ? '#41516b' : '#cbd5e1'}
                     cellSize={1}
                     cellThickness={0.42}
                     fadeDistance={24}
                     fadeStrength={1.2}
                     infiniteGrid
                     position={[0, activeGridY, 0]}
-                    sectionColor="#94a3b8"
+                    sectionColor={dark ? '#667b99' : '#94a3b8'}
                     sectionSize={4}
                     sectionThickness={0.9}
                 />
@@ -1466,6 +1467,7 @@ function SceneContents({ onContextLost, onShelfClick, onLayerSelect, quality, au
 }
 
 export default function Locator3DScene({ onShelfClick = null, onLayerSelect = null }) {
+    const { colorTheme } = useTheme();
     const clearSelection = useLocator3DStore((state) => state.clearSelection);
     const qualityPreference = useLocator3DStore((state) => state.qualityPreference);
     const [webglFailed, setWebglFailed] = useState(false);
@@ -1496,7 +1498,7 @@ export default function Locator3DScene({ onShelfClick = null, onLayerSelect = nu
                 style={{ touchAction: 'none' }}
             >
                 <Suspense fallback={null}>
-                    <SceneContents onContextLost={() => setWebglFailed(true)} onShelfClick={onShelfClick} onLayerSelect={onLayerSelect} quality={quality} autoQuality={qualityPreference === 'auto'} onDowngrade={setMeasuredTier} />
+                    <SceneContents onContextLost={() => setWebglFailed(true)} onShelfClick={onShelfClick} onLayerSelect={onLayerSelect} quality={quality} autoQuality={qualityPreference === 'auto'} onDowngrade={setMeasuredTier} dark={colorTheme === 'dark'} />
                 </Suspense>
             </Canvas>
         </CanvasErrorBoundary>

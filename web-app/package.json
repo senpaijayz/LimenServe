@@ -15,6 +15,7 @@
     "test": "vitest",
     "test:bundle": "node scripts/verify-bundle-budget.mjs",
     "test:responsive": "node scripts/responsive-audit.mjs",
+    "test:theme:browser": "node scripts/responsive-audit.mjs --theme",
     "verify:deployment-env": "node scripts/verify-deployment-env.mjs",
     "verify:pricelist-fixture": "node scripts/generate-pricelist-fixture.mjs --check"
   },

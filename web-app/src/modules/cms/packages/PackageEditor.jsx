@@ -898,7 +898,7 @@ export default function PackageEditor({
           </div>
         )}
       </fieldset>
-      <footer className="fixed inset-x-0 bottom-0 z-30 flex flex-wrap items-center justify-between gap-3 border-t border-primary-200 bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_20px_rgba(15,23,42,0.05)] backdrop-blur sm:sticky sm:inset-x-auto sm:z-10 sm:p-4 sm:px-6">
+      <footer data-theme-dock className="fixed inset-x-0 bottom-0 z-30 flex flex-wrap items-center justify-between gap-3 border-t border-primary-200 bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_20px_rgba(15,23,42,0.05)] backdrop-blur sm:sticky sm:inset-x-auto sm:z-10 sm:p-4 sm:px-6">
         <div className="flex gap-2">
           <button
             type="button"

@@ -1,14 +1,36 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { STORAGE_KEYS } from '../utils/constants';
 
 // Create Theme Context
 const ThemeContext = createContext(null);
+const COLOR_THEME_KEY = 'limen-color-theme';
 
 /**
  * Theme Provider Component
  * Manages theme and sidebar state
  */
 export function ThemeProvider({ children }) {
+    const [colorTheme, setColorTheme] = useState(() => {
+        try { return localStorage.getItem(COLOR_THEME_KEY) === 'dark' ? 'dark' : 'light'; }
+        catch { return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'; }
+    });
+    const toggleColorTheme = useCallback(() => setColorTheme((theme) => theme === 'dark' ? 'light' : 'dark'), []);
+    useLayoutEffect(() => {
+        document.documentElement.dataset.theme = colorTheme;
+        const themeColor = document.querySelector('meta[name="theme-color"]');
+        if (themeColor) themeColor.content = colorTheme === 'dark' ? '#0f1117' : '#183d91';
+    }, [colorTheme]);
+    useEffect(() => {
+        try { localStorage.setItem(COLOR_THEME_KEY, colorTheme); }
+        catch { /* Continue using the theme for this session. */ }
+    }, [colorTheme]);
+    useEffect(() => {
+        const sync = (event) => {
+            if (event.key === COLOR_THEME_KEY) setColorTheme(event.newValue === 'dark' ? 'dark' : 'light');
+        };
+        window.addEventListener('storage', sync);
+        return () => window.removeEventListener('storage', sync);
+    }, []);
     // Sidebar state
     const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
         try {
@@ -57,6 +79,8 @@ export function ThemeProvider({ children }) {
     }, [closeMobileSidebar]);
 
     const value = {
+        colorTheme,
+        toggleColorTheme,
         sidebarCollapsed,
         sidebarOpen,
         toggleSidebar,

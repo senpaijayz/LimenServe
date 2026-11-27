@@ -1,7 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router';
-import MainLayout from './components/layout/MainLayout';
 import PublicLayout from './components/layout/PublicLayout';
 import PageLoader from './components/ui/PageLoader';
 import PageLoadBoundary from './components/ui/PageLoadBoundary';
@@ -9,9 +8,11 @@ import { ToastProvider } from './components/ui/Toast';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { ThemeProvider } from './context/ThemeContext';
+import ThemeToggle from './components/ui/ThemeToggle';
 import { queryClient } from './lib/queryClient';
 import { recordRouteLoad } from './observability/performance';
 
+const MainLayout = lazy(() => import('./components/layout/MainLayout'));
 const LoginPage = lazy(() => import('./modules/auth/pages/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('./modules/auth/pages/ForgotPasswordPage'));
 const ResetPasswordCodePage = lazy(() => import('./modules/auth/pages/ResetPasswordCodePage'));
@@ -120,7 +121,7 @@ function App() {
                 <Route path="/reset-password" element={renderRoute(ResetPasswordPage, <PageLoader />)} />
                 <Route path="/verify-recovery-email" element={renderRoute(RecoveryEmailVerificationPage, <PageLoader />)} />
 
-                <Route element={<MainLayout />}>
+                <Route element={renderRoute(MainLayout, <PageLoader />)}>
                   <Route path="/settings/security" element={renderRoute(AccountSecurityPage, <WorkspaceRouteFallback title="Loading account security" />)} />
                   <Route path="/dashboard" element={renderRoute(AdminDashboard, <WorkspaceRouteFallback title="Loading dashboard" />)} />
                   <Route path="/customers" element={renderRoute(CustomerSearch, <WorkspaceRouteFallback title="Loading customer search" />)} />
@@ -153,6 +154,7 @@ function App() {
 
                 <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
+                <ThemeToggle />
               </ToastProvider>
             </CartProvider>
           </ThemeProvider>

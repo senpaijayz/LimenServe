@@ -1842,7 +1842,7 @@ export default function CmsAdmin() {
   return (
     <div className={handleSaveActive && activeTabHasUnsavedChanges ? 'space-y-6 pb-24 md:pb-0' : 'space-y-6'}>
       <div className="overflow-hidden rounded-3xl border border-primary-200 bg-white shadow-sm">
-        <div className={`${activeTab === 'packages' ? 'hidden md:flex' : 'flex'} flex-col gap-5 border-b border-primary-200 bg-[radial-gradient(circle_at_top_left,_rgba(30,58,138,0.08),_transparent_30%),linear-gradient(to_right,_#ffffff,_#f8fafc)] p-6 lg:flex-row lg:items-center lg:justify-between`}>
+        <div className={`${activeTab === 'packages' ? 'hidden md:flex' : 'flex'} theme-editor-header flex-col gap-5 border-b border-primary-200 p-6 lg:flex-row lg:items-center lg:justify-between`}>
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-accent-primary">
               <Globe2 className="h-3.5 w-3.5" />
@@ -2244,7 +2244,7 @@ export default function CmsAdmin() {
         {hasVisitedPackages && <div hidden={activeTab !== 'packages' || packageArea !== 'packages'}><PageLoadBoundary><Suspense fallback={<p className="p-6 text-sm text-primary-700">Loading package workspace…</p>}><PackageWorkspace active={activeTab === 'packages' && packageArea === 'packages'} onUnsavedChange={setPackagesHaveUnsavedChanges} /></Suspense></PageLoadBoundary></div>}
       </div>
       {handleSaveActive && activeTabHasUnsavedChanges && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-primary-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:hidden">
+        <div data-theme-dock className="fixed inset-x-0 bottom-0 z-40 border-t border-primary-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:hidden">
           <div className="mx-auto flex max-w-2xl gap-3">
             <button type="button" disabled={saving} onClick={discardActiveChanges} className="min-h-12 flex-1 rounded-xl border border-primary-200 bg-white px-4 text-sm font-semibold text-primary-700 disabled:opacity-60">Discard</button>
             <button type="button" disabled={saving} onClick={handleSaveActive} className="min-h-12 flex-1 rounded-xl bg-accent-primary px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60">

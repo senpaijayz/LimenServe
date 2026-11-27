@@ -1,5 +1,6 @@
 .invoice-preview-scroll{max-width:100%;overflow-x:auto;background:#fff}
 .receipt-preview.paper-invoice{width:100%;min-width:490px;max-width:760px;box-sizing:border-box;margin:0 auto;padding:26px;background:white;color:#111;font:12px/1.4 Arial,sans-serif}
+.paper-invoice :is(h1,h2,h3,h4,h5,h6){color:inherit}
 .paper-invoice .invoice-business{text-align:center;margin-bottom:18px}
 .paper-invoice .invoice-logo{display:block;width:200px;height:76px;object-fit:cover;object-position:50% 54%;margin:0 auto 8px}
 .paper-invoice .invoice-hours{font-size:11px}

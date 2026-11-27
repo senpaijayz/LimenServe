@@ -1009,11 +1009,11 @@ const SalesReport = () => {
                     {salesByCategory.length > 0 ? (
                         <MeasuredChart>{({width,height}) => (
                             <BarChart width={width} height={height} data={salesByCategory} margin={{ top: 12, right: 16, bottom: 32, left: 8 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="category" angle={-18} textAnchor="end" height={72} interval={0} tick={{ fontSize: 11 }} />
-                                <YAxis tickFormatter={(value) => formatNumber(value)} width={72} />
-                                <Tooltip formatter={(value, name) => [name === 'revenue' ? formatCurrency(value) : formatNumber(value), name === 'revenue' ? 'Revenue' : 'Units']} />
-                                <Bar dataKey="revenue" fill="#1d4ed8" radius={[6, 6, 0, 0]} />
+                                <CartesianGrid stroke="var(--line)" strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="category" angle={-18} textAnchor="end" height={72} interval={0} tick={{ fill: 'var(--ink-muted)', fontSize: 11 }} stroke="var(--line-control)" />
+                                <YAxis tick={{ fill: 'var(--ink-muted)' }} stroke="var(--line-control)" tickFormatter={(value) => formatNumber(value)} width={72} />
+                                <Tooltip contentStyle={{ background: 'var(--surface-card)', borderColor: 'var(--line)', color: 'var(--ink)' }} itemStyle={{ color: 'var(--ink)' }} cursor={{ fill: 'var(--surface-raised)', fillOpacity: 0.55 }} formatter={(value, name) => [name === 'revenue' ? formatCurrency(value) : formatNumber(value), name === 'revenue' ? 'Revenue' : 'Units']} />
+                                <Bar dataKey="revenue" fill="var(--chart-main)" radius={[6, 6, 0, 0]} />
                             </BarChart>
                         )}</MeasuredChart>
                     ) : (
