@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import { requestAdministratorRecoveryCode, unlockAdministratorWithRecoveryCode } from '../../../services/authApi';
+import { requestAdministratorRecoveryCode, resetAdministratorPasswordWithCode, unlockAdministratorWithRecoveryCode } from '../../../services/authApi';
 
-export default function ResetPasswordCodePage() {
+export default function ResetPasswordCodePage({ resetPassword = false }) {
     const location = useLocation();
     const [email, setEmail] = useState(location.state?.signInEmail || location.state?.email || '');
     const [codeEmail, setCodeEmail] = useState('');
@@ -10,6 +10,8 @@ export default function ResetPasswordCodePage() {
     const [cooldown, setCooldown] = useState(0);
     const [sending, setSending] = useState(false);
     const [code, setCode] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmation, setConfirmation] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
@@ -48,11 +50,20 @@ export default function ResetPasswordCodePage() {
             setError('Enter the numeric code from your email.');
             return;
         }
+        if (resetPassword && password !== confirmation) {
+            setError('The new passwords do not match.');
+            return;
+        }
         setBusy(true);
         try {
-            const result = await unlockAdministratorWithRecoveryCode({ email: codeEmail, code: code.trim() });
-            setSuccess(result.message || 'Sign-in unlocked. Use your usual email and password.');
+            const details = { email: codeEmail, code: code.trim() };
+            const result = resetPassword
+                ? await resetAdministratorPasswordWithCode({ ...details, password })
+                : await unlockAdministratorWithRecoveryCode(details);
+            setSuccess(result.message || (resetPassword ? 'Password changed. Use your new password to sign in.' : 'Sign-in unlocked. Use your usual email and password.'));
             setCode('');
+            setPassword('');
+            setConfirmation('');
         } catch (resetError) {
             setError(resetError.message || 'The code could not be verified. Request a new one.');
         } finally {
@@ -64,8 +75,8 @@ export default function ResetPasswordCodePage() {
         <main className="flex min-h-screen items-center justify-center bg-primary-50/50 p-4">
             <section className="w-full max-w-md rounded-2xl border border-primary-200 bg-white p-6 shadow-xl sm:p-8">
                 <Link to="/login" className="text-sm font-semibold text-primary-700 hover:underline">← Back to sign in</Link>
-                <h1 className="mt-6 font-display text-2xl font-bold text-primary-950">Recover administrator access</h1>
-                <p className="mt-2 text-sm text-primary-600">Request a code for your verified recovery inbox. Enter the code to unlock sign-in, then use your existing email and password.</p>
+                <h1 className="mt-6 font-display text-2xl font-bold text-primary-950">{resetPassword ? 'Reset administrator password' : 'Recover administrator access'}</h1>
+                <p className="mt-2 text-sm text-primary-600">{resetPassword ? 'Request a code for your verified recovery inbox, then enter it with your new password. Cashiers and clerks should contact an administrator for password resets.' : 'Request a code for your verified recovery inbox. Enter the code to unlock sign-in, then use your existing email and password.'}</p>
                 {error && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
                 {!success && (
                     <form onSubmit={sendCode} className="mt-6 space-y-3">
@@ -75,6 +86,8 @@ export default function ResetPasswordCodePage() {
                                 setEmail(event.target.value);
                                 setCodeEmail('');
                                 setCode('');
+                                setPassword('');
+                                setConfirmation('');
                                 setDeliveryNotice('');
                                 setError('');
                             }} className="min-h-11 w-full rounded-xl border border-primary-200 px-3 text-primary-950" />
@@ -95,9 +108,19 @@ export default function ResetPasswordCodePage() {
                             <label htmlFor="recovery-code" className="mb-2 block text-sm font-semibold text-primary-800">Email code</label>
                             <input id="recovery-code" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,8}" required maxLength={8} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} className="min-h-11 w-full rounded-xl border border-primary-200 px-3 text-primary-950" />
                         </div>
-                        <button type="submit" disabled={busy || sending} className="min-h-11 w-full rounded-xl bg-primary-800 px-4 font-semibold text-white hover:bg-primary-950 disabled:opacity-60">{busy ? 'Verifying…' : 'Verify code and unlock sign-in'}</button>
+                        {resetPassword && <>
+                            <p className="text-sm text-primary-600">Use at least 12 characters, with uppercase and lowercase letters, a number, and a symbol.</p>
+                            <label className="block text-sm font-semibold text-primary-800">New password
+                                <input type="password" autoComplete="new-password" required minLength={12} maxLength={72} value={password} onChange={(event) => setPassword(event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-primary-200 px-3" />
+                            </label>
+                            <label className="block text-sm font-semibold text-primary-800">Confirm new password
+                                <input type="password" autoComplete="new-password" required minLength={12} maxLength={72} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-primary-200 px-3" />
+                            </label>
+                        </>}
+                        <button type="submit" disabled={busy || sending} className="min-h-11 w-full rounded-xl bg-primary-800 px-4 font-semibold text-white hover:bg-primary-950 disabled:opacity-60">{busy ? 'Verifying…' : resetPassword ? 'Verify code and change password' : 'Verify code and unlock sign-in'}</button>
                     </form>
                 )}
+                {!success && resetPassword && <Link to="/administrator-recovery" state={{ signInEmail: email }} className="mt-5 block text-center text-sm font-semibold text-primary-800 hover:underline">Only locked out? Unlock without changing the password</Link>}
             </section>
         </main>
     );

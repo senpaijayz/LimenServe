@@ -58,6 +58,15 @@ export async function requestAdministratorRecoveryCode(email) {
   }
 }
 
+export async function resetAdministratorPasswordWithCode({ email, code, password }) {
+  try {
+    const { data } = await apiClient.post('/auth/recovery/code/reset-password', { email, code, password });
+    return data;
+  } catch (error) {
+    extractApiError(error, 'The password could not be reset. Request a new code and try again.');
+  }
+}
+
 export async function getAccountSecurity() {
   try {
     const { data } = await apiClient.get('/auth/security');

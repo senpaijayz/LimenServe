@@ -327,13 +327,17 @@ router.post('/recovery/request', async (req, res) => {
   }
 });
 
-router.post('/recovery/code/unlock', async (req, res) => {
+async function completeAdministratorCodeRecovery(req, res, resetPassword) {
   setNoStore(res);
+  const password = req.body?.password;
   const email = normalizeEmail(req.body?.email);
   const code = String(req.body?.code || '').trim();
   if (!RECOVERY_EMAIL_PATTERN.test(email) || email.length > 254 || !RECOVERY_CODE_PATTERN.test(code)) {
     res.status(400).json({ error: 'Enter your account or recovery email and the code sent to your inbox.' });
     return;
+  }
+  if (resetPassword && (!validateStrongPassword(password) || Buffer.byteLength(password, 'utf8') > 72)) {
+    return res.status(400).json({ error: 'Use at least 12 characters with uppercase, lowercase, a number and a symbol. Use 72 bytes or fewer.' });
   }
 
   try {
@@ -362,8 +366,36 @@ router.post('/recovery/code/unlock', async (req, res) => {
     const { data: currentBinding, error: bindingError } = await supabaseAdmin.rpc('lookup_limen_admin_otp_recovery', { p_email: email });
     if (bindingError) throw bindingError;
     const current = firstRow(currentBinding);
-    if (current?.account_id !== recovery.account_id || current.identity_id !== recovery.identity_id) {
+    if (current?.account_id !== recovery.account_id || current.identity_id !== recovery.identity_id || current.recovery_email !== recovery.recovery_email) {
       return res.status(400).json({ error: 'Recovery access changed. Request a new code.' });
+    }
+
+    if (resetPassword) {
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(current.account_id, { password });
+      if (updateError) {
+        req.log?.warn?.('auth.recovery.admin_code_password_update_rejected', { requestId: req.requestId, code: updateError.code || 'unknown' });
+        return res.status(400).json({ error: 'The password could not be changed. Request a fresh code and choose a different password.' });
+      }
+      clearAuthUserCache();
+      let accountUnlocked = false;
+      let refreshSessionsRevoked = false;
+      try {
+        accountUnlocked = await unlockLogin(current.account_id, null, 'verified_recovery_email');
+      } catch {
+        req.log?.warn?.('auth.recovery.admin_code_unlock_after_reset_failed', { requestId: req.requestId });
+      }
+      try {
+        const target = createEphemeralAuthClient();
+        const { data: signedIn, error: signInError } = await target.auth.signInWithPassword({ email: current.login_email, password });
+        if (!signInError && signedIn?.user?.id === current.account_id && signedIn?.session) {
+          const { error: revokeError } = await target.auth.signOut({ scope: 'global' });
+          refreshSessionsRevoked = !revokeError;
+        }
+      } catch {
+        req.log?.warn?.('auth.recovery.admin_code_session_revocation_failed', { requestId: req.requestId });
+      }
+      return res.json({ passwordUpdated: true, accountUnlocked, refreshSessionsRevoked,
+        message: 'Password changed. Sign in with your usual login email and the new password. If sign-in is still locked, use Recover administrator access.' });
     }
 
     const accountUnlocked = await unlockLogin(recovery.account_id, null, 'verified_recovery_email');
@@ -376,13 +408,16 @@ router.post('/recovery/code/unlock', async (req, res) => {
     });
   } catch (error) {
     if (Number.isInteger(error?.statusCode)) {
-      sendRouteError(res, error, 'Account unlock is temporarily unavailable.');
+      sendRouteError(res, error, 'Administrator recovery is temporarily unavailable.');
       return;
     }
     req.log?.warn?.('auth.recovery.admin_code_unlock_unavailable', { requestId: req.requestId });
-    res.status(503).json({ error: 'Account unlock is temporarily unavailable. Request a new code and try again.' });
+    res.status(503).json({ error: 'Administrator recovery is temporarily unavailable. Request a new code and try again.' });
   }
-});
+}
+
+router.post('/recovery/code/unlock', (req, res) => completeAdministratorCodeRecovery(req, res, false));
+router.post('/recovery/code/reset-password', (req, res) => completeAdministratorCodeRecovery(req, res, true));
 
 router.post('/recovery-email/challenge', requireAuth, async (req, res) => {
   setNoStore(res);
